@@ -12,8 +12,14 @@ export function DashboardNavbar() {
   const getPageInfo = () => {
     if (pathname === "/")
       return {
-        title: "Inicio",
+        title: "Dashboard",
         description: "Bienvenido al puesto de mando. Resumen del negocio vivo.",
+      };
+    if (pathname.startsWith("/pos"))
+      return {
+        title: "Realizar Venta",
+        description:
+          "Carga productos, aplica descuentos, registra el pago y descuenta el stock automáticamente.",
       };
     if (pathname.startsWith("/stock"))
       return {
@@ -24,7 +30,7 @@ export function DashboardNavbar() {
       return {
         title: "Ventas",
         description:
-          "Revisa el registro de todas las transacciones realizadas.",
+          "Consulta el historial de ventas, comprobantes y operaciones realizadas.",
       };
     if (pathname.startsWith("/reportes"))
       return {

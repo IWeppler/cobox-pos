@@ -54,34 +54,6 @@ const obtenerPrimeraImagen = (imagenUrl: unknown): string | null => {
   return getPrimeraImagen(imagenUrl);
 };
 
-/*
-const capitalizarOld = (str: string) => {
-  if (!str) return "";
-  return str.charAt(0).toUpperCase() + str.slice(1).replace("_", " ");
-};
-
-const obtenerPrimeraImagen = (imagenUrl: unknown): string | null => {
-  if (!imagenUrl) return null;
-  if (Array.isArray(imagenUrl) && imagenUrl.length > 0) return imagenUrl[0];
-  if (typeof imagenUrl === "string") {
-    if (imagenUrl.startsWith("[")) {
-      try {
-        const parsed = JSON.parse(imagenUrl);
-        return Array.isArray(parsed) ? parsed[0] : imagenUrl;
-      } catch {
-        return imagenUrl;
-      }
-    }
-    return imagenUrl;
-  }
-  return null;
-};
-
-// Función auxiliar para obtener el total incluyendo negativos
-const getTotalStock = (producto: Producto) => {
-  return (producto.stock || []).reduce((acc, curr) => acc + curr.cantidad, 0);
-};
-*/
 
 export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
   const { isAdmin, agregarAlCarrito } = useStockCartActions(userRole);
@@ -92,17 +64,6 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
   // Estado de Orden
   const [orden, setOrden] = useState<string>("nombre_asc");
 
-  const toggleVariantes = (id: string) => {
-    setVariantesAbiertas((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const handleAgregarAlCarrito = (
-    producto: Producto,
-    variante: string,
-    stockMax: number,
-  ) => {
-    agregarAlCarrito(producto, variante, stockMax);
-  };
 
   // --- LÓGICA DE ORDENAMIENTO ---
   const handleSort = (columna: string) => {
@@ -231,10 +192,9 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                         : "hover:bg-muted/20"
                     }`}
                   >
+                    {/* IMAGEN */}
                     <TableCell className="pl-1 sm:pl-4 py-2.5">
-                      <ProductEditDetailSheet
-                        producto={producto}
-                      >
+                      <ProductEditDetailSheet producto={producto}>
                         <button className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden border border-border/80 cursor-pointer hover:opacity-85 transition-opacity shrink-0 shadow-none">
                           {primeraImagen ? (
                             <Image
@@ -252,6 +212,7 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                       </ProductEditDetailSheet>
                     </TableCell>
 
+                    {/* NOMBRE */}
                     <TableCell className="py-2.5 px-0 mx-0">
                       <div className="flex flex-col">
                         <ProductEditDetailSheet producto={producto}>
@@ -274,6 +235,7 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                       </div>
                     </TableCell>
 
+                    {/* STOCK */}
                     <TableCell className="text-center font-bold hidden sm:table-cell py-2.5">
                       <span
                         className={
@@ -287,6 +249,7 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                       </span>
                     </TableCell>
 
+                    {/* COSTO */}
                     {isAdmin && (
                       <TableCell className="text-right font-medium text-muted-foreground hidden md:table-cell py-2.5">
                         {formatearMoneda(producto.precio_costo ?? 0)}
@@ -299,60 +262,6 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
 
                     <TableCell className="text-right pl-0.5 sm:pr-6 py-2.5">
                       <div className="flex items-center justify-end gap-0.5 md:gap-1.5">
-                        <div
-                          className={`flex items-center justify-end gap-1 overflow-hidden transition-all duration-300 ease-out ${
-                            variantesEstanAbiertas
-                              ? "max-w-45 sm:max-w-65 opacity-100 translate-x-0"
-                              : "max-w-0 opacity-0 translate-x-4 pointer-events-none"
-                          }`}
-                        >
-                          {variantesVisibles.length === 0 ? (
-                            <span className="px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground whitespace-nowrap">
-                              Sin stock
-                            </span>
-                          ) : (
-                            variantesVisibles.map((variante, index) => (
-                              <button
-                                key={variante.id}
-                                type="button"
-                                onClick={() =>
-                                  handleAgregarAlCarrito(
-                                    producto,
-                                    variante.variante,
-                                    variante.cantidad,
-                                  )
-                                }
-                                className={`h-8 px-1 sm:px-2.5 min-w-8 rounded-md border text-[10px] sm:text-xs font-bold uppercase tracking-wide transition-all cursor-pointer shadow-none shrink-0 ${
-                                  variante.cantidad <= 0
-                                    ? "border-destructive text-destructive bg-destructive/10 hover:bg-destructive hover:text-destructive-foreground"
-                                    : "border-border bg-background text-foreground hover:bg-primary hover:text-primary-foreground hover:border-primary"
-                                }`}
-                                style={{
-                                  transitionDelay: variantesEstanAbiertas
-                                    ? `${index * 30}ms`
-                                    : "0ms",
-                                }}
-                              >
-                                {variante.variante}
-                              </button>
-                            ))
-                          )}
-                        </div>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => toggleVariantes(producto.id)}
-                          className={`h-8 w-8 text-primary shrink-0 shadow-none rounded-md transition-transform ${
-                            variantesEstanAbiertas
-                              ? "bg-primary/20 hover:bg-primary/30 rotate-45"
-                              : "bg-primary/10 hover:bg-primary/20"
-                          }`}
-                          title="Elegir variante"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </Button>
-
                         {isAdmin && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

@@ -1,4 +1,4 @@
-🌿 Sistema POS & Catálogo Vivero
+🌿 Sistema POS & Catálogo
 Un sistema integral de Punto de Venta (POS) y catálogo web público diseñado específicamente para viveros y tiendas de plantas. Construido con Next.js, Supabase y Tailwind CSS, ofrece una gestión completa de inventario, control de caja, trazabilidad de ventas por vendedor y un flujo de pedidos a través de WhatsApp.
 ✨ Características Principales
 🏪 Para los Clientes (Catálogo Web)

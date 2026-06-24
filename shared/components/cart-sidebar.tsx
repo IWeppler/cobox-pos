@@ -10,7 +10,7 @@ import {
   useSyncExternalStore,
   useTransition,
 } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { registrarVentaAction } from "@/features/sales/actions/create-sale";
 import { TicketSheet } from "@/features/sales/ui/ticket-sheet";
@@ -50,6 +50,9 @@ export function CartSidebar({
   );
 
   const router = useRouter();
+  const pathname = usePathname();
+  const isPosRoute = pathname === "/pos";
+
   const mounted = useSyncExternalStore(
     subscribeToClientMount,
     getClientSnapshot,
@@ -60,8 +63,6 @@ export function CartSidebar({
   const [branding, setBranding] = useState<ConfiguracionPOS | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [metodosPagoDB, setMetodosPagoDB] = useState<MetodoPago[]>([]);
-
-  // 🚀 ESTADO: SOPORTE PARA PAGOS MÚLTIPLES
   const [pagos, setPagos] = useState<CreateSalePaymentInput[]>([]);
 
   const [promocionesDB, setPromocionesDB] = useState<PromocionDB[]>([]);
@@ -140,7 +141,6 @@ export function CartSidebar({
     };
   }, []);
 
-  // 🚀 LÓGICA DE PROMOCIONES ADAPTADA A PAGOS MIXTOS
   const promocionesElegibles = useMemo(() => {
     return promocionesDB.filter((promo) => {
       if (promo.monto_minimo && totalCarrito < promo.monto_minimo) {
@@ -226,6 +226,8 @@ export function CartSidebar({
 
   const totalFinal = totalCarrito - descuentoDetalle.monto;
 
+  // 'pagosConTotal' is declared but its value is never read.ts(6133)
+  // 'pagosConTotal' is assigned a value but never used.
   const pagosConTotal = useMemo(() => {
     if (metodosPagoDB.length === 0) return pagos;
     if (pagos.length > 1) return pagos;
@@ -273,7 +275,6 @@ export function CartSidebar({
   };
 
   const handleConfirmarVentaPOS = () => {
-    // 🚀 VALIDACIÓN MATEMÁTICA FRONTEND
     const sumaPagos = pagos.reduce(
       (acc, p) => acc + Number(p.montoAsignado),
       0,
@@ -295,10 +296,7 @@ export function CartSidebar({
 
         const formData = new FormData();
         formData.append("cart_items", JSON.stringify(items));
-
-        // 🚀 PASAMOS EL ARRAY DE PAGOS AL SERVER ACTION
         formData.append("pagos", JSON.stringify(pagos));
-        // Fallback por las dudas si create-sale falla
         formData.append("metodo_pago_id", pagos[0].metodoPagoId);
 
         if (promocionActivaId !== "ninguna" && descuentoDetalle.monto > 0) {
@@ -362,17 +360,21 @@ export function CartSidebar({
 
   return (
     <>
+      {/* OVERLAY: Se oculta en POS de escritorio (lg:hidden) */}
       {isOpen && (
         <button
-          className="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm transition-opacity"
+          className={`fixed inset-0 bg-black/40 z-30 backdrop-blur-sm transition-opacity ${
+            isPosRoute ? "lg:hidden" : ""
+          }`}
           onClick={() => setIsOpen(false)}
         />
       )}
 
+      {/* CONTENEDOR PRINCIPAL */}
       <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-100 bg-card z-50 transform transition-transform duration-300 ease-in-out flex flex-col border-l border-border ${
-          isOpen ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`fixed top-0 right-0 h-full w-full sm:w-100 bg-card flex flex-col border-l border-border transform transition-transform duration-300 ease-in-out ${
+          isOpen ? "translate-x-0 z-50" : "translate-x-full z-50"
+        } ${isPosRoute ? "lg:w-100 lg:z-30 lg:translate-x-0" : ""}`}
       >
         <CartSidebarHeader
           isPOSMode={isPOSMode}

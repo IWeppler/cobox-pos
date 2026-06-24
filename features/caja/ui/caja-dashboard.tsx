@@ -14,6 +14,7 @@ import {
   Info,
   Clock,
   Percent,
+  Ticket,
 } from "lucide-react";
 import { EgresoModal } from "./egreso-modal";
 import { Button } from "@/shared/ui/button";
@@ -30,7 +31,6 @@ import {
 } from "@/shared/ui/dialog";
 import {
   TurnoCajaHistorial,
-  VentaCaja,
   EgresoCaja,
   CajaActionState,
 } from "@/entities/caja/types";
@@ -232,10 +232,12 @@ export function CajaDashboard({
                 <div className="space-y-3">
                   <Label
                     htmlFor="monto_inicial"
-                    className="text-sm font-semibold text-foreground uppercase tracking-widest"
+                    className="text-lg font-semibold text-foreground flex items-center gap-2"
                   >
+                    <Ticket className="w-5 h-5 text-muted-foreground" />
                     Efectivo en caja
                   </Label>
+
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">
                       $

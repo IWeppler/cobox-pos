@@ -1,6 +1,5 @@
 import { getVentasAction } from "@/features/sales/actions/get-sales";
 import { getStockAction } from "@/features/stock/actions/get-product";
-import { RegistrarVentaModal } from "@/features/sales/ui/create-sale-modal";
 import { CrearProductoSheet } from "@/features/stock/ui/create-sheet";
 import { EgresoModal } from "@/features/caja/ui/egreso-modal";
 import { createClient } from "@/shared/config/supabase/server";
@@ -18,6 +17,7 @@ import {
   Package,
   ArrowUpRight,
   ArrowDownRight,
+  Plus,
 } from "lucide-react";
 import { formatearMoneda, formatearHora } from "@/shared/utils/formatters";
 
@@ -190,7 +190,12 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <RegistrarVentaModal productos={productos} />
+            <Link
+              href={"/pos"}
+              className="w-full h-10 sm:w-auto bg-primary text-white"
+            >
+              <Plus className="mr-2 h-4 w-4" /> Registrar Venta
+            </Link>
             <CrearProductoSheet />
             <EgresoModal />
           </div>

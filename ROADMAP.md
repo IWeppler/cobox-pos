@@ -91,7 +91,17 @@ Considero que las features postergadas son indispensables para los planes de ges
 # UI:
 
 -- 9. Revisar y corregir UX/UI para mobile. fundamental.
--- 12. mejorar flujo del boton de registrar venta
+-- 12. mejorar flujo del boton de registrar venta y registrar venta en general
+-- mejorar la vista en grilla
+-- mejorar el envio de comprobante
+-- con cuanto paga tu cliente? 
+
+creacion de un producto
+-- producto basico, producto con variantes, producto con medidas
+-- se deberia poder crear una categoria si no tengo creada... Debe haber una opcion si queremos que la categoria se muestre en la tienda/catalogo
+-- no deberia aparecer si es visible o no.
+-- impuestos como dropdown
+
 ✅ 13. En el catalogo hay que mejorar el flujo de variantes de un producto. actualmente aparecen [blanco/M] [Blanco/L] [Negro/M] [Negro/L] y quiero que aparezca [Blanco] [Negro] / [M] [L]
 ✅ 14. Corregir buscador de catalogo: en el navbar tengo un el searchbar para buscar productos que es como una especie de filtro que actua instantaneamente en el catalogo, pero preferiria que en realidad simplemente busque y me aparezca abajo los resultados, ademas que se pueda buscar por productos o categorias.
 ✅ 15. Corregir marquee de catalogo: actualmente no se esta moviendo y necesito que se empiece a mover..

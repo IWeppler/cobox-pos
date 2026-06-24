@@ -20,14 +20,14 @@ import {
   TableRow,
 } from "@/shared/ui/table";
 import { Badge } from "@/shared/ui/badge";
-import { Download, Eye, Receipt } from "lucide-react";
+import { Download, Eye, Plus, Receipt } from "lucide-react";
 import { AnularVentaModal } from "./cancel-sale-modal";
-import { RegistrarVentaModal } from "./create-sale-modal";
 import { Button } from "@/shared/ui/button";
 import { TicketSheet } from "./ticket-sheet";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
 import { getMetodoPagoColor } from "@/shared/utils/payment-methods";
 import { SaleTableHeader } from "./sale-table-header";
+import Link from "next/link";
 
 interface VentasTableProps {
   ventas: Venta[];
@@ -37,7 +37,6 @@ interface VentasTableProps {
 
 export function VentasTable({
   ventas = [],
-  productos = [],
   userRole,
 }: Readonly<VentasTableProps>) {
   const [filtroNombre, setFiltroNombre] = useState("");
@@ -196,7 +195,12 @@ export function VentasTable({
               </Button>
             )}
             <div className="w-full sm:w-auto [&>button]:h-12 [&>button]:rounded-xl [&>button]:shadow-sm">
-              <RegistrarVentaModal productos={productos} />
+              <Link
+                href={"/pos"}
+                className="w-full h-10 sm:w-auto bg-primary text-white"
+              >
+                <Plus className="mr-2 h-4 w-4" /> Registrar Venta
+              </Link>
             </div>
           </>
         }
@@ -269,7 +273,7 @@ export function VentasTable({
 
                           <TableCell className="font-semibold text-foreground py-4">
                             <div className="flex items-center gap-3">
-                              <span className="truncate max-w-[200px] sm:max-w-xs">
+                              <span className="truncate max-w-50 sm:max-w-xs">
                                 {nombrePrincipal}
                                 {itemsExtra > 0 ? (
                                   <span className="text-muted-foreground font-normal ml-1">

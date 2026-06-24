@@ -135,18 +135,11 @@ export function CartSidebarBody({
       {items.length === 0 ? (
         <div className="h-full flex flex-col items-center justify-center p-5 text-muted-foreground/70 space-y-4">
           <ShoppingBag className="w-16 h-16" strokeWidth={1} />
-          <p className="text-sm uppercase tracking-widest font-medium text-center">
+          <p className="text-sm uppercase font-medium text-center">
             {isPOSMode
               ? "No hay productos en la venta"
               : "El carrito está vacío"}
           </p>
-          <Button
-            variant="outline"
-            className="mt-4 uppercase tracking-wide text-xs font-semibold text-muted-foreground"
-            onClick={onContinueShopping}
-          >
-            {isPOSMode ? "Volver al inventario" : "Seguir comprando"}
-          </Button>
         </div>
       ) : (
         <div className="flex flex-col flex-1">
@@ -236,7 +229,7 @@ export function CartSidebarBody({
               {/* --- SECCIÓN MÉTODOS DE PAGO --- */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                     Método de Pago
                   </p>
                   {metodosPagoDB.length > 1 && (
@@ -266,7 +259,7 @@ export function CartSidebarBody({
                   </div>
                 ) : !modoMixto ? (
                   // --- MODO RÁPIDO (Botones simples) ---
-                  <div className="grid grid-cols-2 sm:grid-cols-3 p-1 bg-muted/50 rounded-xl gap-1">
+                  <div className="grid grid-cols-2 p-1 bg-muted/50 rounded-xl gap-1">
                     {metodosPagoDB.map((metodo) => {
                       let Icon = Banknote;
                       if (metodo.tipo === "TRANSFERENCIA") Icon = Smartphone;
@@ -281,19 +274,19 @@ export function CartSidebarBody({
                       if (isSelected) {
                         if (metodo.tipo === "EFECTIVO")
                           selectedClass =
-                            "bg-background text-emerald-600 shadow-sm ring-1 ring-black/5 dark:text-emerald-400 dark:ring-white/10";
+                            "bg-background text-emerald-600 ring-1 ring-black/5 dark:text-emerald-400 dark:ring-white/10";
                         else if (metodo.tipo === "TRANSFERENCIA")
                           selectedClass =
-                            "bg-background text-blue-600 shadow-sm ring-1 ring-black/5 dark:text-blue-400 dark:ring-white/10";
+                            "bg-background text-blue-600 ring-1 ring-black/5 dark:text-blue-400 dark:ring-white/10";
                         else if (metodo.tipo === "BILLETERA_VIRTUAL")
                           selectedClass =
-                            "bg-background text-indigo-600 shadow-sm ring-1 ring-black/5 dark:text-indigo-400 dark:ring-white/10";
+                            "bg-background text-indigo-600 ring-1 ring-black/5 dark:text-indigo-400 dark:ring-white/10";
                         else if (metodo.tipo === "TARJETA")
                           selectedClass =
-                            "bg-background text-purple-600 shadow-sm ring-1 ring-black/5 dark:text-purple-400 dark:ring-white/10";
+                            "bg-background text-purple-600 ring-1 ring-black/5 dark:text-purple-400 dark:ring-white/10";
                         else
                           selectedClass =
-                            "bg-background text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10";
+                            "bg-background text-foreground ring-1 ring-black/5 dark:ring-white/10";
                       }
 
                       return (

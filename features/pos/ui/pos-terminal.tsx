@@ -1,0 +1,241 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Producto } from "@/entities/productos/types";
+import { ShoppingBag } from "lucide-react";
+import { useCartStore } from "@/shared/store/cart-store";
+import { toast } from "sonner";
+import { useCatalogFilters } from "@/features/store/hooks/use-catalog-filters";
+import { QuickAddModal } from "@/features/pos/ui/quick-add-modal";
+import Image from "next/image";
+import { StockFiltersToolbar } from "@/features/stock/ui/stock-filters-toolbar";
+
+interface PosTerminalProps {
+  productos: Producto[];
+  categorias: Array<{
+    id: string;
+    nombre: string;
+    slug?: string | null;
+  }>;
+}
+
+interface VarianteDisponible {
+  variante: string;
+  cantidad: number;
+}
+
+const formatearMoneda = (monto: number) => {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  }).format(monto);
+};
+
+export function PosTerminal({
+  productos,
+  categorias,
+}: Readonly<PosTerminalProps>) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tipo, setTipo] = useState("todos");
+
+  // Estados para el Modal Rápido
+  const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const addItem = useCartStore((state) => state.addItem);
+  const setIsOpenCart = useCartStore((state) => state.setIsOpen);
+
+  const { categoriasConStock, productosFiltrados } = useCatalogFilters({
+    productos,
+    categorias,
+    searchQuery,
+    tipo,
+    filtrosVariantes: {},
+    orden: "mas_vendidos",
+    visibleCount: 1000, // En el POS cargamos todos de una vez para mayor velocidad
+  });
+
+  const categoriasDisponibles = useMemo(
+    () =>
+      categoriasConStock.map((categoria) => ({
+        nombre: categoria.nombre,
+        value: categoria.id,
+        count: categoria.count,
+      })),
+    [categoriasConStock],
+  );
+
+  const hayFiltrosActivos = searchQuery !== "" || tipo !== "todos";
+
+  const limpiarFiltros = () => {
+    setSearchQuery("");
+    setTipo("todos");
+  };
+
+  const handleProductClick = (producto: Producto) => {
+    // 1. Calculamos stock real unificado
+    const variantesArray: VarianteDisponible[] = [];
+    producto.producto_variantes?.forEach((v) =>
+      variantesArray.push({ variante: v.nombre_display, cantidad: v.stock }),
+    );
+    producto.stock?.forEach((s) =>
+      variantesArray.push({ variante: s.variante, cantidad: s.cantidad }),
+    );
+
+    const variantesParaVender = variantesArray.filter((v) => v.cantidad > 0);
+
+    if (variantesParaVender.length === 0) {
+      toast.error("Producto agotado.");
+      return;
+    }
+
+    // 2. Si es variante única, se agrega como un rayo
+    if (variantesParaVender.length === 1) {
+      let imagenes: string[] = [];
+      if (typeof producto.imagen_url === "string") {
+        try {
+          imagenes = JSON.parse(producto.imagen_url);
+        } catch {
+          imagenes = [producto.imagen_url];
+        }
+      } else if (Array.isArray(producto.imagen_url)) {
+        imagenes = producto.imagen_url;
+      }
+
+      addItem({
+        productoId: producto.id,
+        nombre: producto.nombre || "Sin nombre",
+        tipo: producto.tipo || "",
+        variante: variantesParaVender[0].variante,
+        precio: producto.precio,
+        cantidad: 1,
+        imagenUrl: imagenes[0] || null,
+        stockMaximo: variantesParaVender[0].cantidad,
+      });
+
+      toast.success("Agregado a la cuenta");
+      setIsOpenCart(true);
+    } else {
+      // 3. Si tiene múltiples variantes, abrimos el QuickAddModal
+      setSelectedProduct(producto);
+      setIsModalOpen(true);
+    }
+  };
+
+  return (
+    // CONTENEDOR PRINCIPAL: Ocupa todo el alto visible restando los paddings
+    <div className="flex w-full h-full">
+      {/* LADO IZQUIERDO: CATÁLOGO POS */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Toolbar POS */}
+        <StockFiltersToolbar
+          view="grid"
+          onViewChange={() => undefined}
+          showViewToggle={false}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          categoriaActiva={tipo}
+          onCategoriaChange={setTipo}
+          categoriasDisponibles={categoriasDisponibles}
+          conteosPorCategoria={{}}
+          totalProductos={productos.length}
+          hayFiltrosActivos={hayFiltrosActivos}
+          isAdmin={false}
+          onLimpiarFiltros={limpiarFiltros}
+        />
+
+        {/* Grilla de Productos */}
+        <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] p-4 sm:p-6 min-h-0">
+          {productosFiltrados.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+              <ShoppingBag className="w-12 h-12 mb-4 opacity-20" />
+              <p className="font-medium text-lg">No se encontraron productos</p>
+              <p className="text-sm mt-1">
+                Intenta con otra búsqueda o categoría.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 pb-20 lg:pb-0">
+              {productosFiltrados.map((producto) => {
+                let imagenes: string[] = [];
+                if (typeof producto.imagen_url === "string") {
+                  try {
+                    imagenes = JSON.parse(producto.imagen_url);
+                  } catch {
+                    imagenes = [producto.imagen_url];
+                  }
+                } else if (Array.isArray(producto.imagen_url)) {
+                  imagenes = producto.imagen_url;
+                }
+                const primeraImagen = imagenes[0] || null;
+
+                const stockViejos =
+                  producto.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
+                const stockNuevos =
+                  producto.producto_variantes?.reduce(
+                    (acc, v) => acc + v.stock,
+                    0,
+                  ) || 0;
+                const stockTotal = stockViejos + stockNuevos;
+
+                return (
+                  <button
+                    key={producto.id}
+                    onClick={() => handleProductClick(producto)}
+                    disabled={stockTotal <= 0}
+                    className={`flex flex-col text-left rounded-xl border transition-all overflow-hidden cursor-pointer ${
+                      stockTotal > 0
+                        ? "border-border hover:border-foreground/50 active:scale-95"
+                        : "border-border/40 opacity-50"
+                    }`}
+                  >
+                    <div className="w-full aspect-4/3 bg-muted relative border-b border-border/40">
+                      {primeraImagen ? (
+                        <Image
+                          src={primeraImagen}
+                          alt={producto.nombre || ""}
+                          fill
+                          className="object-cover"
+                          sizes="200px"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <ShoppingBag className="w-8 h-8 text-muted-foreground/30" />
+                        </div>
+                      )}
+                      {stockTotal <= 0 && (
+                        <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center">
+                          <span className="bg-white px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest text-rose-600 border border-rose-100">
+                            Agotado
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3 flex flex-col flex-1 justify-between">
+                      <p className="font-medium text-xs sm:text-sm text-muted-foreground leading-tight line-clamp-2 mb-2">
+                        {producto.nombre}
+                      </p>
+                      <p className="font-bold text-sm sm:text-base text-foreground">
+                        {formatearMoneda(producto.precio)}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* LADO DERECHO: ESPACIO PARA EL CARRITO (Solo Desktop) */}
+      <div className="hidden lg:block w-[400px] shrink-0 z-20" />
+
+      <QuickAddModal
+        producto={selectedProduct}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
+    </div>
+  );
+}
