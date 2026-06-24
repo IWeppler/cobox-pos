@@ -30,7 +30,7 @@ export function ProductCategorySection({
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div
-        className="flex items-center justify-between p-5 cursor-pointer"
+        className="flex items-center justify-between p-3 md:p-5 cursor-pointer"
         onClick={() => setShowCategory(true)}
       >
         <div className="flex items-center gap-3">
@@ -65,7 +65,7 @@ export function ProductCategorySection({
       </div>
 
       {showCategory && (
-        <div className="px-5 pb-5 pt-2 animate-in fade-in slide-in-from-top-2 border-t border-border/50 mt-2 space-y-4">
+        <div className="px-2 md:px-5 pb-5 pt-2 animate-in fade-in slide-in-from-top-2 border-t border-border/50 mt-2 space-y-4">
           <div className="relative pt-3">
             <Search className="w-4 h-4 absolute left-3 top-[34px] -translate-y-1/2 text-muted-foreground" />
             <Input

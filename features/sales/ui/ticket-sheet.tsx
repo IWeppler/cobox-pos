@@ -175,7 +175,7 @@ export function TicketSheet({
 
               {/* RESUMEN FINANCIERO CON SOPORTE MULTI-PAGO */}
               {ticket?.montoNeto !== undefined && (
-                <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                <div className="rounded-xl border border-border bg-card overflow-hidden p-1">
                   <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
                     <Wallet className="w-4 h-4 text-muted-foreground/70" />{" "}
                     Resumen Financiero
@@ -266,7 +266,7 @@ export function TicketSheet({
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-muted-foreground/70" />{" "}
-                  <h3 className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Detalles de la Transacción
                   </h3>
                 </div>
@@ -307,7 +307,7 @@ export function TicketSheet({
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Package className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Productos ({ticket?.items.length ?? 0})
                   </h3>
                 </div>

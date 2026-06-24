@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import { Search } from "lucide-react";
+import { Search, ArrowUpDown } from "lucide-react";
 
 export interface SaleTableHeaderOption {
   value: string;
@@ -29,15 +29,15 @@ export function SaleTableHeader({
   orderValue,
   onOrderChange,
   orderOptions,
-  actions,
 }: Readonly<SaleTableHeaderProps>) {
   return (
-    <div className="flex flex-row gap-2 sm:gap-4 justify-between items-center bg-card p-2 sm:p-4 rounded-xl border border-border">
-      <div className="relative flex-1">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+    <div className="flex flex-row gap-2 sm:gap-3 items-center bg-card p-2 sm:p-3 rounded-xl border border-border">
+      {/* 1. Buscador (Toma todo el espacio disponible) */}
+      <div className="relative flex-1 min-w-0">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
         <Input
           placeholder="Buscar por producto o #recibo..."
-          className="pl-9 h-10 text-sm rounded-lg border-border/60 bg-muted focus-visible:bg-background shadow-none transition-colors w-full"
+          className="pl-9 sm:pl-10 h-10 text-xs sm:text-sm rounded-lg border-border/60 bg-muted focus-visible:bg-background shadow-none transition-colors w-full"
           value={searchValue}
           onChange={(event) => {
             onSearchChange(event.target.value);
@@ -45,10 +45,17 @@ export function SaleTableHeader({
         />
       </div>
 
-      <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full lg:w-auto">
+      {/* 2. Filtro (Cuadrado en móviles, Desplegable completo en PC) */}
+      <div className="shrink-0">
         <Select value={orderValue} onValueChange={onOrderChange}>
-          <SelectTrigger className="h-10 w-full sm:w-40 border-border/60 bg-white shadow-none font-medium">
-            <SelectValue placeholder="Ordenar por..." />
+          {/* Usamos [&>svg]:hidden en móviles para ocultar la flecha por defecto de shadcn y mostrar nuestro ícono */}
+          <SelectTrigger className="h-10 w-10 sm:w-44 border-border/60 bg-white shadow-none font-medium px-0 sm:px-3 flex items-center justify-center sm:justify-between [&>svg]:hidden sm:[&>svg]:block">
+            <span className="hidden sm:inline-flex truncate">
+              <SelectValue placeholder="Ordenar por..." />
+            </span>
+            <div className="flex sm:hidden items-center justify-center">
+              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+            </div>
           </SelectTrigger>
           <SelectContent className="rounded-xl">
             {orderOptions.map((option) => (
@@ -58,12 +65,6 @@ export function SaleTableHeader({
             ))}
           </SelectContent>
         </Select>
-
-        {actions && (
-          <div className="flex flex-1 sm:flex-none justify-end gap-2 sm:ml-2 sm:pl-4 sm:border-l sm:border-border">
-            {actions}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -27,7 +27,7 @@ export function ProductPriceSection({
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div
-        className="flex items-center justify-between p-5 cursor-pointer"
+        className="flex items-center justify-between p-3 md:p-5 cursor-pointer"
         onClick={() => onShowPriceChange(true)}
       >
         <div className="flex items-center gap-3">
@@ -59,7 +59,7 @@ export function ProductPriceSection({
       </div>
 
       {showPrice && (
-        <div className="px-5 pb-5 pt-2 animate-in fade-in slide-in-from-top-2 border-t border-border/50 mt-2">
+        <div className="px-2 md:px-5 pb-5 pt-2 animate-in fade-in slide-in-from-top-2 border-t border-border/50 mt-2">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3">
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground">

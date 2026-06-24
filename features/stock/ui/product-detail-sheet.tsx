@@ -122,7 +122,7 @@ export function ProductDetailSheet({
         <SheetHeader className="pb-4 border-b border-border/50 text-left mt-0">
           <SheetTitle className="text-xl flex items-center gap-2">
             <Leaf className="w-5 h-5 text-emerald-600" />
-            Ficha de la Planta
+            Ficha del Producto
           </SheetTitle>
         </SheetHeader>
 

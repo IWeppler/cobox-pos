@@ -184,26 +184,7 @@ export function VentasTable({
         orderValue={orden}
         onOrderChange={setOrden}
         orderOptions={ordenOptions}
-        actions={
-          <>
-            {isAdmin && (
-              <Button
-                variant="outline"
-                className="hidden sm:flex h-12 px-4 bg-white border-border/60 hover:bg-muted rounded-xl shadow-none font-semibold"
-              >
-                <Download className="mr-2 h-4 w-4" /> CSV
-              </Button>
-            )}
-            <div className="w-full sm:w-auto [&>button]:h-12 [&>button]:rounded-xl [&>button]:shadow-sm">
-              <Link
-                href={"/pos"}
-                className="w-full h-10 sm:w-auto bg-primary text-white"
-              >
-                <Plus className="mr-2 h-4 w-4" /> Registrar Venta
-              </Link>
-            </div>
-          </>
-        }
+       
       />
 
       {/* TABLA O EMPTY STATE */}
@@ -407,7 +388,7 @@ export function VentasTable({
                   <div
                     key={venta.id}
                     onClick={() => abrirTicket(venta)}
-                    className="bg-card border border-border rounded-xl p-4 shadow-sm active:scale-[0.98] transition-transform cursor-pointer"
+                    className="bg-card border border-border rounded-xl p-4 active:scale-[0.98] transition-transform cursor-pointer"
                   >
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex flex-col pr-3">
@@ -443,7 +424,7 @@ export function VentasTable({
                     <div className="flex items-center justify-between mb-3">
                       <Badge
                         variant="outline"
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-tight shadow-sm ${getMetodoPagoColor(metodoPago)}`}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-tight ${getMetodoPagoColor(metodoPago)}`}
                       >
                         {metodoPago}
                       </Badge>

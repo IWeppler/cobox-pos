@@ -23,7 +23,7 @@ export default function AuthPage() {
             />
           </div>
           <span className="text-white font-bold text-2xl tracking-tight">
-            Proximi
+            Sistema POS
           </span>
         </div>
 
@@ -133,7 +133,7 @@ export default function AuthPage() {
                 />
               </div>
               <span className="font-bold text-xl tracking-tight text-foreground">
-                Proximi POS
+                Sistema POS
               </span>
             </div>
 

@@ -53,7 +53,7 @@ export function PosTerminal({
     tipo,
     filtrosVariantes: {},
     orden: "mas_vendidos",
-    visibleCount: 1000, // En el POS cargamos todos de una vez para mayor velocidad
+    visibleCount: 1000,
   });
 
   const categoriasDisponibles = useMemo(

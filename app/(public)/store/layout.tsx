@@ -5,8 +5,8 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Tienda Oficial | Vivero Tostado",
-  description: "Encuentra la planta que buscás.",
+  title: "Tienda Oficial | Emprendimiento Tostado",
+  description: "Encontra el producto que buscás.",
 };
 
 export default async function PublicLayout({

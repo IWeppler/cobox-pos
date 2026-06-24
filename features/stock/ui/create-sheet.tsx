@@ -27,7 +27,7 @@ export function CrearProductoSheet() {
         <SheetTrigger asChild>
           <Button variant="ghost">
             <Plus className="w-4 h-4 mr-2" />
-            Nuevo Producto
+            <span className="hidden md:flex">Nuevo Producto</span>
           </Button>
         </SheetTrigger>
 
@@ -52,7 +52,7 @@ export function CrearProductoSheet() {
             </div>
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-8 py-4">
+          <div className="flex-1 overflow-y-auto min-h-0 px-2 md:px-8 py-4">
             <form
               onSubmit={form.handleSubmit}
               id="create-product-form"

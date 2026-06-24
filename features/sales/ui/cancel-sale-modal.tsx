@@ -97,7 +97,7 @@ export function AnularVentaModal({
           {!isProductoEliminado && (
             <div className="space-y-3">
               <Label className="text-sm font-semibold">
-                ¿Qué hacemos con la planta física?
+                ¿Qué hacemos con el producto físico?
               </Label>
               <RadioGroup
                 value={motivo}
@@ -120,7 +120,7 @@ export function AnularVentaModal({
                       <PackagePlus className="w-4 h-4" /> Volver a la estantería
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      El cliente se arrepintió. La planta está sana y se sumará
+                      El cliente se arrepintió. El producto está sano y se sumará
                       al inventario (+{cantidad}).
                     </p>
                   </div>
@@ -139,8 +139,7 @@ export function AnularVentaModal({
                       <AlertTriangle className="w-4 h-4" /> Descartar
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      La planta se marchitó o rompió. Se registrará como Baja y
-                      no volverá al stock.
+                      El producto se rompió. Se registrará como Baja y no volverá al stock.
                     </p>
                   </div>
                 </div>
