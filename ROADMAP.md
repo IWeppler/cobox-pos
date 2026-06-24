@@ -22,43 +22,58 @@ REPORTE POR CANAL DE VENTAS: Instagram, local, POS
 ## 8 - Insights y Gráficos: Evolución de ventas y horarios pico, pero traducidos a lenguaje humano. Tarjetas con 💡 consejos (ej: "Asegura cambio a las 18hs, es tu pico de ventas"). Mantener el ranking de Mayor Rotación.
 
 # Improves:
+
 ## mejorar ui carrito de venta
+
 ## modificacion de precios masivos
+
 ## boton de descargar pwa
+
 ## ticket en formato pdf
+
 ## dark/light mode
+
 ## mejorar el dashboard inicial y mejorar el modulo de reportes/metricas
+
 ## El modulo de reportes: quiero traer por fechas el Flujo de Ingresos Diarios; Ventas por Categoría no me trae correctamente las funciones; Rentabilidad por Categoría tiene el mismo problema ademas el chart no se ve bien.
+
 ## modulo de reportes: margen operativo estimado en porcentaje, falta ver el monto en $ asociado.
+
 ## Ingresos Brutos vs Ganancia Bruta: micro-copy. Total vendido antes de costos y gastos. y Ingresos menos costo de mercadería.
+
 ## Reportes / Ventas: Agregaría ventas por día/hora.
+
 ## Ventas por categoría debería tener selector de métrica: [Ingresos] [Unidades] [Tickets]
+
 ## Reportes/Inventario: Agregaría “valor potencial de venta”
+
 ## Además de capital inmovilizado al costo, sería útil mostrar: Valor al costo: $X; Valor potencial de venta: $Y; Ganancia potencial: $Z
+
 ## Productos sin movimiento: definir ventana: hace 30 días - hace 60 días - hace 90 días
+
 ## en el modulo de stock debo poder ordenar en la tabla por nombre (a-z), mas/menos stock (ej: -5, 1000), orden mayor/menor costo, orden mayor/menor precio venta, y filtro stock-bajo (solo con stock ej: 0 o -10).
+
 ## Relación bajas/ingresos: Muy buen KPI: Bajas sobre ingresos: 2.4%. Porque $20.000 en bajas puede ser mucho o poco según cuánto vendiste.
 
 # 🐛 Bugs / Correcciones necesarias
+
 ## Reportes: Ventas por categoría no calcula correctamente.
+
 ## Reportes: Rentabilidad por categoría no calcula correctamente.
+
 ## Reportes: chart de rentabilidad por categoría no se ve bien.
+
 ## Revisar obtención de datos por rango de fechas.
+
 ## Revisar consistencia entre ingresos, ganancia, caja y descuentos.
 
 ### Features para terminar el MVP:
-
 Considero que las features postergadas son indispensables para los planes de gestion/profesional y empresa, pero no tengo clientes en esa parte, tal vez 1 para gestion profesional.
 
 # Modulo de Configuracion:
 
 ✅ 1. configuracion/promociones: Mejorar la configuracion de promociones. Fecha de inicio y fin, activo/inactivo. editar, borrar.
-✅ 2. configuracion/metodos-de-pago: Métodos de pago configurables. Efectivo: 0%, acreditación inmediata; Transferencia: 0%, inmediata; Mercado Pago: 6%, 1 día;
-Crédito: 8%, 10 días.
-Campos mínimos:
-nombre
-comisión %
-plazo de acreditación
+✅ 2. configuracion/metodos-de-pago: Métodos de pago configurables. Efectivo: 0%, acreditación inmediata; Transferencia: 0%, inmediata; Mercado Pago: 6%, 1 día; Crédito: 8%, 10 días.
 
 # Modulo de Ventas:
 
@@ -75,19 +90,30 @@ plazo de acreditación
 
 # UI:
 
--- 8. Modularizar el componente de tabla de ventas y stock (tienen el filterToolBar integrado)
 -- 9. Revisar y corregir UX/UI para mobile. fundamental.
+-- 12. mejorar flujo del boton de registrar venta
+✅ 13. En el catalogo hay que mejorar el flujo de variantes de un producto. actualmente aparecen [blanco/M] [Blanco/L] [Negro/M] [Negro/L] y quiero que aparezca [Blanco] [Negro] / [M] [L]
+✅ 14. Corregir buscador de catalogo: en el navbar tengo un el searchbar para buscar productos que es como una especie de filtro que actua instantaneamente en el catalogo, pero preferiria que en realidad simplemente busque y me aparezca abajo los resultados, ademas que se pueda buscar por productos o categorias.
+✅ 15. Corregir marquee de catalogo: actualmente no se esta moviendo y necesito que se empiece a mover..
+✅ 16. Corregir CTA de banner en catalogo: hay que chequear bien como funciona, porque actualmente parece que tiene la redireccion a # y en realidad deberia redirigir dependiendo la campaña o configuracion hacia una categoria de plantas o producto en particular o nose...
+✅ 17. corregir categorias de catalogo: actualmente aparecen todas juntas en minusculas y no como estan configuradas en el panel de administracion o aparecen en la base de datos..
+✅ 18. Corregir carrito del POS catalogo, 19. mejorar zustand carrito para clientes en catalogo: parece que son dos problemas que van de la mano hace un rato me aparecia como el carrito del pos y no para enviar pedido.
 
+-- coordenadas o directamente a redirección del local para que en el catalogo un usuario pueda hacer click y que lo redirija a google maps
 # Fix Bug:
 
--- 10. Advisor-Banner: aparece todo el tiempo. Deberia aparecer una vez al dia.
--- 11. El light/dark mode no funciona correctamente, falta un zustand o algo que persevere.
+✅ 10. Advisor-Banner: aparece todo el tiempo. Deberia aparecer una vez al dia.
+✅ 11. El light/dark mode no funciona correctamente, falta un zustand o algo que persevere.
 
 # Admin:
 
-## 6. Estandarización Dinámica: Mover Categorías y Variantes (talles, colores) a la base de datos para que cada negocio cree las suyas propias.
--- 7. El modulo de caja no deberia entrar en el primer nivel de emprendedor, si en el segundo
--- 12. Separacion de modulos: Plan 1 — Emprendedor, Plan 2 — Gestión / Profesional, Plan 3 — Empresa / Multi-sucursal
+✅ 6. Estandarización Dinámica: Mover Categorías y Variantes (talles, colores) a la base de datos para que cada negocio cree las suyas propias.
+
+-- 8. Separacion de modulos: 
+Plan 1 — Emprendedor:
+Plan 2 — Gestión / Profesional:
+Plan 3 — Empresa / Multi-sucursal:
+
 -- Postergado. Presupuestos y Órdenes: Estados de venta (Cobrado, Presupuesto, A Confirmar). Clave para oficios o ventas grandes.
 -- Postergado. Módulo CRM Opcional: Si el negocio lo desea, puede pedir Nombre y WhatsApp al cobrar para ir armando su propia base de datos de clientes. cliente, venta fiada, saldo pendiente, pago posterior, historial de deuda
 Flujo mínimo que deberías implementar
@@ -916,6 +942,7 @@ El sistema precarga categorías y atributos.
 El admin puede modificarlos después.
 
 # Task 22 — Seguridad / RLS
+
 Objetivo: Garantizar que cada negocio solo acceda a sus propias categorías, atributos y variantes.
 En tablas hijas como atributo_valores, validar vía relación.
 

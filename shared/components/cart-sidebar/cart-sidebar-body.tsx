@@ -247,7 +247,7 @@ export function CartSidebarBody({
                           ? handleDeshabilitarModoMixto
                           : handleHabilitarModoMixto
                       }
-                      className="text-[10px] font-bold text-primary flex items-center gap-1 hover:underline cursor-pointer"
+                      className="text-xs font-bold text-primary flex items-center gap-1 hover:underline cursor-pointer"
                     >
                       {modoMixto ? (
                         "Cancelar división"

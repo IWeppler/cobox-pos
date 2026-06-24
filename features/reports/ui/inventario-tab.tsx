@@ -53,7 +53,7 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
                 <p className="text-2xl font-bold text-foreground">
                   {formatearMoneda(metrics.stockValorizadoCosto)}
                 </p>
-                <p className="text-[10px] text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Capital inmovilizado
                 </p>
               </div>
@@ -66,7 +66,7 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
                 <p className="text-2xl font-bold text-foreground">
                   {formatearMoneda(metrics.stockValorizadoPotencial)}
                 </p>
-                <p className="text-[10px] text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Si vendes el 100% del stock
                 </p>
               </div>
@@ -76,10 +76,10 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
                 <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
                   Ganancia Potencial
                 </p>
-                <p className="text-2xl font-black text-emerald-600 dark:text-emerald-500">
+                <p className="text-2xl font-semibold text-emerald-600 dark:text-emerald-500">
                   +{formatearMoneda(metrics.stockGananciaPotencial)}
                 </p>
-                <p className="text-[10px] text-emerald-700/70 dark:text-emerald-500/70 font-medium mt-1">
+                <p className="text-xs text-emerald-700/70 dark:text-emerald-500/70 font-medium mt-1">
                   Rentabilidad estipulada
                 </p>
               </div>

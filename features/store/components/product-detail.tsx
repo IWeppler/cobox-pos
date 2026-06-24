@@ -28,12 +28,11 @@ export function ProductDetail({
   producto,
   config,
 }: Readonly<ProductDetailProps>) {
-  const [varianteSeleccionada, setVarianteSeleccionada] = useState<
-    string | null
-  >(null);
-  const [errorVariante, setErrorVariante] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [descOpen, setDescOpen] = useState(false);
+
+  const [selecciones, setSelecciones] = useState<Record<string, string>>({});
+  const [errorVariante, setErrorVariante] = useState(false);
 
   const addItem = useCartStore((state) => state.addItem);
 
@@ -50,37 +49,151 @@ export function ProductDetail({
     return [];
   }, [producto.imagen_url]);
 
+  const variantesArray = useMemo(() => {
+    const list: Array<{ variante: string; cantidad: number; id_real: string }> =
+      [];
+    producto.producto_variantes?.forEach((v) => {
+      list.push({
+        variante: v.nombre_display,
+        cantidad: v.stock,
+        id_real: v.id,
+      });
+    });
+    producto.stock?.forEach((s) => {
+      list.push({ variante: s.variante, cantidad: s.cantidad, id_real: s.id });
+    });
+    return list;
+  }, [producto.producto_variantes, producto.stock]);
+
   const stockTotal = useMemo(
-    () => producto.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0,
-    [producto.stock],
+    () => variantesArray.reduce((acc, s) => acc + s.cantidad, 0),
+    [variantesArray],
   );
   const estaAgotado = stockTotal === 0;
 
-  const handlePrevImage = () =>
-    setCurrentImageIndex((prev) =>
-      prev === 0 ? imagenes.length - 1 : prev - 1,
-    );
-  const handleNextImage = () =>
-    setCurrentImageIndex((prev) =>
-      prev === imagenes.length - 1 ? 0 : prev + 1,
-    );
+  const parsedVariants = useMemo(() => {
+    const props: Record<string, Set<string>> = {};
+    let isLegacy = false;
+    let isLegacySplit = false;
+
+    variantesArray.forEach((s) => {
+      const v = s.variante || "";
+      if (v.toLowerCase() === "unico" || v.toLowerCase() === "único") return;
+
+      if (v.includes(":")) {
+        v.split("|").forEach((part) => {
+          const [key, val] = part.split(":");
+          if (key && val) {
+            if (!props[key]) props[key] = new Set();
+            props[key].add(val.trim());
+          }
+        });
+      } else if (v.includes("/") || v.includes("-")) {
+        isLegacySplit = true;
+        const separator = v.includes("/") ? "/" : "-";
+        v.split(separator).forEach((part, idx) => {
+          const key =
+            idx === 0 ? "Color" : idx === 1 ? "Talle" : `Opción ${idx + 1}`;
+          if (!props[key]) props[key] = new Set();
+          props[key].add(part.trim());
+        });
+      } else {
+        isLegacy = true;
+        if (!props["Opción"]) props["Opción"] = new Set();
+        props["Opción"].add(v.trim());
+      }
+    });
+
+    const result: Record<string, string[]> = {};
+    Object.keys(props).forEach((k) => {
+      result[k] = Array.from(props[k]);
+    });
+    return { properties: result, isLegacy, isLegacySplit };
+  }, [variantesArray]);
+
+  const isUnico = Object.keys(parsedVariants.properties).length === 0;
+
+  // LÓGICA DE DISPONIBILIDAD CRUZADA (Para tachar botones incompatibles)
+  const isOptionAvailable = (propName: string, val: string) => {
+    const testSelections = { ...selecciones, [propName]: val };
+
+    return variantesArray.some((s) => {
+      if (s.cantidad <= 0) return false;
+      const v = s.variante || "";
+
+      if (
+        parsedVariants.isLegacySplit &&
+        (v.includes("/") || v.includes("-"))
+      ) {
+        const separator = v.includes("/") ? "/" : "-";
+        const parts = v.split(separator).map((p) => p.trim());
+        return Object.entries(testSelections).every(([k, selVal]) => {
+          const idx =
+            k === "Color"
+              ? 0
+              : k === "Talle"
+                ? 1
+                : parseInt(k.replace("Opción ", "")) - 1;
+          return parts[idx] === selVal;
+        });
+      }
+
+      if (parsedVariants.isLegacy) return v.trim() === val;
+
+      const variantParts = v.split("|");
+      return Object.entries(testSelections).every(([k, selVal]) =>
+        variantParts.includes(`${k}:${selVal}`),
+      );
+    });
+  };
 
   const handleAddToCart = () => {
     if (estaAgotado) return;
-    if (!varianteSeleccionada) {
+
+    if (
+      !isUnico &&
+      Object.keys(parsedVariants.properties).length !==
+        Object.keys(selecciones).length
+    ) {
       setErrorVariante(true);
       return;
     }
     setErrorVariante(false);
 
-    const stockDeVariante = producto.stock?.find(
-      (s) =>
-        (s.variante || "").toLowerCase() === varianteSeleccionada.toLowerCase(),
-    );
+    // Buscar el stock que coincida
+    const stockDeVariante = variantesArray.find((s) => {
+      if (isUnico) return true;
+      const v = s.variante || "";
+
+      if (
+        parsedVariants.isLegacySplit &&
+        (v.includes("/") || v.includes("-"))
+      ) {
+        const separator = v.includes("/") ? "/" : "-";
+        const parts = v.split(separator).map((p) => p.trim());
+        return Object.entries(selecciones).every(([k, selVal]) => {
+          const idx =
+            k === "Color"
+              ? 0
+              : k === "Talle"
+                ? 1
+                : parseInt(k.replace("Opción ", "")) - 1;
+          return parts[idx] === selVal;
+        });
+      }
+
+      if (parsedVariants.isLegacy) return v.trim() === selecciones["Opción"];
+
+      const variantParts = v.split("|");
+      return Object.entries(selecciones).every(([k, selVal]) =>
+        variantParts.includes(`${k}:${selVal}`),
+      );
+    });
+
     const stockMaximo = stockDeVariante ? stockDeVariante.cantidad : 0;
 
     if (stockMaximo <= 0) {
-      toast.error("Esta variante se encuentra agotada.");
+      toast.error("Esta combinación se encuentra agotada.");
       return;
     }
 
@@ -88,7 +201,7 @@ export function ProductDetail({
       productoId: producto.id,
       nombre: producto.nombre || "Sin nombre",
       tipo: producto.tipo || "",
-      variante: varianteSeleccionada,
+      variante: stockDeVariante ? stockDeVariante.variante : "Unico",
       precio: producto.precio,
       cantidad: 1,
       imagenUrl: imagenes[0] || null,
@@ -98,11 +211,14 @@ export function ProductDetail({
     toast.success("Añadido al carrito de compras");
   };
 
-  const variantesDelProducto = useMemo(() => {
-    if (!producto.stock || producto.stock.length === 0) return [];
-    const unicas = Array.from(new Set(producto.stock.map((s) => s.variante)));
-    return unicas.filter((v) => (v || "").toLowerCase() !== "todos");
-  }, [producto.stock]);
+  const handlePrevImage = () =>
+    setCurrentImageIndex((prev) =>
+      prev === 0 ? imagenes.length - 1 : prev - 1,
+    );
+  const handleNextImage = () =>
+    setCurrentImageIndex((prev) =>
+      prev === imagenes.length - 1 ? 0 : prev + 1,
+    );
 
   return (
     <div className="flex flex-col md:flex-row items-start mx-4 pb-8 md:pb-0 relative">
@@ -128,7 +244,7 @@ export function ProductDetail({
               <span className="mx-2 opacity-50">/</span>
             </>
           )}
-          <span className="text-foreground truncate max-w-[200px]">
+          <span className="text-foreground truncate max-w-50">
             {producto.nombre}
           </span>
         </nav>
@@ -140,7 +256,7 @@ export function ProductDetail({
           </Link>
           <span className="mx-2 opacity-50">/</span>
           {producto.tipo && (
-            <span className="text-foreground truncate max-w-[200px]">
+            <span className="text-foreground truncate max-w-50">
               {producto.tipo}
             </span>
           )}
@@ -152,7 +268,7 @@ export function ProductDetail({
             imagenes.map((img, i) => (
               <div
                 key={i}
-                className="snap-center shrink-0 w-full aspect-[4/5] relative"
+                className="snap-center shrink-0 w-full aspect-4/5 relative"
               >
                 <Image
                   src={img}
@@ -162,7 +278,6 @@ export function ProductDetail({
                   priority={i === 0}
                   sizes="100vw"
                 />
-                {/* Paginación dots (solo visual mobile) */}
                 {imagenes.length > 1 && (
                   <div className="absolute bottom-4 left-0 w-full flex justify-center gap-1.5">
                     {imagenes.map((_, dotIdx) => (
@@ -176,7 +291,7 @@ export function ProductDetail({
               </div>
             ))
           ) : (
-            <div className="snap-center shrink-0 w-full aspect-[4/5] flex flex-col items-center justify-center text-muted-foreground/30">
+            <div className="snap-center shrink-0 w-full aspect-4/5 flex flex-col items-center justify-center text-muted-foreground/30">
               <ShoppingBag className="w-16 h-16 mb-2" strokeWidth={1} />
             </div>
           )}
@@ -184,7 +299,7 @@ export function ProductDetail({
 
         {/* Galería Desktop (Imagen principal + Miniaturas) */}
         <div className="hidden md:flex flex-col gap-3">
-          <div className="relative aspect-[4/5] bg-[#f7f7f7] w-full flex items-center justify-center group overflow-hidden border border-border/60">
+          <div className="relative aspect-4/5 bg-[#f7f7f7] w-full flex items-center justify-center group overflow-hidden border border-border/60">
             {imagenes.length > 0 ? (
               <Image
                 src={imagenes[currentImageIndex]}
@@ -241,70 +356,70 @@ export function ProductDetail({
 
       {/* LADO DERECHO: INFORMACIÓN Y CTA */}
       <div className="w-full md:w-[45%] lg:w-[40%] flex flex-col pt-4 sm:px-0">
-        {/* Títulos y Precio */}
         <h1 className="text-2xl md:text-4xl font-semibold text-foreground uppercase tracking-tight mb-2 md:mb-4">
           {producto.nombre}
         </h1>
 
-        {/* Ocultar Precio si está configurado así */}
         {config?.mostrar_precios !== false && (
           <div className="text-xl md:text-2xl font-medium text-foreground mb-6 md:mb-8">
             ${(producto.precio || 0).toLocaleString("es-AR")}
           </div>
         )}
 
-        {/*  Si no hay pedidos online, mostramos Solo Visualización en lugar de carrito */}
         {config?.pedidos_whatsapp !== false ? (
           <>
-            {/* Selección de Variantes */}
-            <div className="mb-6">
-              <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-                Selecciona una opción
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {variantesDelProducto.map((nombreVariante) => {
-                  const stockDeVariante = producto.stock?.find(
-                    (s) =>
-                      (s.variante || "").toLowerCase() ===
-                      nombreVariante.toLowerCase(),
-                  );
-                  const tieneStock = stockDeVariante
-                    ? stockDeVariante.cantidad > 0
-                    : false;
-                  const isSelected = varianteSeleccionada === nombreVariante;
+            {/* 🚀 RENDER MULTIDIMENSIONAL DE VARIANTES (Se auto-generan botones por cada Atributo) */}
+            {!isUnico && (
+              <div className="mb-6 space-y-5">
+                {Object.entries(parsedVariants.properties).map(
+                  ([propName, values]) => (
+                    <div key={propName}>
+                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                        Selecciona {propName}
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {values.map((val) => {
+                          const isSelected = selecciones[propName] === val;
+                          const hasStock = isOptionAvailable(propName, val);
 
-                  return (
-                    <button
-                      key={nombreVariante}
-                      type="button"
-                      disabled={!tieneStock}
-                      onClick={() => {
-                        setVarianteSeleccionada(nombreVariante);
-                        setErrorVariante(false);
-                      }}
-                      className={`min-w-[4rem] px-4 py-3 text-[10px] sm:text-xs font-semibold uppercase transition-all border ${
-                        isSelected
-                          ? "border-foreground bg-foreground text-background cursor-pointer"
-                          : tieneStock
-                            ? "border-border/60 bg-transparent text-foreground hover:border-foreground cursor-pointer"
-                            : "border-border/30 bg-transparent text-muted-foreground opacity-40 cursor-not-allowed line-through decoration-muted-foreground/40"
-                      }`}
-                    >
-                      {nombreVariante}
-                    </button>
-                  );
-                })}
+                          return (
+                            <button
+                              key={val}
+                              type="button"
+                              disabled={!hasStock}
+                              onClick={() => {
+                                setSelecciones((prev) => ({
+                                  ...prev,
+                                  [propName]: val,
+                                }));
+                                setErrorVariante(false);
+                              }}
+                              className={`min-w-16 px-4 py-3 text-[10px] sm:text-xs font-semibold uppercase transition-all border ${
+                                isSelected
+                                  ? "border-foreground bg-foreground text-background cursor-pointer"
+                                  : hasStock
+                                    ? "border-border/60 bg-transparent text-foreground hover:border-foreground cursor-pointer"
+                                    : "border-border/30 bg-transparent text-muted-foreground opacity-40 cursor-not-allowed line-through decoration-muted-foreground/40"
+                              }`}
+                            >
+                              {val}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ),
+                )}
+
+                {errorVariante && (
+                  <p className="text-rose-600 text-xs font-bold tracking-wide flex items-center animate-in fade-in slide-in-from-top-1">
+                    <AlertCircle className="w-3.5 h-3.5 mr-1.5" /> Faltan
+                    opciones por seleccionar
+                  </p>
+                )}
               </div>
+            )}
 
-              {errorVariante && (
-                <p className="text-rose-600 text-xs font-bold tracking-wide flex items-center mt-3 animate-in fade-in slide-in-from-top-1">
-                  <AlertCircle className="w-3.5 h-3.5 mr-1.5" /> Debes
-                  seleccionar una opción
-                </p>
-              )}
-            </div>
-
-            {/* Descripción Collapsible */}
             {producto.descripcion && (
               <div className="border-t border-border/60 py-4 mt-2">
                 <button
@@ -316,7 +431,6 @@ export function ProductDetail({
                     className={`w-4 h-4 transition-transform duration-300 ${descOpen ? "rotate-180" : ""}`}
                   />
                 </button>
-
                 <div
                   className={`grid transition-all duration-300 ease-in-out ${descOpen ? "grid-rows-[1fr] opacity-100 mt-4" : "grid-rows-[0fr] opacity-0"}`}
                 >
@@ -329,7 +443,6 @@ export function ProductDetail({
               </div>
             )}
 
-            {/* Botón Desktop */}
             <div className="hidden md:block border-t border-border/60 pt-6 mt-4">
               <button
                 onClick={handleAddToCart}
@@ -359,7 +472,6 @@ export function ProductDetail({
                     className={`w-4 h-4 transition-transform duration-300 ${descOpen ? "rotate-180" : ""}`}
                   />
                 </button>
-
                 <div
                   className={`grid transition-all duration-300 ease-in-out ${descOpen ? "grid-rows-[1fr] opacity-100 mt-4" : "grid-rows-[0fr] opacity-0"}`}
                 >
@@ -378,7 +490,7 @@ export function ProductDetail({
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-center">
                   Modo Catálogo
                 </span>
-                <span className="text-xs text-muted-foreground text-center max-w-[250px]">
+                <span className="text-xs text-muted-foreground text-center max-w-60">
                   Para consultar stock o realizar un pedido, contactanos
                   directamente.
                 </span>
@@ -388,7 +500,6 @@ export function ProductDetail({
         )}
       </div>
 
-      {/* 🚀 STICKY FOOTER MOBILE (Oculto si no hay pedidos) */}
       {config?.pedidos_whatsapp !== false && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t border-border z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
           <button

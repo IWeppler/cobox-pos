@@ -10,9 +10,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-
-// 1. Definimos los tipos para evitar usar "any"
-type Theme = "light" | "dark" | "system";
+import { useThemeStore } from "@/shared/store/theme-store";
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -50,15 +48,13 @@ const isPwaInstalled = () => {
 
 const getDeferredPwaPrompt = () => {
   if (typeof window === "undefined") return null;
-
   return window.deferredPwaPrompt ?? null;
 };
 
 export function PreferencesPanel() {
   const [mounted, setMounted] = useState(false);
-  const [theme, setTheme] = useState<Theme>("light");
+  const { theme, setTheme, initTheme } = useThemeStore();
 
-  // Usamos la interfaz que creamos en lugar de <any>
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(getDeferredPwaPrompt);
   const [isInstalled, setIsInstalled] = useState(isPwaInstalled);
@@ -66,13 +62,8 @@ export function PreferencesPanel() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setMounted(true);
-
-      const storedTheme = localStorage.getItem("theme") as Theme | null;
-      if (storedTheme) {
-        setTheme(storedTheme);
-      } else if (document.documentElement.classList.contains("dark")) {
-        setTheme("dark");
-      }
+      // Aplicamos el tema guardado en Zustand al DOM apenas monta el panel
+      initTheme();
       setDeferredPrompt(getDeferredPwaPrompt());
     }, 0);
 
@@ -99,29 +90,7 @@ export function PreferencesPanel() {
       );
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
-  }, []);
-
-  const changeTheme = (newTheme: Theme) => {
-    setTheme(newTheme);
-
-    const root = document.documentElement;
-
-    if (newTheme === "dark") {
-      root.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else if (newTheme === "light") {
-      root.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    } else {
-      // Tema del sistema
-      localStorage.removeItem("theme");
-      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        root.classList.add("dark");
-      } else {
-        root.classList.remove("dark");
-      }
-    }
-  };
+  }, [initTheme]);
 
   const handleInstallClick = async () => {
     if (isInstalled) return;
@@ -135,7 +104,6 @@ export function PreferencesPanel() {
     }
 
     await deferredPrompt.prompt();
-
     const { outcome } = await deferredPrompt.userChoice;
 
     if (outcome === "accepted") {
@@ -181,7 +149,7 @@ export function PreferencesPanel() {
 
           <div className="flex bg-muted/50 p-1 rounded-xl border border-border/50">
             <button
-              onClick={() => changeTheme("light")}
+              onClick={() => setTheme("light")}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
                 theme === "light"
                   ? "bg-background shadow-sm text-foreground ring-1 ring-black/5 dark:ring-white/10"
@@ -191,7 +159,7 @@ export function PreferencesPanel() {
               <Sun className="w-4 h-4" /> Claro
             </button>
             <button
-              onClick={() => changeTheme("dark")}
+              onClick={() => setTheme("dark")}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
                 theme === "dark"
                   ? "bg-background shadow-sm text-foreground ring-1 ring-black/5 dark:ring-white/10"
@@ -201,7 +169,7 @@ export function PreferencesPanel() {
               <Moon className="w-4 h-4" /> Oscuro
             </button>
             <button
-              onClick={() => changeTheme("system")}
+              onClick={() => setTheme("system")}
               className={`flex-1 items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all hidden sm:flex ${
                 theme === "system"
                   ? "bg-background shadow-sm text-foreground ring-1 ring-black/5 dark:ring-white/10"

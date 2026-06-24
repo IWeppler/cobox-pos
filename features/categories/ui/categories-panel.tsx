@@ -202,7 +202,7 @@ export function CategoriesPanel({
           <Button
             onClick={handleSave}
             disabled={!hasChanges || isSaving}
-            className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white font-semibold rounded-lg"
+            className="w-full sm:w-auto"
           >
             {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Guardar Cambios
@@ -210,7 +210,7 @@ export function CategoriesPanel({
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-border overflow-hidden">
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="flex flex-col divide-y divide-border/60">
           {cats.map((cat, idx) => {
             const isLastEmptyRow = idx === cats.length - 1 && cat.nombre === "";
@@ -221,7 +221,7 @@ export function CategoriesPanel({
                 key={cat.id}
                 className={`flex items-center gap-3 p-3 transition-colors ${isLastEmptyRow ? "bg-muted/10" : "hover:bg-muted/30"}`}
               >
-                {/* Drag Handle (Visual) */}
+                {/* Drag Handle  */}
                 <div
                   className={`flex items-center ${isSubcategoria ? "ml-8" : ""}`}
                 >

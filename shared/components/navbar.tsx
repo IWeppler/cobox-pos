@@ -3,99 +3,15 @@
 import Link from "next/link";
 import Image from "next/image";
 import { CartButton } from "@/shared/ui/cart-button";
-import { Search, X, Menu, MapPin, Clock } from "lucide-react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useState, useEffect, Suspense, useRef } from "react";
+import { X, Menu, MapPin, Clock } from "lucide-react";
+import { useState, Suspense } from "react";
 import { ConfiguracionPOS } from "@/entities/config/types";
-import { Input } from "../ui/input";
 import { FaFacebook, FaInstagram, FaWhatsapp } from "react-icons/fa";
+import { AnnouncementBar } from "../ui/announcement-bar";
+import { SearchBar } from "./search-bar";
 
 interface NavbarProps {
   branding: ConfiguracionPOS;
-}
-
-function SearchBar() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-  const [term, setTerm] = useState("");
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setTimeout(() => {
-      setTerm(searchParams.get("q") || "");
-    }, 100);
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (isMobileOpen && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [isMobileOpen]);
-
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setTerm(val);
-
-    const params = new URLSearchParams(searchParams.toString());
-    if (val) {
-      params.set("q", val);
-    } else {
-      params.delete("q");
-    }
-
-    if (pathname.includes("/store")) {
-      router.replace(`/store?${params.toString()}`);
-    } else {
-      router.push(`/store?${params.toString()}`);
-    }
-  };
-
-  return (
-    <>
-      {/* Desktop Searchbar */}
-      <div className="hidden md:flex relative w-65 lg:w-75">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          type="text"
-          value={term}
-          onChange={handleSearch}
-          placeholder="Buscar producto..."
-          className="w-full h-10 pl-10 pr-4 bg-[#f5f4f4] border-none outline-none focus:ring-1 focus:ring-foreground text-xs transition-all rounded-none tracking-wide font-medium placeholder:text-muted-foreground/60 text-foreground"
-        />
-      </div>
-
-      {/* Mobile Icon Button */}
-      <button
-        className="md:hidden p-2 text-foreground hover:bg-muted transition-colors cursor-pointer"
-        onClick={() => setIsMobileOpen(!isMobileOpen)}
-      >
-        {isMobileOpen ? (
-          <X className="w-5 h-5" />
-        ) : (
-          <Search className="w-5 h-5" />
-        )}
-      </button>
-
-      {/* Mobile Expandable Search Input */}
-      {isMobileOpen && (
-        <div className="absolute top-16 left-0 w-full bg-white border-b border-border p-3 md:hidden flex animate-in slide-in-from-top-2 z-50">
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              ref={inputRef}
-              type="text"
-              value={term}
-              onChange={handleSearch}
-              placeholder="Buscar producto..."
-              className="w-full h-12 pl-10 pr-4 bg-[#f5f4f4] border-none outline-none focus:ring-1 focus:ring-foreground text-xs transition-all rounded-none uppercase tracking-widest font-bold placeholder:text-muted-foreground/60 text-foreground"
-            />
-          </div>
-        </div>
-      )}
-    </>
-  );
 }
 
 export function Navbar({ branding }: Readonly<NavbarProps>) {
@@ -105,14 +21,7 @@ export function Navbar({ branding }: Readonly<NavbarProps>) {
     <>
       {/* MARQUEE (ANNOUNCEMENT BAR) */}
       {branding.marquee_activo && branding.marquee_texto && (
-        <div className="relative flex overflow-x-hidden bg-foreground text-background font-bold text-[10px] sm:text-xs uppercase tracking-[0.2em] py-2 whitespace-nowrap z-50">
-          <div className="animate-marquee flex items-center shrink-0">
-            <span className="mx-4">{branding.marquee_texto}</span>
-            {/* Duplicamos el texto para lograr el efecto infinito suave */}
-            <span className="mx-4">{branding.marquee_texto}</span>
-            <span className="mx-4">{branding.marquee_texto}</span>
-          </div>
-        </div>
+        <AnnouncementBar isActive={true} text={branding.marquee_texto} />
       )}
 
       {/* HEADER INTELIGENTE */}

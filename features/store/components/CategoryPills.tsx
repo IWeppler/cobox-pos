@@ -1,14 +1,15 @@
 import { Button } from "@/shared/ui/button";
+import { CategoriaConStock } from "../hooks/use-catalog-filters";
 
 interface CategoryPillsProps {
   tipo: string;
-  conteosPorCategoria: Record<string, number>;
+  categoriasConStock: CategoriaConStock[];
   onTipoChange: (tipo: string) => void;
 }
 
 export function CategoryPills({
   tipo,
-  conteosPorCategoria,
+  categoriasConStock,
   onTipoChange,
 }: Readonly<CategoryPillsProps>) {
   return (
@@ -25,28 +26,21 @@ export function CategoryPills({
         Ver todo
       </Button>
 
-      {Object.entries(conteosPorCategoria)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([categoria, count]) => {
-          if (count === 0 || !categoria) return null;
-
-          return (
-            <Button
-              key={categoria}
-              variant={tipo === categoria ? "default" : "outline"}
-              className={`rounded-full h-12 md:h-9 px-5 text-xs font-semibold shrink-0 shadow-none border-border/60 transition-colors ${
-                tipo === categoria
-                  ? "bg-foreground text-background border-transparent hover:bg-foreground/90"
-                  : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-              onClick={() => onTipoChange(categoria)}
-            >
-              {categoria}{" "}
-              <span className="ml-1.5 opacity-60 font-normal">({count})</span>
-            </Button>
-          );
-        },
-      )}
+      {categoriasConStock.map((cat) => (
+        <Button
+          key={cat.id}
+          variant={tipo === cat.id ? "default" : "outline"}
+          className={`rounded-full h-12 md:h-9 px-5 text-xs font-semibold shrink-0 shadow-none border-border/60 transition-colors ${
+            tipo === cat.id
+              ? "bg-foreground text-background border-transparent hover:bg-foreground/90"
+              : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+          }`}
+          onClick={() => onTipoChange(cat.id)}
+        >
+          {cat.nombre}{" "}
+          <span className="ml-1.5 opacity-60 font-normal">({cat.count})</span>
+        </Button>
+      ))}
     </div>
   );
 }

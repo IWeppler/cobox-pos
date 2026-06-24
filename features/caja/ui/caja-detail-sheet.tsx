@@ -152,7 +152,7 @@ export function CajaDetailSheet({
     >
       <SheetContent
         side="right"
-        className="w-full sm:max-w-md p-0 flex flex-col bg-card"
+        className="w-full sm:max-w-md p-0 flex flex-col h-dvh overflow-hidden bg-card"
       >
         <SheetHeader className="p-6 border-b border-border z-10 shrink-0">
           <SheetTitle className="flex items-center gap-3 text-xl font-semi text-foreground">
@@ -163,7 +163,7 @@ export function CajaDetailSheet({
           </SheetTitle>
         </SheetHeader>
 
-        <ScrollArea className="flex-1 p-6">
+        <ScrollArea className="flex-1 overflow-y-auto min-h-0 p-6">
           <div className="text-center mb-6">
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
               Ticket Z #{idCorto}
@@ -201,15 +201,15 @@ export function CajaDetailSheet({
                     Diferencia de Efectivo
                   </p>
                   {diferencia === 0 ? (
-                    <span className="text-xl font-black text-emerald-600">
+                    <span className="text-xl font-semibold text-accent-indigo">
                       Caja Cuadrada
                     </span>
                   ) : diferencia < 0 ? (
-                    <span className="text-xl font-black text-rose-600">
+                    <span className="text-xl font-semibold text-rose-600">
                       Faltante: {formatearMoneda(diferencia)}
                     </span>
                   ) : (
-                    <span className="text-xl font-black text-blue-600">
+                    <span className="text-xl font-semibold text-accent-blue">
                       Sobrante: +{formatearMoneda(diferencia)}
                     </span>
                   )}
@@ -254,14 +254,18 @@ export function CajaDetailSheet({
                   {formatearMoneda(totalesDigitales.bruto)}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-rose-600/80">
-                <span>Comisiones Retenidas:</span>
-                <span className="font-medium text-rose-600">
+              <div className="flex justify-between items-center font-medium">
+                <span className="text-muted-foreground">
+                  Comisiones Retenidas:
+                </span>
+                <span className="">
                   -{formatearMoneda(totalesDigitales.comision)}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-blue-900 font-bold pt-1">
-                <span>Acreditación Neta:</span>
+              <div className="flex justify-between items-center  font-medium pt-1">
+                <span className="text-muted-foreground">
+                  Acreditación Neta:
+                </span>
                 <span>{formatearMoneda(totalesDigitales.neto)}</span>
               </div>
             </div>

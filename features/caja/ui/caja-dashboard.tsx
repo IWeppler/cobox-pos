@@ -234,7 +234,7 @@ export function CajaDashboard({
                     htmlFor="monto_inicial"
                     className="text-sm font-semibold text-foreground uppercase tracking-widest"
                   >
-                    Fondo Inicial
+                    Efectivo en caja
                   </Label>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">

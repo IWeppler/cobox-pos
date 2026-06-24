@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useState } from "react";
 import { Producto } from "@/entities/productos/types";
 import { Button } from "@/shared/ui/button";
 import { Plus, SearchX, ShoppingBag } from "lucide-react";
@@ -11,13 +11,19 @@ import { ProductCard } from "./product-card";
 import {
   DEFAULT_ORDEN,
   DEFAULT_TIPO,
-  DEFAULT_VARIANTE,
   ITEMS_POR_PAGINA,
   useCatalogFilters,
 } from "../hooks/use-catalog-filters";
+import { ConfiguracionPOS } from "@/entities/config/types";
 
 interface StoreCatalogProps {
   productos: Producto[];
+  config?: ConfiguracionPOS | null;
+  categorias?: {
+    id: string;
+    nombre: string;
+    slug?: string | null;
+  }[];
 }
 
 const ordenOptions: OrdenOption[] = [
@@ -27,7 +33,11 @@ const ordenOptions: OrdenOption[] = [
   { value: "mayor_precio", label: "Mayor precio" },
 ];
 
-export function StoreCatalog({ productos }: Readonly<StoreCatalogProps>) {
+export function StoreCatalog({
+  productos,
+  config,
+  categorias,
+}: Readonly<StoreCatalogProps>) {
   return (
     <Suspense
       fallback={
@@ -36,33 +46,47 @@ export function StoreCatalog({ productos }: Readonly<StoreCatalogProps>) {
         </div>
       }
     >
-      <CatalogContent productos={productos} />
+      <CatalogContent
+        productos={productos}
+        config={config}
+        categorias={categorias}
+      />
     </Suspense>
   );
 }
 
-function CatalogContent({ productos }: Readonly<StoreCatalogProps>) {
+function CatalogContent({
+  productos,
+  config,
+  categorias,
+}: Readonly<StoreCatalogProps>) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
   const searchQuery = searchParams.get("q") || "";
 
   const [tipo, setTipo] = useState(DEFAULT_TIPO);
-  const [variante, setVariante] = useState(DEFAULT_VARIANTE);
   const [orden, setOrden] = useState(DEFAULT_ORDEN);
   const [visibleCount, setVisibleCount] = useState(ITEMS_POR_PAGINA);
 
+  const [filtrosVariantes, setFiltrosVariantes] = useState<
+    Record<string, string>
+  >({});
+
   const {
-    conteosPorCategoria,
+    propiedadesGlobales,
+    categoriasConStock,
     productosFiltrados,
     productosVisibles,
     hayMasProductos,
     hayFiltrosActivos,
   } = useCatalogFilters({
     productos,
+    categorias,
+    config,
     searchQuery,
     tipo,
-    variante,
+    filtrosVariantes,
     orden,
     visibleCount,
   });
@@ -74,39 +98,19 @@ function CatalogContent({ productos }: Readonly<StoreCatalogProps>) {
     resetVisibleCount();
   };
 
-  const handleVarianteChange = (value: string) => {
-    setVariante(value);
-    resetVisibleCount();
-  };
-
   const handleOrdenChange = (value: string) => {
     setOrden(value);
     resetVisibleCount();
   };
 
-  const variantesDisponibles = useMemo(() => {
-    const variantes = new Set<string>();
-
-    productos.forEach((p) => {
-      // 1. Buscamos en el modelo nuevo
-      p.producto_variantes?.forEach((v) => {
-        if (v.stock > 0 && v.nombre_display !== "Único")
-          variantes.add(v.nombre_display);
-      });
-
-      // 2. Fallback al modelo viejo (Legacy)
-      p.stock?.forEach((s) => {
-        if (s.cantidad > 0 && s.variante !== "Único" && s.variante !== "Unico")
-          variantes.add(s.variante);
-      });
-    });
-
-    return Array.from(variantes).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  }, [productos]);
+  const handleFiltroVarianteChange = (propiedad: string, valor: string) => {
+    setFiltrosVariantes((prev) => ({ ...prev, [propiedad]: valor }));
+    resetVisibleCount();
+  };
 
   const limpiarFiltros = () => {
     setTipo(DEFAULT_TIPO);
-    setVariante(DEFAULT_VARIANTE);
+    setFiltrosVariantes({});
     setOrden(DEFAULT_ORDEN);
     resetVisibleCount();
 
@@ -133,18 +137,18 @@ function CatalogContent({ productos }: Readonly<StoreCatalogProps>) {
     <div className="space-y-6">
       <CategoryPills
         tipo={tipo}
-        conteosPorCategoria={conteosPorCategoria}
+        categoriasConStock={categoriasConStock}
         onTipoChange={handleTipoChange}
       />
 
       <CatalogToolbar
-        variantesDisponibles={variantesDisponibles}
-        variante={variante}
+        propiedadesGlobales={propiedadesGlobales}
+        filtrosVariantes={filtrosVariantes}
         orden={orden}
         searchQuery={searchQuery}
         hayFiltrosActivos={hayFiltrosActivos}
         ordenOptions={ordenOptions}
-        onVarianteChange={handleVarianteChange}
+        onFiltroVarianteChange={handleFiltroVarianteChange}
         onOrdenChange={handleOrdenChange}
         onLimpiarFiltros={limpiarFiltros}
       />

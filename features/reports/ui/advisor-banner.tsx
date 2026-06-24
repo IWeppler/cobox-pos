@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Lightbulb,
   X,
@@ -17,10 +17,38 @@ interface AdvisorBannerProps {
 }
 
 export function AdvisorBanner({ insights }: Readonly<AdvisorBannerProps>) {
-  const [isVisible, setIsVisible] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  if (!isVisible || insights.length === 0) return null;
+  useEffect(() => {
+    // Envolvemos en setTimeout para evitar el "cascading render" síncrono que detecta el linter
+    const timer = setTimeout(() => {
+      setMounted(true);
+      // 1. Obtenemos la fecha de hoy (Ej: "Tue Jun 09 2026")
+      const hoy = new Date().toDateString();
+
+      // 2. Buscamos qué día se cerró por última vez
+      const ultimaVezVisto = localStorage.getItem("advisor-banner-last-closed");
+
+      // 3. Si no se cerró hoy, lo mostramos
+      if (ultimaVezVisto !== hoy) {
+        setIsVisible(true);
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleClose = () => {
+    // Cuando lo cierra, guardamos la fecha de hoy para no volver a molestarlo hasta mañana
+    const hoy = new Date().toDateString();
+    localStorage.setItem("advisor-banner-last-closed", hoy);
+    setIsVisible(false);
+  };
+
+  // Prevenimos error de hidratación y no mostramos si no es visible
+  if (!mounted || !isVisible || insights.length === 0) return null;
 
   const currentInsight = insights[currentIndex];
 
@@ -76,7 +104,7 @@ export function AdvisorBanner({ insights }: Readonly<AdvisorBannerProps>) {
     >
       {/* Botón Cerrar */}
       <button
-        onClick={() => setIsVisible(false)}
+        onClick={handleClose}
         className="absolute top-3 right-3 p-1 text-muted-foreground hover:bg-black/5 hover:text-foreground rounded-md transition-colors cursor-pointer z-10"
         aria-label="Cerrar sugerencias"
       >
@@ -125,7 +153,7 @@ export function AdvisorBanner({ insights }: Readonly<AdvisorBannerProps>) {
           >
             <Button
               size="sm"
-              className={`w-full sm:w-auto font-bold ${config.btnClass}`}
+              className={`w-full sm:w-auto font-bold ${config.btnClass} shadow-none`}
             >
               {currentInsight.actionLabel}{" "}
               <ArrowRight className="w-4 h-4 ml-1.5" />

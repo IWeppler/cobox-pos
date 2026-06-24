@@ -176,12 +176,13 @@ export function TicketSheet({
               {/* RESUMEN FINANCIERO CON SOPORTE MULTI-PAGO */}
               {ticket?.montoNeto !== undefined && (
                 <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-                  <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                      <Wallet className="w-4 h-4 text-muted-foreground/70" />{" "}
-                      Resumen Financiero
-                    </h3>
-                  </div>
+                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-muted-foreground/70" />{" "}
+                    Resumen Financiero
+                  </h3>
+
+                  
+                  
                   <div className="divide-y divide-border">
                     {/* Lista de Pagos Desglosados */}
                     {ticket.pagosDesglosados &&
@@ -249,11 +250,11 @@ export function TicketSheet({
                       />
                     )}
 
-                    <div className="bg-emerald-50/50 dark:bg-emerald-950/20 flex items-center justify-between px-4 py-3 border-t border-border">
-                      <span className="flex items-center gap-2 text-sm font-bold text-emerald-800 dark:text-emerald-500">
-                        Neto Estimado
+                    <div className="bg-muted/40 flex items-center justify-between px-4 py-3 border-t border-border">
+                      <span className="flex items-center gap-2 font-medium text-muted-foreground">
+                        Ganancia Neta
                       </span>
-                      <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                         ${ticket.montoNeto?.toLocaleString("es-AR")}
                       </span>
                     </div>
