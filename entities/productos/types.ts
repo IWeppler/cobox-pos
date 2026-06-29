@@ -15,6 +15,7 @@ export interface ProductoVariante {
   stock: number;
   stock_minimo: number;
   activa: boolean;
+  atributos?: Record<string, string>;
 }
 
 export interface CategoriaRelacion {
@@ -36,6 +37,7 @@ export interface Producto {
   publicado: boolean;
   slug: string | null;
   descripcion?: string | null;
+  atributos_globales?: Record<string, string>;
   stock?: ProductoStock[];
   producto_variantes?: ProductoVariante[];
 }

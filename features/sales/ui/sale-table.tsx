@@ -20,14 +20,13 @@ import {
   TableRow,
 } from "@/shared/ui/table";
 import { Badge } from "@/shared/ui/badge";
-import { Download, Eye, Plus, Receipt } from "lucide-react";
+import { Eye, Receipt } from "lucide-react";
 import { AnularVentaModal } from "./cancel-sale-modal";
 import { Button } from "@/shared/ui/button";
 import { TicketSheet } from "./ticket-sheet";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
 import { getMetodoPagoColor } from "@/shared/utils/payment-methods";
 import { SaleTableHeader } from "./sale-table-header";
-import Link from "next/link";
 
 interface VentasTableProps {
   ventas: Venta[];
@@ -47,7 +46,6 @@ export function VentasTable({
 
   const isAdmin = userRole === "ADMIN";
 
-  // Obtenemos la configuración de branding para los tickets
   useEffect(() => {
     const fetchConfig = async () => {
       const supabase = createClient();
@@ -75,6 +73,28 @@ export function VentasTable({
     { value: "mayor_cantidad", label: "Más unidades vendidas" },
   ];
 
+  const getClienteNombre = (venta: Venta) =>
+    getSupabaseRelation(venta.clientes)?.nombre || "Consumidor final";
+
+  const getEstadoPago = (venta: Venta) => {
+    const montoPendiente = Number(venta.monto_pendiente || 0);
+    const estaPagado =
+      venta.estado_pago === "PAGADA" ||
+      (!venta.estado_pago && montoPendiente <= 0) ||
+      montoPendiente <= 0;
+
+    return {
+      estaPagado,
+      label: estaPagado ? "Pagado" : "Fiado",
+    };
+  };
+
+  const getPagoLabel = (venta: Venta) => {
+    const pagos = venta.venta_pagos || [];
+    if (venta.es_pago_mixto || pagos.length > 1) return "Mixto";
+    return pagos[0]?.metodo_nombre || venta.metodo_pago || "EFECTIVO";
+  };
+
   const ventasFiltradasYOrdenadas = useMemo(() => {
     const resultado = ventas.filter((venta) => {
       const items = venta.ventas_items || [];
@@ -83,11 +103,14 @@ export function VentasTable({
       const searchLower = filtroNombre.toLowerCase().replace("#", "");
       const numeroRecibo = venta.id.split("-")[0].toLowerCase();
       const matchRecibo = numeroRecibo.includes(searchLower);
+      const matchCliente = getClienteNombre(venta)
+        .toLowerCase()
+        .includes(searchLower);
 
       const matchesFiltros = items.some((item: VentaItem) => {
         const producto = getSupabaseRelation(item.producto);
         const nombre = producto?.nombre?.toLowerCase() || "";
-        return nombre.includes(searchLower) || matchRecibo;
+        return nombre.includes(searchLower) || matchRecibo || matchCliente;
       });
 
       return matchesFiltros;
@@ -144,6 +167,16 @@ export function VentasTable({
       venta.venta_pagos && venta.venta_pagos.length > 0
         ? venta.venta_pagos[0]
         : null;
+    const clienteNombre = getClienteNombre(venta);
+    const pagosDesglosados = (venta.venta_pagos || []).map((pago) => ({
+      nombre: pago.metodo_nombre,
+      monto: Number(pago.monto_bruto || 0),
+      tipo: pago.metodo_tipo,
+      comisionMonto: Number(pago.comision_monto || 0),
+      montoNeto: Number(pago.monto_neto || 0),
+      acreditacionDias: Number(pago.acreditacion_dias || 0),
+      tipoMovimiento: pago.tipo_movimiento,
+    }));
 
     setTicketAbierto({
       items: (venta.ventas_items || []).map(
@@ -156,7 +189,7 @@ export function VentasTable({
         }),
       ),
       total: venta.total,
-      metodoPago: pagoInfo?.metodo_nombre || venta.metodo_pago || "EFECTIVO",
+      metodoPago: getPagoLabel(venta),
       nroRecibo: venta.id.split("-")[0].toUpperCase(),
       fecha: formatearFechaHora(venta.fecha_venta),
       vendedor: getSupabaseRelation(venta.perfiles)?.nombre || "Administrador",
@@ -167,6 +200,12 @@ export function VentasTable({
       comisionMonto: pagoInfo ? Number(pagoInfo.comision_monto) : 0,
       montoNeto: pagoInfo ? Number(pagoInfo.monto_neto) : venta.total,
       acreditacionDias: pagoInfo ? Number(pagoInfo.acreditacion_dias) : 0,
+      pagosDesglosados,
+      clienteNombre:
+        clienteNombre === "Consumidor final" ? undefined : clienteNombre,
+      estadoPago: venta.estado_pago ?? undefined,
+      montoCobrado: Number(venta.monto_cobrado || 0),
+      montoPendiente: Number(venta.monto_pendiente || 0),
     });
   };
 
@@ -184,7 +223,6 @@ export function VentasTable({
         orderValue={orden}
         onOrderChange={setOrden}
         orderOptions={ordenOptions}
-       
       />
 
       {/* TABLA O EMPTY STATE */}
@@ -198,20 +236,16 @@ export function VentasTable({
       ) : (
         <>
           {/* VISTA DESKTOP (Tabla tradicional, oculta en móviles) */}
-          <div className="hidden md:block rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="hidden md:block rounded-lg border border-border bg-card overflow-hidden">
             <div className="overflow-x-auto">
               <Table className="w-full min-w-150">
                 <TableHeader>
                   <TableRow className="bg-muted/30 border-b border-border/60 hover:bg-muted/30">
-                    <TableHead className="w-28 pl-4 sm:pl-6">Recibo</TableHead>
-                    <TableHead>Resumen de Venta</TableHead>
-                    <TableHead className="hidden sm:table-cell">
-                      Fecha
-                    </TableHead>
-                    <TableHead className="hidden md:table-cell">
-                      Vendedor
-                    </TableHead>
-                    <TableHead className="hidden sm:table-cell">Pago</TableHead>
+                    <TableHead className="w-28 pl-4 sm:pl-6">Ticket</TableHead>
+                    <TableHead className="w-42">Fecha</TableHead>
+                    <TableHead>Detalle</TableHead>
+                    <TableHead className="w-52">Cliente / Estado</TableHead>
+                    <TableHead className="w-28">Pago</TableHead>
                     <TableHead className="text-right font-bold">
                       Total
                     </TableHead>
@@ -235,12 +269,9 @@ export function VentasTable({
                         : producto.nombre;
                       const itemsExtra = items.length - 1;
 
-                      const gananciaNeta =
-                        venta.total - (venta.precio_costo || 0);
-                      const nombreVendedor =
-                        getSupabaseRelation(venta.perfiles)?.nombre ||
-                        "Administrador";
-                      const metodoPago = venta.metodo_pago || "EFECTIVO";
+                      const clienteNombre = getClienteNombre(venta);
+                      const estadoPago = getEstadoPago(venta);
+                      const metodoPago = getPagoLabel(venta);
 
                       return (
                         <TableRow
@@ -250,6 +281,13 @@ export function VentasTable({
                         >
                           <TableCell className="font-bold text-muted-foreground text-xs pl-4 sm:pl-6">
                             #{venta.id.split("-")[0].toUpperCase()}
+                          </TableCell>
+
+                          <TableCell
+                            className="text-sm text-muted-foreground"
+                            suppressHydrationWarning
+                          >
+                            {formatearFechaHora(venta.fecha_venta)}
                           </TableCell>
 
                           <TableCell className="font-semibold text-foreground py-4">
@@ -271,39 +309,36 @@ export function VentasTable({
                             </div>
                           </TableCell>
 
-                          {/* ¡Agregamos suppressHydrationWarning aquí! */}
-                          <TableCell
-                            className="text-sm text-muted-foreground hidden sm:table-cell"
-                            suppressHydrationWarning
-                          >
-                            {formatearFechaHora(venta.fecha_venta)}
+                          <TableCell>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-foreground">
+                                {clienteNombre}
+                              </p>
+                              <span
+                                className={`mt-1 text-xs uppercase font-bold ${
+                                  estadoPago.estaPagado
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : "text-amber-700"
+                                }`}
+                              >
+                                {estadoPago.label}
+                              </span>
+                            </div>
                           </TableCell>
 
-                          <TableCell className="text-sm font-medium text-muted-foreground hidden md:table-cell">
-                            {nombreVendedor}
-                          </TableCell>
-
-                          <TableCell className="hidden sm:table-cell">
+                          <TableCell>
                             <Badge
                               variant="outline"
-                              className={`text-[10px] uppercase font-bold tracking-widest shadow-none ${getMetodoPagoColor(metodoPago)}`}
+                              className={`text-[10px] uppercase font-bold tracking-widest ${getMetodoPagoColor(metodoPago)}`}
                             >
                               {metodoPago}
                             </Badge>
                           </TableCell>
 
                           <TableCell className="text-right">
-                            <div className="font-semibold text-foreground text-base">
+                            <div className="font-medium text-foreground">
                               {formatearMoneda(venta.total)}
                             </div>
-                            {isAdmin && (
-                              <div
-                                className="text-[11px] font-medium text-emerald-600 mt-0.5"
-                                title="Ganancia neta del ticket"
-                              >
-                                +{formatearMoneda(gananciaNeta)}
-                              </div>
-                            )}
                           </TableCell>
 
                           <TableCell
@@ -378,11 +413,9 @@ export function VentasTable({
                   : producto.nombre;
                 const itemsExtra = items.length - 1;
 
-                const gananciaNeta = venta.total - (venta.precio_costo || 0);
-                const nombreVendedor =
-                  getSupabaseRelation(venta.perfiles)?.nombre ||
-                  "Administrador";
-                const metodoPago = venta.metodo_pago || "EFECTIVO";
+                const clienteNombre = getClienteNombre(venta);
+                const estadoPago = getEstadoPago(venta);
+                const metodoPago = getPagoLabel(venta);
 
                 return (
                   <div
@@ -413,23 +446,34 @@ export function VentasTable({
                         <div className="font-semibold text-foreground text-lg">
                           {formatearMoneda(venta.total)}
                         </div>
-                        {isAdmin && (
-                          <div className="text-[11px] font-medium text-emerald-600 mt-0.5 text-right">
-                            +{formatearMoneda(gananciaNeta)}
-                          </div>
-                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between gap-2 mb-3">
                       <Badge
                         variant="outline"
                         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-tight ${getMetodoPagoColor(metodoPago)}`}
                       >
                         {metodoPago}
                       </Badge>
+                      <Badge
+                        variant="outline"
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-tight ${
+                          estadoPago.estaPagado
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-amber-200 bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {estadoPago.label}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <span className="text-xs text-muted-foreground font-medium truncate">
+                        {clienteNombre}
+                      </span>
                       <span
-                        className="text-xs text-muted-foreground font-medium"
+                        className="text-xs text-muted-foreground font-medium shrink-0"
                         suppressHydrationWarning
                       >
                         {formatearFechaHora(venta.fecha_venta)}
@@ -438,7 +482,7 @@ export function VentasTable({
 
                     <div className="flex items-center justify-between pt-3 border-t border-border/50">
                       <span className="text-xs font-medium text-muted-foreground truncate pr-2">
-                        Vend: {nombreVendedor}
+                        Ticket #{venta.id.split("-")[0].toUpperCase()}
                       </span>
                       <div
                         className="flex items-center gap-2"

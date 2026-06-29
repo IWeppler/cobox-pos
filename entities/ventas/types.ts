@@ -35,15 +35,18 @@ export interface VentaDescuento {
 export interface VentaPago {
   id?: string;
   venta_id?: string;
+  cliente_id?: string | null;
   metodo_pago_id?: string | null;
   metodo_nombre: string;
   metodo_tipo: string;
   monto_bruto: number;
-  comision_porcentaje: number;
+  comision_porcentaje?: number;
   comision_monto: number;
   monto_neto: number;
   acreditacion_dias: number;
+  tipo_movimiento?: string; // 'PAGO_VENTA' | 'PAGO_CUENTA_CORRIENTE'
   creado_en?: string;
+  clientes?: SupabaseRelation<{ nombre: string }>;
 }
 
 export interface CreateSalePaymentInput {
@@ -51,13 +54,22 @@ export interface CreateSalePaymentInput {
   montoAsignado: number;
 }
 
+export type EstadoPagoVenta = "PAGADA" | "PARCIAL" | "PENDIENTE" | "ANULADA";
+
 export interface Venta {
   id: string;
+  cliente_id?: string | null;
   total: number;
   precio_costo: number;
   cantidad: number;
   fecha_venta: string;
   metodo_pago?: string | null;
+
+  clientes?: SupabaseRelation<{ nombre?: string | null }>;
+  monto_cobrado?: number | null;
+  monto_pendiente?: number | null;
+  estado_pago?: EstadoPagoVenta | null;
+
   perfiles?: {
     nombre: string;
   } | null;
@@ -91,8 +103,19 @@ export interface TicketData {
   comisionMonto?: number;
   montoNeto?: number;
   acreditacionDias?: number;
+  // Desglose para pagos mixtos
   pagosDesglosados?: {
     nombre: string;
     monto: number;
+    tipo?: string;
+    comisionMonto?: number;
+    montoNeto?: number;
+    acreditacionDias?: number;
+    tipoMovimiento?: string;
   }[];
+  // Datos del Cliente (si fió)
+  clienteNombre?: string;
+  estadoPago?: string;
+  montoCobrado?: number;
+  montoPendiente?: number;
 }

@@ -76,13 +76,14 @@ export async function crearProductoAction(
     .insert({
       nombre,
       tipo, // Fallback legacy
-      categoria_id: categoria_id || null, // Nueva FK
+      categoria_id: categoria_id || null,
       descripcion,
       precio,
       precio_costo,
       imagen_url,
       slug,
       publicado: true,
+      atributos_globales: {},
     })
     .select("id")
     .single();
@@ -101,6 +102,7 @@ export async function crearProductoAction(
     await supabase.from("producto_variantes").insert({
       producto_id: nuevoProducto.id,
       nombre_display: "Único",
+      atributos: {},
       precio: null, // Hereda del padre
       costo: null, // Hereda del padre
       stock: stockBase,
@@ -124,65 +126,12 @@ export async function crearProductoAction(
       }[];
       const variantes = JSON.parse(variantesStr) as any[];
 
-      const attrMap: Record<string, string> = {};
-      const valMap: Record<string, Record<string, string>> = {};
+      // BATCH INSERT: Preparamos arrays para insertar todo de un solo golpe
+      const variantesToInsert = [];
+      const stockLegacyToInsert = [];
 
-      // A. Crear o reciclar Opciones (Atributos) y sus Valores en la DB Global
-      for (const op of opciones) {
-        const slugAttr = slugify(op.nombre);
-
-        let { data: attr } = await supabase
-          .from("atributos")
-          .select("id")
-          .eq("slug", slugAttr)
-          .single();
-        if (!attr) {
-          const { data: newAttr } = await supabase
-            .from("atributos")
-            .insert({
-              nombre: op.nombre,
-              slug: slugAttr,
-              tipo: "TEXT",
-              activo: true,
-            })
-            .select("id")
-            .single();
-          attr = newAttr;
-        }
-
-        if (attr) {
-          attrMap[op.nombre] = attr.id;
-          valMap[op.nombre] = {};
-
-          for (const v of op.valores) {
-            const slugVal = slugify(v);
-            let { data: valData } = await supabase
-              .from("atributo_valores")
-              .select("id")
-              .eq("atributo_id", attr.id)
-              .eq("slug", slugVal)
-              .single();
-            if (!valData) {
-              const { data: newVal } = await supabase
-                .from("atributo_valores")
-                .insert({
-                  atributo_id: attr.id,
-                  valor: v,
-                  slug: slugVal,
-                  activo: true,
-                })
-                .select("id")
-                .single();
-              valData = newVal;
-            }
-            if (valData) valMap[op.nombre][v] = valData.id;
-          }
-        }
-      }
-
-      // B. Guardar las Variantes concretas que armó el usuario
       for (const v of variantes) {
-        // Ordenamos el nombre para que quede lindo (Ej: "Rojo / S") basándonos en el orden de las opciones
+        // Ordenamos el nombre para que quede lindo (Ej: "Rojo / S")
         const nombreDisplay = opciones
           .map((op) => v.valores[op.nombre])
           .filter(Boolean)
@@ -194,45 +143,26 @@ export async function crearProductoAction(
           : null;
         const vStock = Number.parseInt(v.stock || "0");
 
-        const { data: varData } = await supabase
-          .from("producto_variantes")
-          .insert({
-            producto_id: nuevoProducto.id,
-            nombre_display: nombreDisplay,
-            precio: vPrecio,
-            costo: vCosto,
-            stock: vStock,
-            sku: v.sku || null,
-          })
-          .select("id")
-          .single();
+        variantesToInsert.push({
+          producto_id: nuevoProducto.id,
+          nombre_display: nombreDisplay,
+          atributos: v.valores,
+          precio: vPrecio,
+          costo: vCosto,
+          stock: vStock,
+          sku: v.sku || null,
+        });
 
-        if (varData) {
-          // Relacionar la variante creada con los valores específicos
-          const varValores = [];
-          for (const [opNombre, opValor] of Object.entries(v.valores)) {
-            const aId = attrMap[opNombre];
-            const avId = valMap[opNombre]?.[opValor as string];
-            if (aId && avId) {
-              varValores.push({
-                variante_id: varData.id,
-                atributo_id: aId,
-                atributo_valor_id: avId,
-              });
-            }
-          }
-          if (varValores.length > 0) {
-            await supabase.from("producto_variante_valores").insert(varValores);
-          }
-        }
-
-        // Mantenemos legacy stock table para no romper la app vieja
-        await supabase.from("productos_stock").insert({
+        stockLegacyToInsert.push({
           producto_id: nuevoProducto.id,
           variante: nombreDisplay,
           cantidad: vStock,
         });
       }
+
+      // Hacemos el insert masivo (Muchísimo más rápido y eficiente en Supabase)
+      await supabase.from("producto_variantes").insert(variantesToInsert);
+      await supabase.from("productos_stock").insert(stockLegacyToInsert);
     }
   }
 

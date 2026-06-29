@@ -1,4 +1,4 @@
-Diccionario de Datos - Vivero Tostado (Supabase)
+Diccionario de Datos - System POS (Supabase)
 
 Este documento describe el esquema de la base de datos relacional en Supabase para el sistema de Punto de Venta (POS) y Catálogo Online. Actualizado con los tipos de datos exactos de la BD.
 
@@ -164,7 +164,7 @@ Tablas pivote para asociar promociones a métodos o categorías.
 
 - Ajustes globales del comercio (Singleton).
   id (uuid, PK)
-  posName (text, default: 'Vivero Tostado')
+  posName (text, default: 'System POS')
   whatsapp (text)
   direccion (text, nullable)
   mensaje_ticket (text, nullable, default: '¡Gracias por su compra!')

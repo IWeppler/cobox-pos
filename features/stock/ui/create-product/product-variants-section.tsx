@@ -186,7 +186,7 @@ export function ProductVariantsSection({
                         <Label className="text-xs font-semibold text-muted-foreground">
                           Valores
                         </Label>
-                        <div className="flex flex-wrap items-center gap-2 p-1 min-h-[40px] bg-card border border-border rounded-lg shadow-none focus-within:ring-1 focus-within:ring-primary/20 relative">
+                        <div className="flex flex-wrap items-center gap-2 p-1 min-h-10 bg-card border border-border rounded-lg shadow-none focus-within:ring-1 focus-within:ring-primary/20 relative">
                           {op.valores.map((val) => (
                             <Badge
                               key={val}
@@ -206,7 +206,7 @@ export function ProductVariantsSection({
                             </Badge>
                           ))}
 
-                          <div className="relative flex-1 min-w-[120px]">
+                          <div className="relative flex-1 min-w-30">
                             <input
                               type="text"
                               placeholder={
@@ -232,7 +232,7 @@ export function ProductVariantsSection({
                             {focusedOptionId === op.id &&
                               (op.nombre === "Color" ||
                                 op.nombre === "Talle") && (
-                                <div className="absolute top-full left-0 mt-2 max-h-48 w-48 overflow-y-auto bg-card border border-border rounded-lg shadow-lg z-[60] p-1 flex flex-col gap-0.5">
+                                <div className="absolute top-full left-0 mt-2 max-h-48 w-48 overflow-y-auto bg-card border border-border rounded-lg shadow-lg z-60 p-1 flex flex-col gap-0.5">
                                   {suggestions.length > 0 ? (
                                     suggestions.map((sugg) => (
                                       <button
@@ -279,7 +279,7 @@ export function ProductVariantsSection({
                 <p className="text-sm font-semibold text-foreground pt-4">
                   No hay datos
                 </p>
-                <p className="text-xs text-muted-foreground mt-1 text-center max-w-[250px]">
+                <p className="text-xs text-muted-foreground mt-1 text-center max-w-60">
                   Agrega propiedades y valores arriba para generar
                   automáticamente tus variantes.
                 </p>

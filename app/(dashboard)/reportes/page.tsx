@@ -17,6 +17,7 @@ import {
   DropletOff,
   Package,
   ShoppingCart,
+  Users,
 } from "lucide-react";
 import { BajasTab } from "@/features/reports/ui/bajas-tab";
 import { InventarioTab } from "@/features/reports/ui/inventario-tab";
@@ -24,6 +25,7 @@ import { RentabilidadTab } from "@/features/reports/ui/rentabilidad-tab";
 import { ResumenTab } from "@/features/reports/ui/resumen-tab";
 import { BajaAprobadaReporte } from "@/entities/reportes/types";
 import { VentasTab } from "@/features/reports/ui/ventas-tab";
+import { CrmTab } from "@/features/reports/ui/crm-tab";
 import { Venta } from "@/entities/ventas/types";
 
 export const dynamic = "force-dynamic";
@@ -43,23 +45,31 @@ export default async function ReportesPage({
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const [ventasResponse, productosResponse, egresosResponse, bajasResponse] =
-    await Promise.all([
-      getVentasAction(),
-      getStockAction(),
-      supabase.from("egresos").select("id, concepto, monto, fecha"),
-      supabase
-        .from("bajas")
-        .select(
-          "id, producto_id, variante, cantidad, motivo, creado_en, estado, perfiles(nombre)",
-        )
-        .eq("estado", "APROBADA"),
-    ]);
+  // 🚀 Modificamos la consulta para traer TODOS los clientes y poder analizar la cartera completa
+  const [
+    ventasResponse,
+    productosResponse,
+    egresosResponse,
+    bajasResponse,
+    clientesResponse,
+  ] = await Promise.all([
+    getVentasAction(),
+    getStockAction(),
+    supabase.from("egresos").select("id, concepto, monto, fecha"),
+    supabase
+      .from("bajas")
+      .select(
+        "id, producto_id, variante, cantidad, motivo, creado_en, estado, perfiles(nombre)",
+      )
+      .eq("estado", "APROBADA"),
+    supabase.from("clientes").select("*").order("nombre", { ascending: true }),
+  ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
   const productos = productosResponse.data || [];
   const egresos = egresosResponse.data || [];
   const bajasAprobadas = (bajasResponse.data || []) as BajaAprobadaReporte[];
+  const clientes = clientesResponse.data || [];
 
   const metrics = getDashboardMetrics(
     ventas,
@@ -162,6 +172,12 @@ export default async function ReportesPage({
               >
                 <DropletOff className="w-4 h-4 mr-2" /> Bajas
               </TabsTrigger>
+              <TabsTrigger
+                value="crm"
+                className="rounded-sm px-2 data-[state=active]:bg-background data-[state=active]:border-border data-[state=active]:text-foreground  cursor-pointer transition-colors"
+              >
+                <Users className="w-4 h-4 mr-2" /> CRM & Cobranza
+              </TabsTrigger>
             </TabsList>
             <ScrollBar orientation="horizontal" className="invisible" />
           </ScrollArea>
@@ -186,6 +202,12 @@ export default async function ReportesPage({
           metrics={metrics}
           bajasDelPeriodo={bajasDelPeriodo}
           productos={productos}
+        />
+        {/* 🚀 Pasamos todo el universo de datos al cerebro CRM */}
+        <CrmTab
+          ventas={ventas}
+          ventasDelPeriodo={ventasDelPeriodo}
+          clientes={clientes}
         />
       </Tabs>
     </div>

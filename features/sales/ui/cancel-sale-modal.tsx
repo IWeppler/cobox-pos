@@ -117,7 +117,7 @@ export function AnularVentaModal({
                       htmlFor="r1"
                       className="font-bold text-emerald-800 dark:text-emerald-500 cursor-pointer flex items-center gap-1.5"
                     >
-                      <PackagePlus className="w-4 h-4" /> Volver a la estantería
+                      <PackagePlus className="w-4 h-4" /> Devolver al inventario
                     </Label>
                     <p className="text-xs text-muted-foreground">
                       El cliente se arrepintió. El producto está sano y se sumará

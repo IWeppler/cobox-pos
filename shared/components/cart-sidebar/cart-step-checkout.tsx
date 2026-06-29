@@ -1,0 +1,429 @@
+"use client";
+
+import { ReactNode, useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  Banknote,
+  CreditCard,
+  Plus,
+  Smartphone,
+  Split,
+  Tag,
+  User,
+  Wallet,
+  X,
+} from "lucide-react";
+import { CreateSalePaymentInput } from "@/entities/ventas/types";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Label } from "@/shared/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
+import { ClientSelector, ClienteBasico } from "./client-selector";
+import { MetodoPagoPOS, PromocionDB } from "./types";
+
+interface CartStepCheckoutProps {
+  isPOSMode: boolean;
+  metodosPagoDB: MetodoPagoPOS[];
+  pagos: CreateSalePaymentInput[];
+  onPagosChange: (pagos: CreateSalePaymentInput[]) => void;
+  totalFinal: number;
+  isCuentaCorriente: boolean;
+  onCuentaCorrienteChange: (value: boolean) => void;
+  modoMixto: boolean;
+  onModoMixtoChange: (value: boolean) => void;
+  anticipoMinimo: number;
+  clienteSeleccionado: ClienteBasico | null;
+  onClienteChange: (cliente: ClienteBasico | null) => void;
+  promocionesElegibles: PromocionDB[];
+  promocionActivaId: string;
+  onPromocionChange: (promocionId: string) => void;
+  onBackToCart: () => void;
+  children?: ReactNode;
+}
+
+const getPaymentIcon = (tipo: string) => {
+  if (tipo === "TRANSFERENCIA") return Smartphone;
+  if (tipo === "BILLETERA_VIRTUAL") return Wallet;
+  if (tipo === "TARJETA") return CreditCard;
+  return Banknote;
+};
+
+export function CartStepCheckout({
+  isPOSMode,
+  metodosPagoDB,
+  pagos,
+  onPagosChange,
+  totalFinal,
+  isCuentaCorriente,
+  onCuentaCorrienteChange,
+  modoMixto,
+  onModoMixtoChange,
+  anticipoMinimo,
+  clienteSeleccionado,
+  onClienteChange,
+  promocionesElegibles,
+  promocionActivaId,
+  onPromocionChange,
+  onBackToCart,
+  children,
+}: Readonly<CartStepCheckoutProps>) {
+  const [anticipoManual, setAnticipoManual] = useState<number | "">("");
+  const anticipoActual =
+    anticipoManual === "" ? anticipoMinimo : Number(anticipoManual);
+  const montoObjetivo = isCuentaCorriente ? anticipoActual : totalFinal;
+  const sumaPagos = pagos.reduce(
+    (acc, pago) => acc + Number(pago.montoAsignado || 0),
+    0,
+  );
+  const diferencia = montoObjetivo - sumaPagos;
+
+  const syncSinglePayment = (monto: number, metodoId?: string) => {
+    const currentMethodId =
+      metodoId || pagos[0]?.metodoPagoId || metodosPagoDB[0]?.id;
+    if (!currentMethodId) return;
+    onPagosChange([{ metodoPagoId: currentMethodId, montoAsignado: monto }]);
+  };
+
+  useEffect(() => {
+    if (!modoMixto && metodosPagoDB.length > 0) {
+      const currentMethodId = pagos[0]?.metodoPagoId || metodosPagoDB[0]?.id;
+
+      if (pagos.length !== 1 || pagos[0].metodoPagoId !== currentMethodId) {
+        onPagosChange([
+          { metodoPagoId: currentMethodId, montoAsignado: montoObjetivo },
+        ]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalFinal, isCuentaCorriente, modoMixto, metodosPagoDB]);
+
+  // handlers
+  const handleCuentaCorrienteChange = (value: boolean) => {
+    onCuentaCorrienteChange(value);
+    onModoMixtoChange(false);
+    syncSinglePayment(value ? anticipoActual : totalFinal);
+  };
+
+  const handleAnticipoChange = (value: string) => {
+    const nextValue = value === "" ? "" : Number(value);
+    setAnticipoManual(nextValue);
+    if (!modoMixto) {
+      syncSinglePayment(nextValue === "" ? anticipoMinimo : Number(nextValue));
+    }
+  };
+
+  const handleSelectPagoRapido = (metodoId: string) => {
+    onModoMixtoChange(false);
+    syncSinglePayment(montoObjetivo, metodoId);
+  };
+
+  const handleToggleMixto = () => {
+    const nextValue = !modoMixto;
+    onModoMixtoChange(nextValue);
+    if (!nextValue) {
+      syncSinglePayment(montoObjetivo);
+    } else if (pagos.length === 0) {
+      syncSinglePayment(montoObjetivo);
+    }
+  };
+
+  const handleAddPago = () => {
+    const firstMethodId = metodosPagoDB[0]?.id;
+    if (!firstMethodId) return;
+    onPagosChange([
+      ...pagos,
+      {
+        metodoPagoId: firstMethodId,
+        montoAsignado: diferencia > 0 ? diferencia : 0,
+      },
+    ]);
+  };
+
+  const handleUpdatePago = (
+    index: number,
+    field: keyof CreateSalePaymentInput,
+    value: string | number,
+  ) => {
+    const nextPagos = [...pagos];
+    nextPagos[index] = { ...nextPagos[index], [field]: value };
+    onPagosChange(nextPagos);
+  };
+
+  const handleRemovePago = (index: number) => {
+    const nextPagos = pagos.filter((_, currentIndex) => currentIndex !== index);
+    if (nextPagos.length === 1) {
+      nextPagos[0] = { ...nextPagos[0], montoAsignado: montoObjetivo };
+    }
+    onPagosChange(nextPagos);
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-card">
+      <div className="flex-1 overflow-y-auto p-4">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onBackToCart}
+          className="mb-3 h-9 px-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="mr-1.5 h-4 w-4" />
+          Volver
+        </Button>
+
+        <div className="space-y-4">
+          {/* TIPO DE VENTA */}
+          <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+              Tipo de Venta
+            </h3>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={!isCuentaCorriente ? "default" : "outline"}
+                onClick={() => handleCuentaCorrienteChange(false)}
+                className="h-11"
+              >
+                Venta Regular
+              </Button>
+              <Button
+                type="button"
+                variant={isCuentaCorriente ? "default" : "outline"}
+                onClick={() => handleCuentaCorrienteChange(true)}
+                className="h-11"
+              >
+                Cuenta Corriente
+              </Button>
+            </div>
+          </section>
+
+          {/* SELECTOR DE CLIENTES */}
+          <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
+            <div className="flex items-center gap-1">
+              <User className="w-4 h-4" />
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                Cliente{" "}
+                {isCuentaCorriente ? (
+                  <span className="text-rose-500">*</span>
+                ) : null}
+              </h3>
+            </div>
+            <ClientSelector
+              clienteSeleccionado={clienteSeleccionado}
+              onClienteChange={onClienteChange}
+            />
+          </section>
+
+          {/* ANTICIPO CC */}
+          {/* {isCuentaCorriente ? (
+            <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                  Anticipo
+                </Label>
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground font-semibold">
+                  $
+                </span>
+                <Input
+                  type="number"
+                  min="0"
+                  value={anticipoManual}
+                  onChange={(event) => handleAnticipoChange(event.target.value)}
+                  className="pl-8 bg-white border-border font-semibold text-foreground h-11"
+                  placeholder={String(anticipoMinimo)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground leading-tight font-medium">
+                El resto del ticket se registrara como deuda. Dejalo en 0 si
+                fias el 100%.
+              </p>
+            </section>
+          ) : null} */}
+
+          {/* METODOS DE PAGO */}
+          {isPOSMode && (!isCuentaCorriente || anticipoActual > 0) ? (
+            <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                  Metodos de Pago
+                </h3>
+                {metodosPagoDB.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleToggleMixto}
+                    className="h-8 px-2 text-xs font-bold text-primary"
+                  >
+                    <Split className="mr-1.5 h-3.5 w-3.5" />
+                    {modoMixto ? "Pago rapido" : "Pago Mixto"}
+                  </Button>
+                ) : null}
+              </div>
+
+              {metodosPagoDB.length === 0 ? (
+                <div className="border border-dashed border-border bg-card p-3 text-center text-xs text-muted-foreground">
+                  Sin metodos de pago activos.
+                </div>
+              ) : !modoMixto ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {metodosPagoDB.map((metodo) => {
+                    const Icon = getPaymentIcon(metodo.tipo);
+                    const isSelected = pagos[0]?.metodoPagoId === metodo.id;
+
+                    return (
+                      <button
+                        key={metodo.id}
+                        type="button"
+                        onClick={() => handleSelectPagoRapido(metodo.id)}
+                        className={`flex min-h-18 flex-col items-center justify-center gap-2 border px-2 py-3 text-xs font-bold transition-colors rounded-lg cursor-pointer ${
+                          isSelected
+                            ? "border-primary bg-card text-primary"
+                            : "border-border text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Icon className="h-5 w-5" />
+                        <span className="w-full truncate text-center">
+                          {metodo.nombre}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pagos.map((pago, index) => (
+                    <div
+                      key={`${pago.metodoPagoId}-${index}`}
+                      className="flex items-center gap-2 bg-card p-2 rounded-lg border border-border"
+                    >
+                      <Select
+                        value={pago.metodoPagoId}
+                        onValueChange={(value) =>
+                          handleUpdatePago(index, "metodoPagoId", value)
+                        }
+                      >
+                        <SelectTrigger className="h-10 w-34 border-0 bg-transparent font-semibold text-xs">
+                          <SelectValue placeholder="Metodo" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl">
+                          {metodosPagoDB.map((metodo) => (
+                            <SelectItem
+                              key={metodo.id}
+                              value={metodo.id}
+                              className="text-xs font-semibold"
+                            >
+                              {metodo.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
+                          $
+                        </span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={pago.montoAsignado || ""}
+                          onChange={(event) =>
+                            handleUpdatePago(
+                              index,
+                              "montoAsignado",
+                              Number(event.target.value || 0),
+                            )
+                          }
+                          className="h-10 border-0 bg-transparent pl-7 font-bold text-sm"
+                        />
+                      </div>
+
+                      {pagos.length > 1 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemovePago(index)}
+                          className="h-10 w-10 text-muted-foreground hover:text-rose-600 rounded-md"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  ))}
+
+                  {Math.abs(diferencia) > 0.05 ? (
+                    <div
+                      className={`border p-2 text-[11px] font-bold uppercase tracking-widest rounded-lg text-center ${diferencia > 0 ? "border-border bg-muted text-foreground" : "border-rose-200 bg-rose-50 text-rose-700"}`}
+                    >
+                      {diferencia > 0
+                        ? `Falta asignar: $${diferencia.toLocaleString("es-AR")}`
+                        : `El cliente excede: $${Math.abs(diferencia).toLocaleString("es-AR")}`}
+                    </div>
+                  ) : null}
+
+                  {diferencia > 0.05 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleAddPago}
+                      className="h-10 w-full border-dashed rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground"
+                    >
+                      <Plus className="mr-1.5 h-4 w-4" /> Agregar otro metodo
+                    </Button>
+                  ) : null}
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {/* DESCUENTOS Y PROMOCIONES */}
+          {!isCuentaCorriente ? (
+            <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
+              <div className="flex items-center gap-2">
+                <Tag className="h-4 w-4" />
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                  Descuentos
+                </h3>
+              </div>
+              {promocionesElegibles.length > 0 ? (
+                <Select
+                  value={promocionActivaId || "ninguna"}
+                  onValueChange={onPromocionChange}
+                >
+                  <SelectTrigger className="h-11 border-border bg-card rounded-lg font-medium text-sm">
+                    <SelectValue placeholder="Aplicar descuento" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="ninguna">Sin descuento</SelectItem>
+                    {promocionesElegibles.map((promo) => (
+                      <SelectItem
+                        key={promo.id}
+                        value={promo.id}
+                        className="font-semibold text-emerald-700"
+                      >
+                        {promo.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="border border-dashed border-border bg-card p-3 text-center text-xs text-muted-foreground rounded-lg">
+                  No hay descuentos aplicables.
+                </div>
+              )}
+            </section>
+          ) : null}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}

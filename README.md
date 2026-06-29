@@ -1,30 +1,40 @@
-🌿 Sistema POS & Catálogo
-Un sistema integral de Punto de Venta (POS) y catálogo web público diseñado específicamente para viveros y tiendas de plantas. Construido con Next.js, Supabase y Tailwind CSS, ofrece una gestión completa de inventario, control de caja, trazabilidad de ventas por vendedor y un flujo de pedidos a través de WhatsApp.
-✨ Características Principales
-🏪 Para los Clientes (Catálogo Web)
-Catálogo Interactivo: Visualización de plantas por categorías, con imágenes, precios y variantes (talles de macetas).
-Carrito de Compras: Sistema rápido para agregar productos con persistencia local.
-Integración con WhatsApp: Al finalizar la compra, se genera automáticamente un mensaje pre-armado hacia el WhatsApp del local con el detalle exacto del pedido y el total a pagar.
-💼 Para el Local (Dashboard POS)
-Sistema Multi-Rol:
-ADMIN: Acceso total (Dashboard financiero, métricas, edición de stock, configuración, arqueo de caja).
-VENDEDOR: Acceso limitado (Solo lectura de stock, venta rápida, registro de bajas y listado de sus ventas del día).
-Gestión de Inventario (/stock): Control de productos por variantes (M8, N12, 3L, etc.). Cálculo automático de margen de ganancia (Precio - Costo).
-Venta Rápida POS: Sistema de carrito interno para el mostrador. Descuenta automáticamente el stock de la base de datos al confirmar la venta y registra qué vendedor la realizó.
-Módulo de Caja y Finanzas (/caja):
-Dashboard en tiempo real con cálculos de: Ingresos Brutos - Costo de Mercadería - Egresos = Ganancia Neta.
-Registro de gastos operativos (egresos) como fletes o insumos.
-Filtros dinámicos (Hoy, Este Mes, Este Año).
-Gestión de Bajas (/stock/bajas): Los vendedores pueden reportar plantas secas, roturas o plagas. El Administrador debe aprobarlas para que se descuenten del inventario físico, generando métricas de pérdidas.
-Personalización (/configuracion): Interfaz para modificar dinámicamente el nombre del local, logo, número de WhatsApp y dirección sin tocar el código.
-🛠️ Stack Tecnológico
-Framework: Next.js (App Router, Server Actions, React)
-Base de Datos & Auth: Supabase (PostgreSQL, Row Level Security, Storage para imágenes)
-Estilos: Tailwind CSS
-Componentes UI: Shadcn UI / Radix Primitives
-Gestión de Estado (Carrito): Zustand
-Iconos: Lucide React
-Notificaciones: Sonner (Toasts)
+# 📦 Sistema POS & Catálogo E-commerce (Multirrubro)
+
+Un sistema integral de Punto de Venta (POS), gestión empresarial y catálogo web público. Construido con **Next.js, Supabase y Tailwind CSS**. Gracias a su arquitectura de base de datos basada en JSONB, es altamente flexible y se adapta a cualquier rubro minorista (indumentaria, viveros, tecnología, almacenes, etc.).
+
+## ✨ Características Principales
+
+### 🏪 Para los Clientes (Catálogo Web)
+
+- **Catálogo Dinámico:** Visualización de productos por categorías con atributos configurables (talles, colores, materiales, peso, etc.).
+- **Carrito de Compras Optimizados:** Sistema rápido con persistencia local y cálculo de descuentos.
+- **Integración con WhatsApp:** Checkout sin fricción que genera un mensaje pre-armado hacia el WhatsApp del local con el detalle exacto del pedido.
+
+### 💼 Para el Local (Terminal POS & ERP)
+
+- **Terminal POS Súper Rápida:** Interfaz táctil de mostrador (Quick Add) que descuenta inventario en tiempo real. Soporte para múltiples métodos de pago (Mixtos) y calculadora de vuelto.
+- **Inventario Dinámico (JSONB):** Creación de productos simples o con variantes ilimitadas. Cálculo automático de costos, precios y márgenes de rentabilidad.
+- **Módulo de Caja y Finanzas (Multi-caja):**
+  - Apertura y cierre de turnos (Tickets Z).
+  - Dashboard en tiempo real (Ingresos Brutos - Costos - Egresos = Ganancia Neta).
+  - Arqueo ciego para control estricto de los vendedores.
+- **CRM y Cuentas Corrientes:**
+  - Ficha detallada por cliente con historial de compras (Contado y Crédito).
+  - Gestión de saldos, pagos parciales a cuenta y reglas de recargo/pago mínimo configurables por cliente.
+- **Gestión de Bajas / Mermas:** Registro de roturas, robos o vencimientos para métricas precisas de pérdida de capital.
+- **Gestión de Usuarios y Permisos Granulares:** Sistema de Roles personalizable (Admin, Cajero, Vendedor, etc.) con restricciones específicas (ej: ocultar costos o rentabilidad al staff).
+- **Marca Blanca (Configuración):** Panel para modificar dinámicamente el nombre del local, logos, números de contacto y opciones de visualización sin tocar el código.
+
+## 🛠️ Stack Tecnológico
+
+- **Framework:** Next.js (App Router, Server Actions, React)
+- **Base de Datos & Auth:** Supabase (PostgreSQL, Row Level Security, JSONB, Storage)
+- **Estilos:** Tailwind CSS
+- **Componentes UI:** Shadcn UI / Radix Primitives
+- **Gestión de Estado (Client):** Zustand
+- **Iconos:** Lucide React
+- **Notificaciones:** Sonner
+
 🚀 Instalación y Configuración Local
 
 1. Clonar el repositorio
@@ -84,4 +94,4 @@ Si un usuario no autenticado intenta acceder a /stock, es redirigido a /store (o
 Si un usuario con rol VENDEDOR intenta acceder a / (Dashboard Financiero), /configuracion o /caja, es redirigido forzosamente a /stock.
 
 👨‍💻 Autor
-Desarrollado por Ignacio Weppler para la gestión optimizada de Vivero Tostado.
+Desarrollado por Ignacio Weppler para la gestión optimizada de emprendimientosy pequeños y medianos negocios.

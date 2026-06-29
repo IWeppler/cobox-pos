@@ -8,6 +8,7 @@ export async function getVentasAction() {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
+    // Incluimos los nuevos campos de resumen y el array de venta_pagos
     const { data, error } = await supabase
       .from("ventas")
       .select(
@@ -22,6 +23,11 @@ export async function getVentasAction() {
         cantidad,
         fecha_venta,
         metodo_pago,
+        monto_cobrado,
+        monto_pendiente,
+        estado_pago,
+        cliente_id,
+        clientes(nombre),
         perfiles(nombre),
         ventas_items (
           cantidad,
@@ -43,7 +49,8 @@ export async function getVentasAction() {
           comision_porcentaje,
           comision_monto,
           monto_neto,
-          acreditacion_dias
+          acreditacion_dias,
+          tipo_movimiento
         )
       `,
       )

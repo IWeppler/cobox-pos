@@ -12,7 +12,7 @@ export function DashboardNavbar() {
   const getPageInfo = () => {
     if (pathname === "/")
       return {
-        title: "Dashboard",
+        title: "Panel",
         description: "Bienvenido al puesto de mando. Resumen del negocio vivo.",
       };
     if (pathname.startsWith("/pos"))
@@ -26,11 +26,17 @@ export function DashboardNavbar() {
         title: "Inventario",
         description: "Gestiona el stock, precios y catálogo de tus plantas.",
       };
+    if (pathname.startsWith("/clientes"))
+      return {
+        title: "Directorio de Clientes",
+        description:
+          "Gestiona el historial de compras y las cuentas corrientes de tus clientes.",
+      };
     if (pathname.startsWith("/ventas"))
       return {
         title: "Ventas",
         description:
-          "Consulta el historial de ventas, comprobantes y operaciones realizadas.",
+          "Consultá el historial de ventas, comprobantes y operaciones realizadas.",
       };
     if (pathname.startsWith("/reportes"))
       return {

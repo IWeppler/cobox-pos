@@ -25,6 +25,7 @@ import { PreferencesPanel } from "@/features/preferences/ui/preferences-panel";
 import { PaymentsPanel } from "@/features/payments/ui/payments-panel";
 import { CatalogPanel } from "@/features/catalog/ui/catalog-panel";
 import { CategoriesPanel } from "@/features/categories/ui/categories-panel";
+import { ClientsPanel } from "@/features/clients/ui/clients-panel";
 
 const SECTIONS = [
   {
@@ -64,8 +65,14 @@ const SECTIONS = [
     description: "Mensajes y formato del recibo",
   },
   {
-    id: "usuarios",
-    label: "Usuarios y Permisos",
+    id: "empleados",
+    label: "Empleados y Permisos",
+    icon: Users,
+    description: "Cajeros, administradores y roles",
+  },
+  {
+    id: "clientes",
+    label: "Clientes",
     icon: Users,
     description: "Cajeros, administradores y roles",
   },
@@ -106,6 +113,8 @@ export function SettingsManager({
         return <PaymentsPanel pagos={pagos} />;
       case "catalogo":
         return <CatalogPanel config={config} />;
+      case "clientes":
+        return <ClientsPanel config={config} />;
       default:
         return (
           <div className="bg-card text-card-foreground p-6 rounded-2xl border border-border flex flex-col items-center justify-center py-24 text-center">

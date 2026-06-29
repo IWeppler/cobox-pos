@@ -124,7 +124,6 @@ export function getDashboardMetrics(
   >();
   const rentabilidadCatMap = new Map<string, number>();
 
-  // NUEVO: Análisis profundo de Métodos de Pago
   const metodoPagoMap = new Map<
     string,
     { bruto: number; comision: number; neto: number }
@@ -174,6 +173,11 @@ export function getDashboardMetrics(
     { nombre: string; ingresos: number; unidades: number; ganancia: number }
   > = {};
 
+  const clientesMap = new Map<
+    string,
+    { nombre: string; totalComprado: number; tickets: number }
+  >();
+
   ventasFiltradas.forEach((v) => {
     const totalTicket = Number(v.total || 0);
     const costoTicket = Number(v.precio_costo || 0);
@@ -182,7 +186,24 @@ export function getDashboardMetrics(
     costoMercaderiaVendida += costoTicket;
     gananciaBrutaVentas += totalTicket - costoTicket;
 
-    // --- NUEVO: Procesamiento de Pagos Mixtos y Comisiones ---
+    // Procesamiento de CRM (Mejores Clientes)
+    if (v.cliente_id && v.clientes) {
+      const cId = v.cliente_id;
+      const cliente = getSupabaseRelation(v.clientes);
+      const nombreCliente = cliente?.nombre || "Cliente sin nombre";
+      const currentCliente = clientesMap.get(cId) || {
+        nombre: nombreCliente,
+        totalComprado: 0,
+        tickets: 0,
+      };
+      clientesMap.set(cId, {
+        nombre: nombreCliente,
+        totalComprado: currentCliente.totalComprado + totalTicket,
+        tickets: currentCliente.tickets + 1,
+      });
+    }
+
+    // --- Procesamiento de Pagos Mixtos y Comisiones ---
     if (v.venta_pagos && v.venta_pagos.length > 0) {
       v.venta_pagos.forEach((pago) => {
         const metodo = pago.metodo_nombre;
@@ -232,7 +253,9 @@ export function getDashboardMetrics(
         ventas: 0,
         unidades: 0,
       };
-      const cantidadTicket = ((v.ventas_items || []) as VentaItemExtended[]).reduce(
+      const cantidadTicket = (
+        (v.ventas_items || []) as VentaItemExtended[]
+      ).reduce(
         (acc: number, item: VentaItemExtended) =>
           acc + Number(item.cantidad || 0),
         0,
@@ -451,6 +474,11 @@ export function getDashboardMetrics(
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value);
 
+  // Top 5 de Mejores Clientes
+  const topClientesVolumen = Array.from(clientesMap.values())
+    .sort((a, b) => b.totalComprado - a.totalComprado)
+    .slice(0, 5);
+
   const ventasPorDia = Array.from(diaMap.entries())
     .map(([label, value]) => ({ label, value }))
     .filter((d) => d.value > 0)
@@ -499,7 +527,7 @@ export function getDashboardMetrics(
     gananciaBrutaVentas,
     gananciaNeta: resultadoOperativo,
     totalEgresos,
-    totalComisiones, // Exportado
+    totalComisiones,
     costoPerdidoBajas,
     unidadesBajas,
     margenPorcentaje,
@@ -521,5 +549,6 @@ export function getDashboardMetrics(
     bajasPorMotivo,
     ventasHeatmap,
     topFranjas,
+    topClientesVolumen,
   };
 }

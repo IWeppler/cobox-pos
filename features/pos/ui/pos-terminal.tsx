@@ -9,6 +9,7 @@ import { useCatalogFilters } from "@/features/store/hooks/use-catalog-filters";
 import { QuickAddModal } from "@/features/pos/ui/quick-add-modal";
 import Image from "next/image";
 import { StockFiltersToolbar } from "@/features/stock/ui/stock-filters-toolbar";
+import { formatearMoneda } from "@/shared/utils/formatters";
 
 interface PosTerminalProps {
   productos: Producto[];
@@ -23,14 +24,6 @@ interface VarianteDisponible {
   variante: string;
   cantidad: number;
 }
-
-const formatearMoneda = (monto: number) => {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    maximumFractionDigits: 0,
-  }).format(monto);
-};
 
 export function PosTerminal({
   productos,

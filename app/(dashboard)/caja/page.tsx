@@ -7,6 +7,7 @@ import {
   VentaCaja,
   EgresoCaja,
 } from "@/entities/caja/types";
+import { VentaPago } from "@/entities/ventas/types";
 
 export const dynamic = "force-dynamic";
 
@@ -34,25 +35,33 @@ export default async function CajaPage() {
     .order("fecha_apertura", { ascending: false })
     .limit(30);
 
-  // Tipamos el historial correctamente
   const turnos = (turnosHistorial || []) as TurnoCajaHistorial[];
 
   // 3. Identificamos si hay uno abierto
   const turnoAbierto = turnos.find((t) => t.estado === "ABIERTO") || null;
 
   let ventas: VentaCaja[] = [];
+  let pagosSueltos: VentaPago[] = [];
   let egresos: EgresoCaja[] = [];
 
-  // 4. Si hay turno abierto, traemos sus movimientos
+  // 4. Traemos los movimientos del turno (Ventas, Cobros de Deudas y Gastos)
   if (turnoAbierto) {
-    const [ventasRes, egresosRes] = await Promise.all([
+    const [ventasRes, pagosSueltosRes, egresosRes] = await Promise.all([
       supabase
         .from("ventas")
         .select(
-          "id, total, metodo_pago, fecha_venta, perfiles(nombre), ventas_items(producto:productos(nombre)), venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias)",
+          "id, total, metodo_pago, fecha_venta, cliente_id, clientes(nombre), monto_cobrado, monto_pendiente, estado_pago, perfiles(nombre), ventas_items(producto:productos(nombre)), venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)",
         )
         .gte("fecha_venta", turnoAbierto.fecha_apertura)
         .order("fecha_venta", { ascending: false }),
+      supabase
+        .from("venta_pagos")
+        .select(
+          "id, metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento, creado_en, clientes(nombre)",
+        )
+        .is("venta_id", null) // 🚀 Pagos sin venta (Ej: Pago de Cuenta Corriente)
+        .gte("creado_en", turnoAbierto.fecha_apertura)
+        .order("creado_en", { ascending: false }),
       supabase
         .from("egresos")
         .select("id, concepto, monto, fecha, perfiles(nombre)")
@@ -60,16 +69,17 @@ export default async function CajaPage() {
         .order("fecha", { ascending: false }),
     ]);
 
-    // Casteamos la respuesta de Supabase
     ventas = (ventasRes.data || []) as unknown as VentaCaja[];
+    pagosSueltos = pagosSueltosRes.data || [];
     egresos = (egresosRes.data || []) as unknown as EgresoCaja[];
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="space-y-6 mx-auto pb-12">
       <CajaDashboard
         turno={turnoAbierto}
         ventas={ventas}
+        pagosSueltos={pagosSueltos}
         egresos={egresos}
         historial={turnos}
       />

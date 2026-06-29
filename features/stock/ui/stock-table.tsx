@@ -469,7 +469,7 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                       {/* Usamos colSpan 100 para asegurar que ocupe todo sin importar cuántas columnas estén ocultas */}
                       <TableCell colSpan={100} className="p-0">
                         <div className="py-2 sm:py-3 pl-8 sm:pl-[4.5rem] pr-2 sm:pr-8 animate-in fade-in slide-in-from-top-2 duration-200">
-                          <div className="rounded-lg border border-border/50 bg-background/50 shadow-sm overflow-hidden">
+                          <div className="rounded-lg border border-border/50 bg-background/50 overflow-hidden">
                             <table className="w-full text-sm">
                               <thead className="bg-muted/40 text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider border-b border-border/40">
                                 <tr>

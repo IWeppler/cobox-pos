@@ -152,7 +152,7 @@ export function PreferencesPanel() {
               onClick={() => setTheme("light")}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
                 theme === "light"
-                  ? "bg-background shadow-sm text-foreground ring-1 ring-black/5 dark:ring-white/10"
+                  ? "bg-background text-foreground ring-1 ring-black/5 dark:ring-white/10"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -162,7 +162,7 @@ export function PreferencesPanel() {
               onClick={() => setTheme("dark")}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
                 theme === "dark"
-                  ? "bg-background shadow-sm text-foreground ring-1 ring-black/5 dark:ring-white/10"
+                  ? "bg-background text-foreground ring-1 ring-black/5 dark:ring-white/10"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -172,7 +172,7 @@ export function PreferencesPanel() {
               onClick={() => setTheme("system")}
               className={`flex-1 items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all hidden sm:flex ${
                 theme === "system"
-                  ? "bg-background shadow-sm text-foreground ring-1 ring-black/5 dark:ring-white/10"
+                  ? "bg-background text-foreground ring-1 ring-black/5 dark:ring-white/10"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >

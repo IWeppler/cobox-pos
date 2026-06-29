@@ -155,7 +155,7 @@ export default function AuthPage() {
 
         {/* Footer */}
         <p className="absolute bottom-8 left-0 right-0 text-xs font-medium text-muted-foreground text-center">
-          © {new Date().getFullYear()} Vivero Tostado · Sistema POS
+          © {new Date().getFullYear()} System POS
         </p>
       </div>
     </div>

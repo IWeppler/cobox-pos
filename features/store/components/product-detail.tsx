@@ -21,7 +21,7 @@ interface ProductDetailProps {
   producto: Producto;
   baseUrl?: string;
   numeroWhatsApp?: string;
-  config?: ConfiguracionPOS | any;
+  config?: ConfiguracionPOS | null;
 }
 
 export function ProductDetail({
@@ -49,16 +49,24 @@ export function ProductDetail({
     return [];
   }, [producto.imagen_url]);
 
+  // 1. UNIFICAR LECTURA DE VARIANTES (Agregamos la extracción de los 'atributos' JSONB)
   const variantesArray = useMemo(() => {
-    const list: Array<{ variante: string; cantidad: number; id_real: string }> =
-      [];
+    const list: Array<{
+      variante: string;
+      cantidad: number;
+      id_real: string;
+      atributos?: Record<string, string>;
+    }> = [];
+
     producto.producto_variantes?.forEach((v) => {
       list.push({
         variante: v.nombre_display,
         cantidad: v.stock,
         id_real: v.id,
+        atributos: v.atributos, // El nuevo JSONB
       });
     });
+
     producto.stock?.forEach((s) => {
       list.push({ variante: s.variante, cantidad: s.cantidad, id_real: s.id });
     });
@@ -71,36 +79,24 @@ export function ProductDetail({
   );
   const estaAgotado = stockTotal === 0;
 
+  // 🚀 2. PARSER DE VARIANTES: Puro JSONB Directo
   const parsedVariants = useMemo(() => {
     const props: Record<string, Set<string>> = {};
-    let isLegacy = false;
-    let isLegacySplit = false;
 
     variantesArray.forEach((s) => {
-      const v = s.variante || "";
-      if (v.toLowerCase() === "unico" || v.toLowerCase() === "único") return;
+      if (s.cantidad <= 0 && config?.mostrar_sin_stock === false) return;
 
-      if (v.includes(":")) {
-        v.split("|").forEach((part) => {
-          const [key, val] = part.split(":");
-          if (key && val) {
-            if (!props[key]) props[key] = new Set();
-            props[key].add(val.trim());
-          }
-        });
-      } else if (v.includes("/") || v.includes("-")) {
-        isLegacySplit = true;
-        const separator = v.includes("/") ? "/" : "-";
-        v.split(separator).forEach((part, idx) => {
-          const key =
-            idx === 0 ? "Color" : idx === 1 ? "Talle" : `Opción ${idx + 1}`;
+      if (s.atributos && Object.keys(s.atributos).length > 0) {
+        Object.entries(s.atributos).forEach(([key, val]) => {
           if (!props[key]) props[key] = new Set();
-          props[key].add(part.trim());
+          props[key].add(val.trim());
         });
       } else {
-        isLegacy = true;
-        if (!props["Opción"]) props["Opción"] = new Set();
-        props["Opción"].add(v.trim());
+        const v = s.variante || "";
+        if (v.toLowerCase() !== "unico" && v.toLowerCase() !== "único") {
+          if (!props["Opción"]) props["Opción"] = new Set();
+          props["Opción"].add(v.trim());
+        }
       }
     });
 
@@ -108,42 +104,25 @@ export function ProductDetail({
     Object.keys(props).forEach((k) => {
       result[k] = Array.from(props[k]);
     });
-    return { properties: result, isLegacy, isLegacySplit };
-  }, [variantesArray]);
+    return { properties: result };
+  }, [variantesArray, config]);
 
   const isUnico = Object.keys(parsedVariants.properties).length === 0;
 
-  // LÓGICA DE DISPONIBILIDAD CRUZADA (Para tachar botones incompatibles)
+  // 🚀 3. LÓGICA DE DISPONIBILIDAD CRUZADA (JSONB Nativo)
   const isOptionAvailable = (propName: string, val: string) => {
     const testSelections = { ...selecciones, [propName]: val };
 
     return variantesArray.some((s) => {
       if (s.cantidad <= 0) return false;
-      const v = s.variante || "";
 
-      if (
-        parsedVariants.isLegacySplit &&
-        (v.includes("/") || v.includes("-"))
-      ) {
-        const separator = v.includes("/") ? "/" : "-";
-        const parts = v.split(separator).map((p) => p.trim());
-        return Object.entries(testSelections).every(([k, selVal]) => {
-          const idx =
-            k === "Color"
-              ? 0
-              : k === "Talle"
-                ? 1
-                : parseInt(k.replace("Opción ", "")) - 1;
-          return parts[idx] === selVal;
-        });
+      if (s.atributos && Object.keys(s.atributos).length > 0) {
+        return Object.entries(testSelections).every(
+          ([k, selVal]) => s.atributos![k] === selVal,
+        );
       }
 
-      if (parsedVariants.isLegacy) return v.trim() === val;
-
-      const variantParts = v.split("|");
-      return Object.entries(testSelections).every(([k, selVal]) =>
-        variantParts.includes(`${k}:${selVal}`),
-      );
+      return propName === "Opción" && s.variante === val;
     });
   };
 
@@ -160,34 +139,17 @@ export function ProductDetail({
     }
     setErrorVariante(false);
 
-    // Buscar el stock que coincida
+    // 🚀 4. BUSCADOR DE STOCK (JSONB Nativo)
     const stockDeVariante = variantesArray.find((s) => {
       if (isUnico) return true;
-      const v = s.variante || "";
 
-      if (
-        parsedVariants.isLegacySplit &&
-        (v.includes("/") || v.includes("-"))
-      ) {
-        const separator = v.includes("/") ? "/" : "-";
-        const parts = v.split(separator).map((p) => p.trim());
-        return Object.entries(selecciones).every(([k, selVal]) => {
-          const idx =
-            k === "Color"
-              ? 0
-              : k === "Talle"
-                ? 1
-                : parseInt(k.replace("Opción ", "")) - 1;
-          return parts[idx] === selVal;
-        });
+      if (s.atributos && Object.keys(s.atributos).length > 0) {
+        return Object.entries(selecciones).every(
+          ([k, selVal]) => s.atributos![k] === selVal,
+        );
       }
 
-      if (parsedVariants.isLegacy) return v.trim() === selecciones["Opción"];
-
-      const variantParts = v.split("|");
-      return Object.entries(selecciones).every(([k, selVal]) =>
-        variantParts.includes(`${k}:${selVal}`),
-      );
+      return s.variante === selecciones["Opción"];
     });
 
     const stockMaximo = stockDeVariante ? stockDeVariante.cantidad : 0;
@@ -319,13 +281,13 @@ export function ProductDetail({
               <>
                 <button
                   onClick={handlePrevImage}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white hover:bg-neutral-100 text-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 border border-border cursor-pointer shadow-sm"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white hover:bg-neutral-100 text-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 border border-border cursor-pointer"
                 >
                   <ChevronLeft className="w-5 h-5" strokeWidth={1.5} />
                 </button>
                 <button
                   onClick={handleNextImage}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white hover:bg-neutral-100 text-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 border border-border cursor-pointer shadow-sm"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white hover:bg-neutral-100 text-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 border border-border cursor-pointer"
                 >
                   <ChevronRight className="w-5 h-5" strokeWidth={1.5} />
                 </button>

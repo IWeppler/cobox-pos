@@ -30,4 +30,10 @@ export interface ConfiguracionPOS {
   // Marquee
   marquee_activo?: boolean;
   marquee_texto?: string;
+
+  // Configuración de Cuentas Corrientes
+  cc_activas?: boolean;
+  cc_recargo_default?: number;
+  cc_anticipo_default?: number;
+  cc_limite_default?: number;
 }

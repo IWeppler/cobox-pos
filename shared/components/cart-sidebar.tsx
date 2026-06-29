@@ -17,14 +17,23 @@ import { TicketSheet } from "@/features/sales/ui/ticket-sheet";
 import { TicketData, CreateSalePaymentInput } from "@/entities/ventas/types";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { MetodoPago } from "@/entities/payments/types";
-import { CartSidebarBody } from "./cart-sidebar/cart-sidebar-body";
 import { CartSidebarFooter } from "./cart-sidebar/cart-sidebar-footer";
 import { CartSidebarHeader } from "./cart-sidebar/cart-sidebar-header";
+import { CartStepCheckout } from "./cart-sidebar/cart-step-checkout";
+import { CartStepItems } from "./cart-sidebar/cart-step-items";
 import { PromocionDB } from "./cart-sidebar/types";
+import {
+  generarLinkWhatsApp,
+  getDescuentoDetalle,
+  getPromocionActivaId,
+  getPromocionesElegibles,
+} from "./cart-sidebar/cart-sidebar-utils";
+import { ClienteBasico } from "./cart-sidebar/client-selector";
 
 const subscribeToClientMount = () => () => {};
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
+type CheckoutStep = "CART" | "PAYMENT";
 
 export function CartSidebar({
   numeroWhatsApp,
@@ -64,13 +73,20 @@ export function CartSidebar({
   const [isAdmin, setIsAdmin] = useState(false);
   const [metodosPagoDB, setMetodosPagoDB] = useState<MetodoPago[]>([]);
   const [pagos, setPagos] = useState<CreateSalePaymentInput[]>([]);
+  const [modoMixto, setModoMixto] = useState(false);
+  const [isCuentaCorriente, setIsCuentaCorriente] = useState(false);
 
   const [promocionesDB, setPromocionesDB] = useState<PromocionDB[]>([]);
   const [promocionId, setPromocionId] = useState("ninguna");
   const [ventaExitosa, setVentaExitosa] = useState<TicketData | null>(null);
+  const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("CART");
+  const [clienteSeleccionado, setClienteSeleccionado] =
+    useState<ClienteBasico | null>(null);
 
   const isPOSMode = isAdmin;
   const totalCarrito = getTotalPrice();
+  const effectiveCheckoutStep: CheckoutStep =
+    items.length === 0 ? "CART" : checkoutStep;
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -130,7 +146,7 @@ export function CartSidebar({
     checkUserAndFetchData();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      (_event, session) => {
         if (isMounted) setIsAdmin(!!session);
       },
     );
@@ -142,144 +158,123 @@ export function CartSidebar({
   }, []);
 
   const promocionesElegibles = useMemo(() => {
-    return promocionesDB.filter((promo) => {
-      if (promo.monto_minimo && totalCarrito < promo.monto_minimo) {
-        return false;
-      }
-
-      if (promo.tipo_regla === "METODO_PAGO") {
-        const metodosPromo =
-          promo.promociones_metodos_pago?.map((m) => m.metodo_pago) || [];
-
-        // Obtenemos los 'tipos' (EFECTIVO, TARJETA) de todos los métodos seleccionados actualmente
-        const selectedTipos = pagos.map(
-          (p) => metodosPagoDB.find((m) => m.id === p.metodoPagoId)?.tipo,
-        );
-
-        if (selectedTipos.length === 0) return false;
-
-        // ESTRICTO: Para aplicar una promo de pago, TODOS los métodos divididos deben cumplir la regla
-        const allValid = selectedTipos.every(
-          (t) => t && metodosPromo.includes(t),
-        );
-
-        if (!allValid) return false;
-      }
-
-      if (promo.tipo_regla === "CATEGORIA") {
-        const categorias =
-          promo.promociones_categorias?.map((c) =>
-            c.categoria_nombre.toLowerCase(),
-          ) || [];
-        const hasCategory = items.some((item) =>
-          categorias.includes(item.tipo.toLowerCase()),
-        );
-
-        if (!hasCategory) return false;
-      }
-
-      return true;
+    return getPromocionesElegibles({
+      promociones: promocionesDB,
+      totalCarrito,
+      pagos,
+      items,
+      metodosPago: metodosPagoDB,
     });
   }, [promocionesDB, totalCarrito, pagos, items, metodosPagoDB]);
 
   const promocionActivaId = useMemo(() => {
-    if (promocionId === "ninguna") return "ninguna";
-    return promocionesElegibles.some((promo) => promo.id === promocionId)
-      ? promocionId
-      : "ninguna";
+    return getPromocionActivaId(promocionId, promocionesElegibles);
   }, [promocionesElegibles, promocionId]);
 
   const descuentoDetalle = useMemo(() => {
-    if (promocionActivaId === "ninguna") return { monto: 0, nombre: "" };
-
-    const promo = promocionesElegibles.find(
-      (item) => item.id === promocionActivaId,
-    );
-    if (!promo) return { monto: 0, nombre: "" };
-
-    let montoBase = totalCarrito;
-
-    if (promo.tipo_regla === "CATEGORIA") {
-      const categorias =
-        promo.promociones_categorias?.map((c) =>
-          c.categoria_nombre.toLowerCase(),
-        ) || [];
-      montoBase = items.reduce((acc, item) => {
-        if (categorias.includes(item.tipo.toLowerCase())) {
-          return acc + item.precio * item.cantidad;
-        }
-        return acc;
-      }, 0);
-    }
-
-    let descuento = 0;
-    if (promo.tipo_descuento === "PORCENTAJE") {
-      descuento = (montoBase * promo.valor_descuento) / 100;
-    } else {
-      descuento = promo.valor_descuento;
-    }
-
-    if (descuento > totalCarrito) descuento = totalCarrito;
-
-    return { monto: Math.round(descuento), nombre: promo.nombre };
+    return getDescuentoDetalle({
+      promocionActivaId,
+      promocionesElegibles,
+      totalCarrito,
+      items,
+    });
   }, [promocionActivaId, promocionesElegibles, totalCarrito, items]);
 
-  const totalFinal = totalCarrito - descuentoDetalle.monto;
+  const subtotalConDescuento = totalCarrito - descuentoDetalle.monto;
+  const recargoCuentaCorriente = isCuentaCorriente
+    ? (subtotalConDescuento * (branding?.cc_recargo_default || 0)) / 100
+    : 0;
 
-  // 'pagosConTotal' is declared but its value is never read.ts(6133)
-  // 'pagosConTotal' is assigned a value but never used.
-  const pagosConTotal = useMemo(() => {
-    if (metodosPagoDB.length === 0) return pagos;
-    if (pagos.length > 1) return pagos;
+  const totalFinal = subtotalConDescuento + recargoCuentaCorriente;
+  const anticipoMinimo = isCuentaCorriente
+    ? (totalFinal * (branding?.cc_anticipo_default || 0)) / 100
+    : 0;
+  const firstPagoId = pagos[0]?.metodoPagoId;
 
+  const metodoPagoRapidoId = firstPagoId || metodosPagoDB[0]?.id || "";
+  const pagosSincronizados = useMemo<CreateSalePaymentInput[]>(() => {
+    if (modoMixto) return pagos;
+    if (!metodoPagoRapidoId) return [];
     return [
       {
-        metodoPagoId: pagos[0]?.metodoPagoId || metodosPagoDB[0].id,
-        montoAsignado: totalFinal,
+        metodoPagoId: metodoPagoRapidoId,
+        montoAsignado: isCuentaCorriente ? anticipoMinimo : totalFinal,
       },
     ];
-  }, [pagos, metodosPagoDB, totalFinal]);
+  }, [
+    anticipoMinimo,
+    isCuentaCorriente,
+    metodoPagoRapidoId,
+    modoMixto,
+    pagos,
+    totalFinal,
+  ]);
 
+  const sumaPagos = useMemo(
+    () =>
+      pagosSincronizados.reduce(
+        (acc, p) => acc + Number(p.montoAsignado || 0),
+        0,
+      ),
+    [pagosSincronizados],
+  );
+
+  // 🚀 FIX: AUTO-SYNC DE PAGOS (Garantiza que el cajero nunca vea "$4.248 de $4.720")
   if (!mounted) return null;
 
-  const handleContinueShopping = () => {
+  const closeSidebar = () => {
+    setCheckoutStep("CART");
     setIsOpen(false);
-    router.push(isPOSMode ? "/stock" : "/store");
   };
 
-  const generarLinkWhatsApp = () => {
-    if (!numeroWhatsApp) return "#";
-    let mensaje =
-      "Hola Vivero Tostado!\nQuiero realizar el siguiente pedido:\n\n";
+  const clearCartAndResetStep = () => {
+    clearCart();
+    setCheckoutStep("CART");
+  };
 
-    items.forEach((item) => {
-      mensaje += `${item.cantidad}x ${item.nombre} (${item.tipo})\n`;
-      mensaje += ` - Talle: ${item.variante} - $${(
-        item.precio * item.cantidad
-      ).toLocaleString("es-AR")}\n`;
-    });
+  const handleCuentaCorrienteChange = (value: boolean) => {
+    setIsCuentaCorriente(value);
+    if (value) {
+      setPromocionId("ninguna");
+    }
+  };
 
-    mensaje += `\nTOTAL: $${getTotalPrice().toLocaleString(
-      "es-AR",
-    )}\n\nTienen stock disponible para confirmar?`;
-    return `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(
-      mensaje,
-    )}`;
+  const handleContinueToPayment = () => {
+    if (pagos.length === 0 && metodosPagoDB.length > 0) {
+      setPagos([
+        {
+          metodoPagoId: metodosPagoDB[0].id,
+          montoAsignado: totalFinal,
+        },
+      ]);
+    }
+    setCheckoutStep("PAYMENT");
   };
 
   const handleEnviarPedidoWhatsApp = () => {
     setTimeout(() => {
-      clearCart();
-      setIsOpen(false);
+      clearCartAndResetStep();
+      closeSidebar();
     }, 1000);
   };
 
-  const handleConfirmarVentaPOS = () => {
-    const sumaPagos = pagos.reduce(
-      (acc, p) => acc + Number(p.montoAsignado),
-      0,
-    );
-    if (Math.abs(sumaPagos - totalFinal) > 0.05) {
+  const handleConfirmarVentaPOS = (montoAnticipoModal?: number) => {
+    const montoRealAsignado =
+      montoAnticipoModal !== undefined ? montoAnticipoModal : sumaPagos;
+
+    if (isCuentaCorriente && !clienteSeleccionado) {
+      toast.error("Selecciona un cliente para Cuenta Corriente.");
+      return;
+    }
+
+    if (isCuentaCorriente && montoRealAsignado + 0.05 < anticipoMinimo) {
+      toast.error("El anticipo no alcanza el minimo requerido.", {
+        description: `Minimo: $${anticipoMinimo.toLocaleString("es-AR")}`,
+      });
+      return;
+    }
+
+    if (!isCuentaCorriente && Math.abs(montoRealAsignado - totalFinal) > 0.05) {
       toast.error("La suma de los pagos no coincide con el total.", {
         description:
           "Asegúrate de asignar el dinero exacto para poder cerrar la caja correctamente.",
@@ -294,10 +289,25 @@ export function CartSidebar({
           return;
         }
 
+        // 🚀 ARMAMOS LOS PAGOS DEFINITIVOS PARA EL BACKEND
+        let pagosToSubmit = [...pagosSincronizados];
+        if (isCuentaCorriente && montoAnticipoModal !== undefined) {
+          // Tomamos el método de pago seleccionado y le asignamos el anticipo tipeado
+          pagosToSubmit = [
+            { ...pagosSincronizados[0], montoAsignado: montoAnticipoModal },
+          ];
+        }
+
         const formData = new FormData();
         formData.append("cart_items", JSON.stringify(items));
-        formData.append("pagos", JSON.stringify(pagos));
-        formData.append("metodo_pago_id", pagos[0].metodoPagoId);
+        formData.append("pagos", JSON.stringify(pagosToSubmit));
+        formData.append("metodo_pago_id", pagosToSubmit[0]?.metodoPagoId || "");
+        formData.append("is_cuenta_corriente", String(isCuentaCorriente));
+        formData.append("recargo_cc", String(recargoCuentaCorriente));
+
+        if (clienteSeleccionado) {
+          formData.append("cliente_id", clienteSeleccionado.id);
+        }
 
         if (promocionActivaId !== "ninguna" && descuentoDetalle.monto > 0) {
           formData.append("promocion_id", promocionActivaId);
@@ -317,7 +327,7 @@ export function CartSidebar({
               action: {
                 label: "Ir a Caja",
                 onClick: () => {
-                  setIsOpen(false);
+                  closeSidebar();
                   router.push("/caja");
                 },
               },
@@ -332,11 +342,15 @@ export function CartSidebar({
 
         toast.success("Venta registrada con éxito!");
 
-        // Preparar el ticket visual con soporte para nombre mixto
         const nombreMetodoMostrar =
-          pagos.length > 1
-            ? `Pago mixto (${pagos.map((p) => metodosPagoDB.find((m) => m.id === p.metodoPagoId)?.nombre).join(" + ")})`
-            : metodosPagoDB.find((m) => m.id === pagos[0].metodoPagoId)
+          pagosToSubmit.length > 1
+            ? `Pago mixto (${pagosToSubmit
+                .map(
+                  (p) =>
+                    metodosPagoDB.find((m) => m.id === p.metodoPagoId)?.nombre,
+                )
+                .join(" + ")})`
+            : metodosPagoDB.find((m) => m.id === pagosToSubmit[0]?.metodoPagoId)
                 ?.nombre || "Efectivo";
 
         setVentaExitosa({
@@ -349,8 +363,12 @@ export function CartSidebar({
         });
 
         clearCart();
+        setCheckoutStep("CART");
         setPromocionId("ninguna");
-        setIsOpen(false);
+        setModoMixto(false);
+        setIsCuentaCorriente(false);
+        setClienteSeleccionado(null);
+        closeSidebar();
       } catch (error) {
         console.error("Error al registrar la venta POS:", error);
         toast.error("Ocurrió un error inesperado al registrar la venta.");
@@ -360,55 +378,76 @@ export function CartSidebar({
 
   return (
     <>
-      {/* OVERLAY: Se oculta en POS de escritorio (lg:hidden) */}
       {isOpen && (
         <button
           className={`fixed inset-0 bg-black/40 z-30 backdrop-blur-sm transition-opacity ${
             isPosRoute ? "lg:hidden" : ""
           }`}
-          onClick={() => setIsOpen(false)}
+          onClick={closeSidebar}
         />
       )}
 
-      {/* CONTENEDOR PRINCIPAL */}
       <div
         className={`fixed top-0 right-0 h-full w-full sm:w-100 bg-card flex flex-col border-l border-border transform transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0 z-50" : "translate-x-full z-50"
         } ${isPosRoute ? "lg:w-100 lg:z-30 lg:translate-x-0" : ""}`}
       >
-        <CartSidebarHeader
-          isPOSMode={isPOSMode}
-          onClose={() => setIsOpen(false)}
-        />
+        <CartSidebarHeader isPOSMode={isPOSMode} onClose={closeSidebar} />
 
-        <CartSidebarBody
-          items={items}
-          isPOSMode={isPOSMode}
-          isPending={isPending}
-          metodosPagoDB={metodosPagoDB}
-          pagos={pagos}
-          onPagosChange={setPagos}
-          totalFinal={totalFinal}
-          promocionesElegibles={promocionesElegibles}
-          promocionActivaId={promocionActivaId}
-          onContinueShopping={handleContinueShopping}
-          onRemoveItem={removeItem}
-          onUpdateQuantity={updateQuantity}
-          onPromocionChange={setPromocionId}
-        />
-
-        {items.length > 0 && (
-          <CartSidebarFooter
-            isPOSMode={isPOSMode}
-            isPending={isPending}
+        {effectiveCheckoutStep === "CART" ? (
+          <CartStepItems
+            items={items}
+            onUpdateQuantity={updateQuantity}
+            onRemoveItem={removeItem}
             totalCarrito={totalCarrito}
-            totalFinal={totalFinal}
-            descuentoDetalle={descuentoDetalle}
-            whatsappHref={generarLinkWhatsApp()}
-            onConfirmarVentaPOS={handleConfirmarVentaPOS}
-            onEnviarPedidoWhatsApp={handleEnviarPedidoWhatsApp}
-            onClearCart={clearCart}
+            onContinueToPayment={handleContinueToPayment}
           />
+        ) : (
+          <CartStepCheckout
+            isPOSMode={isPOSMode}
+            metodosPagoDB={metodosPagoDB}
+            pagos={pagos}
+            onPagosChange={setPagos}
+            totalFinal={totalFinal}
+            isCuentaCorriente={isCuentaCorriente}
+            onCuentaCorrienteChange={handleCuentaCorrienteChange}
+            modoMixto={modoMixto}
+            onModoMixtoChange={setModoMixto}
+            anticipoMinimo={anticipoMinimo}
+            clienteSeleccionado={clienteSeleccionado}
+            onClienteChange={setClienteSeleccionado}
+            promocionesElegibles={promocionesElegibles}
+            promocionActivaId={promocionActivaId}
+            onPromocionChange={setPromocionId}
+            onBackToCart={() => setCheckoutStep("CART")}
+          >
+            {items.length > 0 ? (
+              <CartSidebarFooter
+                isPOSMode={isPOSMode}
+                isPending={isPending}
+                totalCarrito={totalCarrito}
+                recargoCuentaCorriente={recargoCuentaCorriente}
+                totalFinal={totalFinal}
+                sumaPagos={sumaPagos}
+                isCuentaCorriente={isCuentaCorriente}
+                anticipoMinimo={anticipoMinimo}
+                clienteSeleccionado={clienteSeleccionado}
+                descuentoDetalle={descuentoDetalle}
+                whatsappHref={generarLinkWhatsApp({
+                  numeroWhatsApp,
+                  nombreComercio: branding?.posName,
+                  items,
+                  total: totalCarrito,
+                })}
+                metodosPagoDB={metodosPagoDB}
+                pagos={pagosSincronizados}
+                modoMixto={modoMixto}
+                onConfirmarVentaPOS={handleConfirmarVentaPOS}
+                onEnviarPedidoWhatsApp={handleEnviarPedidoWhatsApp}
+                onClearCart={clearCartAndResetStep}
+              />
+            ) : null}
+          </CartStepCheckout>
         )}
       </div>
 

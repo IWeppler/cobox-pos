@@ -160,7 +160,7 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
           </CardContent>
         </Card>
 
-        {/* 🚀 Fila Inferior 1/2: Categorías (2 columnas) */}
+        {/* Fila Inferior 1/2: Categorías (2 columnas) */}
         <Card className="lg:col-span-2 border-border shadow-none">
           <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 gap-4">
             <CardTitle className="text-lg flex items-center gap-2">
@@ -172,19 +172,19 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
             <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg border border-border/50 shrink-0 overflow-x-auto w-full sm:w-auto">
               <button
                 onClick={() => setMetricaCat("ingresos")}
-                className={`flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${metricaCat === "ingresos" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                className={`flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${metricaCat === "ingresos" ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground"}`}
               >
                 Ingresos
               </button>
               <button
                 onClick={() => setMetricaCat("unidades")}
-                className={`flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${metricaCat === "unidades" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                className={`flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${metricaCat === "unidades" ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground"}`}
               >
                 Unidades
               </button>
               <button
                 onClick={() => setMetricaCat("tickets")}
-                className={`flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${metricaCat === "tickets" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                className={`flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${metricaCat === "tickets" ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground"}`}
               >
                 Tickets
               </button>

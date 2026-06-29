@@ -13,7 +13,7 @@ export async function getDetallesTurnoAction(
 
     const endDate = fechaFin || new Date().toISOString();
 
-    const [ventasRes, egresosRes] = await Promise.all([
+    const [ventasRes, pagosSueltosRes, egresosRes] = await Promise.all([
       supabase
         .from("ventas")
         .select(
@@ -22,14 +22,28 @@ export async function getDetallesTurnoAction(
           total, 
           metodo_pago, 
           fecha_venta, 
+          cliente_id,
+          clientes(nombre),
+          monto_cobrado,
+          monto_pendiente,
+          estado_pago,
           perfiles(nombre),
           ventas_items(producto:productos(nombre)),
-          venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_porcentaje, comision_monto, monto_neto, acreditacion_dias)
+          venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_porcentaje, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)
         `,
         )
         .gte("fecha_venta", fechaInicio)
         .lte("fecha_venta", endDate)
         .order("fecha_venta", { ascending: false }),
+      supabase
+        .from("venta_pagos")
+        .select(
+          "id, metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento, creado_en, clientes(nombre)",
+        )
+        .is("venta_id", null)
+        .gte("creado_en", fechaInicio)
+        .lte("creado_en", endDate)
+        .order("creado_en", { ascending: false }),
       supabase
         .from("egresos")
         .select("id, concepto, monto, fecha, perfiles(nombre)")
@@ -49,6 +63,7 @@ export async function getDetallesTurnoAction(
     return {
       data: {
         ventas: ventasRes.data || [],
+        pagosSueltos: pagosSueltosRes.data || [],
         egresos: egresosRes.data || [],
       },
       error: null,

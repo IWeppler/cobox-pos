@@ -20,7 +20,9 @@ export async function anularVentaAction(
     // 1. Obtener detalles de la venta antes de borrarla
     const { data: venta, error: fetchError } = await supabase
       .from("ventas")
-      .select("producto_id, variante, cantidad, total")
+      .select(
+        "producto_id, variante, cantidad, total, cliente_id, estado_pago, monto_cobrado, monto_pendiente",
+      )
       .eq("id", ventaId)
       .single();
 
@@ -39,12 +41,58 @@ export async function anularVentaAction(
       return { error: "Error al intentar anular la venta.", success: false };
     }
 
-    // 3. Registrar el egreso de dinero de la caja
-    await supabase.from("egresos").insert({
-      concepto: `Devolución Venta #${ventaId.split("-")[0].toUpperCase()}`,
-      monto: venta.total,
-      creado_por: user.id,
-    });
+    const montoPendiente = Number(venta.monto_pendiente || 0);
+    const montoCobrado = Number(venta.monto_cobrado ?? venta.total);
+    const fueCuentaCorriente =
+      venta.estado_pago === "PARCIAL" || montoPendiente > 0;
+    const ticketCorto = ventaId.split("-")[0].toUpperCase();
+
+    if (fueCuentaCorriente && montoPendiente > 0 && venta.cliente_id) {
+      const { error: ccError } = await supabase
+        .from("cuenta_corriente_movimientos")
+        .insert({
+          cliente_id: venta.cliente_id,
+          tipo: "CREDITO",
+          monto: montoPendiente,
+          descripcion: `Anulacion deuda - Ticket #${ticketCorto}`,
+          creado_por: user.id,
+        });
+
+      if (ccError) {
+        console.error("Error al cancelar deuda en CC:", ccError);
+        return {
+          error:
+            "La venta se anulo, pero no se pudo cancelar la deuda del cliente.",
+          success: false,
+        };
+      }
+
+      const { data: clienteActual } = await supabase
+        .from("clientes")
+        .select("saldo_pendiente")
+        .eq("id", venta.cliente_id)
+        .single();
+
+      const saldoActual = Number(clienteActual?.saldo_pendiente || 0);
+      await supabase
+        .from("clientes")
+        .update({
+          saldo_pendiente: Math.max(0, saldoActual - montoPendiente),
+        })
+        .eq("id", venta.cliente_id);
+    }
+
+    const montoADevolverCaja = fueCuentaCorriente
+      ? Math.max(0, montoCobrado)
+      : Number(venta.total || 0);
+
+    if (montoADevolverCaja > 0.05) {
+      await supabase.from("egresos").insert({
+        concepto: `Devolucion Venta #${ticketCorto}`,
+        monto: montoADevolverCaja,
+        creado_por: user.id,
+      });
+    }
 
     // 4. Manejo del Stock según la decisión del usuario
     if (venta.producto_id) {
@@ -86,6 +134,7 @@ export async function anularVentaAction(
     revalidatePath("/ventas");
     revalidatePath("/stock");
     revalidatePath("/caja");
+    revalidatePath("/clientes");
 
     return { error: null, success: true };
   } catch (err) {

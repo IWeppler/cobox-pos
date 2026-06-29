@@ -32,7 +32,6 @@ interface UseCatalogFiltersProps {
   visibleCount: number;
 }
 
-
 export function useCatalogFilters({
   productos,
   categorias = [],
@@ -43,46 +42,41 @@ export function useCatalogFilters({
   orden,
   visibleCount,
 }: UseCatalogFiltersProps) {
-  // 1. EXTRACTOR GLOBAL DE PROPIEDADES (Centralizado y Multi-Esquema)
+  // 1. EXTRACTOR GLOBAL DE PROPIEDADES (Puro JSONB Nativo)
   const propiedadesGlobales = useMemo(() => {
     const propsMap: Record<string, Set<string>> = {};
 
-    const procesarVarianteStr = (v: string) => {
-      if (!v || v.toLowerCase() === "unico" || v.toLowerCase() === "único")
-        return;
-
-      if (v.includes(":")) {
-        v.split("|").forEach((part) => {
-          const [key, val] = part.split(":");
-          if (key && val) {
-            if (!propsMap[key]) propsMap[key] = new Set();
-            propsMap[key].add(val.trim());
-          }
-        });
-      } else if (v.includes("/") || v.includes("-")) {
-        const separator = v.includes("/") ? "/" : "-";
-        v.split(separator).forEach((part, idx) => {
-          const key =
-            idx === 0 ? "Color" : idx === 1 ? "Talle" : `Opción ${idx + 1}`;
-          if (!propsMap[key]) propsMap[key] = new Set();
-          propsMap[key].add(part.trim());
-        });
-      } else {
-        if (!propsMap["Opción"]) propsMap["Opción"] = new Set();
-        propsMap["Opción"].add(v.trim());
-      }
-    };
-
     productos.forEach((p) => {
-      // Leer del esquema NUEVO (producto_variantes)
+      // Esquema nuevo (JSONB)
       p.producto_variantes?.forEach((v) => {
         if (config?.mostrar_sin_stock === false && v.stock <= 0) return;
-        procesarVarianteStr(v.nombre_display);
+
+        // Si la variante tiene un JSON de atributos reales (Ej: { "Color": "Rojo", "Talle": "L" })
+        if (v.atributos && Object.keys(v.atributos).length > 0) {
+          Object.entries(v.atributos).forEach(([key, val]) => {
+            if (!propsMap[key]) propsMap[key] = new Set();
+            propsMap[key].add((val as string).trim());
+          });
+        }
+        // Si no tiene JSON, pero tiene un texto manual que no es "Unico" (Fallback)
+        else if (
+          v.nombre_display &&
+          v.nombre_display.toLowerCase() !== "unico" &&
+          v.nombre_display.toLowerCase() !== "único"
+        ) {
+          if (!propsMap["Opción"]) propsMap["Opción"] = new Set();
+          propsMap["Opción"].add(v.nombre_display.trim());
+        }
       });
-      // Leer del esquema VIEJO/LEGACY (stock)
+
+      // Esquema viejo (Stock Legacy)
       p.stock?.forEach((s) => {
         if (config?.mostrar_sin_stock === false && s.cantidad <= 0) return;
-        procesarVarianteStr(s.variante);
+        const v = s.variante || "";
+        if (v.toLowerCase() !== "unico" && v.toLowerCase() !== "único") {
+          if (!propsMap["Opción"]) propsMap["Opción"] = new Set();
+          propsMap["Opción"].add(v.trim());
+        }
       });
     });
 
@@ -98,7 +92,6 @@ export function useCatalogFilters({
   const conteosRaw = useMemo(() => {
     const conteos: Record<string, number> = {};
     productos.forEach((p) => {
-      // Unificamos el cálculo de stock para ambos esquemas
       const stockViejos = p.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
       const stockNuevos =
         p.producto_variantes?.reduce((acc, v) => acc + v.stock, 0) || 0;
@@ -117,11 +110,9 @@ export function useCatalogFilters({
   }, [productos, config]);
 
   const categoriasConStock = useMemo<CategoriaConStock[]>(() => {
-    // FALLBACK DE SEGURIDAD (Si la BD no devuelve categorías o falla)
     if (!categorias || categorias.length === 0) {
       return Object.entries(conteosRaw)
         .map(([k, v]) => {
-          // Buscamos algún producto que tenga esta clave para extraer su nombre original
           const prodMatch = productos.find(
             (p) =>
               p.categoria_id?.toLowerCase() === k ||
@@ -130,9 +121,8 @@ export function useCatalogFilters({
 
           let fallbackName = "Categoría";
           if (prodMatch && prodMatch.tipo) {
-            fallbackName = prodMatch.tipo; // Usa el texto "Plantas Ornamentales" directamente del producto
+            fallbackName = prodMatch.tipo;
           } else {
-            // Si por alguna razón no hay tipo, capitaliza la clave
             fallbackName = k.charAt(0).toUpperCase() + k.slice(1);
           }
 
@@ -141,7 +131,6 @@ export function useCatalogFilters({
         .sort((a, b) => a.nombre.localeCompare(b.nombre));
     }
 
-    // MAPEO OFICIAL (Usa la tabla real de la base de datos)
     return categorias
       .map((cat) => {
         const count =
@@ -178,40 +167,39 @@ export function useCatalogFilters({
         (catObj && catObj.slug?.toLowerCase() === tipoStr.toLowerCase()) ||
         (catObj && catObj.nombre?.toLowerCase() === tipoStr.toLowerCase());
 
-      // 🚀 LÓGICA DE FILTRADO MULTI-DIMENSIÓN (Chequea ambas tablas y entiende el formato Blanco/M)
+      //  LÓGICA DE FILTRADO MULTI-DIMENSIÓN (JSONB NATIVO)
       const matchVariante = Object.entries(filtrosVariantes).every(
         ([propKey, propVal]) => {
           if (propVal === "todos") return true;
 
-          const checkMatch = (v: string) => {
-            if (!v) return false;
-            if (v.includes(":")) {
-              return v.split("|").includes(`${propKey}:${propVal}`);
-            } else if (v.includes("/") || v.includes("-")) {
-              const separator = v.includes("/") ? "/" : "-";
-              const parts = v.split(separator).map((p) => p.trim());
-              const idx =
-                propKey === "Color"
-                  ? 0
-                  : propKey === "Talle"
-                    ? 1
-                    : Number(propKey.replace("Opción ", "")) - 1;
-              return parts[idx]?.toLowerCase() === propVal.toLowerCase();
-            } else {
+          // 1. Chequear tabla nueva
+          const matchNew =
+            c.producto_variantes?.some((pv) => {
+              if (pv.stock <= 0) return false;
+
+              // Si tiene JSON, buscamos la llave exacta
+              if (pv.atributos && Object.keys(pv.atributos).length > 0) {
+                return (
+                  pv.atributos[propKey]?.toLowerCase() === propVal.toLowerCase()
+                );
+              }
+
+              // Si no, recae en la comprobación legacy
               return (
                 propKey === "Opción" &&
-                v.trim().toLowerCase() === propVal.toLowerCase()
+                pv.nombre_display?.toLowerCase() === propVal.toLowerCase()
               );
-            }
-          };
+            }) ?? false;
 
+          // 2. Chequear tabla vieja
           const matchOld =
-            c.stock?.some((s) => s.cantidad > 0 && checkMatch(s.variante)) ??
-            false;
-          const matchNew =
-            c.producto_variantes?.some(
-              (pv) => pv.stock > 0 && checkMatch(pv.nombre_display),
-            ) ?? false;
+            c.stock?.some((s) => {
+              if (s.cantidad <= 0) return false;
+              return (
+                propKey === "Opción" &&
+                s.variante?.toLowerCase() === propVal.toLowerCase()
+              );
+            }) ?? false;
 
           return matchOld || matchNew;
         },

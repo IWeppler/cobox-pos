@@ -84,7 +84,7 @@ export function SearchBar() {
       </button>
 
       {isMobileOpen && (
-        <div className="absolute top-full left-0 w-full bg-white border-b border-border p-3 md:hidden flex animate-in slide-in-from-top-2 z-50 shadow-sm">
+        <div className="absolute top-full left-0 w-full bg-white border-b border-border p-3 md:hidden flex animate-in slide-in-from-top-2 z-50">
           <div className="relative w-full">
             <Search
               className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${term ? "text-foreground" : "text-muted-foreground"}`}

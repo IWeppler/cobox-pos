@@ -1,11 +1,13 @@
 export interface Movimiento {
   id: string;
   tipo: "INGRESO" | "EGRESO";
+  descripcion: string;
   concepto: string;
   metodo: string;
   monto: number;
   fecha: string;
   usuario: string;
+  creado_en: string;
 }
 
 export interface CajaActionState {

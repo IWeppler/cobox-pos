@@ -3,8 +3,8 @@ import { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Vivero Tostado - POS System",
-    short_name: "Vivero POS",
+    name: "System POS",
+    short_name: "System POS",
     description: "Sistema de gestión y punto de venta web",
     start_url: "/",
     scope: "/",

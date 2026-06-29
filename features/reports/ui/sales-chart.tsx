@@ -448,7 +448,7 @@ export function SalesChart({
                   fill="#ffffff"
                   stroke="#10b981"
                   strokeWidth={3}
-                  className="pointer-events-none shadow-sm"
+                  className="pointer-events-none"
                 />
               )}
               {data.hasPrevious && hoveredData.data.previous !== null && (
@@ -459,7 +459,7 @@ export function SalesChart({
                   fill="#ffffff"
                   stroke="#9ca3af"
                   strokeWidth={2}
-                  className="pointer-events-none shadow-sm"
+                  className="pointer-events-none"
                 />
               )}
             </g>

@@ -194,7 +194,7 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
                   onClick={() => setFiltroDias(dias)}
                   className={`flex-1 sm:flex-none text-xs font-bold px-3 py-1.5 rounded-md transition-all ${
                     filtroDias === dias
-                      ? "bg-background shadow-sm text-foreground"
+                      ? "bg-background text-foreground"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >

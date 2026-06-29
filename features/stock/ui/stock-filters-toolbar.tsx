@@ -67,8 +67,8 @@ export function StockFiltersToolbar({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar planta, maceta, sustrato..."
-            className="pl-9 h-10 text-sm rounded-lg border-border/60 bg-muted focus-visible:bg-background shadow-none transition-colors w-full"
+            placeholder="Buscar producto..."
+            className="pl-9 h-10 text-sm rounded-lg border-border bg-muted w-full"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
           />
@@ -83,7 +83,7 @@ export function StockFiltersToolbar({
                 variant="ghost"
                 size="sm"
                 onClick={() => onViewChange("table")}
-                className={`h-8 px-2.5 rounded-md ${view === "table" ? "bg-background font-bold shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`h-8 px-2.5 rounded-md ${view === "table" ? "bg-background font-bold" : "text-muted-foreground hover:text-foreground"}`}
                 title="Vista de lista"
               >
                 <List className="h-4 w-4" />
@@ -92,7 +92,7 @@ export function StockFiltersToolbar({
                 variant="ghost"
                 size="sm"
                 onClick={() => onViewChange("grid")}
-                className={`h-8 px-2.5 rounded-md ${view === "grid" ? "bg-background font-bold shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`h-8 px-2.5 rounded-md ${view === "grid" ? "bg-background font-bold" : "text-muted-foreground hover:text-foreground"}`}
                 title="Vista de grilla (agrupada)"
               >
                 <LayoutGrid className="h-4 w-4" />

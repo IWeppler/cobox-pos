@@ -20,6 +20,7 @@ import {
   Plus,
 } from "lucide-react";
 import { formatearMoneda, formatearHora } from "@/shared/utils/formatters";
+import { Button } from "@/shared/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -144,7 +145,6 @@ export default async function DashboardPage() {
 
   return (
     <>
-      {/* 🚀 INYECCIÓN DE ESTILOS CSS PARA SCROLLBAR ULTRA-PREMIUM (ESTILO MAC/STRIPE/VERCEL) */}
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -201,7 +201,6 @@ export default async function DashboardPage() {
             </div>
 
             <EgresoModal />
-            
           </div>
         </div>
 
@@ -306,9 +305,9 @@ export default async function DashboardPage() {
                   </p>
                 </div>
                 <Link href="/caja">
-                  <button className="w-full text-xs h-8 border border-border rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors">
+                  <Button variant="outline" className="w-full">
                     Ver caja
-                  </button>
+                  </Button>
                 </Link>
               </>
             ) : (
@@ -354,9 +353,9 @@ export default async function DashboardPage() {
               )}
             </div>
             <Link href="/stock">
-              <button className="w-full text-xs h-8 border border-border rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors">
+              <Button variant="outline" className="w-full">
                 Ir al inventario
-              </button>
+              </Button>
             </Link>
           </div>
 

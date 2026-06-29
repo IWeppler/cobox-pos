@@ -15,6 +15,7 @@ import {
   ChartArea,
   Settings,
   Store,
+  UserCog,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ConfiguracionPOS } from "@/entities/config/types";
@@ -23,11 +24,12 @@ import { useSidebarStore } from "@/shared/store/sidebar-store";
 import { createClient } from "../config/supabase/client";
 
 const ALL_NAV_ITEMS = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard, adminOnly: true },
+  { name: "Panel", href: "/", icon: LayoutDashboard, adminOnly: true },
   { name: "Vender", href: "/pos", icon: Store, adminOnly: false },
-  { name: "Caja y Movimientos", href: "/caja", icon: Wallet, adminOnly: true },
+  { name: "Caja", href: "/caja", icon: Wallet, adminOnly: true },
   { name: "Inventario", href: "/stock", icon: Package, adminOnly: false },
   { name: "Ventas", href: "/ventas", icon: ShoppingCart, adminOnly: false },
+  { name: "Clientes", href: "/clientes", icon: UserCog, adminOnly: false },
   { name: "Reportes", href: "/reportes", icon: ChartArea, adminOnly: true },
   {
     name: "Configuración",
