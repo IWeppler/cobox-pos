@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from "react";
 import {
+  TurnoCajaHistorial,
+  EgresoCaja,
+  VentaCaja,
+} from "@/entities/caja/types";
+import { VentaPago, getSupabaseRelation } from "@/entities/ventas/types";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -20,12 +26,25 @@ import {
   BookUser,
   TrendingDown,
 } from "lucide-react";
-import { getDetallesTurnoAction } from "../actions/get-details";
+import { getDetallesTurnoAction } from "../actions/caja-action";
 
 interface CajaDetailSheetProps {
-  turno: any;
+  turno: TurnoCajaHistorial | null;
   onClose: () => void;
 }
+
+type MovimientoDetalle = {
+  id: string;
+  tipo: "INGRESO" | "EGRESO";
+  origen: "VENTA" | "COBRO_DEUDA" | "EGRESO";
+  concepto: string;
+  metodo: string;
+  metodo_tipo: string;
+  monto: number;
+  comision: number;
+  neto: number;
+  fecha: string;
+};
 
 const formatearMoneda = (monto: number) => {
   return new Intl.NumberFormat("es-AR", {
@@ -39,7 +58,7 @@ export function CajaDetailSheet({
   turno,
   onClose,
 }: Readonly<CajaDetailSheetProps>) {
-  const [movimientos, setMovimientos] = useState<any[]>([]);
+  const [movimientos, setMovimientos] = useState<MovimientoDetalle[]>([]);
   const [totalesDigitales, setTotalesDigitales] = useState({
     bruto: 0,
     neto: 0,
@@ -53,22 +72,27 @@ export function CajaDetailSheet({
     const fetchDetalles = async () => {
       setIsLoading(true);
       const res = await getDetallesTurnoAction(
+        turno.id,
         turno.fecha_apertura,
         turno.fecha_cierre,
       );
 
       if (res.data) {
-        const ventasMapeadas = res.data.ventas.flatMap((v: any) => {
-          const primerProducto = v.ventas_items?.[0]?.producto?.nombre;
+        const ventas = res.data.ventas as unknown as VentaCaja[];
+        const pagosSueltos = res.data.pagosSueltos as VentaPago[];
+        const egresos = res.data.egresos as EgresoCaja[];
+
+        const ventasMapeadas: MovimientoDetalle[] = ventas.flatMap((v) => {
+          const primerProducto = getSupabaseRelation(v.ventas_items?.[0]?.producto);
           const itemsExtra = (v.ventas_items?.length || 1) - 1;
-          const conceptoNombre = primerProducto
-            ? `${primerProducto} ${itemsExtra > 0 ? `+ ${itemsExtra} art.` : ""}`
+          const conceptoNombre = primerProducto?.nombre
+            ? `${primerProducto.nombre} ${itemsExtra > 0 ? `+ ${itemsExtra} art.` : ""}`
             : "Varios/Eliminado";
 
           const pagos = v.venta_pagos || [];
 
           if (pagos.length > 0) {
-            return pagos.map((pago: any) => ({
+            return pagos.map((pago) => ({
               id: `${v.id}-${pago.id || Math.random()}`,
               tipo: "INGRESO",
               origen: "VENTA",
@@ -99,20 +123,26 @@ export function CajaDetailSheet({
           }
         });
 
-        const pagosSueltosMapeados = res.data.pagosSueltos.map((p: any) => ({
-          id: p.id,
-          tipo: "INGRESO",
-          origen: "COBRO_DEUDA",
-          concepto: `Cobro a Deudor: ${p.clientes?.nombre || "Cliente"}`,
-          metodo: p.metodo_nombre,
-          metodo_tipo: p.metodo_tipo,
-          monto: Number(p.monto_bruto),
-          comision: Number(p.comision_monto),
-          neto: Number(p.monto_neto),
-          fecha: p.creado_en,
-        }));
+        const pagosSueltosMapeados: MovimientoDetalle[] = pagosSueltos.map(
+          (p) => {
+            const cliente = getSupabaseRelation(p.clientes);
 
-        const egresosMapeados = res.data.egresos.map((e: any) => ({
+            return {
+              id: p.id ?? `${p.metodo_nombre}-${p.creado_en}`,
+              tipo: "INGRESO",
+              origen: "COBRO_DEUDA",
+              concepto: `Cobro a Deudor: ${cliente?.nombre || "Cliente"}`,
+              metodo: p.metodo_nombre,
+              metodo_tipo: p.metodo_tipo,
+              monto: Number(p.monto_bruto),
+              comision: Number(p.comision_monto),
+              neto: Number(p.monto_neto),
+              fecha: p.creado_en || new Date().toISOString(),
+            };
+          },
+        );
+
+        const egresosMapeados: MovimientoDetalle[] = egresos.map((e) => ({
           id: e.id,
           tipo: "EGRESO",
           origen: "EGRESO",

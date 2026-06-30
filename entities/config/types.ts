@@ -36,4 +36,10 @@ export interface ConfiguracionPOS {
   cc_recargo_default?: number;
   cc_anticipo_default?: number;
   cc_limite_default?: number;
+  cc_plazo_mora?: number;
+  crm_dias_inactivo?: number;
+
+  // Configuración de Caja
+  modo_caja?: "UNICA" | "POR_USUARIO" | "POR_PUNTO_VENTA";
+  requiere_caja_abierta?: boolean;
 }

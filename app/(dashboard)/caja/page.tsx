@@ -15,7 +15,7 @@ export default async function CajaPage() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  // 1. Verificación de permisos
+  // 1. Verificación de permisos y perfil
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -23,65 +23,100 @@ export default async function CajaPage() {
 
   const { data: perfil } = await supabase
     .from("perfiles")
-    .select("rol")
+    .select("rol, nombre")
     .eq("id", user.id)
     .single();
-  if (perfil?.rol !== "ADMIN") redirect("/stock");
 
-  // 2. Traemos el historial de turnos completos
-  const { data: turnosHistorial } = await supabase
+  const userRole = perfil?.rol || "VENDEDOR";
+
+  // 2. Traer configuración operativa
+  const { data: config } = await supabase
+    .from("configuracion_pos")
+    .select("modo_caja, requiere_caja_abierta")
+    .single();
+
+  const modoCaja = config?.modo_caja || "UNICA";
+
+  // 3. Traemos el historial de turnos (Filtrado según el rol y modo)
+  let historialQuery = supabase
     .from("turnos_caja")
     .select("*, perfiles(nombre)")
     .order("fecha_apertura", { ascending: false })
     .limit(30);
 
+  // Si es Vendedor y opera por usuario, solo ve sus propias cajas pasadas
+  if (userRole !== "ADMIN" && modoCaja === "POR_USUARIO") {
+    historialQuery = historialQuery.eq("vendedor_id", user.id);
+  }
+
+  const { data: turnosHistorial, error: queryError } = await historialQuery;
+
+  if (queryError) {
+    console.error("Error cargando historial:", queryError);
+  }
+  
   const turnos = (turnosHistorial || []) as TurnoCajaHistorial[];
 
-  // 3. Identificamos si hay uno abierto
-  const turnoAbierto = turnos.find((t) => t.estado === "ABIERTO") || null;
+  // 4. Identificamos los turnos ABIERTOS actuales
+  const turnosAbiertos = turnos.filter((t) => t.estado === "ABIERTO");
+  const turnosAbiertosIds = turnosAbiertos.map((t) => t.id);
 
   let ventas: VentaCaja[] = [];
   let pagosSueltos: VentaPago[] = [];
   let egresos: EgresoCaja[] = [];
 
-  // 4. Traemos los movimientos del turno (Ventas, Cobros de Deudas y Gastos)
-  if (turnoAbierto) {
+  // 5. Traemos los movimientos SOLAMENTE si hay cajas abiertas
+  if (turnosAbiertosIds.length > 0) {
+    // Calculamos la fecha más antigua de las cajas abiertas para filtrar egresos
+    const fechaMinimaApertura = turnosAbiertos.reduce((min, t) => {
+      const d = new Date(t.fecha_apertura);
+      return d < min ? d : min;
+    }, new Date());
+
     const [ventasRes, pagosSueltosRes, egresosRes] = await Promise.all([
       supabase
         .from("ventas")
         .select(
-          "id, total, metodo_pago, fecha_venta, cliente_id, clientes(nombre), monto_cobrado, monto_pendiente, estado_pago, perfiles(nombre), ventas_items(producto:productos(nombre)), venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)",
+          "id, total, metodo_pago, fecha_venta, turno_caja_id, cliente_id, clientes(nombre), monto_cobrado, monto_pendiente, estado_pago, perfiles(nombre), ventas_items(producto:productos(nombre)), venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)",
         )
-        .gte("fecha_venta", turnoAbierto.fecha_apertura)
+        .in("turno_caja_id", turnosAbiertosIds)
         .order("fecha_venta", { ascending: false }),
       supabase
         .from("venta_pagos")
         .select(
-          "id, metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento, creado_en, clientes(nombre)",
+          "id, turno_caja_id, metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento, creado_en, clientes(nombre)",
         )
-        .is("venta_id", null) // 🚀 Pagos sin venta (Ej: Pago de Cuenta Corriente)
-        .gte("creado_en", turnoAbierto.fecha_apertura)
+        .is("venta_id", null)
+        .in("turno_caja_id", turnosAbiertosIds)
         .order("creado_en", { ascending: false }),
       supabase
         .from("egresos")
-        .select("id, concepto, monto, fecha, perfiles(nombre)")
-        .gte("fecha", turnoAbierto.fecha_apertura)
+        .select("id, concepto, monto, fecha, creado_por, perfiles(nombre)")
+        .gte("fecha", fechaMinimaApertura.toISOString())
         .order("fecha", { ascending: false }),
     ]);
 
     ventas = (ventasRes.data || []) as unknown as VentaCaja[];
-    pagosSueltos = pagosSueltosRes.data || [];
+    pagosSueltos = (pagosSueltosRes.data || []) as unknown as VentaPago[];
     egresos = (egresosRes.data || []) as unknown as EgresoCaja[];
+
+    // Si es vendedor, no le mostramos los egresos que registraron otros usuarios
+    if (userRole !== "ADMIN") {
+      egresos = egresos.filter((e) => e.creado_por === user.id);
+    }
   }
 
   return (
     <div className="space-y-6 mx-auto pb-12">
       <CajaDashboard
-        turno={turnoAbierto}
+        turnosAbiertos={turnosAbiertos}
         ventas={ventas}
         pagosSueltos={pagosSueltos}
         egresos={egresos}
         historial={turnos}
+        modoCaja={modoCaja}
+        userRole={userRole}
+        userId={user.id}
       />
     </div>
   );

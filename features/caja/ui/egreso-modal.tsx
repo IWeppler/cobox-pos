@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useActionState } from "react";
-import { registrarEgresoAction } from "../actions/create-egreso";
+import { registrarEgresoAction } from "../actions/caja-action";
 import { toast } from "sonner";
 import {
   Dialog,

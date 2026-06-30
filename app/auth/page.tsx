@@ -15,15 +15,15 @@ export default function AuthPage() {
         <div className="relative z-10 flex items-center gap-3">
           <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg">
             <Image
-              src="/icon-192x192.png"
+              src="/logow.png"
               alt="Logo"
               width={56}
               height={56}
-              className="object-contain"
+              className="object-contain rounded-lg"
             />
           </div>
           <span className="text-white font-bold text-2xl tracking-tight">
-            Sistema POS
+            Cobox POS
           </span>
         </div>
 
@@ -125,7 +125,7 @@ export default function AuthPage() {
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-card rounded-xl flex items-center justify-center">
                 <Image
-                  src="/icon-192x192.png"
+                  src="/logow.png"
                   alt="Logo"
                   width={56}
                   height={56}
@@ -133,7 +133,7 @@ export default function AuthPage() {
                 />
               </div>
               <span className="font-bold text-xl tracking-tight text-foreground">
-                Sistema POS
+                Cobox POS
               </span>
             </div>
 
@@ -155,7 +155,7 @@ export default function AuthPage() {
 
         {/* Footer */}
         <p className="absolute bottom-8 left-0 right-0 text-xs font-medium text-muted-foreground text-center">
-          © {new Date().getFullYear()} System POS
+          © {new Date().getFullYear()} Cobox POS
         </p>
       </div>
     </div>

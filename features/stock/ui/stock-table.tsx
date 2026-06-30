@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useMemo } from "react";
+import { Fragment, useState, useMemo, useTransition } from "react";
 import Image from "next/image";
 import { Producto } from "@/entities/productos/types";
 import {
@@ -23,6 +23,9 @@ import {
   ArrowDown,
   ChevronDown,
   ChevronRight,
+  FolderInput,
+  Loader2,
+  X,
 } from "lucide-react";
 import { ProductEditDetailSheet } from "./edit-sheet";
 import { EliminarProductoModal } from "./delete-modal";
@@ -40,6 +43,29 @@ import {
   getVariantesVisibles,
   obtenerPrimeraImagen as getPrimeraImagen,
 } from "../lib/stock-product-utils";
+import {
+  bulkDeleteProductsAction,
+  bulkUpdateCategoryAction,
+} from "../actions/delete-product";
+import { useActiveCategories } from "../hooks/use-active-categories";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/shared/ui/alert-dialog";
+import { toast } from "sonner";
 
 interface StockTableProps {
   productos: Producto[];
@@ -57,13 +83,25 @@ const obtenerPrimeraImagen = (imagenUrl: unknown): string | null => {
   return getPrimeraImagen(imagenUrl);
 };
 
+type StockTableVariant = {
+  id?: string;
+  variante?: string;
+  nombre_display?: string;
+  stock?: number | string | null;
+  cantidad?: number | string | null;
+};
+
 export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
   const { isAdmin } = useStockCartActions(userRole);
   const [variantesAbiertas, setVariantesAbiertas] = useState<
     Record<string, boolean>
   >({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const categorias = useActiveCategories();
   const [orden, setOrden] = useState<string>("nombre_asc");
+  const selectedIdsArray = useMemo(() => Array.from(selectedIds), [selectedIds]);
 
   // --- LÓGICA DE SELECCIÓN MASIVA ---
   const toggleAll = () => {
@@ -79,6 +117,55 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
     if (newSet.has(id)) newSet.delete(id);
     else newSet.add(id);
     setSelectedIds(newSet);
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setBulkCategoryId("");
+  };
+
+  const handleBulkMove = () => {
+    if (!bulkCategoryId) {
+      toast.error("Selecciona una categoria para mover los productos.");
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await bulkUpdateCategoryAction(
+        selectedIdsArray,
+        bulkCategoryId,
+      );
+
+      if (result.success) {
+        toast.success(
+          `${selectedIdsArray.length} ${
+            selectedIdsArray.length === 1 ? "producto movido" : "productos movidos"
+          } de categoria.`,
+        );
+        clearSelection();
+      } else {
+        toast.error(result.error || "No se pudo cambiar la categoria.");
+      }
+    });
+  };
+
+  const handleBulkDelete = () => {
+    startTransition(async () => {
+      const result = await bulkDeleteProductsAction(selectedIdsArray);
+
+      if (result.success) {
+        toast.success(
+          `${selectedIdsArray.length} ${
+            selectedIdsArray.length === 1
+              ? "producto eliminado"
+              : "productos eliminados"
+          }.`,
+        );
+        clearSelection();
+      } else {
+        toast.error(result.error || "No se pudieron eliminar los productos.");
+      }
+    });
   };
 
   const toggleVariantes = (id: string) => {
@@ -148,32 +235,111 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 ">
       {/* ACCIONES MASIVAS: Barra flotante contextual */}
       {selectedIds.size > 0 && (
-        <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
-          <span className="text-sm font-bold text-primary px-2">
-            {selectedIds.size}{" "}
-            {selectedIds.size === 1
-              ? "producto seleccionado"
-              : "productos seleccionados"}
-          </span>
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="fixed inset-x-3 bottom-4 z-50 mx-auto flex max-w-4xl flex-col gap-3 rounded-xl border border-border bg-background/95 p-3 shadow-lg ring-1 ring-foreground/5 backdrop-blur animate-in fade-in slide-in-from-bottom-4 sm:inset-x-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
             <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs bg-white"
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 shrink-0"
+              onClick={clearSelection}
+              disabled={isPending}
+              aria-label="Limpiar seleccion"
             >
-              Cambiar Categoría
+              <X className="h-4 w-4" />
             </Button>
-            {isAdmin && (
+            <span className="text-sm font-semibold text-foreground">
+              {selectedIds.size}{" "}
+              {selectedIds.size === 1
+                ? "producto seleccionado"
+                : "productos seleccionados"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 items-center gap-2">
+              <Select
+                value={bulkCategoryId}
+                onValueChange={setBulkCategoryId}
+                disabled={isPending}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="h-8 w-full min-w-0 bg-background sm:w-52"
+                >
+                  <SelectValue placeholder="Categoria destino" />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  {categorias.map((categoria) => (
+                    <SelectItem key={categoria.id} value={categoria.id}>
+                      {categoria.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <Button
+                type="button"
                 size="sm"
                 variant="outline"
-                className="h-8 text-xs bg-white text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
+                className="h-8 shrink-0 text-xs bg-background"
+                onClick={handleBulkMove}
+                disabled={isPending || !bulkCategoryId}
               >
-                <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Eliminar
+                {isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <FolderInput className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Mover
               </Button>
+            </div>
+            {isAdmin && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs bg-background text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
+                    disabled={isPending}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Eliminar
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Eliminar productos seleccionados
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Vas a eliminar {selectedIds.size}{" "}
+                      {selectedIds.size === 1 ? "producto" : "productos"} y su
+                      stock asociado. Esta accion no se puede deshacer.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isPending}>
+                      Cancelar
+                    </AlertDialogCancel>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={handleBulkDelete}
+                      disabled={isPending}
+                    >
+                      {isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4 mr-2" />
+                      )}
+                      Eliminar
+                    </Button>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </div>
         </div>
@@ -482,7 +648,7 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border/40">
-                                {variantesVisibles.map((v: any) => {
+                                {variantesVisibles.map((v: StockTableVariant) => {
                                   const varStock = v.stock ?? v.cantidad ?? 0;
 
                                   return (

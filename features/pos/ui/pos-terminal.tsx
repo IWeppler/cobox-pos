@@ -221,9 +221,6 @@ export function PosTerminal({
         </div>
       </div>
 
-      {/* LADO DERECHO: ESPACIO PARA EL CARRITO (Solo Desktop) */}
-      <div className="hidden lg:block w-[400px] shrink-0 z-20" />
-
       <QuickAddModal
         producto={selectedProduct}
         isOpen={isModalOpen}

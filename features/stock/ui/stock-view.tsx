@@ -80,7 +80,7 @@ export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 px-4 p-2">
       <StockFiltersToolbar
         view={view}
         onViewChange={setView}

@@ -11,6 +11,8 @@ import {
   CreditCard,
   Settings,
   FileSliders,
+  UserCog,
+  Calculator,
 } from "lucide-react";
 import {
   Select,
@@ -26,6 +28,7 @@ import { PaymentsPanel } from "@/features/payments/ui/payments-panel";
 import { CatalogPanel } from "@/features/catalog/ui/catalog-panel";
 import { CategoriesPanel } from "@/features/categories/ui/categories-panel";
 import { ClientsPanel } from "@/features/clients/ui/clients-panel";
+import { CajaConfigPanel } from "@/features/clients/ui/caja-panel";
 
 const SECTIONS = [
   {
@@ -39,6 +42,12 @@ const SECTIONS = [
     label: "Catálogo Online",
     icon: Globe,
     description: "Link público y preferencias",
+  },
+  {
+    id: "caja",
+    label: "Caja y Turnos",
+    icon: Calculator,
+    description: "Modo única o multicaja",
   },
   {
     id: "categoria",
@@ -72,8 +81,8 @@ const SECTIONS = [
   },
   {
     id: "clientes",
-    label: "Clientes",
-    icon: Users,
+    label: "Clientes (CRM)",
+    icon: UserCog,
     description: "Cajeros, administradores y roles",
   },
   {
@@ -115,6 +124,8 @@ export function SettingsManager({
         return <CatalogPanel config={config} />;
       case "clientes":
         return <ClientsPanel config={config} />;
+      case "caja":
+        return <CajaConfigPanel config={config} />;
       default:
         return (
           <div className="bg-card text-card-foreground p-6 rounded-2xl border border-border flex flex-col items-center justify-center py-24 text-center">

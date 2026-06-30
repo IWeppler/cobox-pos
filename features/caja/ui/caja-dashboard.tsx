@@ -19,7 +19,7 @@ import { EgresoModal } from "./egreso-modal";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
-import { abrirTurnoAction, cerrarTurnoAction } from "../actions/open-caja";
+import { abrirTurnoAction, cerrarTurnoAction } from "../actions/caja-action";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -32,16 +32,21 @@ import {
   TurnoCajaHistorial,
   EgresoCaja,
   CajaActionState,
+  VentaCaja,
 } from "@/entities/caja/types";
+import { VentaPago, getSupabaseRelation } from "@/entities/ventas/types";
 import { CajaHistoryTable } from "./caja-history-table";
 import { formatearMoneda } from "@/shared/utils/formatters";
 
 export interface CajaDashboardProps {
-  turno: TurnoCajaHistorial | null;
-  ventas: any[];
-  pagosSueltos: any[];
+  turnosAbiertos: TurnoCajaHistorial[];
+  ventas: VentaCaja[];
+  pagosSueltos: VentaPago[];
   egresos: EgresoCaja[];
   historial: TurnoCajaHistorial[];
+  modoCaja?: string;
+  userRole?: string;
+  userId?: string;
 }
 
 type MovimientoExtendido = {
@@ -59,13 +64,20 @@ type MovimientoExtendido = {
 };
 
 export function CajaDashboard({
-  turno,
+  turnosAbiertos,
   ventas,
   pagosSueltos,
   egresos,
   historial,
+  modoCaja: _modoCaja,
+  userRole: _userRole,
+  userId: _userId,
 }: Readonly<CajaDashboardProps>) {
   const [isCerrarOpen, setIsCerrarOpen] = useState(false);
+  const turno = turnosAbiertos[0] ?? null;
+  void _modoCaja;
+  void _userRole;
+  void _userId;
 
   const [, abrirAction, isAbrirPending] = useActionState(
     async (prevState: CajaActionState, formData: FormData) => {
@@ -91,11 +103,10 @@ export function CajaDashboard({
     { error: null, success: false },
   );
 
-  // --- LÓGICA DE CÁLCULO DEL TURNO ABIERTO ---
   const { movimientos, totales } = useMemo(() => {
-    if (!turno)
+    if (!turno) {
       return {
-        movimientos: [],
+        movimientos: [] as MovimientoExtendido[],
         totales: {
           fondoInicial: 0,
           ingresosEfectivo: 0,
@@ -107,13 +118,17 @@ export function CajaDashboard({
           totalFacturado: 0,
         },
       };
+    }
 
     const ventasMapeadas: MovimientoExtendido[] = ventas.flatMap((v) => {
       const pagos = v.venta_pagos || [];
-      const conceptoVenta = `Venta: ${v.ventas_items?.[0]?.producto?.nombre || "Varios"}`;
+      const primerItem = v.ventas_items?.[0];
+      const primerProducto = getSupabaseRelation(primerItem?.producto);
+      const vendedor = getSupabaseRelation(v.perfiles);
+      const conceptoVenta = `Venta: ${primerProducto?.nombre || "Varios"}`;
 
       if (pagos.length > 0) {
-        return pagos.map((pago: any) => ({
+        return pagos.map((pago) => ({
           id: `${v.id}-${pago.id || Math.random()}`,
           tipo: "INGRESO",
           origen: "VENTA",
@@ -124,42 +139,46 @@ export function CajaDashboard({
           comision: Number(pago.comision_monto),
           neto: Number(pago.monto_neto),
           fecha: v.fecha_venta,
-          usuario: v.perfiles?.nombre || "Vendedor",
+          usuario: vendedor?.nombre || "Vendedor",
         }));
-      } else {
-        const isEfectivo = v.metodo_pago === "EFECTIVO";
-        return [
-          {
-            id: v.id,
-            tipo: "INGRESO",
-            origen: "VENTA",
-            concepto: conceptoVenta,
-            metodo: v.metodo_pago || "EFECTIVO",
-            metodo_tipo: isEfectivo ? "EFECTIVO" : "TARJETA",
-            monto: Number(v.total),
-            comision: 0,
-            neto: Number(v.total),
-            fecha: v.fecha_venta,
-            usuario: v.perfiles?.nombre || "Vendedor",
-          },
-        ];
       }
+
+      const isEfectivo = v.metodo_pago === "EFECTIVO";
+      return [
+        {
+          id: v.id,
+          tipo: "INGRESO",
+          origen: "VENTA",
+          concepto: conceptoVenta,
+          metodo: v.metodo_pago || "EFECTIVO",
+          metodo_tipo: isEfectivo ? "EFECTIVO" : "TARJETA",
+          monto: Number(v.total),
+          comision: 0,
+          neto: Number(v.total),
+          fecha: v.fecha_venta,
+          usuario: vendedor?.nombre || "Vendedor",
+        },
+      ];
     });
 
     const pagosSueltosMapeados: MovimientoExtendido[] = pagosSueltos.map(
-      (p) => ({
-        id: p.id,
-        tipo: "INGRESO",
-        origen: "COBRO_DEUDA",
-        concepto: `Cobro a Deudor: ${p.clientes?.nombre || "Cliente"}`,
-        metodo: p.metodo_nombre,
-        metodo_tipo: p.metodo_tipo,
-        monto: Number(p.monto_bruto),
-        comision: Number(p.comision_monto),
-        neto: Number(p.monto_neto),
-        fecha: p.creado_en,
-        usuario: "Sistema", // Por ahora, pagos rápidos no tienen un usuario explícito cargado
-      }),
+      (p) => {
+        const cliente = getSupabaseRelation(p.clientes);
+
+        return {
+          id: p.id ?? `${p.metodo_nombre}-${p.creado_en}`,
+          tipo: "INGRESO",
+          origen: "COBRO_DEUDA",
+          concepto: `Cobro a Deudor: ${cliente?.nombre || "Cliente"}`,
+          metodo: p.metodo_nombre,
+          metodo_tipo: p.metodo_tipo,
+          monto: Number(p.monto_bruto),
+          comision: Number(p.comision_monto),
+          neto: Number(p.monto_neto),
+          fecha: p.creado_en || new Date().toISOString(),
+          usuario: "Sistema",
+        };
+      },
     );
 
     const egresosMapeados: MovimientoExtendido[] = egresos.map((e) => ({
@@ -167,7 +186,7 @@ export function CajaDashboard({
       tipo: "EGRESO",
       origen: "EGRESO",
       concepto: `Gasto: ${e.concepto}`,
-      metodo: "CAJA FÍSICA",
+      metodo: "CAJA FISICA",
       metodo_tipo: "EFECTIVO",
       monto: Number(e.monto),
       comision: 0,
@@ -201,7 +220,6 @@ export function CajaDashboard({
 
     const totalEgresos = egresosMapeados.reduce((acc, m) => acc + m.monto, 0);
     const fondoInicial = Number(turno.monto_inicial);
-
     const efectivoEsperado = Math.max(
       0,
       fondoInicial + ingresosEfectivo - totalEgresos,
@@ -217,14 +235,13 @@ export function CajaDashboard({
         ingresosDigitalesNeto,
         totalEgresos,
         efectivoEsperado,
-        totalFacturado: ingresosEfectivo + ingresosDigitalesBruto, // Bruto total entrado
+        totalFacturado: ingresosEfectivo + ingresosDigitalesBruto,
       },
     };
   }, [ventas, pagosSueltos, egresos, turno]);
 
   return (
-    <div className="space-y-6 animate-in fade-in-50">
-      {/* SECCIÓN 1: ESTADO ACTUAL (ABIERTA O CERRADA) */}
+    <div className="space-y-6 animate-in fade-in-50 px-4 p-2">
       {!turno ? (
         <Card className="border-border bg-background shadow-none overflow-hidden rounded-2xl">
           <div className="flex flex-col md:flex-row">
@@ -233,7 +250,7 @@ export function CajaDashboard({
                 <Lock className="w-5 h-5" />
               </div>
               <h2 className="text-2xl font-bold text-foreground mb-3 tracking-tight">
-                La caja está cerrada
+                La caja esta cerrada
               </h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Antes de comenzar a registrar ventas o movimientos de dinero,
@@ -265,7 +282,7 @@ export function CajaDashboard({
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Monto de cambio (billetes/monedas) en el cajón.
+                    Monto de cambio (billetes/monedas) en el cajon.
                   </p>
                 </div>
                 <Button
@@ -372,7 +389,7 @@ export function CajaDashboard({
                     />
                     <div className="space-y-3">
                       <Label className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-                        Efectivo real en cajón
+                        Efectivo real en cajon
                       </Label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">
@@ -388,14 +405,14 @@ export function CajaDashboard({
                         />
                       </div>
                       <p className="text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1 mt-1 font-semibold">
-                        <Info className="w-3 h-3" /> El sistema calculará
+                        <Info className="w-3 h-3" /> El sistema calculara
                         diferencias
                       </p>
                     </div>
                     <Button
                       type="submit"
                       disabled={isCerrarPending}
-                      className="w-full h-12 bg-neutral-900 hover:bg-neutral-800 text-background font-bold rounded-xl shadow-none cursor-pointer"
+                      className="w-full h-12"
                     >
                       {isCerrarPending
                         ? "Cerrando turno..."
@@ -407,14 +424,12 @@ export function CajaDashboard({
             </div>
           </div>
 
-          {/* TARJETAS SEPARADAS: FÍSICO VS DIGITAL (FLAT DESIGN) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* CAJÓN FÍSICO */}
             <div className="p-4 rounded-2xl border border-border bg-muted flex flex-col justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
                   <Banknote className="w-4 h-4 text-emerald-500" />
-                  Efectivo en Cajón
+                  Efectivo en Cajon
                 </h3>
                 <div className="text-3xl font-bold text-foreground mb-2">
                   {formatearMoneda(totales.efectivoEsperado)}
@@ -439,7 +454,7 @@ export function CajaDashboard({
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm font-medium">
-                  <span className="text-muted-foreground">Gastos físicos</span>
+                  <span className="text-muted-foreground">Gastos fisicos</span>
                   <span className="font-semibold text-rose-600">
                     -{formatearMoneda(totales.totalEgresos)}
                   </span>
@@ -447,7 +462,6 @@ export function CajaDashboard({
               </div>
             </div>
 
-            {/* COBROS DIGITALES */}
             <div className="p-4 rounded-2xl border border-border bg-muted flex flex-col justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
@@ -458,7 +472,7 @@ export function CajaDashboard({
                   {formatearMoneda(totales.ingresosDigitalesNeto)}
                 </div>
                 <p className="text-sm text-muted-foreground font-medium">
-                  Acreditación neta estimada (Transf. y Tarjetas)
+                  Acreditacion neta estimada (Transf. y Tarjetas)
                 </p>
               </div>
               <div className="mt-8 space-y-2">
@@ -480,7 +494,6 @@ export function CajaDashboard({
             </div>
           </div>
 
-          {/* Tabla de Movimientos del Turno Abierto */}
           <div>
             <div className="px-4 mb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="text-lg font-semibold text-foreground">
@@ -500,7 +513,7 @@ export function CajaDashboard({
                   <tr>
                     <th className="px-6 py-4">Hora</th>
                     <th className="px-6 py-4">Concepto</th>
-                    <th className="px-6 py-4">Método</th>
+                    <th className="px-6 py-4">Metodo</th>
                     <th className="px-6 py-4 text-right">Monto</th>
                     <th className="px-6 py-4 hidden sm:table-cell">Usuario</th>
                   </tr>
@@ -512,7 +525,7 @@ export function CajaDashboard({
                         colSpan={5}
                         className="px-6 py-12 text-center text-muted-foreground bg-transparent"
                       >
-                        Aún no hay movimientos registrados en este turno.
+                        Aun no hay movimientos registrados en este turno.
                       </td>
                     </tr>
                   ) : (
@@ -568,7 +581,6 @@ export function CajaDashboard({
                             {mov.tipo === "INGRESO" ? "+" : "-"}
                             {formatearMoneda(mov.monto)}
                           </div>
-                          
                         </td>
                         <td className="px-6 py-4 text-muted-foreground hidden sm:table-cell text-xs">
                           {mov.usuario}

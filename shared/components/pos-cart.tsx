@@ -10,7 +10,7 @@ import {
   useSyncExternalStore,
   useTransition,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { registrarVentaAction } from "@/features/sales/actions/create-sale";
 import { TicketSheet } from "@/features/sales/ui/ticket-sheet";
@@ -21,6 +21,7 @@ import { CartSidebarFooter } from "./cart-sidebar/cart-sidebar-footer";
 import { CartSidebarHeader } from "./cart-sidebar/cart-sidebar-header";
 import { CartStepCheckout } from "./cart-sidebar/cart-step-checkout";
 import { CartStepItems } from "./cart-sidebar/cart-step-items";
+import { Sheet, SheetContent } from "@/shared/ui/sheet";
 import { PromocionDB } from "./cart-sidebar/types";
 import {
   generarLinkWhatsApp,
@@ -35,7 +36,7 @@ const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
 type CheckoutStep = "CART" | "PAYMENT";
 
-export function CartSidebar({
+export function PosCart({
   numeroWhatsApp,
 }: Readonly<{ numeroWhatsApp?: string }>) {
   const {
@@ -59,8 +60,6 @@ export function CartSidebar({
   );
 
   const router = useRouter();
-  const pathname = usePathname();
-  const isPosRoute = pathname === "/pos";
 
   const mounted = useSyncExternalStore(
     subscribeToClientMount,
@@ -70,11 +69,11 @@ export function CartSidebar({
   const [isPending, startTransition] = useTransition();
 
   const [branding, setBranding] = useState<ConfiguracionPOS | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [metodosPagoDB, setMetodosPagoDB] = useState<MetodoPago[]>([]);
   const [pagos, setPagos] = useState<CreateSalePaymentInput[]>([]);
   const [modoMixto, setModoMixto] = useState(false);
   const [isCuentaCorriente, setIsCuentaCorriente] = useState(false);
+  const [isMobileLayout, setIsMobileLayout] = useState(false);
 
   const [promocionesDB, setPromocionesDB] = useState<PromocionDB[]>([]);
   const [promocionId, setPromocionId] = useState("ninguna");
@@ -83,7 +82,7 @@ export function CartSidebar({
   const [clienteSeleccionado, setClienteSeleccionado] =
     useState<ClienteBasico | null>(null);
 
-  const isPOSMode = isAdmin;
+  const isPOSMode = true;
   const totalCarrito = getTotalPrice();
   const effectiveCheckoutStep: CheckoutStep =
     items.length === 0 ? "CART" : checkoutStep;
@@ -105,6 +104,18 @@ export function CartSidebar({
   }, []);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+    const updateLayout = () => setIsMobileLayout(mediaQuery.matches);
+
+    updateLayout();
+    mediaQuery.addEventListener("change", updateLayout);
+
+    return () => {
+      mediaQuery.removeEventListener("change", updateLayout);
+    };
+  }, []);
+
+  useEffect(() => {
     const supabase = createClient();
     let isMounted = true;
 
@@ -114,8 +125,6 @@ export function CartSidebar({
       } = await supabase.auth.getSession();
 
       if (!isMounted) return;
-
-      setIsAdmin(!!session);
 
       if (session) {
         const { data: promos } = await supabase
@@ -145,15 +154,8 @@ export function CartSidebar({
 
     checkUserAndFetchData();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (isMounted) setIsAdmin(!!session);
-      },
-    );
-
     return () => {
       isMounted = false;
-      authListener.subscription.unsubscribe();
     };
   }, []);
 
@@ -376,80 +378,83 @@ export function CartSidebar({
     });
   };
 
+  const CartContent = (
+    <>
+      <CartSidebarHeader isPOSMode={isPOSMode} onClose={closeSidebar} />
+
+      {effectiveCheckoutStep === "CART" ? (
+        <CartStepItems
+          items={items}
+          onUpdateQuantity={updateQuantity}
+          onRemoveItem={removeItem}
+          totalCarrito={totalCarrito}
+          onContinueToPayment={handleContinueToPayment}
+        />
+      ) : (
+        <CartStepCheckout
+          isPOSMode={isPOSMode}
+          metodosPagoDB={metodosPagoDB}
+          pagos={pagos}
+          onPagosChange={setPagos}
+          totalFinal={totalFinal}
+          isCuentaCorriente={isCuentaCorriente}
+          onCuentaCorrienteChange={handleCuentaCorrienteChange}
+          modoMixto={modoMixto}
+          onModoMixtoChange={setModoMixto}
+          anticipoMinimo={anticipoMinimo}
+          clienteSeleccionado={clienteSeleccionado}
+          onClienteChange={setClienteSeleccionado}
+          promocionesElegibles={promocionesElegibles}
+          promocionActivaId={promocionActivaId}
+          onPromocionChange={setPromocionId}
+          onBackToCart={() => setCheckoutStep("CART")}
+        >
+          {items.length > 0 ? (
+            <CartSidebarFooter
+              isPOSMode={isPOSMode}
+              isPending={isPending}
+              totalCarrito={totalCarrito}
+              recargoCuentaCorriente={recargoCuentaCorriente}
+              totalFinal={totalFinal}
+              sumaPagos={sumaPagos}
+              isCuentaCorriente={isCuentaCorriente}
+              anticipoMinimo={anticipoMinimo}
+              clienteSeleccionado={clienteSeleccionado}
+              descuentoDetalle={descuentoDetalle}
+              whatsappHref={generarLinkWhatsApp({
+                numeroWhatsApp,
+                nombreComercio: branding?.posName,
+                items,
+                total: totalCarrito,
+              })}
+              metodosPagoDB={metodosPagoDB}
+              pagos={pagosSincronizados}
+              modoMixto={modoMixto}
+              onConfirmarVentaPOS={handleConfirmarVentaPOS}
+              onEnviarPedidoWhatsApp={handleEnviarPedidoWhatsApp}
+              onClearCart={clearCartAndResetStep}
+            />
+          ) : null}
+        </CartStepCheckout>
+      )}
+    </>
+  );
+
   return (
     <>
-      {isOpen && (
-        <button
-          className={`fixed inset-0 bg-black/40 z-40 backdrop-blur-sm transition-opacity ${
-            isPosRoute ? "lg:hidden" : ""
-          }`}
-          onClick={closeSidebar}
-        />
-      )}
-
-      <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-100 bg-card flex flex-col border-l border-border transform transition-transform duration-300 ease-in-out ${
-          isOpen ? "translate-x-0 z-50" : "translate-x-full z-50"
-        } ${isPosRoute ? "lg:w-100 lg:z-30 lg:translate-x-0" : ""}`}
-      >
-        <CartSidebarHeader isPOSMode={isPOSMode} onClose={closeSidebar} />
-
-        {effectiveCheckoutStep === "CART" ? (
-          <CartStepItems
-            items={items}
-            onUpdateQuantity={updateQuantity}
-            onRemoveItem={removeItem}
-            totalCarrito={totalCarrito}
-            onContinueToPayment={handleContinueToPayment}
-          />
-        ) : (
-          <CartStepCheckout
-            isPOSMode={isPOSMode}
-            metodosPagoDB={metodosPagoDB}
-            pagos={pagos}
-            onPagosChange={setPagos}
-            totalFinal={totalFinal}
-            isCuentaCorriente={isCuentaCorriente}
-            onCuentaCorrienteChange={handleCuentaCorrienteChange}
-            modoMixto={modoMixto}
-            onModoMixtoChange={setModoMixto}
-            anticipoMinimo={anticipoMinimo}
-            clienteSeleccionado={clienteSeleccionado}
-            onClienteChange={setClienteSeleccionado}
-            promocionesElegibles={promocionesElegibles}
-            promocionActivaId={promocionActivaId}
-            onPromocionChange={setPromocionId}
-            onBackToCart={() => setCheckoutStep("CART")}
-          >
-            {items.length > 0 ? (
-              <CartSidebarFooter
-                isPOSMode={isPOSMode}
-                isPending={isPending}
-                totalCarrito={totalCarrito}
-                recargoCuentaCorriente={recargoCuentaCorriente}
-                totalFinal={totalFinal}
-                sumaPagos={sumaPagos}
-                isCuentaCorriente={isCuentaCorriente}
-                anticipoMinimo={anticipoMinimo}
-                clienteSeleccionado={clienteSeleccionado}
-                descuentoDetalle={descuentoDetalle}
-                whatsappHref={generarLinkWhatsApp({
-                  numeroWhatsApp,
-                  nombreComercio: branding?.posName,
-                  items,
-                  total: totalCarrito,
-                })}
-                metodosPagoDB={metodosPagoDB}
-                pagos={pagosSincronizados}
-                modoMixto={modoMixto}
-                onConfirmarVentaPOS={handleConfirmarVentaPOS}
-                onEnviarPedidoWhatsApp={handleEnviarPedidoWhatsApp}
-                onClearCart={clearCartAndResetStep}
-              />
-            ) : null}
-          </CartStepCheckout>
-        )}
+      <div className="hidden lg:flex flex-col w-[400px] shrink-0 border-l border-border bg-white h-full z-20">
+        {CartContent}
       </div>
+
+      <Sheet open={isMobileLayout && isOpen} onOpenChange={setIsOpen}>
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className="lg:hidden w-full sm:max-w-sm gap-0 p-0"
+        >
+          {CartContent}
+        </SheetContent>
+      </Sheet>
 
       <TicketSheet
         ticket={ventaExitosa}

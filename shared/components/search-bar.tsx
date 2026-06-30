@@ -56,7 +56,7 @@ export function SearchBar() {
           value={term}
           onChange={(e) => setTerm(e.target.value)}
           placeholder="Buscar producto..."
-          className="w-full h-10 pl-10 pr-10 bg-[#f5f4f4] border-transparent hover:border-border/80 focus:bg-white outline-none focus:ring-1 focus:ring-foreground text-xs transition-all rounded-none tracking-wide font-medium placeholder:text-muted-foreground/60 text-foreground shadow-none"
+          className="w-full h-10 pl-10 pr-10 bg-card border-transparent hover:border-border/80 focus:bg-background outline-none focus:ring-1 focus:ring-foreground text-xs transition-all rounded-none tracking-wide font-medium placeholder:text-muted-foreground/60 text-foreground shadow-none"
         />
         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
           {isSearching ? (
@@ -84,7 +84,7 @@ export function SearchBar() {
       </button>
 
       {isMobileOpen && (
-        <div className="absolute top-full left-0 w-full bg-white border-b border-border p-3 md:hidden flex animate-in slide-in-from-top-2 z-50">
+        <div className="absolute top-full left-0 w-full bg-background border-b border-border p-3 md:hidden flex animate-in slide-in-from-top-2 z-50">
           <div className="relative w-full">
             <Search
               className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${term ? "text-foreground" : "text-muted-foreground"}`}
@@ -95,7 +95,7 @@ export function SearchBar() {
               value={term}
               onChange={(e) => setTerm(e.target.value)}
               placeholder="Buscar producto..."
-              className="w-full h-12 pl-10 pr-10 bg-[#f5f4f4] border-transparent focus:bg-white outline-none focus:ring-1 focus:ring-foreground text-xs transition-all rounded-none uppercase tracking-widest font-bold placeholder:text-muted-foreground/60 text-foreground shadow-none"
+              className="w-full h-12 pl-10 pr-10 bg-card border-transparent focus:bg-background outline-none focus:ring-1 focus:ring-foreground text-xs transition-all rounded-none uppercase tracking-widest font-bold placeholder:text-muted-foreground/60 text-foreground shadow-none"
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
               {isSearching ? (

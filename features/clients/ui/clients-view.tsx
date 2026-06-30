@@ -191,7 +191,7 @@ export function ClientsView({
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 px-4 p-2">
       {/* ── KPIs SUPERIORES ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-border shadow-none">

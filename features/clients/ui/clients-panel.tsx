@@ -8,12 +8,14 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Switch } from "@/shared/ui/switch";
 import {
-  Users,
   Loader2,
   Wallet,
   TrendingUp,
   ShieldAlert,
   Percent,
+  Clock,
+  UserX,
+  UserCog,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
@@ -31,6 +33,8 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
     cc_recargo_default: config.cc_recargo_default ?? 0,
     cc_anticipo_default: config.cc_anticipo_default ?? 0,
     cc_limite_default: config.cc_limite_default ?? 0,
+    cc_plazo_mora: config.cc_plazo_mora ?? 30,
+    crm_dias_inactivo: config.crm_dias_inactivo ?? 60,
   });
 
   const handleChange = (field: string, value: string | number | boolean) => {
@@ -64,7 +68,7 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-border pb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <Users className="w-6 h-6 text-primary" />
+              <UserCog className="w-6 h-6 text-primary" />
               <h2 className="text-2xl font-bold text-foreground">
                 Clientes y Cuentas Corrientes
               </h2>
@@ -113,39 +117,71 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
                 </div>
 
                 <div
-                  className={`space-y-3 transition-opacity ${!formData.cc_activas ? "opacity-50 pointer-events-none" : ""}`}
+                  className={`space-y-6 transition-opacity ${!formData.cc_activas ? "opacity-50 pointer-events-none" : ""}`}
                 >
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-semibold flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5" /> Límite de Crédito
-                      Base
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Límite global sugerido. Déjalo en 0 si no deseas límite
-                      estricto.
-                    </p>
+                  <div className="space-y-3">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-semibold flex items-center gap-1.5">
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        Límite de Crédito Base
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Límite global sugerido. Déjalo en 0 si no deseas límite
+                        estricto.
+                      </p>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                        $
+                      </span>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={
+                          formData.cc_limite_default === 0
+                            ? ""
+                            : formData.cc_limite_default
+                        }
+                        onChange={(e) =>
+                          handleChange(
+                            "cc_limite_default",
+                            Number(e.target.value),
+                          )
+                        }
+                        placeholder="0 (Sin límite)"
+                        className="pl-8 bg-muted/50 border-border"
+                      />
+                    </div>
                   </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
-                      $
-                    </span>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={
-                        formData.cc_limite_default === 0
-                          ? ""
-                          : formData.cc_limite_default
-                      }
-                      onChange={(e) =>
-                        handleChange(
-                          "cc_limite_default",
-                          Number(e.target.value),
-                        )
-                      }
-                      placeholder="0 (Sin límite)"
-                      className="pl-8 bg-muted/50 border-border"
-                    />
+
+                  <div className="space-y-3 pt-4 border-t border-border/50">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-semibold flex items-center gap-1.5">
+                        <UserX className="w-3.5 h-3.5 text-slate-500" />
+                        Días de Inactividad (CRM)
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Días sin comprar para considerar a un cliente como
+                        &quot;Inactivo&quot; en los reportes.
+                      </p>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        min="1"
+                        value={formData.crm_dias_inactivo}
+                        onChange={(e) =>
+                          handleChange(
+                            "crm_dias_inactivo",
+                            Number(e.target.value),
+                          )
+                        }
+                        className="pr-12 bg-muted/50 border-border"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-xs">
+                        días
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -229,6 +265,33 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
                       %
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-2 border-t border-border/50">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-semibold flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-orange-500" /> Plazo de
+                      Vencimiento de Deuda
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Días desde la compra para considerar que el saldo deudor
+                      de un ticket está vencido (Mora).
+                    </p>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="1"
+                      value={formData.cc_plazo_mora}
+                      onChange={(e) =>
+                        handleChange("cc_plazo_mora", Number(e.target.value))
+                      }
+                      className="pr-12 bg-muted/50 border-border"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-xs">
+                      días
                     </span>
                   </div>
                 </div>

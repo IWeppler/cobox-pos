@@ -33,12 +33,41 @@ export interface VentaCaja {
   total: number | string;
   metodo_pago?: string | null;
   fecha_venta: string;
-  producto?: {
-    nombre?: string | null;
-  } | null;
+  cliente_id?: string | null;
+  monto_cobrado?: number | null;
+  monto_pendiente?: number | null;
+  estado_pago?: string | null;
+  clientes?:
+    | {
+        nombre?: string | null;
+      }
+    | {
+        nombre?: string | null;
+      }[]
+    | null;
   perfiles?: {
     nombre?: string | null;
-  } | null;
+  } | { nombre?: string | null }[] | null;
+  ventas_items?: {
+    producto?:
+      | {
+          nombre?: string | null;
+        }
+      | {
+          nombre?: string | null;
+        }[]
+      | null;
+  }[];
+  venta_pagos?: {
+    id?: string;
+    metodo_nombre: string;
+    metodo_tipo: string;
+    monto_bruto: number;
+    comision_monto: number;
+    monto_neto: number;
+    acreditacion_dias?: number;
+    tipo_movimiento?: string;
+  }[];
 }
 
 export interface EgresoCaja {
@@ -46,6 +75,7 @@ export interface EgresoCaja {
   monto: number | string;
   concepto: string;
   fecha: string;
+  creado_por?: string | null;
   perfiles?: {
     nombre?: string | null;
   } | null;

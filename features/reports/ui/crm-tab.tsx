@@ -33,11 +33,10 @@ interface CrmTabProps {
   ventas: any[];
   ventasDelPeriodo: any[];
   clientes: any[];
+  plazoMora: number;
+  diasInactivo: number;
 }
 
-// 🚀 REGLAS DE NEGOCIO (Futura conexión a Configuración Global)
-const PLAZO_CREDITO_DIAS = 30; // Días para considerar una deuda vencida
-const DIAS_INACTIVO = 60; // Días sin comprar para considerar al cliente inactivo
 const ITEMS_POR_PAGINA = 10;
 
 type SortConfig = {
@@ -55,6 +54,8 @@ export function CrmTab({
   ventas,
   ventasDelPeriodo,
   clientes,
+  plazoMora,
+  diasInactivo,
 }: Readonly<CrmTabProps>) {
   const [search, setSearch] = useState("");
   const [segmentFilter, setSegmentFilter] = useState("TODOS");
@@ -183,7 +184,7 @@ export function CrmTab({
           c.dias_deuda_ponderada += pendiente * diffDays;
 
           // Si pasaron los días de crédito, esa deuda está vencida
-          if (diffDays > PLAZO_CREDITO_DIAS) {
+          if (diffDays > plazoMora) {
             c.saldo_vencido += pendiente;
           }
         }
@@ -212,11 +213,11 @@ export function CrmTab({
         if (c.saldo_vencido > 0) {
           estado = "Riesgo Alto";
           colorClass = "bg-rose-50 text-rose-700 border-rose-200";
-        } else if (c.saldo_actual > 0 && promedioPago > PLAZO_CREDITO_DIAS) {
+        } else if (c.saldo_actual > 0 && promedioPago > plazoMora) {
           estado = "Valioso pero Lento";
           colorClass = "bg-amber-50 text-amber-700 border-amber-200";
         } else if (
-          diasDesdeUltimaCompra > DIAS_INACTIVO &&
+          diasDesdeUltimaCompra > diasInactivo &&
           c.saldo_actual === 0
         ) {
           estado = "Inactivo";
@@ -257,7 +258,7 @@ export function CrmTab({
       proyeccion,
       clientList,
     };
-  }, [ventas, ventasDelPeriodo, clientes]);
+  }, [ventas, ventasDelPeriodo, clientes, plazoMora, diasInactivo]);
 
   const { filteredAndSortedClients, totalPages } = useMemo(() => {
     let result = [...crmMetrics.clientList];
@@ -393,7 +394,7 @@ export function CrmTab({
               {formatearMoneda(crmMetrics.saldoVencidoTotal)}
             </div>
             <p className="text-xs text-muted-foreground font-medium mt-1">
-              Mayor a {PLAZO_CREDITO_DIAS} días
+              Mayor a {plazoMora} días
             </p>
           </CardContent>
         </Card>
@@ -515,7 +516,9 @@ export function CrmTab({
             <div className="divide-y divide-border/60">
               <div className="flex items-center justify-between py-5">
                 <div>
-                  <p className="text-sm font-semibold text-destructive">Vencido</p>
+                  <p className="text-sm font-semibold text-destructive">
+                    Vencido
+                  </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Gestión de cobro requerida
                   </p>

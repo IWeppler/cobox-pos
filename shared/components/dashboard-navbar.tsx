@@ -1,6 +1,5 @@
 "use client";
 
-import { CartButton } from "@/shared/ui/cart-button";
 import { SidebarIcon } from "lucide-react";
 import { useSidebarStore } from "@/shared/store/sidebar-store";
 import { usePathname } from "next/navigation";
@@ -89,9 +88,6 @@ export function DashboardNavbar() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <CartButton />
-      </div>
     </header>
   );
 }

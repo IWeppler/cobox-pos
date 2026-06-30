@@ -210,7 +210,7 @@ export function VentasTable({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-4 p-2">
       <TicketSheet
         ticket={ticketAbierto}
         config={branding || ({} as ConfiguracionPOS)}

@@ -43,35 +43,74 @@ export async function getOrdenParaMergeAction(ordenId: string) {
 
 export async function crearProductoAlVueloAction(
   nombre: string,
-  precio_costo: number,
-  precio_venta: number,
+  costo: number,
+  precio: number,
+  categoriaNombre?: string,
 ) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  try {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "No autorizado." };
 
-  let slug = slugify(`${nombre}-Interior`);
-  const sufijo = Math.random().toString(36).substring(2, 6);
-  slug = `${slug}-${sufijo}`;
+    const slug =
+      nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-") +
+      "-" +
+      Math.random().toString(36).substring(2, 6);
+    let categoria_id = null;
 
-  const { data: nuevoProducto, error } = await supabase
-    .from("productos")
-    .insert({
-      nombre,
-      tipo: "Interior",
-      precio_costo,
-      precio: precio_venta,
-      slug,
-      publicado: true,
-    })
-    .select("id, nombre, precio, precio_costo, tipo")
-    .single();
+    // Si viene la categoría del Excel, la buscamos o la creamos
+    if (categoriaNombre) {
+      // Intentamos buscarla
+      const { data: catExistente } = await supabase
+        .from("categorias")
+        .select("id")
+        .ilike("nombre", categoriaNombre.trim())
+        .maybeSingle();
 
-  if (error || !nuevoProducto) {
-    console.error("Error creando producto al vuelo:", error);
-    return { error: "Hubo un error al crear el producto al vuelo." };
+      if (catExistente) {
+        categoria_id = catExistente.id;
+      } else {
+        // La creamos
+        const { data: nuevaCat } = await supabase
+          .from("categorias")
+          .insert({
+            nombre: categoriaNombre.trim(),
+            slug: categoriaNombre
+              .trim()
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-"),
+            activa: true,
+          })
+          .select("id")
+          .single();
+        if (nuevaCat) categoria_id = nuevaCat.id;
+      }
+    }
+
+    const { data: nuevoProducto, error } = await supabase
+      .from("productos")
+      .insert({
+        nombre,
+        precio_costo: costo || 0,
+        precio: precio || 0,
+        slug,
+        tipo: categoriaNombre || "General",
+        categoria_id: categoria_id,
+        publicado: true,
+        atributos_globales: {},
+      })
+      .select("*")
+      .single();
+
+    if (error || !nuevoProducto) return { error: "Error de BD al crear." };
+
+    return { success: true, producto: nuevoProducto };
+  } catch (error) {
+    return { error: "Error interno al crear el producto." };
   }
-
-  return { success: true, producto: nuevoProducto };
 }
 
 async function actualizarPrecios(item: ItemResuelto, supabase: SupabaseDb) {

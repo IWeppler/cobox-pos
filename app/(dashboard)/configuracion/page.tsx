@@ -34,7 +34,7 @@ export default async function ConfiguracionPage() {
     .order("nombre", { ascending: true });
 
   return (
-    <div className="space-y-6 mx-auto">
+    <div className="space-y-6 mx-auto px-4 p-2">
       {configError || !config ? (
         <div className="p-4 rounded-md bg-destructive/10 border border-destructive/20 text-destructive font-medium">
           {configError ||

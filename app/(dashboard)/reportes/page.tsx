@@ -27,6 +27,7 @@ import { BajaAprobadaReporte } from "@/entities/reportes/types";
 import { VentasTab } from "@/features/reports/ui/ventas-tab";
 import { CrmTab } from "@/features/reports/ui/crm-tab";
 import { Venta } from "@/entities/ventas/types";
+import { ConfiguracionPOS } from "@/entities/config/types";
 
 export const dynamic = "force-dynamic";
 
@@ -45,13 +46,13 @@ export default async function ReportesPage({
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  // 🚀 Modificamos la consulta para traer TODOS los clientes y poder analizar la cartera completa
   const [
     ventasResponse,
     productosResponse,
     egresosResponse,
     bajasResponse,
     clientesResponse,
+    configResponse,
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
@@ -63,6 +64,10 @@ export default async function ReportesPage({
       )
       .eq("estado", "APROBADA"),
     supabase.from("clientes").select("*").order("nombre", { ascending: true }),
+    supabase
+      .from("configuracion_pos")
+      .select("cc_plazo_mora, crm_dias_inactivo")
+      .single(),
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
@@ -70,6 +75,10 @@ export default async function ReportesPage({
   const egresos = egresosResponse.data || [];
   const bajasAprobadas = (bajasResponse.data || []) as BajaAprobadaReporte[];
   const clientes = clientesResponse.data || [];
+
+  const config: Partial<ConfiguracionPOS> = configResponse.data || {};
+  const plazoMora = config.cc_plazo_mora ?? 30;
+  const diasInactivo = config.crm_dias_inactivo ?? 60;
 
   const metrics = getDashboardMetrics(
     ventas,
@@ -135,7 +144,7 @@ export default async function ReportesPage({
   const insights = getAdvisorInsights(metrics);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 px-4 p-2">
       <AdvisorBanner insights={insights} />
 
       <Tabs defaultValue="resumen" className="w-full space-y-4 mt-2">
@@ -203,11 +212,14 @@ export default async function ReportesPage({
           bajasDelPeriodo={bajasDelPeriodo}
           productos={productos}
         />
-        {/* 🚀 Pasamos todo el universo de datos al cerebro CRM */}
+
+        {/* 🚀 Pasamos los parámetros dinámicos al Tab del CRM */}
         <CrmTab
           ventas={ventas}
           ventasDelPeriodo={ventasDelPeriodo}
           clientes={clientes}
+          plazoMora={plazoMora}
+          diasInactivo={diasInactivo}
         />
       </Tabs>
     </div>

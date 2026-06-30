@@ -173,7 +173,7 @@ export default async function DashboardPage() {
         }}
       />
 
-      <div className="space-y-6 px-1">
+      <div className="space-y-6 px-1 py-2">
         {/* HEADER */}
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border">
           <div>

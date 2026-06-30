@@ -12,6 +12,13 @@ import { Input } from "@/shared/ui/input";
 import { Badge } from "@/shared/ui/badge";
 import { Label } from "@/shared/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -44,6 +51,7 @@ import {
 import Link from "next/link";
 import { ItemResuelto, OrdenCompra } from "@/entities/compras/types";
 import { Producto } from "@/entities/productos/types";
+import { createClient } from "@/shared/config/supabase/client";
 
 interface MergeTableProps {
   orden: OrdenCompra;
@@ -51,7 +59,11 @@ interface MergeTableProps {
   productos: Producto[];
 }
 
-// --- NUEVO COMPONENTE: Combobox de Búsqueda Personalizado ---
+type ItemResueltoConCategoria = ItemResuelto & {
+  raw_categoria?: string | null;
+};
+
+// --- Combobox de Búsqueda Personalizado ---
 function SearchableSelect({
   productos,
   value,
@@ -167,7 +179,7 @@ export function MergeTable({
   const [localProductos, setLocalProductos] = useState<Producto[]>(productos);
 
   // Estado local para los ítems
-  const [items, setItems] = useState<ItemResuelto[]>(() =>
+  const [items, setItems] = useState<ItemResueltoConCategoria[]>(() =>
     itemsOriginales.map((item) => ({
       ...item,
       variante_match: item.variante_match || item.raw_variante || "Unico",
@@ -182,7 +194,24 @@ export function MergeTable({
   const [nuevoProductoData, setNuevoProductoData] = useState({
     nombre: "",
     precio: 0,
+    categoria: "",
   });
+  const [categoriasDB, setCategoriasDB] = useState<
+    { id: string; nombre: string }[]
+  >([]);
+
+  useEffect(() => {
+    const fetchCats = async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("categorias")
+        .select("id, nombre")
+        .eq("activa", true)
+        .order("nombre");
+      if (data) setCategoriasDB(data);
+    };
+    fetchCats();
+  }, []);
 
   function productoReal(
     id: string | null,
@@ -259,6 +288,7 @@ export function MergeTable({
       nuevoProductoData.nombre,
       itemActual.precio_costo,
       nuevoProductoData.precio,
+      nuevoProductoData.categoria,
     );
     setIsSubmitting(false);
 
@@ -304,7 +334,7 @@ export function MergeTable({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-4 py-2">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -452,12 +482,13 @@ export function MergeTable({
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-8 text-xs border-dashed text-green-700 hover:bg-green-50 hover:text-green-800 hover:border-green-600"
+                          className="h-8 text-xs border-dashed text-primary hover:bg-primary/10 hover:text-primary hover:border-primary"
                           onClick={() => {
                             setItemToCreateIdx(idx);
                             setNuevoProductoData({
                               nombre: item.raw_nombre,
                               precio: Math.ceil(item.precio_costo * 1.5),
+                              categoria: (item as any).raw_categoria || "",
                             });
                           }}
                         >
@@ -468,7 +499,7 @@ export function MergeTable({
                     ) : (
                       <div className="flex items-center justify-between gap-2">
                         <div>
-                          <p className="font-semibold text-green-800">
+                          <p className="font-semibold text-primary">
                             {pReal?.nombre}
                           </p>
                           <p className="text-xs text-muted-foreground mt-0.5">
@@ -563,6 +594,7 @@ export function MergeTable({
               Completa los datos para crear un nuevo producto en el sistema.
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4 pt-4">
             <div className="space-y-2">
               <Label>Nombre del Producto</Label>
@@ -577,8 +609,30 @@ export function MergeTable({
                 placeholder="Ej: Ficus Benjamina"
               />
             </div>
+
             <div className="space-y-2">
-              <Label>Precio de Costo</Label>
+              <Label>Categoría</Label>
+              <Select
+                value={nuevoProductoData.categoria}
+                onValueChange={(val) =>
+                  setNuevoProductoData({ ...nuevoProductoData, categoria: val })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecciona una categoría..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-50">
+                  {categoriasDB.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.nombre}>
+                      {cat.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Precio Público</Label>
               <Input
                 type="number"
                 value={nuevoProductoData.precio}
@@ -600,11 +654,7 @@ export function MergeTable({
               >
                 Cancelar
               </Button>
-              <Button
-                className="bg-emerald-600 hover:bg-emerald-700"
-                onClick={handleCrearAlVuelo}
-                disabled={isSubmitting}
-              >
+              <Button onClick={handleCrearAlVuelo} disabled={isSubmitting}>
                 {isSubmitting ? "Creando..." : "Guardar y Asignar"}
               </Button>
             </div>

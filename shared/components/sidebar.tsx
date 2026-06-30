@@ -15,21 +15,27 @@ import {
   ChartArea,
   Settings,
   Store,
-  UserCog,
+  Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { CartButton } from "@/shared/ui/cart-button";
 import { useSidebarStore } from "@/shared/store/sidebar-store";
 import { createClient } from "../config/supabase/client";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/shared/ui/tooltip";
 
 const ALL_NAV_ITEMS = [
   { name: "Panel", href: "/", icon: LayoutDashboard, adminOnly: true },
   { name: "Vender", href: "/pos", icon: Store, adminOnly: false },
-  { name: "Caja", href: "/caja", icon: Wallet, adminOnly: true },
+  { name: "Caja", href: "/caja", icon: Wallet, adminOnly: false },
   { name: "Inventario", href: "/stock", icon: Package, adminOnly: false },
   { name: "Ventas", href: "/ventas", icon: ShoppingCart, adminOnly: false },
-  { name: "Clientes", href: "/clientes", icon: UserCog, adminOnly: false },
+  { name: "Clientes", href: "/clientes", icon: Users, adminOnly: false },
   { name: "Reportes", href: "/reportes", icon: ChartArea, adminOnly: true },
   {
     name: "Configuración",
@@ -59,16 +65,37 @@ export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
   }, [userRole]);
 
   useEffect(() => {
-    if (userRole !== "ADMIN") return;
     let isMounted = true;
 
     const fetchCajaStatus = async () => {
       const supabase = createClient();
-      const { data } = await supabase
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 1. Buscamos el modo de operación
+      const { data: config } = await supabase
+        .from("configuracion_pos")
+        .select("modo_caja")
+        .single();
+
+      const modo = config?.modo_caja || "UNICA";
+
+      // 2. Buscamos si hay caja abierta según las reglas
+      let query = supabase
         .from("turnos_caja")
         .select("id")
-        .eq("estado", "ABIERTO")
-        .limit(1);
+        .eq("estado", "ABIERTO");
+
+      if (modo === "UNICA") {
+        query = query.eq("modo", "UNICA");
+      } else {
+        // Modo multicaja: Busca estrictamente la caja del usuario logueado
+        query = query.eq("modo", "POR_USUARIO").eq("vendedor_id", user.id);
+      }
+
+      const { data } = await query.limit(1);
 
       if (isMounted) {
         setIsCajaAbierta(data && data.length > 0);
@@ -77,18 +104,18 @@ export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
 
     fetchCajaStatus();
 
-    const interval = setInterval(fetchCajaStatus, 5000);
+    const interval = setInterval(fetchCajaStatus, 8000);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [userRole, pathname]);
+  }, [pathname]);
 
   const initial = branding.posName;
 
   return (
-    <>
+    <TooltipProvider>
       {/* MOBILE TOP NAVBAR (Solo visible en celular) */}
       <div className="md:hidden flex w-full shrink-0 items-center justify-between px-4 h-16 bg-background border-b border-border sticky top-0 z-50">
         <Link
@@ -184,60 +211,98 @@ export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
 
             const Icon = item.icon;
             const showCajaAlert =
-              item.name === "Caja y Movimientos" && isCajaAbierta === false;
+              item.name === "Caja" && isCajaAbierta === false;
 
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setIsOpenMobile(false)}
-                title={isCollapsed ? item.name : undefined}
-                className={`flex items-center rounded-lg transition-all font-medium ${
-                  isCollapsed
-                    ? "justify-center h-10 w-10 mx-auto"
-                    : "gap-3 px-3 py-2.5"
-                } ${
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                <div className="relative flex items-center justify-center">
-                  <Icon
-                    className={`w-5 h-5 shrink-0 transition-colors ${
-                      isActive ? "text-primary-foreground" : ""
+              <Tooltip key={item.href} disableHoverableContent={!isCollapsed}>
+                <TooltipTrigger asChild>
+                  <Link
+                    href={item.href}
+                    onClick={() => setIsOpenMobile(false)}
+                    className={`flex items-center rounded-lg transition-all font-medium ${
+                      isCollapsed
+                        ? "justify-center h-10 w-10 mx-auto"
+                        : "gap-3 px-3 py-2.5"
+                    } ${
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
-                  />
-                  {showCajaAlert && (
-                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600"></span>
-                    </span>
-                  )}
-                </div>
-                {!isCollapsed && <span className="truncate">{item.name}</span>}
-              </Link>
+                  >
+                    <div className="relative flex items-center justify-center">
+                      <Icon
+                        className={`w-5 h-5 shrink-0 transition-colors ${
+                          isActive ? "text-primary-foreground" : ""
+                        }`}
+                      />
+                      {showCajaAlert && (
+                        <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600"></span>
+                        </span>
+                      )}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="truncate">{item.name}</span>
+                    )}
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="right"
+                  sideOffset={8}
+                  hidden={!isCollapsed}
+                  className="font-semibold"
+                >
+                  {item.name}
+                </TooltipContent>
+              </Tooltip>
             );
           })}
         </nav>
 
         {/* FOOTER / LOGOUT */}
-        <div className="p-3 border-t border-transparent">
+        <div className="p-4 border-t border-border bg-muted/10 flex flex-col gap-4">
           <form action={logoutAction}>
-            <button
-              type="submit"
-              title={isCollapsed ? "Cerrar Sesión" : undefined}
-              className={`flex items-center text-destructive rounded-lg hover:bg-destructive/10 transition-colors cursor-pointer font-medium ${
-                isCollapsed
-                  ? "justify-center h-10 w-10 mx-auto"
-                  : "w-full gap-3 px-3 py-2.5"
-              }`}
-            >
-              <LogOut className="w-5 h-5 shrink-0" />
-              {!isCollapsed && <span>Cerrar Sesión</span>}
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="submit"
+                  className={`flex items-center text-muted-foreground rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer font-semibold ${
+                    isCollapsed
+                      ? "justify-center h-12 w-12 mx-auto"
+                      : "w-full gap-3 px-3.5 py-3"
+                  }`}
+                >
+                  <LogOut className="w-[18px] h-[18px] shrink-0" />
+                  {!isCollapsed && <span>Cerrar Sesión</span>}
+                </button>
+              </TooltipTrigger>
+              {isCollapsed && (
+                <TooltipContent side="right" className="font-semibold">
+                  Cerrar Sesión
+                </TooltipContent>
+              )}
+            </Tooltip>
           </form>
+
+          {/* WATERMARK POWERED BY */}
+          {!isCollapsed && (
+            <div className="flex text-center mx-auto pt-2 gap-1">
+              <p className="text-[10px] text-muted-foreground">
+                Powered by{" "}
+              </p>
+              <Link
+                href="https://www.ignacioweppler.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-semibold text-primary"
+              >
+                {" "}
+                Ignacio Weppler
+              </Link>
+            </div>
+          )}
         </div>
       </aside>
-    </>
+    </TooltipProvider>
   );
 }

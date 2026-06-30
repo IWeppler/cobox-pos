@@ -12,12 +12,11 @@ export async function registrarVentaAction(
   const cartData = formData.get("cart_items") as string;
   const promocionId = formData.get("promocion_id") as string | null;
   const descuentoMonto = Number(formData.get("descuento_monto") || 0);
-
-  // 🚀 SOPORTE MIXTO Y RETROCOMPATIBILIDAD
   const pagosRaw = formData.get("pagos") as string;
-  const metodoPagoIdLegacy = formData.get("metodo_pago_id") as string;
 
-  // 🚀 CRM: CUENTA CORRIENTE
+  // REGLAS DE NEGOCIO CRM Y CC
+  const isCuentaCorriente = formData.get("is_cuenta_corriente") === "true";
+  const recargoCC = Number(formData.get("recargo_cc") || 0);
   const clienteId = formData.get("cliente_id") as string | null;
 
   if (!cartData) return { error: "El carrito está vacío.", success: false };
@@ -33,15 +32,30 @@ export async function registrarVentaAction(
 
   if (authError || !user) return { error: "No autorizado.", success: false };
 
-  // --- BLOQUEO DE CAJA ---
-  const { data: turnoAbierto } = await supabase
+  // 🚀 BLOQUEO Y ASIGNACIÓN DE CAJA (MODO DINÁMICO)
+  const { data: config } = await supabase
+    .from("configuracion_pos")
+    .select("modo_caja, requiere_caja_abierta")
+    .single();
+  const requiereCaja = config?.requiere_caja_abierta ?? true;
+  const modoCaja = config?.modo_caja || "UNICA";
+
+  let turnoQuery = supabase
     .from("turnos_caja")
     .select("id")
-    .eq("estado", "ABIERTO")
-    .single();
-  if (!turnoAbierto) return { error: "CAJA_CERRADA", success: false };
+    .eq("estado", "ABIERTO");
+  if (modoCaja === "UNICA") {
+    turnoQuery = turnoQuery.eq("modo", "UNICA");
+  } else if (modoCaja === "POR_USUARIO") {
+    turnoQuery = turnoQuery.eq("modo", "POR_USUARIO").eq("usuario_id", user.id);
+  }
 
-  // --- FETCH MÉTODOS DE PAGO ---
+  const { data: turnoAbierto } = await turnoQuery.maybeSingle();
+
+  if (requiereCaja && !turnoAbierto) {
+    return { error: "CAJA_CERRADA", success: false };
+  }
+
   const { data: metodosDb } = await supabase.from("metodos_pago").select("*");
   if (!metodosDb)
     return { error: "Error consultando métodos de pago.", success: false };
@@ -83,7 +97,7 @@ export async function registrarVentaAction(
 
   // --- 1. VALIDAR STOCK Y PRORRATEAR DESCUENTOS ---
   const itemsProcesados = [];
-  let totalVenta = 0;
+  let totalVentaBrutaItems = 0;
   let costoTotalVenta = 0;
 
   for (const item of items) {
@@ -118,7 +132,7 @@ export async function registrarVentaAction(
       itemPrecioFinal = precioUnitario - itemDescuentoMonto;
     }
 
-    totalVenta += precioUnitario * cantidadFinal;
+    totalVentaBrutaItems += precioUnitario * cantidadFinal;
     costoTotalVenta += precioCostoReal * cantidadFinal;
 
     itemsProcesados.push({
@@ -134,57 +148,49 @@ export async function registrarVentaAction(
     });
   }
 
-  const totalSeguro = isNaN(totalVenta) ? 0 : totalVenta;
-  const costoSeguro = isNaN(costoTotalVenta) ? 0 : costoTotalVenta;
-  const totalConDescuento = Math.max(
+  // Calculamos el Total Real del Ticket
+  const totalConDescuentoYRecargo =
+    Math.max(0, totalVentaBrutaItems - descuentoMonto) +
+    (isNaN(recargoCC) ? 0 : recargoCC);
+
+  // --- 2. VALIDACIÓN DEL ARRAY DE PAGOS ---
+  const pagosRawArray: CreateSalePaymentInput[] = pagosRaw
+    ? JSON.parse(pagosRaw)
+    : [];
+  const pagosValidos = pagosRawArray.filter((p) => Number(p.montoAsignado) > 0);
+  const sumaPagos = pagosValidos.reduce(
+    (acc, p) => acc + Number(p.montoAsignado),
     0,
-    totalSeguro - (isNaN(descuentoMonto) ? 0 : descuentoMonto),
   );
 
-  // --- 2. 🚀 PREPARACIÓN DEL ARRAY DE PAGOS ---
-  let pagos: CreateSalePaymentInput[] = [];
-
-  if (pagosRaw) {
-    pagos = JSON.parse(pagosRaw);
-  } else if (metodoPagoIdLegacy) {
-    pagos = [
-      { metodoPagoId: metodoPagoIdLegacy, montoAsignado: totalConDescuento },
-    ];
-  } else {
-    return { error: "No se asignó un método de pago.", success: false };
-  }
-
-  if (pagos.length === 0) {
-    return { error: "La lista de pagos no puede estar vacía.", success: false };
-  }
-
-  const sumaPagos = pagos.reduce((acc, p) => acc + Number(p.montoAsignado), 0);
-
-  // 🚀 LÓGICA DE CUENTA CORRIENTE
-  const montoPendiente = totalConDescuento - sumaPagos;
+  const montoPendiente = totalConDescuentoYRecargo - sumaPagos;
   const estadoPago = montoPendiente > 0.05 ? "PARCIAL" : "PAGADA";
 
-  if (montoPendiente > 0.05 && !clienteId) {
+  if (isCuentaCorriente && !clienteId) {
     return {
-      error: "Para dejar un saldo pendiente debes seleccionar un cliente.",
+      error: "Debes seleccionar un cliente para generar una deuda.",
+      success: false,
+    };
+  }
+  if (!isCuentaCorriente && montoPendiente > 0.05) {
+    return {
+      error: "Venta contado: El pago no cubre el total del ticket.",
+      success: false,
+    };
+  }
+  if (sumaPagos > totalConDescuentoYRecargo + 0.05) {
+    return {
+      error: "Los cobros asignados superan el total del ticket.",
       success: false,
     };
   }
 
-  // Prevenir sobre-pagos (Errores de tipeo del cajero)
-  if (sumaPagos > totalConDescuento + 0.05) {
-    return {
-      error: "Los pagos asignados superan el total de la venta.",
-      success: false,
-    };
-  }
-
-  // --- 3. CÁLCULO FINANCIERO MASIVO (Iterando los pagos) ---
+  // --- 3. CÁLCULO FINANCIERO MASIVO ---
   let comisionTotalGeneral = 0;
   let totalNetoGeneral = 0;
   const ventaPagosPayloads = [];
 
-  for (const pago of pagos) {
+  for (const pago of pagosValidos) {
     const metodoData = metodosMap[pago.metodoPagoId];
     if (!metodoData)
       return { error: "Método de pago inválido.", success: false };
@@ -206,12 +212,16 @@ export async function registrarVentaAction(
       comision_monto: comisionMonto,
       monto_neto: montoNeto,
       acreditacion_dias: metodoData.acreditacion_dias || 0,
+      turno_caja_id: turnoAbierto?.id || null,
     });
   }
 
-  let metodoPagoSafe = "PAGO_MIXTO";
-  if (pagos.length === 1) {
-    const m = metodosMap[pagos[0].metodoPagoId];
+  let metodoPagoSafe =
+    isCuentaCorriente && pagosValidos.length === 0
+      ? "CUENTA_CORRIENTE"
+      : "PAGO_MIXTO";
+  if (pagosValidos.length === 1) {
+    const m = metodosMap[pagosValidos[0].metodoPagoId];
     if (m.tipo === "TRANSFERENCIA") metodoPagoSafe = "TRANSFERENCIA";
     else if (m.tipo === "TARJETA" || m.tipo === "BILLETERA_VIRTUAL")
       metodoPagoSafe = "TARJETA";
@@ -221,17 +231,19 @@ export async function registrarVentaAction(
   const payloadVentas = {
     vendedor_id: user.id,
     cliente_id: clienteId || null,
+    turno_caja_id: turnoAbierto?.id || null,
+    estado_operacion: 'CONFIRMADA',
     metodo_pago: metodoPagoSafe,
-    total: totalConDescuento,
-    precio_costo: costoSeguro,
+    total: totalConDescuentoYRecargo,
+    precio_costo: isNaN(costoTotalVenta) ? 0 : costoTotalVenta,
     cantidad: items.length,
-    total_bruto: totalConDescuento,
+    total_bruto: totalConDescuentoYRecargo,
     comision_total: comisionTotalGeneral,
     total_neto: totalNetoGeneral,
-    es_pago_mixto: pagos.length > 1,
+    es_pago_mixto: pagosValidos.length > 1,
     monto_cobrado: sumaPagos,
     monto_pendiente: montoPendiente > 0 ? montoPendiente : 0,
-    estado_pago: estadoPago,
+    estado_pago: estadoPago
   };
 
   // --- 4. CREAR LA CABECERA (ventas) ---
@@ -240,16 +252,11 @@ export async function registrarVentaAction(
     .insert(payloadVentas)
     .select("id")
     .single();
+  if (ventaError || !nuevaVenta)
+    return { error: `Fallo en BD: ${ventaError.message}`, success: false };
 
-  if (ventaError || !nuevaVenta) {
-    return {
-      error: `Fallo en BD (Ventas): ${ventaError.message}`,
-      success: false,
-    };
-  }
-
-  // --- 5. REGISTRAR DEUDA EN CUENTA CORRIENTE (Si aplica) ---
-  if (montoPendiente > 0.05 && clienteId) {
+  // --- 5. REGISTRAR DEUDA EN CUENTA CORRIENTE ---
+  if (isCuentaCorriente && montoPendiente > 0.05 && clienteId) {
     const { error: ccError } = await supabase
       .from("cuenta_corriente_movimientos")
       .insert({
@@ -257,31 +264,29 @@ export async function registrarVentaAction(
         venta_id: nuevaVenta.id,
         tipo: "DEBITO",
         monto: montoPendiente,
-        descripcion: `Compra Parcial - Ticket #${nuevaVenta.id.split("-")[0].toUpperCase()}`,
+        descripcion: `Compra Fiada - Ticket #${nuevaVenta.id.split("-")[0].toUpperCase()}`,
         creado_por: user.id,
       });
-
     if (ccError) console.error("Error al registrar deuda en CC:", ccError);
   }
 
-  // --- 6. REGISTRAR EL DESGLOSE DE PAGOS (venta_pagos) ---
-  const pagosToInsert = ventaPagosPayloads.map((p) => ({
-    ...p,
-    venta_id: nuevaVenta.id,
-  }));
-
-  const { error: pagoError } = await supabase
-    .from("venta_pagos")
-    .insert(pagosToInsert);
-
-  if (pagoError) {
-    return {
-      error: `Fallo en BD (Venta Pagos): ${pagoError.message}`,
-      success: false,
-    };
+  // --- 6. REGISTRAR EL DESGLOSE DE PAGOS ---
+  if (pagosValidos.length > 0) {
+    const pagosToInsert = ventaPagosPayloads.map((p) => ({
+      ...p,
+      venta_id: nuevaVenta.id,
+    }));
+    const { error: pagoError } = await supabase
+      .from("venta_pagos")
+      .insert(pagosToInsert);
+    if (pagoError)
+      return {
+        error: `Fallo guardando pago: ${pagoError.message}`,
+        success: false,
+      };
   }
 
-  // --- 7. REGISTRAR TRAZABILIDAD DEL DESCUENTO ---
+  // --- 7. TRAZABILIDAD DEL DESCUENTO ---
   if (
     promocionId &&
     promocionId !== "ninguna" &&
@@ -295,12 +300,9 @@ export async function registrarVentaAction(
       tipo_descuento: promoData.tipo_descuento,
       monto_descontado: descuentoMonto,
     });
-
     await supabase
       .from("promociones")
-      .update({
-        usos_actuales: (promoData.usos_actuales || 0) + 1,
-      })
+      .update({ usos_actuales: (promoData.usos_actuales || 0) + 1 })
       .eq("id", promocionId);
   }
 
@@ -319,16 +321,7 @@ export async function registrarVentaAction(
       promoData && item.descuentoMonto > 0 ? promoData.nombre : null,
   }));
 
-  const { error: itemsError } = await supabase
-    .from("ventas_items")
-    .insert(insertItems);
-
-  if (itemsError) {
-    return {
-      error: `Fallo en BD (Ventas Items): ${itemsError.message}`,
-      success: false,
-    };
-  }
+  await supabase.from("ventas_items").insert(insertItems);
 
   // --- 9. DESCONTAR STOCK ---
   for (const item of itemsProcesados) {
