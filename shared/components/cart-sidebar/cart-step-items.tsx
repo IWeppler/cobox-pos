@@ -29,7 +29,7 @@ export function CartStepItems({
         {items.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
             <ShoppingBag className="mb-4 h-12 w-12 opacity-30" />
-            <p className="text-sm font-semibold">Tu bolsa esta vacia</p>
+            <p className="text-sm font-medium">Tu carrito esta vacio</p>
           </div>
         ) : (
           <div className="space-y-3">

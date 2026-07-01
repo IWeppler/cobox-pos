@@ -56,7 +56,7 @@ export default async function DashboardLayout({
         <div className="flex-1 flex flex-col bg-background md:border md:border-border md:rounded-xl md:shadow-sm overflow-hidden relative">
           <DashboardNavbar />
 
-          <main className="flex-1 pl-2 lg:pl-4 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <main className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <TooltipProvider>{children}</TooltipProvider>
           </main>
         </div>

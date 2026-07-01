@@ -194,6 +194,7 @@ export async function editarProductoAction(
           .insert({
             producto_id: id,
             nombre_display: nombreDisplay,
+            atributos: v.valores,
             precio: vPrecio,
             costo: vCosto,
             stock: vStock,

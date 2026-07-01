@@ -193,6 +193,20 @@ export async function aplicarPreciosAction(
           `Error actualizando producto ${item.producto_id}`,
           updateError,
         );
+
+      const { error: variantesUpdateError } = await supabase
+        .from("producto_variantes")
+        .update({
+          costo: item.costo_nuevo,
+          precio: item.precio_nuevo,
+        })
+        .eq("producto_id", item.producto_id);
+
+      if (variantesUpdateError)
+        console.error(
+          `Error actualizando variantes del producto ${item.producto_id}`,
+          variantesUpdateError,
+        );
     }
 
     await supabase.from("actualizaciones_precio_items").insert(itemsHistorial);
@@ -231,6 +245,14 @@ export async function revertirPreciosAction(loteId: string) {
         precio: item.precio_anterior,
       })
       .eq("id", item.producto_id);
+
+    await supabase
+      .from("producto_variantes")
+      .update({
+        costo: item.costo_anterior,
+        precio: item.precio_anterior,
+      })
+      .eq("producto_id", item.producto_id);
   }
 
   await supabase

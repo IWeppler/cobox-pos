@@ -146,7 +146,7 @@ export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
           <CartButton />
           <button
             onClick={() => setIsOpenMobile(!isOpenMobile)}
-            className="p-2 text-muted-foreground hover:bg-muted hover:text-foreground rounded-md transition-colors cursor-pointer shrink-0"
+            className="p-2 text-foreground hover:bg-muted hover:text-foreground rounded-md transition-colors cursor-pointer shrink-0"
             aria-label="Alternar menú"
           >
             {isOpenMobile ? (

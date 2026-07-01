@@ -18,7 +18,13 @@ export async function getStockAction(): Promise<{
         `
         *,
         categoria:categorias(id, nombre, slug),
-        producto_variantes(*),
+        producto_variantes(
+          *,
+          producto_variante_valores(
+            atributo:atributos(nombre),
+            atributo_valor:atributo_valores(valor)
+          )
+        ),
         stock:productos_stock(id, variante, cantidad)
         `,
       )

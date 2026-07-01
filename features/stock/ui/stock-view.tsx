@@ -13,14 +13,71 @@ interface StockViewProps {
   userRole: string;
 }
 
+function getAtributosVariante(
+  variante: NonNullable<Producto["producto_variantes"]>[number],
+) {
+  if (variante.atributos && Object.keys(variante.atributos).length > 0) {
+    return variante.atributos;
+  }
+
+  const atributos: Record<string, string> = {};
+  variante.producto_variante_valores?.forEach((relacion) => {
+    const propiedad = relacion.atributo?.nombre?.trim();
+    const valor = relacion.atributo_valor?.valor?.trim();
+    if (propiedad && valor) {
+      atributos[propiedad] = valor;
+    }
+  });
+
+  return atributos;
+}
+
 export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
   const [view, setView] = useState<"table" | "grid">("table");
   const ITEMS_POR_PAGINA = 10;
   const [paginaActual, setPaginaActual] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState("todos");
+  const [filtrosVariantes, setFiltrosVariantes] = useState<
+    Record<string, string>
+  >({});
 
   const isAdmin = userRole === "ADMIN";
+
+  const propiedadesGlobales = useMemo(() => {
+    const propsMap: Record<string, Set<string>> = {};
+
+    productos.forEach((producto) => {
+      producto.producto_variantes?.forEach((variante) => {
+        const atributos = getAtributosVariante(variante);
+
+        if (Object.keys(atributos).length > 0) {
+          Object.entries(atributos).forEach(([propiedad, valor]) => {
+            const valorLimpio = valor?.trim();
+            if (!valorLimpio) return;
+            if (!propsMap[propiedad]) propsMap[propiedad] = new Set();
+            propsMap[propiedad].add(valorLimpio);
+          });
+          return;
+        }
+
+        const nombreVariante = variante.nombre_display?.trim();
+        if (nombreVariante && nombreVariante.toLowerCase() !== "unico") {
+          if (!propsMap["Opcion"]) propsMap["Opcion"] = new Set();
+          propsMap["Opcion"].add(nombreVariante);
+        }
+      });
+    });
+
+    const propiedades: Record<string, string[]> = {};
+    Object.keys(propsMap)
+      .sort()
+      .forEach((propiedad) => {
+        propiedades[propiedad] = Array.from(propsMap[propiedad]).sort();
+      });
+
+    return propiedades;
+  }, [productos]);
 
   // Lógica de filtrado por producto adaptada al modelo dinámico
   const productosFiltrados = useMemo(() => {
@@ -36,9 +93,32 @@ export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
         categoriaActiva === "todos" ||
         catNombre.toLowerCase() === categoriaActiva.toLowerCase();
 
-      return matchSearch && matchCat;
+      const matchVariantes = Object.entries(filtrosVariantes).every(
+        ([propiedad, valor]) => {
+          if (valor === "todos") return true;
+
+          return (
+            p.producto_variantes?.some((variante) => {
+              const atributos = getAtributosVariante(variante);
+
+              if (Object.keys(atributos).length > 0) {
+                return (
+                  atributos[propiedad]?.toLowerCase() === valor.toLowerCase()
+                );
+              }
+
+              return (
+                propiedad === "Opcion" &&
+                variante.nombre_display?.toLowerCase() === valor.toLowerCase()
+              );
+            }) ?? false
+          );
+        },
+      );
+
+      return matchSearch && matchCat && matchVariantes;
     });
-  }, [productos, searchQuery, categoriaActiva]);
+  }, [productos, searchQuery, categoriaActiva, filtrosVariantes]);
 
   const totalPaginas = Math.ceil(productosFiltrados.length / ITEMS_POR_PAGINA);
   const productosPaginados = productosFiltrados.slice(
@@ -46,7 +126,10 @@ export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
     paginaActual * ITEMS_POR_PAGINA,
   );
 
-  const hayFiltrosActivos = searchQuery !== "" || categoriaActiva !== "todos";
+  const hayFiltrosActivos =
+    searchQuery !== "" ||
+    categoriaActiva !== "todos" ||
+    Object.values(filtrosVariantes).some((valor) => valor !== "todos");
 
   const conteosPorCategoria = useMemo(() => {
     const conteos: Record<string, number> = {};
@@ -66,6 +149,7 @@ export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
   const limpiarFiltros = () => {
     setSearchQuery("");
     setCategoriaActiva("todos");
+    setFiltrosVariantes({});
     setPaginaActual(1);
   };
 
@@ -79,8 +163,16 @@ export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
     setPaginaActual(1);
   };
 
+  const handleFiltroVarianteChange = (propiedad: string, valor: string) => {
+    setFiltrosVariantes((current) => ({
+      ...current,
+      [propiedad]: valor,
+    }));
+    setPaginaActual(1);
+  };
+
   return (
-    <div className="space-y-4 px-4 p-2">
+    <div className="space-y-4 px-2 md:px-4 p-2">
       <StockFiltersToolbar
         view={view}
         onViewChange={setView}
@@ -92,6 +184,9 @@ export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
         conteosPorCategoria={conteosPorCategoria}
         totalProductos={productos.length}
         hayFiltrosActivos={hayFiltrosActivos}
+        propiedadesGlobales={propiedadesGlobales}
+        filtrosVariantes={filtrosVariantes}
+        onFiltroVarianteChange={handleFiltroVarianteChange}
         isAdmin={isAdmin}
         onLimpiarFiltros={limpiarFiltros}
       />

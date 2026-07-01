@@ -12,7 +12,15 @@ type CreateClientState = {
   success: boolean;
 };
 
-export function CreateClientModal() {
+interface CreateClientModalProps {
+  buttonClassName?: string;
+  labelClassName?: string;
+}
+
+export function CreateClientModal({
+  buttonClassName,
+  labelClassName = "hidden md:flex",
+}: Readonly<CreateClientModalProps> = {}) {
   const [isOpen, setIsOpen] = useState(false);
 
   const [, formAction, isPending] = useActionState(
@@ -37,9 +45,9 @@ export function CreateClientModal() {
       isPending={isPending}
       includeDni
       trigger={
-        <Button title="Nuevo Cliente">
+        <Button title="Nuevo Cliente" className={buttonClassName}>
           <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span className="hidden md:flex">Nuevo Cliente</span>
+          <span className={labelClassName}>Nuevo Cliente</span>
         </Button>
       }
     />

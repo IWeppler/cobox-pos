@@ -333,7 +333,7 @@ export function CajaDashboard({
               <Dialog open={isCerrarOpen} onOpenChange={setIsCerrarOpen}>
                 <DialogTrigger asChild>
                   <Button className="text-white sm:w-auto">
-                    <Lock className="w-4 h-4 mr-2" /> Cierre Z (Arqueo)
+                    <Lock className="w-4 h-4 mr-2" /> Cierre Z
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[420px] p-0 overflow-hidden border-border shadow-2xl">

@@ -32,6 +32,34 @@ interface UseCatalogFiltersProps {
   visibleCount: number;
 }
 
+function parseLegacyVariant(raw: string): Record<string, string> {
+  const v = raw?.trim() || "";
+  if (!v || v.toLowerCase() === "unico" || v.toLowerCase() === "único")
+    return {};
+
+  const result: Record<string, string> = {};
+
+  if (v.includes("/") || v.includes("-")) {
+    const separator = v.includes("/") ? "/" : "-";
+    const parts = v.split(separator).map((p) => p.trim());
+
+    if (parts.length >= 2) {
+      result["Color"] = parts[0];
+      result["Talle"] = parts[1];
+
+      // Si por casualidad separan 3 cosas (Ej: Rojo/L/Algodón)
+      for (let i = 2; i < parts.length; i++) {
+        result[`Opción ${i + 1}`] = parts[i];
+      }
+      return result;
+    }
+  }
+
+  // Si no tiene separadores (ej: "10L", "Atado", "Bandeja"), cae como Opción genérica
+  result["Opción"] = v;
+  return result;
+}
+
 export function useCatalogFilters({
   productos,
   categorias = [],
@@ -51,32 +79,31 @@ export function useCatalogFilters({
       p.producto_variantes?.forEach((v) => {
         if (config?.mostrar_sin_stock === false && v.stock <= 0) return;
 
-        // Si la variante tiene un JSON de atributos reales (Ej: { "Color": "Rojo", "Talle": "L" })
+        // Si la variante tiene un JSON de atributos reales
         if (v.atributos && Object.keys(v.atributos).length > 0) {
           Object.entries(v.atributos).forEach(([key, val]) => {
             if (!propsMap[key]) propsMap[key] = new Set();
             propsMap[key].add((val as string).trim());
           });
         }
-        // Si no tiene JSON, pero tiene un texto manual que no es "Unico" (Fallback)
-        else if (
-          v.nombre_display &&
-          v.nombre_display.toLowerCase() !== "unico" &&
-          v.nombre_display.toLowerCase() !== "único"
-        ) {
-          if (!propsMap["Opción"]) propsMap["Opción"] = new Set();
-          propsMap["Opción"].add(v.nombre_display.trim());
+        // Si no tiene JSON, aplicamos el Auto-Split al nombre
+        else if (v.nombre_display) {
+          const parsed = parseLegacyVariant(v.nombre_display);
+          Object.entries(parsed).forEach(([key, val]) => {
+            if (!propsMap[key]) propsMap[key] = new Set();
+            propsMap[key].add(val);
+          });
         }
       });
 
-      // Esquema viejo (Stock Legacy)
+      // Esquema viejo (Stock Legacy) con Auto-Split
       p.stock?.forEach((s) => {
         if (config?.mostrar_sin_stock === false && s.cantidad <= 0) return;
-        const v = s.variante || "";
-        if (v.toLowerCase() !== "unico" && v.toLowerCase() !== "único") {
-          if (!propsMap["Opción"]) propsMap["Opción"] = new Set();
-          propsMap["Opción"].add(v.trim());
-        }
+        const parsed = parseLegacyVariant(s.variante);
+        Object.entries(parsed).forEach(([key, val]) => {
+          if (!propsMap[key]) propsMap[key] = new Set();
+          propsMap[key].add(val);
+        });
       });
     });
 
@@ -177,28 +204,23 @@ export function useCatalogFilters({
             c.producto_variantes?.some((pv) => {
               if (pv.stock <= 0) return false;
 
-              // Si tiene JSON, buscamos la llave exacta
               if (pv.atributos && Object.keys(pv.atributos).length > 0) {
                 return (
                   pv.atributos[propKey]?.toLowerCase() === propVal.toLowerCase()
                 );
               }
 
-              // Si no, recae en la comprobación legacy
-              return (
-                propKey === "Opción" &&
-                pv.nombre_display?.toLowerCase() === propVal.toLowerCase()
-              );
+              // Auto-Split al vuelo
+              const parsed = parseLegacyVariant(pv.nombre_display || "");
+              return parsed[propKey]?.toLowerCase() === propVal.toLowerCase();
             }) ?? false;
 
-          // 2. Chequear tabla vieja
+          // 2. Chequear tabla vieja (Auto-Split al vuelo)
           const matchOld =
             c.stock?.some((s) => {
               if (s.cantidad <= 0) return false;
-              return (
-                propKey === "Opción" &&
-                s.variante?.toLowerCase() === propVal.toLowerCase()
-              );
+              const parsed = parseLegacyVariant(s.variante || "");
+              return parsed[propKey]?.toLowerCase() === propVal.toLowerCase();
             }) ?? false;
 
           return matchOld || matchNew;

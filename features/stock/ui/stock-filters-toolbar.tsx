@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   ClipboardList,
+  Filter,
   FilterX,
   LayoutGrid,
   List,
@@ -11,6 +12,15 @@ import {
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { Label } from "@/shared/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/shared/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +51,9 @@ interface StockFiltersToolbarProps {
   conteosPorCategoria: Record<string, number>;
   totalProductos: number;
   hayFiltrosActivos: boolean;
+  propiedadesGlobales: Record<string, string[]>;
+  filtrosVariantes: Record<string, string>;
+  onFiltroVarianteChange: (propiedad: string, valor: string) => void;
   isAdmin: boolean;
   onLimpiarFiltros: () => void;
 }
@@ -57,21 +70,111 @@ export function StockFiltersToolbar({
   conteosPorCategoria,
   totalProductos,
   hayFiltrosActivos,
+  propiedadesGlobales,
+  filtrosVariantes,
+  onFiltroVarianteChange,
   isAdmin,
   onLimpiarFiltros,
 }: Readonly<StockFiltersToolbarProps>) {
+  const propiedadesVariantes = Object.entries(propiedadesGlobales);
+  const hayFiltrosVariantesActivos = Object.values(filtrosVariantes).some(
+    (valor) => valor !== "todos",
+  );
+
+  const limpiarFiltrosVariantes = () => {
+    propiedadesVariantes.forEach(([propiedad]) => {
+      onFiltroVarianteChange(propiedad, "todos");
+    });
+    onLimpiarFiltros();
+  };
+
   return (
     <>
       {/* 1. BARRA SUPERIOR: Buscador y Acciones */}
       <div className="flex flex-row gap-2 sm:gap-4 justify-between items-center bg-card p-2 sm:p-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar producto..."
-            className="pl-9 h-10 text-sm rounded-lg border-border bg-muted w-full"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-          />
+        <div className="flex flex-1 items-center gap-2 min-w-0">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar producto..."
+              className="pl-9 h-10 text-sm rounded-lg border-border bg-muted w-full"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+            />
+          </div>
+
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="relative h-10 w-10 p-0 shrink-0 border-border/60 bg-background"
+                aria-label="Abrir filtros de variantes"
+              >
+                <Filter className="h-4 w-4" />
+                {hayFiltrosVariantesActivos && (
+                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background" />
+                )}
+              </Button>
+            </SheetTrigger>
+
+            <SheetContent side="right" className="w-full sm:max-w-sm p-0 gap-0">
+              <SheetHeader className="p-5 border-b border-border text-left">
+                <SheetTitle>Filtros de Variantes</SheetTitle>
+              </SheetHeader>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                {propiedadesVariantes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No hay variantes disponibles para filtrar.
+                  </p>
+                ) : (
+                  propiedadesVariantes.map(([propName, valores]) => (
+                    <div key={propName} className="space-y-3">
+                      <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                        {propName}
+                      </Label>
+                      <div className="flex flex-wrap gap-2">
+                        {["todos", ...valores].map((valor) => {
+                          const isActive =
+                            (filtrosVariantes[propName] || "todos") === valor;
+                          const label =
+                            valor === "todos" ? "Cualquiera" : valor;
+
+                          return (
+                            <button
+                              key={valor}
+                              type="button"
+                              onClick={() =>
+                                onFiltroVarianteChange(propName, valor)
+                              }
+                              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                isActive
+                                  ? "border-primary bg-primary text-white"
+                                  : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <SheetFooter className="border-t border-border bg-card p-4">
+                <Button
+                  variant="outline"
+                  onClick={limpiarFiltrosVariantes}
+                  className="w-full"
+                >
+                  Limpiar Filtros
+                </Button>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
         </div>
 
         {/* Controles y Botonera Admin (No se encoge nunca en mobile) */}
@@ -144,11 +247,11 @@ export function StockFiltersToolbar({
       </div>
 
       {/* 2. BARRA DE CATEGORÍAS DINÁMICAS Y LIMPIEZA */}
-      <div className="flex items-start gap-2 mt-4">
+      <div className="flex items-start gap-2 mt-4 px-2">
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide flex-1 px-1 sm:px-0">
           <Button
             variant={categoriaActiva === "todos" ? "default" : "outline"}
-            className={`rounded-full h-8 px-4 text-xs font-semibold shrink-0 shadow-none border-border/60 ${
+            className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 shadow-none border-border/60 ${
               categoriaActiva === "todos"
                 ? "bg-foreground text-background border-transparent"
                 : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -174,7 +277,7 @@ export function StockFiltersToolbar({
               <Button
                 key={catValue}
                 variant={isActive ? "default" : "outline"}
-                className={`rounded-full h-8 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none border-border/60 ${
+                className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none border-border/60 ${
                   isActive
                     ? "bg-foreground text-background border-transparent"
                     : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"

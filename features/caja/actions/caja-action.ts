@@ -89,7 +89,7 @@ export async function abrirTurnoAction(prevState: any, formData: FormData) {
     vendedor_id: user.id,
     abierta_por: user.id,
     monto_inicial: montoInicial,
-    monto_esperado: montoInicial,
+    efectivo_esperado: montoInicial,
     estado: "ABIERTO",
   });
 

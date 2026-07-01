@@ -52,7 +52,7 @@ export function CatalogToolbar({
   return (
     <>
       {/* ── TOOLBAR MOBILE ── */}
-      <div className="grid grid-cols-2 sm:hidden w-full border-y border-border bg-white sticky top-[116px] z-30 divide-x divide-border">
+      <div className="grid grid-cols-2 sm:hidden w-full border-y border-border bg-white sticky top-16 md:top-29 z-30 divide-x divide-border">
         <Dialog
           open={isMobileFiltersOpen}
           onOpenChange={setIsMobileFiltersOpen}

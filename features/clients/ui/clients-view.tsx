@@ -94,9 +94,8 @@ export function ClientsView({
         ventas
           .map((venta) => venta.fecha_venta)
           .filter((fecha): fecha is string => Boolean(fecha))
-          .sort(
-            (a, b) => new Date(b).getTime() - new Date(a).getTime(),
-          )[0] || null;
+          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ||
+        null;
 
       return {
         ...cliente,
@@ -191,10 +190,10 @@ export function ClientsView({
   };
 
   return (
-    <div className="flex flex-col gap-4 px-4 p-2">
+    <div className="flex flex-col gap-4 py-2 px-2 md:px-4">
       {/* ── KPIs SUPERIORES ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border-border shadow-none">
+      <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">
+        <Card className="min-w-[82vw] border-border shadow-none snap-start sm:min-w-0">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Dinero en la Calle
@@ -211,7 +210,7 @@ export function ClientsView({
           </CardContent>
         </Card>
 
-        <Card className="border-border shadow-none bg-card">
+        <Card className="min-w-[82vw] border-border shadow-none bg-card snap-start sm:min-w-0">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Cuentas con Deuda
@@ -229,7 +228,7 @@ export function ClientsView({
           </CardContent>
         </Card>
 
-        <Card className="border-border shadow-none bg-card">
+        <Card className="min-w-[82vw] border-border shadow-none bg-card snap-start sm:min-w-0">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Clientes activos
@@ -247,7 +246,8 @@ export function ClientsView({
         </Card>
       </div>
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2 pt-2">
+      {/* SEARCHBAR Y FILTERBAR */}
+      <div className="flex flex-col gap-3 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="relative w-full sm:w-80 shrink-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -258,23 +258,23 @@ export function ClientsView({
           />
         </div>
 
-        <div className="flex items-center justify-between w-full sm:w-auto gap-4">
-          <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50 overflow-x-auto">
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-4">
+          <div className="grid w-full grid-cols-3 gap-1 bg-muted p-1 rounded-xl border border-border/50 sm:flex sm:w-auto sm:items-center">
             <button
               onClick={() => handleFilterChange("todos")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${filterStatus === "todos" ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`px-2 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all sm:px-3 ${filterStatus === "todos" ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               Todos
             </button>
             <button
               onClick={() => handleFilterChange("con_deuda")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${filterStatus === "con_deuda" ? "bg-background text-accent-orange" : "text-muted-foreground hover:text-accent-orange"}`}
+              className={`px-2 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all sm:px-3 ${filterStatus === "con_deuda" ? "bg-background text-accent-orange" : "text-muted-foreground hover:text-accent-orange"}`}
             >
               Morosos
             </button>
             <button
               onClick={() => handleFilterChange("al_dia")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${filterStatus === "al_dia" ? "bg-background text-emerald-600 dark:text-accent-lime" : "text-muted-foreground hover:text-emerald-600 dark:hover:text-accent-lime"}`}
+              className={`px-2 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all sm:px-3 ${filterStatus === "al_dia" ? "bg-background text-emerald-600 dark:text-accent-lime" : "text-muted-foreground hover:text-emerald-600 dark:hover:text-accent-lime"}`}
             >
               Al Dia
             </button>
@@ -291,23 +291,25 @@ export function ClientsView({
             </Button>
             <CreateClientModal />
           </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:hidden">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsImportOpen(true)}
+              className="h-10 w-full justify-center"
+            >
+              <UploadCloud className="w-4 h-4 mr-2" /> Importar
+            </Button>
+            <CreateClientModal
+              buttonClassName="h-10 w-full justify-center"
+              labelClassName="flex whitespace-nowrap"
+            />
+          </div>
         </div>
       </div>
 
-      <div className="sm:hidden px-2 pb-2 flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsImportOpen(true)}
-          className="flex-1"
-        >
-          <UploadCloud className="w-4 h-4 mr-2" /> Importar
-        </Button>
-        <div className="flex-1">
-          <CreateClientModal />
-        </div>
-      </div>
-
+      {/* TABLA */}
       <div className="bg-card rounded-xl border border-border shadow-none overflow-hidden mt-2">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left whitespace-nowrap">

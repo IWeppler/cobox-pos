@@ -31,6 +31,9 @@ export function PosTerminal({
 }: Readonly<PosTerminalProps>) {
   const [searchQuery, setSearchQuery] = useState("");
   const [tipo, setTipo] = useState("todos");
+  const [filtrosVariantes, setFiltrosVariantes] = useState<
+    Record<string, string>
+  >({});
 
   // Estados para el Modal Rápido
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
@@ -39,12 +42,13 @@ export function PosTerminal({
   const addItem = useCartStore((state) => state.addItem);
   const setIsOpenCart = useCartStore((state) => state.setIsOpen);
 
-  const { categoriasConStock, productosFiltrados } = useCatalogFilters({
+  const { categoriasConStock, productosFiltrados, propiedadesGlobales } =
+    useCatalogFilters({
     productos,
     categorias,
     searchQuery,
     tipo,
-    filtrosVariantes: {},
+    filtrosVariantes,
     orden: "mas_vendidos",
     visibleCount: 1000,
   });
@@ -59,11 +63,17 @@ export function PosTerminal({
     [categoriasConStock],
   );
 
-  const hayFiltrosActivos = searchQuery !== "" || tipo !== "todos";
+  const hayFiltrosActivos =
+    searchQuery !== "" ||
+    tipo !== "todos" ||
+    Object.keys(filtrosVariantes).some(
+      (propiedad) => filtrosVariantes[propiedad] !== "todos",
+    );
 
   const limpiarFiltros = () => {
     setSearchQuery("");
     setTipo("todos");
+    setFiltrosVariantes({});
   };
 
   const handleProductClick = (producto: Producto) => {
@@ -117,7 +127,6 @@ export function PosTerminal({
   };
 
   return (
-    // CONTENEDOR PRINCIPAL: Ocupa todo el alto visible restando los paddings
     <div className="flex w-full h-full">
       {/* LADO IZQUIERDO: CATÁLOGO POS */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -134,6 +143,11 @@ export function PosTerminal({
           conteosPorCategoria={{}}
           totalProductos={productos.length}
           hayFiltrosActivos={hayFiltrosActivos}
+          propiedadesGlobales={propiedadesGlobales}
+          filtrosVariantes={filtrosVariantes}
+          onFiltroVarianteChange={(prop, val) =>
+            setFiltrosVariantes((prev) => ({ ...prev, [prop]: val }))
+          }
           isAdmin={false}
           onLimpiarFiltros={limpiarFiltros}
         />

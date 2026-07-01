@@ -16,6 +16,14 @@ export interface ProductoVariante {
   stock_minimo: number;
   activa: boolean;
   atributos?: Record<string, string>;
+  producto_variante_valores?: {
+    atributo?: {
+      nombre?: string | null;
+    } | null;
+    atributo_valor?: {
+      valor?: string | null;
+    } | null;
+  }[];
 }
 
 export interface CategoriaRelacion {

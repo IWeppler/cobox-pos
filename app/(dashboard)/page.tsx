@@ -173,7 +173,7 @@ export default async function DashboardPage() {
         }}
       />
 
-      <div className="space-y-6 px-1 py-2">
+      <div className="space-y-6 px-2 py-2">
         {/* HEADER */}
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border">
           <div>
@@ -205,11 +205,11 @@ export default async function DashboardPage() {
         </div>
 
         {/* KPI CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible sm:pb-0">
           {/* Ingresos brutos */}
-          <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
+          <div className="bg-card border border-border rounded-xl p-4 flex min-w-[82vw] flex-col gap-3 snap-start sm:min-w-0">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Ingresos brutos
               </span>
               <GrowthBadge value={crecimientoIngresos} />
@@ -225,9 +225,9 @@ export default async function DashboardPage() {
           </div>
 
           {/* Unidades vendidas */}
-          <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
+          <div className="bg-card border border-border rounded-xl p-4 flex min-w-[82vw] flex-col gap-3 snap-start sm:min-w-0">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Unidades vendidas
               </span>
               <GrowthBadge value={crecimientoUnidades} />
@@ -243,9 +243,9 @@ export default async function DashboardPage() {
           </div>
 
           {/* Tickets emitidos */}
-          <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
+          <div className="bg-card border border-border rounded-xl p-4 flex min-w-[82vw] flex-col gap-3 snap-start sm:min-w-0">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Tickets emitidos
               </span>
               <Receipt className="w-3.5 h-3.5 text-muted-foreground/40" />
@@ -261,9 +261,9 @@ export default async function DashboardPage() {
           </div>
 
           {/* Ganancia estimada */}
-          <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
+          <div className="bg-card border border-border rounded-xl p-4 flex min-w-[82vw] flex-col gap-3 snap-start sm:min-w-0">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Ganancia estimada
               </span>
             </div>
@@ -284,7 +284,7 @@ export default async function DashboardPage() {
           <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <Wallet className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Caja actual
               </span>
             </div>
@@ -318,9 +318,9 @@ export default async function DashboardPage() {
                   </p>
                 </div>
                 <Link href="/caja">
-                  <button className="w-full text-xs h-8 border border-border rounded-lg text-foreground hover:bg-muted/30 transition-colors font-medium">
+                  <Button variant="outline" className="w-full">
                     Abrir turno
-                  </button>
+                  </Button>
                 </Link>
               </>
             )}
@@ -330,7 +330,7 @@ export default async function DashboardPage() {
           <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <Package className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Alertas de stock
               </span>
             </div>
@@ -363,7 +363,7 @@ export default async function DashboardPage() {
           <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <TrendingDown className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Bajas de hoy
               </span>
             </div>
@@ -405,7 +405,7 @@ export default async function DashboardPage() {
           <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <Flame className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Mayor rotación hoy
               </span>
             </div>
@@ -417,7 +417,7 @@ export default async function DashboardPage() {
                     className="flex items-center justify-between px-4 py-3"
                   >
                     <div className="flex items-center gap-3 overflow-hidden">
-                      <span className="text-[11px] text-muted-foreground/50 w-4 shrink-0">
+                      <span className="text-xs text-muted-foreground/50 w-4 shrink-0">
                         {idx + 1}
                       </span>
                       <p
@@ -444,7 +444,7 @@ export default async function DashboardPage() {
           <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <Trophy className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Mayor rentabilidad hoy
               </span>
             </div>
@@ -458,7 +458,7 @@ export default async function DashboardPage() {
                       className="flex items-center justify-between px-4 py-3"
                     >
                       <div className="flex items-center gap-3 overflow-hidden">
-                        <span className="text-[11px] text-muted-foreground/50 w-4 shrink-0">
+                        <span className="text-xs text-muted-foreground/50 w-4 shrink-0">
                           {idx + 1}
                         </span>
                         <p
@@ -486,13 +486,13 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Últimas ventas
                 </span>
               </div>
               <Link
                 href="/ventas"
-                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 Ver todas →
               </Link>
@@ -536,7 +536,7 @@ function GrowthBadge({ value }: { value: number }) {
   const isPositive = value >= 0;
   return (
     <span
-      className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded ${
+      className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded ${
         isPositive
           ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
           : "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400"

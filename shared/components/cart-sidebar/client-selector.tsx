@@ -5,9 +5,9 @@ import { createClient } from "@/shared/config/supabase/client";
 import { Button } from "@/shared/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
 import { CreateClientDialog } from "@/features/clients/ui/create-client-dialog";
-import { Label } from "@/shared/ui/label";
 import { Check, ChevronDown, Loader2, Search, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/shared/ui/input";
 
 export interface ClienteBasico {
   id: string;
@@ -118,11 +118,12 @@ export function ClientSelector({
           >
             <div className="flex items-center border-b border-border px-3">
               <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-              <input
-                className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              <Input
+                className="flex h-11 w-full rounded-md bg-transparent py-3 border-none outline-none text-sm placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="Buscar cliente por nombre o telefono..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                autoFocus={false}
               />
             </div>
 

@@ -289,7 +289,7 @@ export function CartSidebar({
           return;
         }
 
-        // 🚀 ARMAMOS LOS PAGOS DEFINITIVOS PARA EL BACKEND
+        // ARMAMOS LOS PAGOS DEFINITIVOS PARA EL BACKEND
         let pagosToSubmit = [...pagosSincronizados];
         if (isCuentaCorriente && montoAnticipoModal !== undefined) {
           // Tomamos el método de pago seleccionado y le asignamos el anticipo tipeado

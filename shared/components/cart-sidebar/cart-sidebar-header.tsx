@@ -1,4 +1,4 @@
-import { ShoppingBag } from "lucide-react";
+import { ShoppingBag, X } from "lucide-react";
 
 interface CartSidebarHeaderProps {
   isPOSMode: boolean;
@@ -7,6 +7,7 @@ interface CartSidebarHeaderProps {
 
 export function CartSidebarHeader({
   isPOSMode,
+  onClose,
 }: Readonly<CartSidebarHeaderProps>) {
   return (
     <div className="shrink-0 flex items-center justify-between p-4 border-b border-border">
@@ -14,6 +15,14 @@ export function CartSidebarHeader({
         <ShoppingBag className="w-4 h-4" />
         {isPOSMode ? "Venta en Curso" : "Tu Carrito"}
       </h2>
+      <button
+        type="button"
+        onClick={onClose}
+        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+        aria-label={isPOSMode ? "Cerrar venta en curso" : "Cerrar carrito"}
+      >
+        <X className="h-5 w-5" />
+      </button>
     </div>
   );
 }
