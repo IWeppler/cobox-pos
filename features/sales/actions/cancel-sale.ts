@@ -17,11 +17,19 @@ export async function anularVentaAction(
 
     if (!user) return { error: "No autorizado", success: false };
 
-    // 1. Obtener detalles de la venta antes de borrarla
+    // 1. Obtener TODOS los detalles de la venta y sus items antes de borrarla
     const { data: venta, error: fetchError } = await supabase
       .from("ventas")
       .select(
-        "producto_id, variante, cantidad, total, cliente_id, estado_pago, monto_cobrado, monto_pendiente",
+        `
+        id, 
+        estado_operacion,
+        monto_cobrado,
+        monto_pendiente,
+        cliente_id,
+        turno_caja_id,
+        ventas_items ( producto_id, variante, cantidad )
+      `,
       )
       .eq("id", ventaId)
       .single();
@@ -30,107 +38,145 @@ export async function anularVentaAction(
       return { error: "No se encontró la venta solicitada.", success: false };
     }
 
-    // 2. Eliminar el registro de la venta (o podríamos marcarla como ANULADA, pero por simplicidad del MVP la borramos)
-    const { error: deleteError } = await supabase
+    // 2. Anulación lógica: preservamos ticket, items, pagos y relaciones contables.
+    if (venta.estado_operacion === "ANULADA") {
+      return { error: "La venta ya se encuentra anulada.", success: false };
+    }
+
+    const { error: updateVentaError } = await supabase
       .from("ventas")
-      .delete()
+      .update({
+        estado_operacion: "ANULADA",
+        estado_pago: "ANULADA",
+      })
       .eq("id", ventaId);
 
-    if (deleteError) {
-      console.error(deleteError);
-      return { error: "Error al intentar anular la venta.", success: false };
+    if (updateVentaError) {
+      console.error(updateVentaError);
+      return {
+        error: "Error de BD al intentar anular la venta.",
+        success: false,
+      };
     }
 
-    const montoPendiente = Number(venta.monto_pendiente || 0);
-    const montoCobrado = Number(venta.monto_cobrado ?? venta.total);
-    const fueCuentaCorriente =
-      venta.estado_pago === "PARCIAL" || montoPendiente > 0;
-    const ticketCorto = ventaId.split("-")[0].toUpperCase();
+    const { error: updatePagosError } = await supabase
+      .from("venta_pagos")
+      .update({ estado_pago_operacion: "ANULADO" })
+      .eq("venta_id", ventaId);
 
-    if (fueCuentaCorriente && montoPendiente > 0 && venta.cliente_id) {
-      const { error: ccError } = await supabase
-        .from("cuenta_corriente_movimientos")
-        .insert({
-          cliente_id: venta.cliente_id,
-          tipo: "CREDITO",
-          monto: montoPendiente,
-          descripcion: `Anulacion deuda - Ticket #${ticketCorto}`,
-          creado_por: user.id,
-        });
-
-      if (ccError) {
-        console.error("Error al cancelar deuda en CC:", ccError);
-        return {
-          error:
-            "La venta se anulo, pero no se pudo cancelar la deuda del cliente.",
-          success: false,
-        };
-      }
-
-      const { data: clienteActual } = await supabase
-        .from("clientes")
-        .select("saldo_pendiente")
-        .eq("id", venta.cliente_id)
-        .single();
-
-      const saldoActual = Number(clienteActual?.saldo_pendiente || 0);
-      await supabase
-        .from("clientes")
-        .update({
-          saldo_pendiente: Math.max(0, saldoActual - montoPendiente),
-        })
-        .eq("id", venta.cliente_id);
+    if (updatePagosError) {
+      console.error(updatePagosError);
+      return {
+        error: "Error de BD al intentar anular los pagos de la venta.",
+        success: false,
+      };
     }
 
-    const montoADevolverCaja = fueCuentaCorriente
-      ? Math.max(0, montoCobrado)
-      : Number(venta.total || 0);
-
-    if (montoADevolverCaja > 0.05) {
+    // 3. Registrar el egreso de dinero de la caja (SÓLO lo que se pagó realmente)
+    if (venta.monto_cobrado > 0) {
       await supabase.from("egresos").insert({
-        concepto: `Devolucion Venta #${ticketCorto}`,
-        monto: montoADevolverCaja,
+        concepto: `Devolución Venta #${ventaId.split("-")[0].toUpperCase()}`,
+        monto: venta.monto_cobrado,
         creado_por: user.id,
       });
     }
 
-    // 4. Manejo del Stock según la decisión del usuario
-    if (venta.producto_id) {
+    // 4. Si la venta tenía deuda (Fiado), restarle esa deuda al cliente porque se anuló el ticket
+    if (venta.monto_pendiente > 0 && venta.cliente_id) {
+      const { data: cli } = await supabase
+        .from("clientes")
+        .select("saldo_pendiente")
+        .eq("id", venta.cliente_id)
+        .single();
+      if (cli) {
+        await supabase
+          .from("clientes")
+          .update({
+            saldo_pendiente: Math.max(
+              0,
+              Number(cli.saldo_pendiente) - venta.monto_pendiente,
+            ),
+          })
+          .eq("id", venta.cliente_id);
+      }
+
+      const { error: ccError } = await supabase
+        .from("cuenta_corriente_movimientos")
+        .insert({
+          cliente_id: venta.cliente_id,
+          venta_id: ventaId,
+          tipo: "CREDITO",
+          monto: venta.monto_pendiente,
+          descripcion: `Anulación de Venta #${ventaId}`,
+          creado_por: user.id,
+        });
+
+      if (ccError) {
+        console.error(ccError);
+        return {
+          error: "Error al registrar el movimiento de cuenta corriente.",
+          success: false,
+        };
+      }
+    }
+
+    // 5. Manejo del Stock para TODOS los items del carrito de compras
+    const items = venta.ventas_items || [];
+
+    for (const item of items) {
+      if (!item.producto_id) continue;
+
       if (motivoDevolucion === "RESTAURAR_STOCK") {
-        // La planta está sana, vuelve a la estantería
-        const { data: stockActual } = await supabase
+        // Restauramos en la tabla principal de JSONB
+        const { data: varNueva } = await supabase
+          .from("producto_variantes")
+          .select("id, stock")
+          .eq("producto_id", item.producto_id)
+          .eq("nombre_display", item.variante)
+          .maybeSingle();
+        if (varNueva) {
+          await supabase
+            .from("producto_variantes")
+            .update({ stock: varNueva.stock + item.cantidad })
+            .eq("id", varNueva.id);
+        }
+
+        // Restauramos también en la tabla Legacy (Retrocompatibilidad)
+        const { data: stockViejo } = await supabase
           .from("productos_stock")
           .select("id, cantidad")
-          .eq("producto_id", venta.producto_id)
-          .eq("variante", venta.variante)
-          .single();
-
-        if (stockActual) {
+          .eq("producto_id", item.producto_id)
+          .eq("variante", item.variante)
+          .maybeSingle();
+        if (stockViejo) {
           await supabase
             .from("productos_stock")
-            .update({ cantidad: stockActual.cantidad + venta.cantidad })
-            .eq("id", stockActual.id);
-        } else {
+            .update({ cantidad: stockViejo.cantidad + item.cantidad })
+            .eq("id", stockViejo.id);
+        } else if (!varNueva) {
+          // Si no existía en ningún lado, la creamos
           await supabase.from("productos_stock").insert({
-            producto_id: venta.producto_id,
-            variante: venta.variante,
-            cantidad: venta.cantidad,
+            producto_id: item.producto_id,
+            variante: item.variante,
+            cantidad: item.cantidad,
           });
         }
       } else if (motivoDevolucion === "BAJA") {
-        // La planta volvió rota o seca, registramos la pérdida operativa
+        // La planta volvió rota o seca
         await supabase.from("bajas").insert({
-          producto_id: venta.producto_id,
-          variante: venta.variante,
-          cantidad: venta.cantidad,
-          motivo: "Devolución por producto fallado/roto",
+          producto_id: item.producto_id,
+          variante: item.variante,
+          cantidad: item.cantidad,
+          motivo: "Devolución de cliente por producto fallado/roto",
           estado: "APROBADA",
           creado_por: user.id,
         });
       }
     }
 
-    // 5. Refrescamos las vistas
+    // 6. Refrescamos todas las vistas
+    revalidatePath("/");
+    revalidatePath("/reportes");
     revalidatePath("/ventas");
     revalidatePath("/stock");
     revalidatePath("/caja");

@@ -188,7 +188,7 @@ function QuickAddModalContent({
           stockMaximo: stockDeVariante.cantidad,
         });
 
-        toast.success("Agregado a la cuenta");
+        // toast.success("Agregado a la cuenta");
         setIsOpenCart(true); // Abre el carrito lateral
         onClose(); // Cierra el modal rápido
       }

@@ -51,6 +51,10 @@ export default async function DashboardPage() {
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
+  const ventasOperativas = ventas.filter(
+    (venta) =>
+      venta.estado_operacion !== "ANULADA" && venta.estado_pago !== "ANULADA",
+  );
   const productos = productosResponse.data || [];
   const egresos = egresosResponse.data || [];
   const bajas = bajasResponse.data || [];
@@ -62,7 +66,7 @@ export default async function DashboardPage() {
   ).length;
 
   const metricasHoy = getDashboardMetrics(
-    ventas,
+    ventasOperativas,
     productos,
     egresos,
     bajasAprobadas,
@@ -72,7 +76,7 @@ export default async function DashboardPage() {
   const hoy = new Date();
   const { inicio: inicioAyer, fin: finAyer } = getPreviousDayRange(hoy);
 
-  const ventasAyer = ventas.filter((v) => {
+  const ventasAyer = ventasOperativas.filter((v) => {
     const fechaVenta = new Date(v.fecha_venta);
     return fechaVenta >= inicioAyer && fechaVenta <= finAyer;
   });
@@ -92,7 +96,7 @@ export default async function DashboardPage() {
     unidadesAyer,
   );
 
-  const ventasDeHoy = ventas.filter((v) => {
+  const ventasDeHoy = ventasOperativas.filter((v) => {
     const f = new Date(v.fecha_venta);
     return (
       f.getDate() === hoy.getDate() &&
@@ -105,7 +109,7 @@ export default async function DashboardPage() {
   let efectivoEsperado = 0;
   let egresosTurno = 0;
   if (turnoAbierto) {
-    const ventasTurnoEfectivo = ventas.filter(
+    const ventasTurnoEfectivo = ventasOperativas.filter(
       (v) =>
         new Date(v.fecha_venta) >= new Date(turnoAbierto.fecha_apertura) &&
         v.metodo_pago === "EFECTIVO",

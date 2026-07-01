@@ -77,6 +77,17 @@ export function VentasTable({
     getSupabaseRelation(venta.clientes)?.nombre || "Consumidor final";
 
   const getEstadoPago = (venta: Venta) => {
+    if (
+      venta.estado_operacion === "ANULADA" ||
+      venta.estado_pago === "ANULADA"
+    ) {
+      return {
+        estaPagado: false,
+        label: "Anulada",
+        variant: "anulada",
+      };
+    }
+
     const montoPendiente = Number(venta.monto_pendiente || 0);
     const estaPagado =
       venta.estado_pago === "PAGADA" ||
@@ -86,6 +97,7 @@ export function VentasTable({
     return {
       estaPagado,
       label: estaPagado ? "Pagado" : "Fiado",
+      variant: estaPagado ? "pagada" : "fiado",
     };
   };
 
@@ -272,6 +284,9 @@ export function VentasTable({
                       const clienteNombre = getClienteNombre(venta);
                       const estadoPago = getEstadoPago(venta);
                       const metodoPago = getPagoLabel(venta);
+                      const isAnulada =
+                        venta.estado_operacion === "ANULADA" ||
+                        venta.estado_pago === "ANULADA";
 
                       return (
                         <TableRow
@@ -315,10 +330,12 @@ export function VentasTable({
                                 {clienteNombre}
                               </p>
                               <span
-                                className={`mt-1 text-xs uppercase font-bold ${
-                                  estadoPago.estaPagado
-                                    ? "text-emerald-600 dark:text-emerald-400"
-                                    : "text-amber-700"
+                                className={`mt-1 text-xs uppercase font-semibold ${
+                                  estadoPago.variant === "anulada"
+                                    ? "text-destructive"
+                                    : estadoPago.estaPagado
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-amber-600"
                                 }`}
                               >
                                 {estadoPago.label}
@@ -356,7 +373,7 @@ export function VentasTable({
                                 <Eye className="w-4.5 h-4.5" />
                               </Button>
 
-                              {isAdmin && (
+                              {isAdmin && !isAnulada && (
                                 <AnularVentaModal
                                   id={venta.id}
                                   productoNombre={
@@ -416,6 +433,9 @@ export function VentasTable({
                 const clienteNombre = getClienteNombre(venta);
                 const estadoPago = getEstadoPago(venta);
                 const metodoPago = getPagoLabel(venta);
+                const isAnulada =
+                  venta.estado_operacion === "ANULADA" ||
+                  venta.estado_pago === "ANULADA";
 
                 return (
                   <div
@@ -459,9 +479,11 @@ export function VentasTable({
                       <Badge
                         variant="outline"
                         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-tight ${
-                          estadoPago.estaPagado
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-amber-200 bg-amber-50 text-amber-700"
+                          estadoPago.variant === "anulada"
+                            ? "border-destructive/20 bg-destructive/10 text-destructive"
+                            : estadoPago.estaPagado
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700"
                         }`}
                       >
                         {estadoPago.label}
@@ -497,7 +519,7 @@ export function VentasTable({
                         >
                           <Eye className="w-4 h-4 text-muted-foreground" />
                         </Button>
-                        {isAdmin && (
+                        {isAdmin && !isAnulada && (
                           <div className="[&>button]:h-8 [&>button]:w-8 [&>button]:rounded-lg [&>button]:border [&>button]:border-transparent [&>button:hover]:border-rose-200">
                             <AnularVentaModal
                               id={venta.id}

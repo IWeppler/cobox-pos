@@ -268,6 +268,22 @@ export async function registrarVentaAction(
         creado_por: user.id,
       });
     if (ccError) console.error("Error al registrar deuda en CC:", ccError);
+
+    const { data: clienteActual } = await supabase
+      .from("clientes")
+      .select("saldo_pendiente")
+      .eq("id", clienteId)
+      .single();
+
+    if (clienteActual) {
+      await supabase
+        .from("clientes")
+        .update({
+          saldo_pendiente:
+            Number(clienteActual.saldo_pendiente || 0) + montoPendiente,
+        })
+        .eq("id", clienteId);
+    }
   }
 
   // --- 6. REGISTRAR EL DESGLOSE DE PAGOS ---

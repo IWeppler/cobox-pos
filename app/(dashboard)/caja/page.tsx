@@ -80,6 +80,7 @@ export default async function CajaPage() {
           "id, total, metodo_pago, fecha_venta, turno_caja_id, cliente_id, clientes(nombre), monto_cobrado, monto_pendiente, estado_pago, perfiles(nombre), ventas_items(producto:productos(nombre)), venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)",
         )
         .in("turno_caja_id", turnosAbiertosIds)
+        .neq("estado_operacion", "ANULADA")
         .order("fecha_venta", { ascending: false }),
       supabase
         .from("venta_pagos")
@@ -88,6 +89,7 @@ export default async function CajaPage() {
         )
         .is("venta_id", null)
         .in("turno_caja_id", turnosAbiertosIds)
+        .neq("estado_pago_operacion", "ANULADO")
         .order("creado_en", { ascending: false }),
       supabase
         .from("egresos")

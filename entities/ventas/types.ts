@@ -45,6 +45,7 @@ export interface VentaPago {
   monto_neto: number;
   acreditacion_dias: number;
   tipo_movimiento?: string; // 'PAGO_VENTA' | 'PAGO_CUENTA_CORRIENTE'
+  estado_pago_operacion?: string;
   creado_en?: string;
   clientes?: SupabaseRelation<{ nombre: string }>;
 }
@@ -55,6 +56,7 @@ export interface CreateSalePaymentInput {
 }
 
 export type EstadoPagoVenta = "PAGADA" | "PARCIAL" | "PENDIENTE" | "ANULADA";
+export type EstadoOperacionVenta = "CONFIRMADA" | "ANULADA";
 
 export interface Venta {
   id: string;
@@ -64,6 +66,7 @@ export interface Venta {
   cantidad: number;
   fecha_venta: string;
   metodo_pago?: string | null;
+  estado_operacion?: EstadoOperacionVenta | null;
 
   clientes?: SupabaseRelation<{ nombre?: string | null }>;
   monto_cobrado?: number | null;

@@ -22,6 +22,7 @@ export async function getVentasAction() {
         precio_costo,
         cantidad,
         fecha_venta,
+        estado_operacion,
         metodo_pago,
         monto_cobrado,
         monto_pendiente,
@@ -50,7 +51,8 @@ export async function getVentasAction() {
           comision_monto,
           monto_neto,
           acreditacion_dias,
-          tipo_movimiento
+          tipo_movimiento,
+          estado_pago_operacion
         )
       `,
       )

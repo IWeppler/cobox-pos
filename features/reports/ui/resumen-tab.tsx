@@ -46,12 +46,12 @@ export function ResumenTab({
                   <TooltipContent className="max-w-[250px] text-xs">
                     <p>
                       Suma total de todas las ventas. Es todo el dinero que
-                      ingresó sin descontar ningún tipo de gasto, costo o merma.
+                      ingresó sin descontar ningún tipo de gasto, costo o baja.
                     </p>
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <DollarSign className="w-4 h-4 text-blue-500" />
+              <DollarSign className="w-4 h-4 text-primary" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold">

@@ -87,10 +87,14 @@ export function getDashboardMetrics(
     }
   }
 
+  const ventasOperativas = ventas.filter(
+    (v) => v.estado_operacion !== "ANULADA" && v.estado_pago !== "ANULADA",
+  );
+
   const ventasFiltradas =
     periodo === "historico"
-      ? ventas
-      : ventas.filter((v) => {
+      ? ventasOperativas
+      : ventasOperativas.filter((v) => {
           const f = new Date(v.fecha_venta);
           return f >= startDate && f <= endDate;
         });

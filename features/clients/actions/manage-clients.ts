@@ -80,7 +80,27 @@ export async function registrarPagoDeudaAction(
 
   if (!user) return { error: "No autorizado.", success: false };
 
-  // A. Buscar el método de pago
+  // 🚀 A. Buscar si el usuario tiene una caja abierta donde meter la plata
+  const { data: config } = await supabase
+    .from("configuracion_pos")
+    .select("modo_caja")
+    .single();
+  const modoCaja = config?.modo_caja || "UNICA";
+
+  let query = supabase.from("turnos_caja").select("id").eq("estado", "ABIERTO");
+  if (modoCaja === "UNICA") query = query.eq("modo", "UNICA");
+  else query = query.eq("modo", "POR_USUARIO").eq("usuario_id", user.id);
+
+  const { data: turno } = await query.maybeSingle();
+
+  if (!turno) {
+    return {
+      error: "Caja cerrada. Debes abrir un turno para ingresar este dinero.",
+      success: false,
+    };
+  }
+
+  // B. Buscar el método de pago
   const { data: metodo } = await supabase
     .from("metodos_pago")
     .select("*")
@@ -90,17 +110,18 @@ export async function registrarPagoDeudaAction(
   if (!metodo)
     return { error: "Método de pago no encontrado.", success: false };
 
-  // B. Cálculos de comisión para la caja
+  // C. Cálculos de comisión para la caja
   const comisionPorcentaje = Number(metodo.comision || 0);
   const comisionMonto = (monto * comisionPorcentaje) / 100;
   const montoNeto = monto - comisionMonto;
 
-  // C. Iniciar Transacción Manual simulada
+  // D. Iniciar Transacción Manual
   // 1. Guardar en venta_pagos (Para que impacte en el Cierre Z de Caja)
   const { data: pagoRegistrado, error: pagoError } = await supabase
     .from("venta_pagos")
     .insert({
       cliente_id: clienteId,
+      turno_caja_id: turno.id, // 🚀 FIX: Ahora sí se vincula a la caja
       metodo_pago_id: metodo.id,
       metodo_nombre: metodo.nombre,
       metodo_tipo: metodo.tipo,
@@ -109,7 +130,7 @@ export async function registrarPagoDeudaAction(
       comision_monto: comisionMonto,
       monto_neto: montoNeto,
       acreditacion_dias: metodo.acreditacion_dias,
-      tipo_movimiento: "PAGO_CUENTA_CORRIENTE", // <-- Diferenciador clave
+      tipo_movimiento: "PAGO_CUENTA_CORRIENTE",
     })
     .select("id")
     .single();
@@ -142,7 +163,7 @@ export async function registrarPagoDeudaAction(
 
   await supabase
     .from("clientes")
-    .update({ saldo_pendiente: Math.max(0, saldoActual - monto) }) // Evitamos que quede en negativo si paga de más
+    .update({ saldo_pendiente: Math.max(0, saldoActual - monto) })
     .eq("id", clienteId);
 
   revalidatePath("/clientes");
@@ -150,6 +171,8 @@ export async function registrarPagoDeudaAction(
 
   return { error: null, success: true };
 }
+
+
 
 // 4. CREAR CLIENTE NUEVO
 export async function crearClienteAction(

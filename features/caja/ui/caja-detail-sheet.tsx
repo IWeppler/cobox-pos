@@ -209,7 +209,7 @@ export function CajaDetailSheet({
           </SheetTitle>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto min-h-0 p-6">
+        <div className="flex-1 overflow-y-auto min-h-0 p-4">
           <div className="text-center mb-6">
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
               Ticket Z #{idCorto}
@@ -335,12 +335,12 @@ export function CajaDetailSheet({
                 {movimientos.map((mov) => (
                   <div
                     key={`${mov.tipo}-${mov.id}`}
-                    className="p-3 flex items-center justify-between"
+                    className="py-3 flex items-center justify-between"
                   >
                     <div className="flex items-center gap-3">
                       {mov.origen === "VENTA" && (
-                        <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg shrink-0 border border-emerald-100">
-                          <ShoppingBag className="w-4 h-4" />
+                        <div className="p-1 bg-emerald-50 text-emerald-600 rounded-sm shrink-0 border border-emerald-100">
+                          <ShoppingBag className="w-3 h-3" />
                         </div>
                       )}
                       {mov.origen === "COBRO_DEUDA" && (

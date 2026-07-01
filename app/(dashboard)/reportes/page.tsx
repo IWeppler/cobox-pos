@@ -71,6 +71,10 @@ export default async function ReportesPage({
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
+  const ventasOperativas = ventas.filter(
+    (venta) =>
+      venta.estado_operacion !== "ANULADA" && venta.estado_pago !== "ANULADA",
+  );
   const productos = productosResponse.data || [];
   const egresos = egresosResponse.data || [];
   const bajasAprobadas = (bajasResponse.data || []) as BajaAprobadaReporte[];
@@ -81,7 +85,7 @@ export default async function ReportesPage({
   const diasInactivo = config.crm_dias_inactivo ?? 60;
 
   const metrics = getDashboardMetrics(
-    ventas,
+    ventasOperativas,
     productos,
     egresos,
     bajasAprobadas,
@@ -126,8 +130,8 @@ export default async function ReportesPage({
 
   const ventasDelPeriodo =
     periodoParam === "historico"
-      ? ventas
-      : ventas.filter((v) => {
+      ? ventasOperativas
+      : ventasOperativas.filter((v) => {
           const fechaVenta = new Date(v.fecha_venta);
           return fechaVenta >= startDate && fechaVenta <= endDate;
         });

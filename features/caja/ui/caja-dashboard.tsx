@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useActionState } from "react";
+import { useRouter } from "next/navigation";
 import { Card } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 import {
@@ -73,8 +74,15 @@ export function CajaDashboard({
   userRole: _userRole,
   userId: _userId,
 }: Readonly<CajaDashboardProps>) {
+  const router = useRouter();
   const [isCerrarOpen, setIsCerrarOpen] = useState(false);
-  const turno = turnosAbiertos[0] ?? null;
+  const [turnosCerradosOptimistas, setTurnosCerradosOptimistas] = useState<
+    string[]
+  >([]);
+  const turno =
+    turnosAbiertos.find(
+      (turnoAbierto) => !turnosCerradosOptimistas.includes(turnoAbierto.id),
+    ) ?? null;
   void _modoCaja;
   void _userRole;
   void _userId;
@@ -82,8 +90,12 @@ export function CajaDashboard({
   const [, abrirAction, isAbrirPending] = useActionState(
     async (prevState: CajaActionState, formData: FormData) => {
       const res = await abrirTurnoAction(prevState, formData);
-      if (res.success) toast.success("Caja abierta correctamente.");
-      else toast.error(res.error);
+      if (res.success) {
+        toast.success("Caja abierta correctamente.");
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
       return res;
     },
     { error: null, success: false },
@@ -95,6 +107,12 @@ export function CajaDashboard({
       if (res.success) {
         toast.success("Turno cerrado. Arqueo guardado.");
         setIsCerrarOpen(false);
+        setTurnosCerradosOptimistas((currentTurnos) =>
+          Array.from(
+            new Set([...currentTurnos, String(formData.get("turno_id") || "")]),
+          ),
+        );
+        router.refresh();
       } else {
         toast.error(res.error);
       }

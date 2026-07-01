@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { CajaActionState } from "@/entities/caja/types";
 
 // ============================================================================
 // 1. OBTENER CAJA ACTIVA (Según Configuración)
@@ -40,7 +41,10 @@ export async function getTurnoActivoAction() {
 // ============================================================================
 // 2. ABRIR TURNO SEGÚN MODO
 // ============================================================================
-export async function abrirTurnoAction(prevState: any, formData: FormData) {
+export async function abrirTurnoAction(
+  prevState: CajaActionState,
+  formData: FormData,
+) {
   const montoInicial = Number(formData.get("monto_inicial"));
 
   if (isNaN(montoInicial) || montoInicial < 0) {
@@ -100,6 +104,7 @@ export async function abrirTurnoAction(prevState: any, formData: FormData) {
 
   revalidatePath("/caja");
   revalidatePath("/");
+  revalidatePath("/", "layout");
   revalidatePath("/pos");
   return { error: null, success: true };
 }
@@ -107,7 +112,10 @@ export async function abrirTurnoAction(prevState: any, formData: FormData) {
 // ============================================================================
 // 3. CERRAR TURNO
 // ============================================================================
-export async function cerrarTurnoAction(prevState: any, formData: FormData) {
+export async function cerrarTurnoAction(
+  prevState: CajaActionState,
+  formData: FormData,
+) {
   const turnoId = formData.get("turno_id") as string;
   const montoDeclarado = Number(formData.get("monto_final"));
   const efectivoEsperado = Number(formData.get("efectivo_esperado"));
@@ -144,6 +152,7 @@ export async function cerrarTurnoAction(prevState: any, formData: FormData) {
 
   revalidatePath("/caja");
   revalidatePath("/");
+  revalidatePath("/", "layout");
   revalidatePath("/pos");
   return { error: null, success: true };
 }
@@ -174,6 +183,7 @@ export async function getDetallesTurnoAction(
         `,
         )
         .eq("turno_caja_id", turnoId)
+        .neq("estado_operacion", "ANULADA")
         .order("fecha_venta", { ascending: false }),
       supabase
         .from("venta_pagos")
@@ -182,6 +192,7 @@ export async function getDetallesTurnoAction(
         )
         .eq("turno_caja_id", turnoId)
         .is("venta_id", null)
+        .neq("estado_pago_operacion", "ANULADO")
         .order("creado_en", { ascending: false }),
       supabase
         .from("egresos")
@@ -211,7 +222,7 @@ export async function getDetallesTurnoAction(
 }
 
 export async function registrarEgresoAction(
-  prevState: any,
+  prevState: CajaActionState,
   formData: FormData,
 ) {
   const concepto = formData.get("concepto") as string;
