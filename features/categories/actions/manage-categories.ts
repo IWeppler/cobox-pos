@@ -5,8 +5,16 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { generateSlug } from "../utils/slugify-categories";
 
+type CategoriaBulkInput = {
+  id?: string;
+  nombre: string;
+  parent_id?: string | null;
+  activa: boolean;
+  isNew?: boolean;
+};
+
 export async function bulkSaveCategoriasAction(
-  categoriasToUpsert: any[],
+  categoriasToUpsert: CategoriaBulkInput[],
   categoriasToDelete: string[],
 ) {
   try {
@@ -33,8 +41,10 @@ export async function bulkSaveCategoriasAction(
 
     // 2. Insertar / Actualizar las que quedaron (En 2 pasadas para proteger las relaciones)
     if (categoriasToUpsert.length > 0) {
+      // 🚀 SOLUCIÓN MAGISTRAL: En lugar de borrar el ID, le generamos un UUID válido
+      // a las nuevas. Así la base de datos recibe un array perfecto y uniforme.
       const payload = categoriasToUpsert.map((cat, index) => ({
-        id: cat.id, // El cliente ahora genera UUIDs reales, así que siempre lo pasamos
+        id: cat.isNew || !cat.id ? crypto.randomUUID() : cat.id,
         nombre: cat.nombre,
         slug: generateSlug(cat.nombre),
         parent_id: cat.parent_id || null, // Relación Padre/Hijo
@@ -68,7 +78,7 @@ export async function bulkSaveCategoriasAction(
 
     revalidatePath("/configuracion");
     return { success: true, error: null };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Error interno del servidor." };
   }
 }
