@@ -1,6 +1,6 @@
 import { getProductosAction } from "@/shared/actions/store-actions";
 import { PosTerminal } from "@/features/pos/ui/pos-terminal";
-import { PosCart } from "@/shared/components/pos-cart";
+import { PosCart } from "@/features/pos/ui/pos-cart";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -31,7 +31,7 @@ export default async function PosPage() {
   const categoriasDB = categoriasRes.data || [];
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 w-full min-w-0 overflow-hidden">
       <PosTerminal productos={productos} categorias={categoriasDB} />
       <PosCart />
     </div>

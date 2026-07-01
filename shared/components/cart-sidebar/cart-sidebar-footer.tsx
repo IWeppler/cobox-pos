@@ -30,7 +30,7 @@ interface CartSidebarFooterProps {
   metodosPagoDB: MetodoPagoPOS[];
   pagos: CreateSalePaymentInput[];
   modoMixto: boolean;
-  onConfirmarVentaPOS: () => void;
+  onConfirmarVentaPOS: (montoAnticipo?: number) => void;
   onEnviarPedidoWhatsApp: () => void;
   onClearCart: () => void;
 }
@@ -72,9 +72,9 @@ export function CartSidebarFooter({
     isCuentaCorriente && sumaPagos + 0.05 < anticipoMinimo;
   const isPrimaryDisabled = isPending || isMissingClient || isMissingAnticipo;
 
-  const handleConfirmar = () => {
+  const handleConfirmar = (montoAnticipo?: number) => {
     setModalAbierto(false);
-    onConfirmarVentaPOS();
+    onConfirmarVentaPOS(montoAnticipo);
   };
 
   return (

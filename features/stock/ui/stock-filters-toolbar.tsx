@@ -91,7 +91,7 @@ export function StockFiltersToolbar({
   return (
     <>
       {/* 1. BARRA SUPERIOR: Buscador y Acciones */}
-      <div className="flex flex-row gap-2 sm:gap-4 justify-between items-center bg-card p-2 sm:p-4">
+      <div className="flex w-full min-w-0 flex-row gap-2 overflow-hidden sm:gap-4 justify-between items-center bg-card p-2 sm:p-4">
         <div className="flex flex-1 items-center gap-2 min-w-0">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -178,7 +178,7 @@ export function StockFiltersToolbar({
         </div>
 
         {/* Controles y Botonera Admin (No se encoge nunca en mobile) */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Toggle View (Oculto en celular para ahorrar valioso espacio) */}
           {showViewToggle && (
             <div className="hidden sm:flex items-center bg-muted border border-border/80 p-0.5 rounded-lg shrink-0">
@@ -247,8 +247,8 @@ export function StockFiltersToolbar({
       </div>
 
       {/* 2. BARRA DE CATEGORÍAS DINÁMICAS Y LIMPIEZA */}
-      <div className="flex items-start gap-2 mt-4 px-2">
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide flex-1 px-1 sm:px-0">
+      <div className="flex w-full min-w-0 items-start gap-2 overflow-hidden mt-4 md:mt-2 px-2">
+        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-2 scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] px-1 sm:px-0">
           <Button
             variant={categoriaActiva === "todos" ? "default" : "outline"}
             className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 shadow-none border-border/60 ${

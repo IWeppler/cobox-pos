@@ -25,6 +25,18 @@ interface VarianteDisponible {
   cantidad: number;
 }
 
+const getStockTotal = (producto: Producto) => {
+  const stockViejos =
+    producto.stock?.reduce((acc, s) => acc + Number(s.cantidad || 0), 0) || 0;
+  const stockNuevos =
+    producto.producto_variantes?.reduce(
+      (acc, v) => acc + Number(v.stock || 0),
+      0,
+    ) || 0;
+
+  return stockViejos + stockNuevos;
+};
+
 export function PosTerminal({
   productos,
   categorias,
@@ -44,14 +56,14 @@ export function PosTerminal({
 
   const { categoriasConStock, productosFiltrados, propiedadesGlobales } =
     useCatalogFilters({
-    productos,
-    categorias,
-    searchQuery,
-    tipo,
-    filtrosVariantes,
-    orden: "mas_vendidos",
-    visibleCount: 1000,
-  });
+      productos,
+      categorias,
+      searchQuery,
+      tipo,
+      filtrosVariantes,
+      orden: "mas_vendidos",
+      visibleCount: 1000,
+    });
 
   const categoriasDisponibles = useMemo(
     () =>
@@ -61,6 +73,19 @@ export function PosTerminal({
         count: categoria.count,
       })),
     [categoriasConStock],
+  );
+
+  const productosOrdenados = useMemo(
+    () =>
+      [...productosFiltrados].sort((a, b) => {
+        const stockA = getStockTotal(a);
+        const stockB = getStockTotal(b);
+
+        if (stockA > 0 && stockB <= 0) return -1;
+        if (stockA <= 0 && stockB > 0) return 1;
+        return 0;
+      }),
+    [productosFiltrados],
   );
 
   const hayFiltrosActivos =
@@ -117,7 +142,7 @@ export function PosTerminal({
         stockMaximo: variantesParaVender[0].cantidad,
       });
 
-      toast.success("Agregado a la cuenta");
+      // toast.success("Agregado a la cuenta");
       setIsOpenCart(true);
     } else {
       // 3. Si tiene múltiples variantes, abrimos el QuickAddModal
@@ -127,9 +152,9 @@ export function PosTerminal({
   };
 
   return (
-    <div className="flex w-full h-full">
+    <div className="flex h-full min-w-0 flex-1 overflow-hidden">
       {/* LADO IZQUIERDO: CATÁLOGO POS */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         {/* Toolbar POS */}
         <StockFiltersToolbar
           view="grid"
@@ -154,7 +179,7 @@ export function PosTerminal({
 
         {/* Grilla de Productos */}
         <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] p-4 sm:p-6 min-h-0">
-          {productosFiltrados.length === 0 ? (
+          {productosOrdenados.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
               <ShoppingBag className="w-12 h-12 mb-4 opacity-20" />
               <p className="font-medium text-lg">No se encontraron productos</p>
@@ -163,8 +188,8 @@ export function PosTerminal({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 pb-20 lg:pb-0">
-              {productosFiltrados.map((producto) => {
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pb-20 lg:pb-0">
+              {productosOrdenados.map((producto) => {
                 let imagenes: string[] = [];
                 if (typeof producto.imagen_url === "string") {
                   try {
@@ -177,14 +202,7 @@ export function PosTerminal({
                 }
                 const primeraImagen = imagenes[0] || null;
 
-                const stockViejos =
-                  producto.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
-                const stockNuevos =
-                  producto.producto_variantes?.reduce(
-                    (acc, v) => acc + v.stock,
-                    0,
-                  ) || 0;
-                const stockTotal = stockViejos + stockNuevos;
+                const stockTotal = getStockTotal(producto);
 
                 return (
                   <button

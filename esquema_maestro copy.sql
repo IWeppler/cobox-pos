@@ -1,5 +1,5 @@
 -- =========================================================================
--- ESQUEMA MAESTRO PROXIMI POS (Extraído desde BD Original)
+-- ESQUEMA MAESTRO COBOX POS (Extraído desde BD Original)
 -- =========================================================================
 
 BEGIN;

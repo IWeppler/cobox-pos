@@ -288,7 +288,7 @@ export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
           {!isCollapsed && (
             <div className="flex text-center mx-auto pt-2 gap-1">
               <p className="text-[10px] text-muted-foreground">
-                Powered by{" "}
+                Powered by Cobox{" "}
               </p>
               <Link
                 href="https://www.ignacioweppler.com"

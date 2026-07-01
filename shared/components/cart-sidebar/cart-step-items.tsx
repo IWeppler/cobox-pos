@@ -39,7 +39,7 @@ export function CartStepItems({
               return (
                 <div
                   key={`${item.productoId}-${item.variante}`}
-                  className="flex gap-3 p-3"
+                  className="flex gap-3 py-3"
                 >
                   <div className="h-24 w-18 shrink-0 overflow-hidden border border-border bg-muted/40">
                     {item.imagenUrl ? (

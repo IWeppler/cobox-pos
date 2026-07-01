@@ -11,7 +11,7 @@ import {
   pdf,
 } from "@react-pdf/renderer";
 
-// Estilos específicos para el PDF (No usa Tailwind ni DOM)
+// Estilos específicos para el PDF
 const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: "Helvetica", backgroundColor: "#ffffff" },
   header: {
@@ -277,7 +277,7 @@ const ReceiptDocument = ({
             COMPROBANTE INTERNO - NO VÁLIDO COMO FACTURA FISCAL
           </Text>
           <Text style={[styles.footerText, { marginTop: 4 }]}>
-            Generado por Proximi POS
+            Generado por Cobox POS
           </Text>
         </View>
       </Page>
@@ -285,7 +285,7 @@ const ReceiptDocument = ({
   );
 };
 
-// 🚀 Función maestra que genera y descarga el PDF invisiblemente en 1 segundo
+// Función maestra que genera y descarga el PDF invisiblemente en 1 segundo
 export async function downloadSaleReceiptPdf(
   ticket: TicketData,
   config: ConfiguracionPOS | null,

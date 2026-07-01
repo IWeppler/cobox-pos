@@ -165,7 +165,7 @@ export function CartStepCheckout({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <Button
           type="button"
           variant="ghost"
@@ -218,34 +218,6 @@ export function CartStepCheckout({
               onClienteChange={onClienteChange}
             />
           </section>
-
-          {/* ANTICIPO CC */}
-          {/* {isCuentaCorriente ? (
-            <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-foreground">
-                  Anticipo
-                </Label>
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground font-semibold">
-                  $
-                </span>
-                <Input
-                  type="number"
-                  min="0"
-                  value={anticipoManual}
-                  onChange={(event) => handleAnticipoChange(event.target.value)}
-                  className="pl-8 bg-white border-border font-semibold text-foreground h-11"
-                  placeholder={String(anticipoMinimo)}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground leading-tight font-medium">
-                El resto del ticket se registrara como deuda. Dejalo en 0 si
-                fias el 100%.
-              </p>
-            </section>
-          ) : null} */}
 
           {/* METODOS DE PAGO */}
           {isPOSMode && (!isCuentaCorriente || anticipoActual > 0) ? (

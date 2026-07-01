@@ -49,6 +49,21 @@ export function TicketSheet({
   const subtotalCarrito = getTicketSubtotal(ticket);
   const { esFiado, montoCobrado, montoPendiente } =
     getTicketFinancialSummary(ticket);
+  const tieneSaldoPendiente =
+    Number(ticket?.montoPendiente ?? montoPendiente) > 0.05 ||
+    montoPendiente > 0.05;
+  const estadoEsFiado =
+    esFiado || Boolean(ticket?.esFiadoDirecto) || tieneSaldoPendiente;
+  const badgeEstadoLabel = estadoEsFiado
+    ? tieneSaldoPendiente
+      ? "PENDIENTE DE PAGO"
+      : "CUENTA CORRIENTE"
+    : "PAGADO";
+  const estadoTexto = estadoEsFiado
+    ? tieneSaldoPendiente
+      ? "Pendiente de pago"
+      : "Cuenta corriente"
+    : "Pagado";
 
   const compartirRecibo = () => {
     if (!ticket) return;
@@ -147,21 +162,24 @@ export function TicketSheet({
 
             <div className="flex-1 overflow-y-auto min-h-0">
               <div className="px-2 space-y-2 md:px-5 md:py-5 md:space-y-4">
-                <div className="rounded-xl border border-border bg-white p-5 text-center">
-                  <Badge
-                    variant="outline"
-                    className={`mx-auto mb-4 w-fit border px-3 py-1 text-[11px] font-bold uppercase tracking-widest shadow-none ${
-                      esFiado
-                        ? "border-amber-200 bg-amber-50 text-amber-700"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    }`}
-                  >
-                    {esFiado ? "Cta. Cte" : "PAGADO COMPLETO"}
-                  </Badge>
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Total Comprobante
-                  </p>
-                  <p className="mt-1 text-4xl font-semibold tracking-tight text-foreground">
+                <div className="rounded-xl border border-border bg-card p-5 text-center">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Total
+                    </p>
+
+                    <Badge
+                      variant="outline"
+                      className={`w-fit border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${
+                        estadoEsFiado
+                          ? "border-accent-orange bg-accent-orange/10 text-amber-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      {badgeEstadoLabel}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-3xl font-semibold text-left text-foreground">
                     {formatTicketMoney(ticket?.total)}
                   </p>
                 </div>
@@ -203,7 +221,7 @@ export function TicketSheet({
                     />
                     {(ticket?.descuentoMonto ?? 0) > 0 && (
                       <DetailRow
-                        icon={<Tag className="w-3.5 h-3.5 text-emerald-500" />}
+                        icon={<Tag className="w-3.5 h-3.5 text-neutral-900" />}
                         label="Promocion"
                         value={ticket?.promocionNombre || "Descuento aplicado"}
                       />
@@ -227,15 +245,17 @@ export function TicketSheet({
                     />
                     <DetailRow
                       icon={<CreditCard className="w-3.5 h-3.5" />}
-                      label={esFiado ? "Pagado (Anticipo)" : "Pagado"}
+                      label={estadoEsFiado ? "Pagado (Anticipo)" : "Pagado"}
                       value={formatTicketMoney(
-                        esFiado ? montoCobrado : ticket?.total,
+                        estadoEsFiado ? montoCobrado : ticket?.total,
                       )}
                     />
                     <DetailRow
                       icon={<Wallet className="w-3.5 h-3.5" />}
                       label="Saldo pendiente"
-                      value={formatTicketMoney(esFiado ? montoPendiente : 0)}
+                      value={formatTicketMoney(
+                        estadoEsFiado ? montoPendiente : 0,
+                      )}
                     />
                     <div className="flex items-center justify-between px-4 py-3 gap-4">
                       <span className="text-xs text-muted-foreground">
@@ -243,10 +263,10 @@ export function TicketSheet({
                       </span>
                       <span
                         className={`text-xs font-semibold ${
-                          esFiado ? "text-amber-700" : "text-emerald-700"
+                          estadoEsFiado ? "text-amber-700" : "text-emerald-700"
                         }`}
                       >
-                        {esFiado ? "Pendiente de pago" : "Pagado"}
+                        {estadoTexto}
                       </span>
                     </div>
                   </div>

@@ -70,16 +70,11 @@ export default async function DashboardPage() {
   );
 
   const hoy = new Date();
-  const ayer = new Date(hoy);
-  ayer.setDate(ayer.getDate() - 1);
+  const { inicio: inicioAyer, fin: finAyer } = getPreviousDayRange(hoy);
 
   const ventasAyer = ventas.filter((v) => {
     const fechaVenta = new Date(v.fecha_venta);
-    return (
-      fechaVenta.getDate() === ayer.getDate() &&
-      fechaVenta.getMonth() === ayer.getMonth() &&
-      fechaVenta.getFullYear() === ayer.getFullYear()
-    );
+    return fechaVenta >= inicioAyer && fechaVenta <= finAyer;
   });
 
   const ingresosAyer = ventasAyer.reduce((acc, v) => acc + Number(v.total), 0);
@@ -88,14 +83,14 @@ export default async function DashboardPage() {
     0,
   );
 
-  const crecimientoIngresos =
-    ingresosAyer > 0
-      ? ((metricasHoy.ingresos - ingresosAyer) / ingresosAyer) * 100
-      : 100;
-  const crecimientoUnidades =
-    unidadesAyer > 0
-      ? ((metricasHoy.unidadesVendidas - unidadesAyer) / unidadesAyer) * 100
-      : 100;
+  const crecimientoIngresos = calcularCrecimientoDiario(
+    metricasHoy.ingresos,
+    ingresosAyer,
+  );
+  const crecimientoUnidades = calcularCrecimientoDiario(
+    metricasHoy.unidadesVendidas,
+    unidadesAyer,
+  );
 
   const ventasDeHoy = ventas.filter((v) => {
     const f = new Date(v.fecha_venta);
@@ -529,6 +524,34 @@ export default async function DashboardPage() {
       </div>
     </>
   );
+}
+
+function getPreviousDayRange(date: Date) {
+  const inicio = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() - 1,
+    0,
+    0,
+    0,
+    0,
+  );
+  const fin = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() - 1,
+    23,
+    59,
+    59,
+    999,
+  );
+
+  return { inicio, fin };
+}
+
+function calcularCrecimientoDiario(valorHoy: number, valorAyer: number) {
+  if (valorHoy <= 0 || valorAyer <= 0) return 0;
+  return ((valorHoy - valorAyer) / valorAyer) * 100;
 }
 
 // Componente auxiliar para badge de crecimiento

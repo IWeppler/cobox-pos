@@ -172,7 +172,7 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
           <div className="space-y-2">
             <Label htmlFor="mensaje_ticket" className="flex items-center gap-2">
               <ReceiptText className="w-4 h-4 text-muted-foreground" />
-              Mensaje en el Ticket (Próximamente)
+              Mensaje en el Ticket
             </Label>
             <textarea
               id="mensaje_ticket"

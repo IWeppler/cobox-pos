@@ -32,7 +32,7 @@ export async function registrarVentaAction(
 
   if (authError || !user) return { error: "No autorizado.", success: false };
 
-  // 🚀 BLOQUEO Y ASIGNACIÓN DE CAJA (MODO DINÁMICO)
+  // BLOQUEO Y ASIGNACIÓN DE CAJA (MODO DINÁMICO)
   const { data: config } = await supabase
     .from("configuracion_pos")
     .select("modo_caja, requiere_caja_abierta")
@@ -232,7 +232,7 @@ export async function registrarVentaAction(
     vendedor_id: user.id,
     cliente_id: clienteId || null,
     turno_caja_id: turnoAbierto?.id || null,
-    estado_operacion: 'CONFIRMADA',
+    estado_operacion: "CONFIRMADA",
     metodo_pago: metodoPagoSafe,
     total: totalConDescuentoYRecargo,
     precio_costo: isNaN(costoTotalVenta) ? 0 : costoTotalVenta,
@@ -243,7 +243,7 @@ export async function registrarVentaAction(
     es_pago_mixto: pagosValidos.length > 1,
     monto_cobrado: sumaPagos,
     monto_pendiente: montoPendiente > 0 ? montoPendiente : 0,
-    estado_pago: estadoPago
+    estado_pago: estadoPago,
   };
 
   // --- 4. CREAR LA CABECERA (ventas) ---
@@ -332,5 +332,5 @@ export async function registrarVentaAction(
   }
 
   revalidatePath("/", "layout");
-  return { error: null, success: true };
+  return { error: null, success: true, ventaId: nuevaVenta.id };
 }

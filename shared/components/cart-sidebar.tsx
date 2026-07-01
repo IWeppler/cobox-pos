@@ -71,6 +71,7 @@ export function CartSidebar({
 
   const [branding, setBranding] = useState<ConfiguracionPOS | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [vendedorNombre, setVendedorNombre] = useState("Tú");
   const [metodosPagoDB, setMetodosPagoDB] = useState<MetodoPago[]>([]);
   const [pagos, setPagos] = useState<CreateSalePaymentInput[]>([]);
   const [modoMixto, setModoMixto] = useState(false);
@@ -118,6 +119,21 @@ export function CartSidebar({
       setIsAdmin(!!session);
 
       if (session) {
+        const { data: perfil } = await supabase
+          .from("perfiles")
+          .select("nombre")
+          .eq("id", session.user.id)
+          .maybeSingle();
+        const metadata = session.user.user_metadata;
+        setVendedorNombre(
+          perfil?.nombre ||
+            metadata?.nombre ||
+            metadata?.name ||
+            metadata?.full_name ||
+            session.user.email?.split("@")[0] ||
+            "Tú",
+        );
+
         const { data: promos } = await supabase
           .from("promociones")
           .select(
@@ -353,13 +369,29 @@ export function CartSidebar({
             : metodosPagoDB.find((m) => m.id === pagosToSubmit[0]?.metodoPagoId)
                 ?.nombre || "Efectivo";
 
+        const idReal = result.ventaId.split("-")[0].toUpperCase();
+        const montoPendiente = isCuentaCorriente
+          ? Math.max(0, totalFinal - montoRealAsignado)
+          : 0;
+        const estadoVenta = isCuentaCorriente
+          ? montoRealAsignado > 0
+            ? "PARCIAL"
+            : "PENDIENTE"
+          : "PAGADA";
+
         setVentaExitosa({
           items: [...items],
           total: totalFinal,
           metodoPago: nombreMetodoMostrar,
-          nroRecibo: Math.random().toString().slice(2, 8).toUpperCase(),
+          nroRecibo: idReal,
           descuentoMonto: descuentoDetalle.monto,
           promocionNombre: descuentoDetalle.nombre,
+          vendedor: vendedorNombre || "Tú",
+          clienteNombre: clienteSeleccionado?.nombre || "Consumidor final",
+          estadoPago: estadoVenta,
+          montoPendiente,
+          montoCobrado: montoRealAsignado,
+          esFiadoDirecto: isCuentaCorriente,
         });
 
         clearCart();

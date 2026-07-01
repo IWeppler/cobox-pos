@@ -118,4 +118,5 @@ export interface TicketData {
   estadoPago?: string;
   montoCobrado?: number;
   montoPendiente?: number;
+  esFiadoDirecto?: boolean;
 }

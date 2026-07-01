@@ -17,19 +17,19 @@ import { TicketSheet } from "@/features/sales/ui/ticket-sheet";
 import { TicketData, CreateSalePaymentInput } from "@/entities/ventas/types";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { MetodoPago } from "@/entities/payments/types";
-import { CartSidebarFooter } from "./cart-sidebar/cart-sidebar-footer";
-import { CartSidebarHeader } from "./cart-sidebar/cart-sidebar-header";
-import { CartStepCheckout } from "./cart-sidebar/cart-step-checkout";
-import { CartStepItems } from "./cart-sidebar/cart-step-items";
+import { CartSidebarFooter } from "../../../shared/components/cart-sidebar/cart-sidebar-footer";
+import { CartSidebarHeader } from "../../../shared/components/cart-sidebar/cart-sidebar-header";
+import { CartStepCheckout } from "../../../shared/components/cart-sidebar/cart-step-checkout";
+import { CartStepItems } from "../../../shared/components/cart-sidebar/cart-step-items";
 import { Sheet, SheetContent } from "@/shared/ui/sheet";
-import { PromocionDB } from "./cart-sidebar/types";
+import { PromocionDB } from "../../../shared/components/cart-sidebar/types";
 import {
   generarLinkWhatsApp,
   getDescuentoDetalle,
   getPromocionActivaId,
   getPromocionesElegibles,
-} from "./cart-sidebar/cart-sidebar-utils";
-import { ClienteBasico } from "./cart-sidebar/client-selector";
+} from "../../../shared/components/cart-sidebar/cart-sidebar-utils";
+import { ClienteBasico } from "../../../shared/components/cart-sidebar/client-selector";
 
 const subscribeToClientMount = () => () => {};
 const getClientSnapshot = () => true;
@@ -69,6 +69,7 @@ export function PosCart({
   const [isPending, startTransition] = useTransition();
 
   const [branding, setBranding] = useState<ConfiguracionPOS | null>(null);
+  const [vendedorNombre, setVendedorNombre] = useState("Tú");
   const [metodosPagoDB, setMetodosPagoDB] = useState<MetodoPago[]>([]);
   const [pagos, setPagos] = useState<CreateSalePaymentInput[]>([]);
   const [modoMixto, setModoMixto] = useState(false);
@@ -127,6 +128,21 @@ export function PosCart({
       if (!isMounted) return;
 
       if (session) {
+        const { data: perfil } = await supabase
+          .from("perfiles")
+          .select("nombre")
+          .eq("id", session.user.id)
+          .maybeSingle();
+        const metadata = session.user.user_metadata;
+        setVendedorNombre(
+          perfil?.nombre ||
+            metadata?.nombre ||
+            metadata?.name ||
+            metadata?.full_name ||
+            session.user.email?.split("@")[0] ||
+            "Tú",
+        );
+
         const { data: promos } = await supabase
           .from("promociones")
           .select(
@@ -355,13 +371,29 @@ export function PosCart({
             : metodosPagoDB.find((m) => m.id === pagosToSubmit[0]?.metodoPagoId)
                 ?.nombre || "Efectivo";
 
+        const idReal = result.ventaId.split("-")[0].toUpperCase();
+        const montoPendiente = isCuentaCorriente
+          ? Math.max(0, totalFinal - montoRealAsignado)
+          : 0;
+        const estadoVenta = isCuentaCorriente
+          ? montoRealAsignado > 0
+            ? "PARCIAL"
+            : "PENDIENTE"
+          : "PAGADA";
+
         setVentaExitosa({
           items: [...items],
           total: totalFinal,
           metodoPago: nombreMetodoMostrar,
-          nroRecibo: Math.random().toString().slice(2, 8).toUpperCase(),
+          nroRecibo: idReal,
           descuentoMonto: descuentoDetalle.monto,
           promocionNombre: descuentoDetalle.nombre,
+          vendedor: vendedorNombre || "Tú",
+          clienteNombre: clienteSeleccionado?.nombre || "Consumidor final",
+          estadoPago: estadoVenta,
+          montoPendiente,
+          montoCobrado: montoRealAsignado,
+          esFiadoDirecto: isCuentaCorriente,
         });
 
         clearCart();
@@ -442,7 +474,7 @@ export function PosCart({
 
   return (
     <>
-      <div className="hidden lg:flex flex-col w-[400px] shrink-0 border-l border-border bg-white h-full z-20">
+      <div className="hidden lg:flex flex-col w-100 shrink-0 border-l border-border bg-background h-full z-20">
         {CartContent}
       </div>
 
