@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   aprobarOrdenAction,
@@ -47,6 +47,7 @@ import {
   Trash2,
   Search,
   ChevronDown,
+  Layers,
 } from "lucide-react";
 import Link from "next/link";
 import { ItemResuelto, OrdenCompra } from "@/entities/compras/types";
@@ -111,7 +112,7 @@ function SearchableSelect({
         }}
       >
         <span
-          className={`truncate ${selectedProduct ? "text-foreground" : "text-muted-foreground"}`}
+          className={`truncate ${selectedProduct ? "text-foreground font-semibold" : "text-muted-foreground"}`}
         >
           {selectedProduct
             ? `${selectedProduct.nombre} (${selectedProduct.tipo})`
@@ -122,7 +123,7 @@ function SearchableSelect({
 
       {/* Contenido del Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-popover text-popover-foreground border border-border rounded-md shadow-md outline-none animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 w-full mt-1 bg-popover text-popover-foreground border border-border rounded-md outline-none animate-in fade-in-0 zoom-in-95">
           {/* Buscador interno */}
           <div className="flex items-center px-3 border-b border-border/50">
             <Search className="w-4 h-4 mr-2 text-muted-foreground opacity-50" />
@@ -173,12 +174,19 @@ export function MergeTable({
 }: Readonly<MergeTableProps>) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [itemToRemoveIdx, setItemToRemoveIdx] = useState<number | null>(null);
+
+  // En lugar de manejar índices sueltos, manejamos el `raw_nombre` de la agrupación
+  const [groupToRemoveName, setGroupToRemoveName] = useState<string | null>(
+    null,
+  );
+  const [groupToCreateName, setGroupToCreateName] = useState<string | null>(
+    null,
+  );
 
   // Estado local para productos (permite inyectar los creados al vuelo)
   const [localProductos, setLocalProductos] = useState<Producto[]>(productos);
 
-  // Estado local para los ítems
+  // Estado local plano de ítems para envío
   const [items, setItems] = useState<ItemResueltoConCategoria[]>(() =>
     itemsOriginales.map((item) => ({
       ...item,
@@ -188,9 +196,18 @@ export function MergeTable({
     })),
   );
 
+  // Agrupación Computada Dinámicamente para Renderizar
+  const groupedItems = useMemo(() => {
+    const map = new Map<string, ItemResueltoConCategoria[]>();
+    items.forEach((item) => {
+      if (!map.has(item.raw_nombre)) map.set(item.raw_nombre, []);
+      map.get(item.raw_nombre)!.push(item);
+    });
+    return Array.from(map.entries());
+  }, [items]);
+
   // Estados para nuevas funcionalidades
   const [margenGlobal, setMargenGlobal] = useState<number | "">("");
-  const [itemToCreateIdx, setItemToCreateIdx] = useState<number | null>(null);
   const [nuevoProductoData, setNuevoProductoData] = useState({
     nombre: "",
     precio: 0,
@@ -221,67 +238,89 @@ export function MergeTable({
     return listaProductos.find((p) => p.id === id);
   }
 
-  // --- Handlers Básicos ---
-  const handleAssignProduct = (itemIndex: number, newProductId: string) => {
-    const newItems = [...items];
+  // --- Handlers Grupales ---
+
+  const handleAssignProduct = (rawNombre: string, newProductId: string) => {
     const prod = productoReal(newProductId);
 
-    newItems[itemIndex].producto_id = newProductId;
-    newItems[itemIndex].precio_venta_actualizado = prod?.precio || 0;
-
-    if (newItems[itemIndex].estado_match === "DESCONOCIDO") {
-      newItems[itemIndex].estado_match = "NUEVO_ALIAS";
-    }
-
-    setItems(newItems);
+    setItems((prevItems) =>
+      prevItems.map((item) => {
+        if (item.raw_nombre === rawNombre) {
+          return {
+            ...item,
+            producto_id: newProductId,
+            precio_venta_actualizado: prod?.precio || 0,
+            estado_match:
+              item.estado_match === "DESCONOCIDO"
+                ? "NUEVO_ALIAS"
+                : item.estado_match,
+          };
+        }
+        return item;
+      }),
+    );
   };
 
-  const handleUpdatePrice = (itemIndex: number, newPrice: number) => {
-    const newItems = [...items];
-    newItems[itemIndex].precio_venta_actualizado = newPrice;
-    setItems(newItems);
+  const handleUpdatePrice = (rawNombre: string, newPrice: number) => {
+    setItems((prevItems) =>
+      prevItems.map((item) =>
+        item.raw_nombre === rawNombre
+          ? { ...item, precio_venta_actualizado: newPrice }
+          : item,
+      ),
+    );
   };
 
-  const confirmRemoveItem = () => {
-    if (itemToRemoveIdx === null) return;
-
-    const newItems = items.filter((_, idx) => idx !== itemToRemoveIdx);
-    setItems(newItems);
-    setItemToRemoveIdx(null);
-    toast.info("Ítem descartado de la conciliación.");
+  const handleUndo = (rawNombre: string) => {
+    setItems((prevItems) =>
+      prevItems.map((item) => {
+        if (item.raw_nombre === rawNombre) {
+          return {
+            ...item,
+            producto_id: null,
+            precio_venta_actualizado: 0,
+            estado_match: "DESCONOCIDO",
+          };
+        }
+        return item;
+      }),
+    );
+    toast.info(`Asignación deshecha para "${rawNombre}".`);
   };
 
-  const handleUndo = (itemIndex: number) => {
-    const newItems = [...items];
-    newItems[itemIndex].producto_id = null;
-    newItems[itemIndex].precio_venta_actualizado = 0;
-    newItems[itemIndex].estado_match = "DESCONOCIDO";
-    setItems(newItems);
-    toast.info("Asignación deshecha.");
+  const confirmRemoveGroup = () => {
+    if (!groupToRemoveName) return;
+
+    setItems((prevItems) =>
+      prevItems.filter((item) => item.raw_nombre !== groupToRemoveName),
+    );
+    setGroupToRemoveName(null);
+    toast.info("Agrupación descartada de la conciliación.");
   };
 
   const handleAplicarMargenGlobal = () => {
     if (margenGlobal === "" || margenGlobal < 0) return;
 
-    const newItems = items.map((item) => ({
-      ...item,
-      // Calculamos el nuevo precio sumando el porcentaje al costo
-      precio_venta_actualizado: Math.ceil(
-        item.precio_costo * (1 + Number(margenGlobal) / 100),
-      ),
-    }));
-
-    setItems(newItems);
+    setItems((prevItems) =>
+      prevItems.map((item) => ({
+        ...item,
+        precio_venta_actualizado: Math.ceil(
+          item.precio_costo * (1 + Number(margenGlobal) / 100),
+        ),
+      })),
+    );
     toast.success(
       `Margen del ${margenGlobal}% aplicado a todos los productos.`,
     );
   };
 
-  // --- NUEVO: Crear al Vuelo ---
+  // --- Crear al Vuelo Grupal ---
   const handleCrearAlVuelo = async () => {
-    if (itemToCreateIdx === null) return;
+    if (!groupToCreateName) return;
 
-    const itemActual = items[itemToCreateIdx];
+    // Buscamos un item representativo del grupo para sacar el costo
+    const itemActual = items.find((i) => i.raw_nombre === groupToCreateName);
+    if (!itemActual) return;
 
     setIsSubmitting(true);
     const res = await crearProductoAlVueloAction(
@@ -298,23 +337,39 @@ export function MergeTable({
     }
 
     const nuevoProd = res.producto as Producto;
-    setLocalProductos([...localProductos, nuevoProd]);
+    setLocalProductos((prevProductos) => [...prevProductos, nuevoProd]);
 
-    const newItems = [...items];
-    newItems[itemToCreateIdx].producto_id = nuevoProd.id;
-    newItems[itemToCreateIdx].precio_venta_actualizado = nuevoProd.precio;
-    newItems[itemToCreateIdx].estado_match = "NUEVO_ALIAS";
-    setItems(newItems);
+    // Asignar el nuevo producto a todos los ítems de este grupo
+    const precioUnificado = Number(
+      nuevoProductoData.precio || nuevoProd.precio || 0,
+    );
+    setItems((prevItems) =>
+      prevItems.map((item) => {
+        if (item.raw_nombre !== groupToCreateName) return item;
 
-    toast.success("Producto creado y asignado con éxito.");
-    setItemToCreateIdx(null); // Cerrar modal
+        return {
+          ...item,
+          producto_id: nuevoProd.id,
+          precio_venta_actualizado: precioUnificado,
+          estado_match:
+            item.estado_match === "DESCONOCIDO"
+              ? "NUEVO_ALIAS"
+              : item.estado_match,
+        };
+      }),
+    );
+
+    toast.success(
+      `Producto "${nuevoProd.nombre}" creado y asignado a ${items.filter((i) => i.raw_nombre === groupToCreateName).length} variantes.`,
+    );
+    setGroupToCreateName(null);
   };
 
   const handleAprobar = async () => {
     const sinResolver = items.some((i) => !i.producto_id);
     if (sinResolver) {
       toast.error(
-        "Debes asignar un producto a todos los ítems desconocidos (Rojos).",
+        "Debes asignar un producto a todas las agrupaciones desconocidas (Rojas).",
       );
       return;
     }
@@ -356,7 +411,7 @@ export function MergeTable({
           size="lg"
           className="h-10 bg-primary hover:bg-primary/90 text-white w-full sm:w-auto cursor-pointer"
           onClick={handleAprobar}
-          disabled={isSubmitting}
+          disabled={isSubmitting || items.length === 0}
         >
           <Save className="w-5 h-5 mr-2" />
           {isSubmitting ? "Procesando..." : "Confirmar e Impactar Stock"}
@@ -409,195 +464,244 @@ export function MergeTable({
           variant="outline"
           className="bg-rose-50 text-rose-700 border-rose-200 px-3 py-1"
         >
-          <HelpCircle className="w-4 h-4 mr-2" /> Desconocido
+          <HelpCircle className="w-4 h-4 mr-2" /> Desconocido / Para Revisar
         </Badge>
       </div>
 
-      {/* Tabla Interactiva */}
+      {/* Tabla Interactiva Agrupada */}
       <div className="bg-background rounded-xl border border-border overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-muted/50 text-foreground/80 text-xs uppercase font-semibold tracking-wide">
+        <table className="w-full text-sm text-left min-w-[1000px]">
+          <thead className="bg-muted/50 text-foreground/80 text-xs uppercase font-semibold tracking-wide border-b border-border">
             <tr>
-              <th className="px-6 py-2">Estado</th>
-              <th className="px-6 py-2">Ítem del Proveedor</th>
-              <th className="px-6 py-2">Producto en Sistema</th>
-              <th className="px-6 py-2 text-center">Cant.</th>
-              <th className="px-6 py-2 text-right">Costo Unidad</th>
-              <th className="px-6 py-2 text-right min-w-40">Precio Público</th>
-              <th className="px-4 py-2"></th>
+              <th className="px-6 py-3 w-16 text-center">Estado</th>
+              <th className="px-6 py-3 w-1/3">Productos del Remito</th>
+              <th className="px-6 py-3 w-1/3">Vinculación en Sistema</th>
+              <th className="px-6 py-3 text-right">Costo Und.</th>
+              <th className="px-6 py-3 text-right">Precio Público</th>
+              <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {items.map((item, idx) => {
-              const pReal = productoReal(item.producto_id);
-              const isPerfecto =
-                item.estado_match === "PERFECTO" ||
-                item.estado_match === "NUEVO_ALIAS";
-              const isInflacion = item.estado_match === "MODIFICADO";
-              const isDesconocido = item.estado_match === "DESCONOCIDO";
-
-              let rowClassName = "hover:bg-muted/30";
-              if (isInflacion) rowClassName = "bg-amber-50/30";
-              else if (isDesconocido) rowClassName = "bg-rose-50/30";
-
-              return (
-                <tr
-                  key={item.id ?? `item-${idx}`}
-                  className={`transition-colors ${rowClassName}`}
+            {groupedItems.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="text-center py-12 text-muted-foreground"
                 >
-                  <td className="px-6 py-4">
-                    {isPerfecto && (
-                      <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-                    )}
-                    {isInflacion && (
-                      <span title="El costo subió">
-                        <AlertTriangle className="w-6 h-6 text-amber-500" />
-                      </span>
-                    )}
-                    {isDesconocido && (
-                      <span title="No se encontró alias">
-                        <HelpCircle className="w-6 h-6 text-rose-500 animate-pulse" />
-                      </span>
-                    )}
-                  </td>
+                  No hay ítems para conciliar.
+                </td>
+              </tr>
+            ) : (
+              groupedItems.map(([rawNombre, group]) => {
+                // Tomamos el primer item como representativo para estado y costos base
+                const firstItem = group[0];
+                const pReal = productoReal(firstItem.producto_id);
+                const isPerfecto =
+                  firstItem.estado_match === "PERFECTO" ||
+                  firstItem.estado_match === "NUEVO_ALIAS";
+                const isInflacion = firstItem.estado_match === "MODIFICADO";
+                const isDesconocido = firstItem.estado_match === "DESCONOCIDO";
+                const totalGroupStock = group.reduce(
+                  (sum, i) => sum + i.cantidad,
+                  0,
+                );
 
-                  <td className="px-6 py-4">
-                    <p className="font-semibold text-foreground uppercase tracking-wide">
-                      {item.raw_nombre}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Variante: {item.raw_variante}
-                    </p>
-                  </td>
+                let rowClassName = "hover:bg-muted/30";
+                if (isInflacion)
+                  rowClassName = "bg-amber-50/30 hover:bg-amber-50/50";
+                else if (isDesconocido)
+                  rowClassName = "bg-rose-50/40 hover:bg-rose-50/60";
 
-                  <td className="px-6 py-4 min-w-70">
-                    {isDesconocido ? (
-                      <div className="flex flex-col gap-2 relative">
-                        {/* AQUÍ SE REEMPLAZA EL COMPONENTE SELECT POR EL BUSCADOR */}
-                        <SearchableSelect
-                          productos={localProductos}
-                          value={item.producto_id || null}
-                          onSelect={(value) => handleAssignProduct(idx, value)}
+                return (
+                  <tr
+                    key={rawNombre}
+                    className={`transition-colors ${rowClassName}`}
+                  >
+                    {/* STATUS */}
+                    <td className="px-6 py-4 text-center align-top pt-5">
+                      {isPerfecto && (
+                        <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
+                      )}
+                      {isInflacion && (
+                        <AlertTriangle
+                          className="w-6 h-6 text-amber-500 mx-auto"
                         />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs border-dashed text-primary hover:bg-primary/10 hover:text-primary hover:border-primary"
-                          onClick={() => {
-                            setItemToCreateIdx(idx);
-                            setNuevoProductoData({
-                              nombre: item.raw_nombre,
-                              precio: Math.ceil(item.precio_costo * 1.5),
-                              categoria: (item as any).raw_categoria || "",
-                            });
-                          }}
-                        >
-                          <PlusCircle className="w-3 h-3 mr-1" /> Crear &quot;
-                          {item.raw_nombre}&quot;
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="font-semibold text-primary">
-                            {pReal?.nombre}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Asignado a variante: {item.variante_match}
-                          </p>
-                        </div>
-                        {/* Botón de Deshacer */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50 shrink-0"
-                          onClick={() => handleUndo(idx)}
-                          title="Deshacer asignación"
-                        >
-                          <Undo2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </td>
+                      )}
+                      {isDesconocido && (
+                        <HelpCircle
+                          className="w-6 h-6 text-rose-500 animate-pulse mx-auto"
+                        />
+                      )}
+                    </td>
 
-                  <td className="px-6 py-2 text-center font-semibold">
-                    +{item.cantidad}
-                  </td>
-
-                  <td className="px-6 py-2 text-right">
-                    <p className="font-semibold text-foreground">
-                      ${Number(item.precio_costo).toLocaleString("es-AR")}
-                    </p>
-                    {isInflacion && pReal && (
-                      <p className="text-xs text-amber-600 font-semibold line-through mt-0.5">
-                        Era $
-                        {Number(pReal.precio_costo).toLocaleString("es-AR")}
+                    {/* PRODUCTO DEL PROVEEDOR (Desglose de variantes) */}
+                    <td className="px-6 py-4 align-top">
+                      <p className="font-bold text-foreground uppercase tracking-wide">
+                        {rawNombre}
                       </p>
-                    )}
-                  </td>
+                      {/* Sub-bloques de variantes integrados */}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {group.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-1.5 bg-background border border-border/80 px-2 py-1 rounded text-xs text-muted-foreground"
+                          >
+                            <Layers className="w-3 h-3 opacity-60" />
+                            <span className="truncate max-w-[150px]">
+                              {item.raw_variante}
+                            </span>
+                            <span className="font-bold text-emerald-600 bg-emerald-50 px-1 rounded ml-1">
+                              +{item.cantidad}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 text-xs font-semibold text-muted-foreground">
+                        Total a ingresar:{" "}
+                        <span className="text-foreground">
+                          {totalGroupStock} u.
+                        </span>
+                      </div>
+                    </td>
 
-                  <td className="px-6 py-2 text-right">
-                    {item.producto_id ? (
-                      <div className="flex flex-col items-end gap-1">
-                        <div className="relative w-28">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
-                            $
-                          </span>
-                          <Input
-                            type="number"
-                            className={`pl-7 h-9 font-semibold text-right ${isInflacion ? "border-amber-400 bg-amber-50 focus-visible:ring-amber-500" : ""}`}
-                            value={item.precio_venta_actualizado || 0}
-                            onChange={(e) =>
-                              handleUpdatePrice(idx, Number(e.target.value))
+                    {/* VINCULACIÓN EN SISTEMA */}
+                    <td className="px-6 py-4 align-top pt-5">
+                      {isDesconocido ? (
+                        <div className="flex flex-col gap-2 relative">
+                          <SearchableSelect
+                            productos={localProductos}
+                            value={firstItem.producto_id || null}
+                            onSelect={(value) =>
+                              handleAssignProduct(rawNombre, value)
                             }
                           />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs border-dashed text-primary hover:bg-primary/10 hover:text-primary hover:border-primary w-full justify-start"
+                            onClick={() => {
+                              setGroupToCreateName(rawNombre);
+                              setNuevoProductoData({
+                                nombre: rawNombre,
+                                precio: Math.ceil(firstItem.precio_costo * 1.5), // Sugerencia de precio base
+                                categoria: firstItem.raw_categoria || "",
+                              });
+                            }}
+                          >
+                            <PlusCircle className="w-4 h-4 mr-2" /> Crear
+                            Producto Nuevo
+                          </Button>
                         </div>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground italic">
-                        Esperando...
-                      </span>
-                    )}
-                  </td>
+                      ) : (
+                        <div className="flex items-start justify-between gap-2 p-2 bg-background border border-border/60 rounded-md">
+                          <div>
+                            <p className="font-semibold text-primary flex items-center gap-1.5">
+                              {pReal?.nombre}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              Asignado a {group.length} variantes
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50 shrink-0"
+                            onClick={() => handleUndo(rawNombre)}
+                            title="Deshacer asignación para todo el grupo"
+                          >
+                            <Undo2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </td>
 
-                  {/* Columna del botón Descartar */}
-                  <td className="px-4 py-4 text-center">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-rose-600 hover:bg-rose-50"
-                      onClick={() => setItemToRemoveIdx(idx)}
-                      title="Descartar ítem del remito"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
+                    {/* COSTO UNITARIO */}
+                    <td className="px-6 py-4 text-right align-top pt-5">
+                      <p className="font-semibold text-foreground">
+                        $
+                        {Number(firstItem.precio_costo).toLocaleString("es-AR")}
+                      </p>
+                      {isInflacion && pReal && (
+                        <p
+                          className="text-xs text-amber-600 font-semibold line-through mt-0.5"
+                          title="Costo anterior en sistema"
+                        >
+                          Era $
+                          {Number(pReal.precio_costo).toLocaleString("es-AR")}
+                        </p>
+                      )}
+                    </td>
+
+                    {/* PRECIO PÚBLICO (Unificado para todo el grupo) */}
+                    <td className="px-6 py-4 text-right align-top pt-5">
+                      {firstItem.producto_id ? (
+                        <div className="flex justify-end">
+                          <div className="relative w-28">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                              $
+                            </span>
+                            <Input
+                              type="number"
+                              className={`pl-7 h-9 font-semibold text-right ${
+                                isInflacion
+                                  ? "border-amber-400 bg-amber-50 focus-visible:ring-amber-500"
+                                  : "bg-background"
+                              }`}
+                              value={firstItem.precio_venta_actualizado || 0}
+                              onChange={(e) =>
+                                handleUpdatePrice(
+                                  rawNombre,
+                                  Number(e.target.value),
+                                )
+                              }
+                              title="Este precio se aplicará al producto padre y sus variantes"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic mr-2">
+                          Esperando asignación...
+                        </span>
+                      )}
+                    </td>
+
+                    {/* DESCARTAR GRUPO */}
+                    <td className="px-4 py-4 text-center align-top pt-5">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-rose-600 hover:bg-rose-50"
+                        onClick={() => setGroupToRemoveName(rawNombre)}
+                        title="Descartar todo este grupo"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
 
       {/* Modal para Crear Al Vuelo */}
       <Dialog
-        open={itemToCreateIdx !== null}
-        onOpenChange={(open) => !open && setItemToCreateIdx(null)}
+        open={groupToCreateName !== null}
+        onOpenChange={(open) => !open && setGroupToCreateName(null)}
       >
         <DialogContent aria-describedby="crear-producto-description">
           <DialogHeader>
-            <DialogTitle>Crear Producto</DialogTitle>
-            <DialogDescription
-              id="crear-producto-description"
-              className="sr-only"
-            >
-              Completa los datos para crear un nuevo producto en el sistema.
+            <DialogTitle>Crear Producto Múltiple</DialogTitle>
+            <DialogDescription id="crear-producto-description">
+              Se creará este producto y se le asociarán las variantes detectadas
+              automáticamente.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 pt-4">
             <div className="space-y-2">
-              <Label>Nombre del Producto</Label>
+              <Label>Nombre del Producto Central</Label>
               <Input
                 value={nuevoProductoData.nombre}
                 onChange={(e) =>
@@ -632,61 +736,66 @@ export function MergeTable({
             </div>
 
             <div className="space-y-2">
-              <Label>Precio Público</Label>
-              <Input
-                type="number"
-                value={nuevoProductoData.precio}
-                onChange={(e) =>
-                  setNuevoProductoData({
-                    ...nuevoProductoData,
-                    precio: Number(e.target.value),
-                  })
-                }
-                placeholder="Ej: 1500"
-              />
+              <Label>Precio Público Unificado</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                  $
+                </span>
+                <Input
+                  type="number"
+                  className="pl-7"
+                  value={nuevoProductoData.precio}
+                  onChange={(e) =>
+                    setNuevoProductoData({
+                      ...nuevoProductoData,
+                      precio: Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
             </div>
 
             <div className="pt-2 flex justify-end gap-2">
               <Button
                 variant="outline"
-                onClick={() => setItemToCreateIdx(null)}
+                onClick={() => setGroupToCreateName(null)}
                 disabled={isSubmitting}
               >
                 Cancelar
               </Button>
-              <Button onClick={handleCrearAlVuelo} disabled={isSubmitting}>
-                {isSubmitting ? "Creando..." : "Guardar y Asignar"}
+              <Button
+                onClick={handleCrearAlVuelo}
+                disabled={isSubmitting}
+                className="bg-primary"
+              >
+                {isSubmitting ? "Creando..." : "Guardar y Asignar Todo"}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Confirmación para Descartar */}
+      {/* Modal de Confirmación para Descartar Grupo */}
       <AlertDialog
-        open={itemToRemoveIdx !== null}
-        onOpenChange={(open) => !open && setItemToRemoveIdx(null)}
+        open={groupToRemoveName !== null}
+        onOpenChange={(open) => !open && setGroupToRemoveName(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Descartar este ítem?</AlertDialogTitle>
+            <AlertDialogTitle>¿Descartar grupo completo?</AlertDialogTitle>
             <AlertDialogDescription>
-              Estás a punto de ignorar el ítem{" "}
-              <strong className="text-foreground font-semibold">
-                {itemToRemoveIdx !== null
-                  ? items[itemToRemoveIdx]?.raw_nombre
-                  : ""}
-              </strong>{" "}
-              de la conciliación actual. No se impactará su stock ni se
-              actualizará su precio.
+              Estás a punto de ignorar{" "}
+              <strong className="text-foreground">{groupToRemoveName}</strong> y
+              todas sus variantes de este remito. No se impactará stock ni
+              precios para este producto.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setItemToRemoveIdx(null)}>
+            <AlertDialogCancel onClick={() => setGroupToRemoveName(null)}>
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={confirmRemoveItem}
+              onClick={confirmRemoveGroup}
               className="bg-rose-600 hover:bg-rose-700 text-white"
             >
               Descartar

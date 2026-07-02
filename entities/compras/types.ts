@@ -13,6 +13,7 @@ export interface ItemResuelto {
   producto_id: string | null;
   raw_nombre: string;
   raw_variante: string;
+  raw_categoria?: string | null;
   variante_match: string;
   cantidad: number;
   precio_costo: number;

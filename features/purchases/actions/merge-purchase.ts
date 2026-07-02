@@ -8,6 +8,27 @@ import { slugify } from "@/shared/utils/slugify";
 
 type SupabaseDb = ReturnType<typeof createClient>;
 
+type SupabaseActionError = {
+  message?: string;
+  details?: string | null;
+  code?: string | null;
+};
+
+function formatSupabaseError(error: SupabaseActionError | null | undefined) {
+  if (!error) return "Error desconocido";
+  return [error.message, error.details, error.code].filter(Boolean).join(" | ");
+}
+
+function throwIfSupabaseError(
+  context: string,
+  error: SupabaseActionError | null | undefined,
+) {
+  if (!error) return;
+
+  console.error(`[PURCHASE MERGE] ${context}:`, JSON.stringify(error, null, 2));
+  throw new Error(`${context}: ${formatSupabaseError(error)}`);
+}
+
 // 1. Obtener los datos para la pantalla de Merge
 export async function getOrdenParaMergeAction(ordenId: string) {
   const cookieStore = await cookies();
@@ -22,17 +43,35 @@ export async function getOrdenParaMergeAction(ordenId: string) {
       .eq("publicado", true),
   ]);
 
-  // Si hay error, devolvemos la misma estructura pero con datos nulos/vacíos
   if (ordenRes.error || !ordenRes.data) {
     return {
-      error: "Orden no encontrada.",
+      error: ordenRes.error
+        ? `Orden no encontrada: ${formatSupabaseError(ordenRes.error)}`
+        : "Orden no encontrada.",
       orden: null,
       items: [],
       productos: [],
     };
   }
 
-  // Si todo está bien, devolvemos los datos y error en null
+  if (itemsRes.error) {
+    return {
+      error: `No se pudieron leer los items del remito: ${formatSupabaseError(itemsRes.error)}`,
+      orden: null,
+      items: [],
+      productos: [],
+    };
+  }
+
+  if (productosRes.error) {
+    return {
+      error: `No se pudieron leer los productos para conciliar: ${formatSupabaseError(productosRes.error)}`,
+      orden: null,
+      items: [],
+      productos: [],
+    };
+  }
+
   return {
     error: null,
     orden: ordenRes.data,
@@ -55,37 +94,41 @@ export async function crearProductoAlVueloAction(
     } = await supabase.auth.getUser();
     if (!user) return { error: "No autorizado." };
 
-    const slug =
-      nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-") +
-      "-" +
-      Math.random().toString(36).substring(2, 6);
+    const slug = `${slugify(nombre)}-${Math.random().toString(36).substring(2, 6)}`;
     let categoria_id = null;
+    const categoriaLimpia = categoriaNombre?.trim();
 
     // Si viene la categoría del Excel, la buscamos o la creamos
-    if (categoriaNombre) {
-      // Intentamos buscarla
-      const { data: catExistente } = await supabase
+    if (categoriaLimpia) {
+      const { data: catExistente, error: categoriaSelectError } = await supabase
         .from("categorias")
         .select("id")
-        .ilike("nombre", categoriaNombre.trim())
+        .ilike("nombre", categoriaLimpia)
         .maybeSingle();
+
+      if (categoriaSelectError) {
+        console.error("Error buscando categoria:", categoriaSelectError);
+        return { error: "Error buscando la categoría del producto." };
+      }
 
       if (catExistente) {
         categoria_id = catExistente.id;
       } else {
-        // La creamos
-        const { data: nuevaCat } = await supabase
+        const { data: nuevaCat, error: categoriaInsertError } = await supabase
           .from("categorias")
           .insert({
-            nombre: categoriaNombre.trim(),
-            slug: categoriaNombre
-              .trim()
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, "-"),
+            nombre: categoriaLimpia,
+            slug: slugify(categoriaLimpia),
             activa: true,
           })
           .select("id")
           .single();
+
+        if (categoriaInsertError) {
+          console.error("Error creando categoria:", categoriaInsertError);
+          return { error: "Error creando la categoría del producto." };
+        }
+
         if (nuevaCat) categoria_id = nuevaCat.id;
       }
     }
@@ -97,7 +140,7 @@ export async function crearProductoAlVueloAction(
         precio_costo: costo || 0,
         precio: precio || 0,
         slug,
-        tipo: categoriaNombre || "General",
+        tipo: categoriaLimpia || "General",
         categoria_id: categoria_id,
         publicado: true,
         atributos_globales: {},
@@ -105,11 +148,24 @@ export async function crearProductoAlVueloAction(
       .select("*")
       .single();
 
-    if (error || !nuevoProducto) return { error: "Error de BD al crear." };
+    if (error || !nuevoProducto) {
+      console.error("Error creando producto al vuelo:", error);
+      return { error: "Error de BD al crear." };
+    }
+
+    // ELIMINADO: Ya no creamos la variante "Unico" ni su stock base aquí.
+    // La función aprobarOrdenAction se encargará de inyectar dinámicamente
+    // todas las variantes detectadas (ej: Talle S, M, L) que le pase el Frontend.
 
     return { success: true, producto: nuevoProducto };
   } catch (error) {
-    return { error: "Error interno al crear el producto." };
+    console.error("Error interno al crear el producto:", error);
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Error interno al crear el producto.",
+    };
   }
 }
 
@@ -122,31 +178,99 @@ async function actualizarPrecios(item: ItemResuelto, supabase: SupabaseDb) {
   if (item.precio_venta_actualizado)
     updateData.precio = item.precio_venta_actualizado;
 
-  await supabase
+  const { error } = await supabase
     .from("productos")
     .update(updateData)
     .eq("id", item.producto_id);
+
+  throwIfSupabaseError(
+    `Error actualizando precios de ${item.raw_nombre}`,
+    error,
+  );
 }
 
 async function actualizarStock(item: ItemResuelto, supabase: SupabaseDb) {
-  const { data: stockExistente } = await supabase
+  if (!item.producto_id) return;
+
+  const variante = item.variante_match || item.raw_variante || "Unico";
+
+  const { data: varianteExistente, error: varianteSelectError } = await supabase
+    .from("producto_variantes")
+    .select("id, stock")
+    .eq("producto_id", item.producto_id)
+    .eq("nombre_display", variante)
+    .maybeSingle();
+
+  throwIfSupabaseError(
+    `Error buscando variante ${variante} de ${item.raw_nombre}`,
+    varianteSelectError,
+  );
+
+  if (varianteExistente) {
+    const { error: varianteUpdateError } = await supabase
+      .from("producto_variantes")
+      .update({ stock: Number(varianteExistente.stock || 0) + item.cantidad })
+      .eq("id", varianteExistente.id);
+
+    throwIfSupabaseError(
+      `Error actualizando variante ${variante} de ${item.raw_nombre}`,
+      varianteUpdateError,
+    );
+  } else {
+    const { error: varianteInsertError } = await supabase
+      .from("producto_variantes")
+      .insert({
+        producto_id: item.producto_id,
+        nombre_display: variante,
+        atributos: {},
+        precio: null,
+        costo: null,
+        stock: item.cantidad,
+      });
+
+    throwIfSupabaseError(
+      `Error creando variante ${variante} de ${item.raw_nombre}`,
+      varianteInsertError,
+    );
+  }
+
+  const { data: stockExistente, error: stockSelectError } = await supabase
     .from("productos_stock")
     .select("id, cantidad")
     .eq("producto_id", item.producto_id)
-    .eq("variante", item.variante_match)
-    .single();
+    .eq("variante", variante)
+    .maybeSingle();
+
+  throwIfSupabaseError(
+    `Error buscando stock ${variante} de ${item.raw_nombre}`,
+    stockSelectError,
+  );
 
   if (stockExistente) {
-    await supabase
+    const { error: stockUpdateError } = await supabase
       .from("productos_stock")
-      .update({ cantidad: stockExistente.cantidad + item.cantidad })
+      .update({
+        cantidad: Number(stockExistente.cantidad || 0) + item.cantidad,
+      })
       .eq("id", stockExistente.id);
+
+    throwIfSupabaseError(
+      `Error actualizando stock ${variante} de ${item.raw_nombre}`,
+      stockUpdateError,
+    );
   } else {
-    await supabase.from("productos_stock").insert({
-      producto_id: item.producto_id,
-      variante: item.variante_match,
-      cantidad: item.cantidad,
-    });
+    const { error: stockInsertError } = await supabase
+      .from("productos_stock")
+      .insert({
+        producto_id: item.producto_id,
+        variante,
+        cantidad: item.cantidad,
+      });
+
+    throwIfSupabaseError(
+      `Error creando stock ${variante} de ${item.raw_nombre}`,
+      stockInsertError,
+    );
   }
 }
 
@@ -159,7 +283,7 @@ async function registrarAliasDiccionario(
     item.estado_match === "DESCONOCIDO" ||
     item.estado_match === "NUEVO_ALIAS"
   ) {
-    await supabase.from("diccionario_alias").upsert(
+    const { error } = await supabase.from("diccionario_alias").upsert(
       {
         proveedor,
         raw_nombre: item.raw_nombre.trim().toLowerCase(),
@@ -167,10 +291,12 @@ async function registrarAliasDiccionario(
       },
       { onConflict: "proveedor, raw_nombre" },
     );
+
+    throwIfSupabaseError(`Error registrando alias ${item.raw_nombre}`, error);
   }
 }
 
-// 2. Aprobar e Impactar la Orden en la BD (Completamente Tipado)
+// 2. Aprobar e Impactar la Orden en la BD (Agrupada y Optimizada)
 export async function aprobarOrdenAction(
   ordenId: string,
   proveedor: string,
@@ -180,19 +306,39 @@ export async function aprobarOrdenAction(
   const supabase = createClient(cookieStore);
 
   try {
+    // Sets de control para evitar golpear la DB repetidas veces por el mismo producto padre
+    const productosActualizados = new Set<string>();
+    const aliasRegistrados = new Set<string>();
+
     for (const item of itemsResueltos) {
       if (!item.producto_id) continue;
 
-      // Código súper limpio y fácil de leer
-      await actualizarPrecios(item, supabase);
+      // 1. Actualizar precios (Solo se hace 1 vez por Producto, aunque tenga 10 variantes)
+      if (!productosActualizados.has(item.producto_id)) {
+        await actualizarPrecios(item, supabase);
+        productosActualizados.add(item.producto_id);
+      }
+
+      // 2. Actualizar stock (Se ejecuta siempre, por CADA variante individual)
       await actualizarStock(item, supabase);
-      await registrarAliasDiccionario(item, proveedor, supabase);
+
+      // 3. Registrar Alias en el Diccionario (Solo 1 vez por nombre crudo)
+      const aliasKey = item.raw_nombre.trim().toLowerCase();
+      if (!aliasRegistrados.has(aliasKey)) {
+        await registrarAliasDiccionario(item, proveedor, supabase);
+        aliasRegistrados.add(aliasKey);
+      }
     }
 
-    await supabase
+    const { error: ordenUpdateError } = await supabase
       .from("ordenes_compra")
       .update({ estado: "APROBADA" })
       .eq("id", ordenId);
+
+    throwIfSupabaseError(
+      "Error marcando orden como aprobada",
+      ordenUpdateError,
+    );
 
     revalidatePath("/stock");
     revalidatePath("/compras");
@@ -200,6 +346,11 @@ export async function aprobarOrdenAction(
     return { success: true };
   } catch (error) {
     console.error("Error al aprobar orden:", error);
-    return { error: "Hubo un error al impactar los datos en el sistema." };
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Hubo un error al impactar los datos en el sistema.",
+    };
   }
 }

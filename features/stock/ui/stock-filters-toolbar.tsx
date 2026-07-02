@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   ClipboardList,
@@ -8,6 +9,7 @@ import {
   LayoutGrid,
   List,
   MoreHorizontal,
+  PackagePlus,
   Search,
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
@@ -76,6 +78,7 @@ export function StockFiltersToolbar({
   isAdmin,
   onLimpiarFiltros,
 }: Readonly<StockFiltersToolbarProps>) {
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const propiedadesVariantes = Object.entries(propiedadesGlobales);
   const hayFiltrosVariantesActivos = Object.values(filtrosVariantes).some(
     (valor) => valor !== "todos",
@@ -92,6 +95,12 @@ export function StockFiltersToolbar({
     <>
       {/* 1. BARRA SUPERIOR: Buscador y Acciones */}
       <div className="flex w-full min-w-0 flex-row gap-2 overflow-hidden sm:gap-4 justify-between items-center bg-card p-2 sm:p-4">
+        <ImportarPedidoModal
+          open={isImportModalOpen}
+          onOpenChange={setIsImportModalOpen}
+          hideTrigger
+        />
+
         <div className="flex flex-1 items-center gap-2 min-w-0">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -226,7 +235,14 @@ export function StockFiltersToolbar({
                 >
                   <div className="flex flex-col gap-0.5 [&_button]:w-full [&_button]:justify-start [&_button]:h-9 [&_button]:px-2 [&_button]:bg-transparent [&_button]:border-0 [&_button]:shadow-none [&_button]:font-medium [&_button]:text-sm [&_button:hover]:bg-muted [&_button]:rounded-md [&_button_span.hidden]:!inline-block [&_button_svg]:mr-2 [&_button_svg]:w-4 [&_button_svg]:h-4 [&_button_svg]:shrink-0">
                     <UpdatePricesModal />
-                    <ImportarPedidoModal />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setIsImportModalOpen(true)}
+                    >
+                      <PackagePlus className="w-4 h-4 mr-2 text-emerald-600 shrink-0" />
+                      <span>Ingresar Remito</span>
+                    </Button>
                     <DropdownMenuSeparator className="my-1 bg-border/60" />
                     <Link href="/stock/bajas" className="w-full block">
                       <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-amber-700 hover:bg-amber-50 rounded-md hover:text-amber-800 transition-colors">
