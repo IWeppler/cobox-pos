@@ -32,22 +32,46 @@ interface UseCatalogFiltersProps {
   visibleCount: number;
 }
 
-function parseLegacyVariant(raw: string): Record<string, string> {
+export function parseLegacyVariant(raw: string): Record<string, string> {
   const v = raw?.trim() || "";
   if (!v || v.toLowerCase() === "unico" || v.toLowerCase() === "único")
     return {};
 
   const result: Record<string, string> = {};
 
+  // Formato Constructor de Variantes (Ej: Color:Rojo|Talle:M)
+  if (v.includes("|") && v.includes(":")) {
+    v.split("|").forEach((part) => {
+      const [key, ...vals] = part.split(":");
+      if (key && vals.length > 0) result[key.trim()] = vals.join(":").trim();
+    });
+    return result;
+  }
+
+  // Formato Excel (Ej: TALLE: S / COLOR: NEGRO) o Viejo (Ej: S / Negro)
   if (v.includes("/") || v.includes("-")) {
     const separator = v.includes("/") ? "/" : "-";
     const parts = v.split(separator).map((p) => p.trim());
 
+    const hasKeys = parts.some((p) => p.includes(":"));
+
+    // Si viene del Excel con etiquetas (TALLE: S)
+    if (hasKeys) {
+      parts.forEach((part, idx) => {
+        if (part.includes(":")) {
+          const [key, ...vals] = part.split(":");
+          result[key.trim()] = vals.join(":").trim();
+        } else {
+          result[`Opción ${idx + 1}`] = part;
+        }
+      });
+      return result;
+    }
+
+    // Si es el formato viejo sin etiquetas (S / Negro)
     if (parts.length >= 2) {
       result["Color"] = parts[0];
       result["Talle"] = parts[1];
-
-      // Si por casualidad separan 3 cosas (Ej: Rojo/L/Algodón)
       for (let i = 2; i < parts.length; i++) {
         result[`Opción ${i + 1}`] = parts[i];
       }
@@ -55,7 +79,14 @@ function parseLegacyVariant(raw: string): Record<string, string> {
     }
   }
 
-  // Si no tiene separadores (ej: "10L", "Atado", "Bandeja"), cae como Opción genérica
+  // Un solo atributo explícito (Ej: TALLE: S)
+  if (v.includes(":")) {
+    const [key, ...vals] = v.split(":");
+    result[key.trim()] = vals.join(":").trim();
+    return result;
+  }
+
+  // Fallback final
   result["Opción"] = v;
   return result;
 }
@@ -70,24 +101,19 @@ export function useCatalogFilters({
   orden,
   visibleCount,
 }: UseCatalogFiltersProps) {
-  // 1. EXTRACTOR GLOBAL DE PROPIEDADES (Puro JSONB Nativo)
   const propiedadesGlobales = useMemo(() => {
     const propsMap: Record<string, Set<string>> = {};
 
     productos.forEach((p) => {
-      // Esquema nuevo (JSONB)
       p.producto_variantes?.forEach((v) => {
         if (config?.mostrar_sin_stock === false && v.stock <= 0) return;
 
-        // Si la variante tiene un JSON de atributos reales
         if (v.atributos && Object.keys(v.atributos).length > 0) {
           Object.entries(v.atributos).forEach(([key, val]) => {
             if (!propsMap[key]) propsMap[key] = new Set();
             propsMap[key].add((val as string).trim());
           });
-        }
-        // Si no tiene JSON, aplicamos el Auto-Split al nombre
-        else if (v.nombre_display) {
+        } else if (v.nombre_display) {
           const parsed = parseLegacyVariant(v.nombre_display);
           Object.entries(parsed).forEach(([key, val]) => {
             if (!propsMap[key]) propsMap[key] = new Set();
@@ -96,7 +122,6 @@ export function useCatalogFilters({
         }
       });
 
-      // Esquema viejo (Stock Legacy) con Auto-Split
       p.stock?.forEach((s) => {
         if (config?.mostrar_sin_stock === false && s.cantidad <= 0) return;
         const parsed = parseLegacyVariant(s.variante);
@@ -194,28 +219,22 @@ export function useCatalogFilters({
         (catObj && catObj.slug?.toLowerCase() === tipoStr.toLowerCase()) ||
         (catObj && catObj.nombre?.toLowerCase() === tipoStr.toLowerCase());
 
-      //  LÓGICA DE FILTRADO MULTI-DIMENSIÓN (JSONB NATIVO)
       const matchVariante = Object.entries(filtrosVariantes).every(
         ([propKey, propVal]) => {
           if (propVal === "todos") return true;
 
-          // 1. Chequear tabla nueva
           const matchNew =
             c.producto_variantes?.some((pv) => {
               if (pv.stock <= 0) return false;
-
               if (pv.atributos && Object.keys(pv.atributos).length > 0) {
                 return (
                   pv.atributos[propKey]?.toLowerCase() === propVal.toLowerCase()
                 );
               }
-
-              // Auto-Split al vuelo
               const parsed = parseLegacyVariant(pv.nombre_display || "");
               return parsed[propKey]?.toLowerCase() === propVal.toLowerCase();
             }) ?? false;
 
-          // 2. Chequear tabla vieja (Auto-Split al vuelo)
           const matchOld =
             c.stock?.some((s) => {
               if (s.cantidad <= 0) return false;

@@ -5,13 +5,13 @@ import { Producto } from "@/entities/productos/types";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/shared/ui/dialog";
 import { useCartStore } from "@/shared/store/cart-store";
 import { toast } from "sonner";
 import { Layers } from "lucide-react";
+import { parseLegacyVariant } from "@/features/store/hooks/use-catalog-filters";
 
 interface QuickAddModalProps {
   producto: Producto | null;
@@ -24,41 +24,24 @@ export function QuickAddModal({
   isOpen,
   onClose,
 }: Readonly<QuickAddModalProps>) {
-  if (!producto) return null;
-
-  return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <QuickAddModalContent
-        key={`${producto.id}-${isOpen ? "open" : "closed"}`}
-        producto={producto}
-        isOpen={isOpen}
-        onClose={onClose}
-      />
-    </Dialog>
-  );
-}
-
-function QuickAddModalContent({
-  producto,
-  isOpen,
-  onClose,
-}: Readonly<{
-  producto: Producto;
-  isOpen: boolean;
-  onClose: () => void;
-}>) {
   const [selecciones, setSelecciones] = useState<Record<string, string>>({});
   const addItem = useCartStore((state) => state.addItem);
   const setIsOpenCart = useCartStore((state) => state.setIsOpen);
 
   const variantesArray = useMemo(() => {
-    const list: Array<{ variante: string; cantidad: number; id_real: string }> =
-      [];
+    if (!producto) return [];
+    const list: Array<{
+      variante: string;
+      cantidad: number;
+      id_real: string;
+      atributos?: Record<string, string>;
+    }> = [];
     producto.producto_variantes?.forEach((v) =>
       list.push({
         variante: v.nombre_display,
         cantidad: v.stock,
         id_real: v.id,
+        atributos: v.atributos,
       }),
     );
     producto.stock?.forEach((s) =>
@@ -69,66 +52,57 @@ function QuickAddModalContent({
 
   const parsedVariants = useMemo(() => {
     const props: Record<string, Set<string>> = {};
-    let isLegacy = false;
-    let isLegacySplit = false;
 
     variantesArray.forEach((s) => {
-      const v = s.variante || "";
-      if (v.toLowerCase() === "unico" || v.toLowerCase() === "único") return;
-
-      if (v.includes(":")) {
-        v.split("|").forEach((part) => {
-          const [key, val] = part.split(":");
-          if (key && val) {
-            if (!props[key]) props[key] = new Set();
-            props[key].add(val.trim());
-          }
-        });
-      } else if (v.includes("/") || v.includes("-")) {
-        isLegacySplit = true;
-        const separator = v.includes("/") ? "/" : "-";
-        v.split(separator).forEach((part, idx) => {
-          const key =
-            idx === 0 ? "Color" : idx === 1 ? "Talle" : `Opción ${idx + 1}`;
-          if (!props[key]) props[key] = new Set();
-          props[key].add(part.trim());
+      if (s.atributos && Object.keys(s.atributos).length > 0) {
+        Object.entries(s.atributos).forEach(([k, val]) => {
+          if (!props[k]) props[k] = new Set();
+          props[k].add(val as string);
         });
       } else {
-        isLegacy = true;
-        if (!props["Opción"]) props["Opción"] = new Set();
-        props["Opción"].add(v.trim());
+        const parsed = parseLegacyVariant(s.variante || "");
+        Object.entries(parsed).forEach(([k, val]) => {
+          if (!props[k]) props[k] = new Set();
+          props[k].add(val);
+        });
       }
     });
 
     const result: Record<string, string[]> = {};
     Object.keys(props).forEach((k) => (result[k] = Array.from(props[k])));
-    return { properties: result, isLegacy, isLegacySplit };
+    return { properties: result };
   }, [variantesArray]);
+
+  // 🚀 FIX UX: Auto-seleccionar opciones únicas para ahorrar clics al vendedor
+  useEffect(() => {
+    if (isOpen && producto) {
+      const autoSelections: Record<string, string> = {};
+
+      Object.entries(parsedVariants.properties).forEach(
+        ([propName, values]) => {
+          // Si la propiedad solo tiene 1 valor (Ej: Color: Negro), se selecciona sola
+          if (values.length === 1) {
+            autoSelections[propName] = values[0];
+          }
+        },
+      );
+
+      setSelecciones(autoSelections);
+    }
+  }, [isOpen, producto, parsedVariants]);
 
   const isOptionAvailable = (propName: string, val: string) => {
     const testSelections = { ...selecciones, [propName]: val };
     return variantesArray.some((s) => {
       if (s.cantidad <= 0) return false;
-      const v = s.variante || "";
-      if (
-        parsedVariants.isLegacySplit &&
-        (v.includes("/") || v.includes("-"))
-      ) {
-        const separator = v.includes("/") ? "/" : "-";
-        const parts = v.split(separator).map((p) => p.trim());
-        return Object.entries(testSelections).every(([k, selVal]) => {
-          const idx =
-            k === "Color"
-              ? 0
-              : k === "Talle"
-                ? 1
-                : parseInt(k.replace("Opción ", "")) - 1;
-          return parts[idx] === selVal;
-        });
-      }
-      if (parsedVariants.isLegacy) return v.trim() === val;
-      return Object.entries(testSelections).every(([k, selVal]) =>
-        v.split("|").includes(`${k}:${selVal}`),
+
+      const attrs =
+        s.atributos && Object.keys(s.atributos).length > 0
+          ? s.atributos
+          : parseLegacyVariant(s.variante || "");
+
+      return Object.entries(testSelections).every(
+        ([k, selVal]) => attrs[k] === selVal,
       );
     });
   };
@@ -140,28 +114,13 @@ function QuickAddModalContent({
     const selectionsCount = Object.keys(selecciones).length;
 
     if (dimensionsCount > 0 && dimensionsCount === selectionsCount) {
-      // Buscar la variante exacta y agregarla
       const stockDeVariante = variantesArray.find((s) => {
-        const v = s.variante || "";
-        if (
-          parsedVariants.isLegacySplit &&
-          (v.includes("/") || v.includes("-"))
-        ) {
-          const separator = v.includes("/") ? "/" : "-";
-          const parts = v.split(separator).map((p) => p.trim());
-          return Object.entries(selecciones).every(([k, selVal]) => {
-            const idx =
-              k === "Color"
-                ? 0
-                : k === "Talle"
-                  ? 1
-                  : parseInt(k.replace("Opción ", "")) - 1;
-            return parts[idx] === selVal;
-          });
-        }
-        if (parsedVariants.isLegacy) return v.trim() === selecciones["Opción"];
-        return Object.entries(selecciones).every(([k, selVal]) =>
-          v.split("|").includes(`${k}:${selVal}`),
+        const attrs =
+          s.atributos && Object.keys(s.atributos).length > 0
+            ? s.atributos
+            : parseLegacyVariant(s.variante || "");
+        return Object.entries(selecciones).every(
+          ([k, selVal]) => attrs[k] === selVal,
         );
       });
 
@@ -188,9 +147,9 @@ function QuickAddModalContent({
           stockMaximo: stockDeVariante.cantidad,
         });
 
-        // toast.success("Agregado a la cuenta");
-        setIsOpenCart(true); // Abre el carrito lateral
-        onClose(); // Cierra el modal rápido
+        toast.success("Agregado a la cuenta");
+        setIsOpenCart(true);
+        onClose();
       }
     }
   }, [
@@ -204,55 +163,62 @@ function QuickAddModalContent({
     onClose,
   ]);
 
-  return (
-    <DialogContent aria-describedby="select-variant">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <Layers className="w-5 h-5 text-primary" />
-          {producto.nombre}
-        </DialogTitle>
-        <DialogDescription id="select-variant">
-          Selecciona la variante a vender.
-        </DialogDescription>
-      </DialogHeader>
-      <div className="p-5 space-y-6">
-        {Object.entries(parsedVariants.properties).map(([propName, values]) => (
-          <div key={propName}>
-            <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">
-              {propName}
-            </h3>
-            <div className="grid grid-cols-3 gap-2">
-              {values.map((val) => {
-                const isSelected = selecciones[propName] === val;
-                const hasStock = isOptionAvailable(propName, val);
+  if (!producto) return null;
 
-                return (
-                  <button
-                    key={val}
-                    type="button"
-                    disabled={!hasStock}
-                    onClick={() =>
-                      setSelecciones((prev) => ({
-                        ...prev,
-                        [propName]: val,
-                      }))
-                    }
-                    className={`h-12 rounded-xl text-xs font-bold uppercase transition-all border ${
-                      isSelected
-                        ? "border-primary bg-primary text-primary-foreground ring-2 ring-primary/20 cursor-pointer scale-[0.98]"
-                        : hasStock
-                          ? "border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted cursor-pointer"
-                          : "border-border/30 bg-muted/30 text-muted-foreground opacity-50 cursor-not-allowed line-through decoration-muted-foreground/40"
-                    }`}
-                  >
-                    {val}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    </DialogContent>
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-card border-border">
+        <DialogHeader className="p-5 pb-3 border-b border-border bg-muted/20">
+          <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+            <Layers className="w-5 h-5 text-primary" />
+            {producto.nombre}
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Selecciona la variante a vender.
+          </p>
+        </DialogHeader>
+
+        <div className="p-5 space-y-6">
+          {Object.entries(parsedVariants.properties).map(
+            ([propName, values]) => (
+              <div key={propName}>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                  {propName}
+                </h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {values.map((val) => {
+                    const isSelected = selecciones[propName] === val;
+                    const hasStock = isOptionAvailable(propName, val);
+
+                    return (
+                      <button
+                        key={val}
+                        type="button"
+                        disabled={!hasStock}
+                        onClick={() =>
+                          setSelecciones((prev) => ({
+                            ...prev,
+                            [propName]: val,
+                          }))
+                        }
+                        className={`h-12 rounded-xl text-xs font-bold uppercase transition-all border ${
+                          isSelected
+                            ? "border-primary bg-primary text-primary-foreground ring-2 ring-primary/20 cursor-pointer scale-[0.98]"
+                            : hasStock
+                              ? "border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted cursor-pointer"
+                              : "border-border/30 bg-muted/30 text-muted-foreground opacity-50 cursor-not-allowed line-through decoration-muted-foreground/40"
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ),
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
