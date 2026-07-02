@@ -101,6 +101,9 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
   const [isPending, startTransition] = useTransition();
   const categorias = useActiveCategories();
   const [orden, setOrden] = useState<string>("nombre_asc");
+  const [productoEnEdicion, setProductoEnEdicion] = useState<Producto | null>(
+    null,
+  );
   const selectedIdsArray = useMemo(() => Array.from(selectedIds), [selectedIds]);
 
   // --- LÓGICA DE SELECCIÓN MASIVA ---
@@ -236,6 +239,17 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
 
   return (
     <div className="space-y-4 ">
+      {productoEnEdicion && (
+        <ProductEditDetailSheet
+          producto={productoEnEdicion}
+          open
+          onOpenChange={(open) => {
+            if (!open) setProductoEnEdicion(null);
+          }}
+          hideTrigger
+        />
+      )}
+
       {/* ACCIONES MASIVAS: Barra flotante contextual */}
       {selectedIds.size > 0 && (
         <div className="fixed inset-x-3 bottom-4 z-50 mx-auto flex max-w-4xl flex-col gap-3 rounded-xl border border-border bg-background/95 p-3 shadow-lg ring-1 ring-foreground/5 backdrop-blur animate-in fade-in slide-in-from-bottom-4 sm:inset-x-6 sm:flex-row sm:items-center sm:justify-between">
@@ -586,15 +600,14 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                               className="w-52 p-1.5 rounded-xl border-border/60 shadow-md bg-card z-40"
                             >
                               <div className="flex flex-col gap-0.5">
-                                <ProductEditDetailSheet producto={producto}>
-                                  <Button
-                                    variant="ghost"
-                                    className="w-full justify-start h-9 px-2 text-sm font-medium cursor-pointer rounded-lg hover:bg-muted transition-colors"
-                                  >
-                                    <Edit2 className="w-4 h-4 mr-2.5 text-emerald-600" />
-                                    Editar producto
-                                  </Button>
-                                </ProductEditDetailSheet>
+                                <Button
+                                  variant="ghost"
+                                  className="w-full justify-start h-9 px-2 text-sm font-medium cursor-pointer rounded-lg hover:bg-muted transition-colors"
+                                  onClick={() => setProductoEnEdicion(producto)}
+                                >
+                                  <Edit2 className="w-4 h-4 mr-2.5 text-emerald-600" />
+                                  Editar producto
+                                </Button>
 
                                 <BajaModal producto={producto}>
                                   <Button

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { ChevronRight, ImagePlus } from "lucide-react";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -15,12 +16,28 @@ export function ProductMediaSection({
   existingImages = [],
   inputId = "imagenes",
 }: ProductMediaSectionProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePickImages = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFilesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      onArchivosChange(Array.from(event.target.files));
+    }
+  };
+
   return (
     <div className="space-y-2">
       <Label className="text-sm font-semibold text-foreground">Media</Label>
-      <Label
-        htmlFor={inputId}
-        className="flex items-center justify-between p-4 rounded-xl cursor-pointer hover:bg-muted/50 transition-colors border border-dashed border-border/80 group"
+      <button
+        type="button"
+        onClick={handlePickImages}
+        className="flex w-full items-center justify-between p-4 text-left rounded-xl cursor-pointer hover:bg-muted/50 transition-colors border border-dashed border-border/80 group"
       >
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-muted/50 rounded-lg flex items-center justify-center group-hover:bg-muted transition-colors">
@@ -36,17 +53,16 @@ export function ProductMediaSection({
           </div>
         </div>
         <ChevronRight className="w-5 h-5 text-muted-foreground" />
-      </Label>
+      </button>
       <Input
+        ref={fileInputRef}
         id={inputId}
         name="imagenes"
         type="file"
         multiple
         accept="image/png, image/jpeg, image/webp, image/heic"
         className="hidden"
-        onChange={(e) =>
-          e.target.files && onArchivosChange(Array.from(e.target.files))
-        }
+        onChange={handleFilesChange}
       />
 
       {(existingImages.length > 0 || archivos.length > 0) && (

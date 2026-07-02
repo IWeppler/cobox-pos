@@ -46,6 +46,9 @@ type ProductEditDetailSheetProps = {
   producto: EditableProducto;
   userRole?: string;
   children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 };
 
 function buildVariantKey(values: Record<string, string>) {
@@ -95,7 +98,9 @@ function getLegacyVariants(
 }
 
 function valsFromParts(parts: string[]) {
-  return parts.map((value, index) => [`Propiedad ${index + 1}`, value] as const);
+  return parts.map(
+    (value, index) => [`Propiedad ${index + 1}`, value] as const,
+  );
 }
 
 function getLegacyOptions(variants: VarianteInput[]): Opcion[] {
@@ -177,6 +182,9 @@ function getCustomTypeMode(opciones: Opcion[]) {
 export function ProductEditDetailSheet({
   producto,
   children,
+  open,
+  onOpenChange,
+  hideTrigger = false,
 }: Readonly<ProductEditDetailSheetProps>) {
   const isSimpleProduct = isSingleLegacyVariant(producto);
   const initialVariants = useMemo(
@@ -188,7 +196,7 @@ export function ProductEditDetailSheet({
     [initialVariants],
   );
 
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [archivos, setArchivos] = useState<File[]>([]);
   const [isCompressing, setIsCompressing] = useState(false);
   const [categorias, setCategorias] = useState<CategoriaOption[]>([]);
@@ -213,6 +221,8 @@ export function ProductEditDetailSheet({
     () => getCustomTypeMode(initialOptions),
   );
   const [focusedOptionId, setFocusedOptionId] = useState<string | null>(null);
+  const isOpen = open ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
 
   useEffect(() => {
     const fetchCats = async () => {
@@ -254,7 +264,7 @@ export function ProductEditDetailSheet({
   };
 
   const handleOpenChange = (open: boolean) => {
-    setIsOpen(open);
+    setOpen(open);
     if (!open) resetFormState();
   };
 
@@ -307,7 +317,9 @@ export function ProductEditDetailSheet({
         opcion.id === id
           ? {
               ...opcion,
-              valores: opcion.valores.filter((valor) => valor !== valueToRemove),
+              valores: opcion.valores.filter(
+                (valor) => valor !== valueToRemove,
+              ),
             }
           : opcion,
       ),
@@ -328,7 +340,9 @@ export function ProductEditDetailSheet({
 
   const getSuggestions = (nombre: string, currentValues: string[]) => {
     if (nombre === "Color") {
-      return PREDEFINED_COLORS.filter((color) => !currentValues.includes(color));
+      return PREDEFINED_COLORS.filter(
+        (color) => !currentValues.includes(color),
+      );
     }
     if (nombre === "Talle") {
       return PREDEFINED_SIZES.filter((size) => !currentValues.includes(size));
@@ -392,14 +406,19 @@ export function ProductEditDetailSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={handleOpenChange}>
-      <SheetTrigger asChild>
-        {children ?? <Button variant="outline">Editar producto</Button>}
-      </SheetTrigger>
+      {!hideTrigger && (
+        <SheetTrigger asChild>
+          {children ?? <Button variant="outline">Editar producto</Button>}
+        </SheetTrigger>
+      )}
 
       <SheetContent
         side="right"
         size="wide"
         className="w-full sm:w-3xl! p-0 flex flex-col h-dvh bg-card border-l border-border"
+        onInteractOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
       >
         <SheetHeader className="px-8 py-5 border-b border-border bg-card shrink-0 flex-row items-center justify-between shadow-none z-10 space-y-0">
           <div className="flex items-center gap-4">

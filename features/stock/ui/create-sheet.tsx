@@ -35,6 +35,9 @@ export function CrearProductoSheet() {
           side="right"
           size="wide"
           className="w-full sm:w-3xl! p-0 flex flex-col h-dvh bg-card border-l border-border"
+          onInteractOutside={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onFocusOutside={(event) => event.preventDefault()}
         >
           <SheetHeader className="px-8 py-5 border-b border-border bg-card shrink-0 flex-row items-center justify-between shadow-none z-10 space-y-0">
             <div className="flex items-center gap-4">
