@@ -5,8 +5,35 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { ItemResuelto } from "@/entities/compras/types";
 import { slugify } from "@/shared/utils/slugify";
+import { parseAttributeSegment } from "@/features/stock/utils/parse-legacy-variant";
 
 type SupabaseDb = ReturnType<typeof createClient>;
+
+const NOMBRES_VARIANTE_UNICA = new Set(["unico", "único"]);
+
+/**
+ * Convierte el string crudo de variante (ej. "TALLE: S / COLOR: NEGRO") en
+ * un objeto estructurado { Talle: "S", Color: "Negro" } para guardar en
+ * `producto_variantes.atributos`, en vez de dejarlo vacío ({}).
+ */
+function parseVarianteAtributos(variante: string): Record<string, string> {
+  const normalizado = variante.trim().toLowerCase();
+  if (!normalizado || NOMBRES_VARIANTE_UNICA.has(normalizado)) {
+    return {};
+  }
+
+  const segmentos = variante.split(" / ");
+  const atributos: Record<string, string> = {};
+
+  for (const segmento of segmentos) {
+    const parsed = parseAttributeSegment(segmento);
+    if (parsed) {
+      atributos[parsed.nombre] = parsed.valor;
+    }
+  }
+
+  return atributos;
+}
 
 type SupabaseActionError = {
   message?: string;
@@ -193,6 +220,7 @@ async function actualizarStock(item: ItemResuelto, supabase: SupabaseDb) {
   if (!item.producto_id) return;
 
   const variante = item.variante_match || item.raw_variante || "Unico";
+  const atributos = parseVarianteAtributos(variante);
 
   const { data: varianteExistente, error: varianteSelectError } = await supabase
     .from("producto_variantes")
@@ -209,7 +237,10 @@ async function actualizarStock(item: ItemResuelto, supabase: SupabaseDb) {
   if (varianteExistente) {
     const { error: varianteUpdateError } = await supabase
       .from("producto_variantes")
-      .update({ stock: Number(varianteExistente.stock || 0) + item.cantidad })
+      .update({
+        stock: Number(varianteExistente.stock || 0) + item.cantidad,
+        atributos,
+      })
       .eq("id", varianteExistente.id);
 
     throwIfSupabaseError(
@@ -222,7 +253,7 @@ async function actualizarStock(item: ItemResuelto, supabase: SupabaseDb) {
       .insert({
         producto_id: item.producto_id,
         nombre_display: variante,
-        atributos: {},
+        atributos,
         precio: null,
         costo: null,
         stock: item.cantidad,

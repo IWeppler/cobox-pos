@@ -62,7 +62,15 @@ export async function editarProductoAction(
   }
 
   // 2. Actualizar Cabecera de Producto
-  const updateData: any = {
+  const updateData: {
+    nombre: string;
+    categoria_id: string | null;
+    precio: number;
+    precio_costo: number;
+    descripcion: string;
+    publicado: boolean;
+    imagen_url?: string;
+  } = {
     nombre,
     categoria_id: categoria_id || null,
     precio,
@@ -79,7 +87,7 @@ export async function editarProductoAction(
     .eq("id", id);
 
   if (errorProducto) {
-    console.error("Error BD:", errorProducto);
+    console.error("[EDIT PRODUCT ERROR]", errorProducto);
     return {
       error: "Hubo un error al actualizar el producto base.",
       success: false,
@@ -87,149 +95,246 @@ export async function editarProductoAction(
   }
 
   // 3. Procesar Variantes Editadas
-  // Estrategia: Borramos todo lo viejo de PV y PVV y reinsertamos lo que mande el form.
-  // Nota: En un sistema gigante esto podría romper históricos si se borran IDs.
-  // Para el MVP y simplificar, asumimos que el usuario edita la grilla final.
+  try {
+    if (!tieneVariantes) {
+      const { error: delVarError } = await supabase
+        .from("producto_variantes")
+        .delete()
+        .eq("producto_id", id);
+      if (delVarError) throw delVarError;
 
-  if (!tieneVariantes) {
-    // Borramos todas las variantes dinámicas que tuviera antes
-    await supabase.from("producto_variantes").delete().eq("producto_id", id);
+      const { error: insVarError } = await supabase
+        .from("producto_variantes")
+        .insert({
+          producto_id: id,
+          nombre_display: "Único",
+          stock: stockBase,
+        });
+      if (insVarError) throw insVarError;
 
-    // Insertamos/Upsertamos variante Unica
-    await supabase.from("producto_variantes").insert({
-      producto_id: id,
-      nombre_display: "Único",
-      stock: stockBase,
-    });
+      // Legacy support
+      const { error: delStockError } = await supabase
+        .from("productos_stock")
+        .delete()
+        .eq("producto_id", id);
+      if (delStockError) throw delStockError;
 
-    // Legacy support
-    await supabase.from("productos_stock").delete().eq("producto_id", id);
-    await supabase
-      .from("productos_stock")
-      .insert({ producto_id: id, variante: "Único", cantidad: stockBase });
-  } else {
-    // Es producto con opciones dinámicas
-    const opcionesStr = formData.get("opciones") as string;
-    const variantesStr = formData.get("variantes") as string;
+      const { error: insStockError } = await supabase
+        .from("productos_stock")
+        .insert({ producto_id: id, variante: "Único", cantidad: stockBase });
+      if (insStockError) throw insStockError;
+    } else {
+      // Es producto con opciones dinámicas
+      const opcionesStr = formData.get("opciones") as string;
+      const variantesStr = formData.get("variantes") as string;
 
-    if (opcionesStr && variantesStr) {
-      const opciones = JSON.parse(opcionesStr) as {
-        nombre: string;
-        valores: string[];
-      }[];
-      const variantes = JSON.parse(variantesStr) as any[];
+      if (opcionesStr && variantesStr) {
+        const opcionesRaw = JSON.parse(opcionesStr) as {
+          nombre: string;
+          valores: string[];
+        }[];
+        const variantesRaw = JSON.parse(variantesStr) as {
+          valores: Record<string, string>;
+          precio?: string;
+          precio_costo?: string;
+          stock?: string;
+          sku?: string;
+        }[];
 
-      const attrMap: Record<string, string> = {};
-      const valMap: Record<string, Record<string, string>> = {};
+        // Descartamos propiedades/valores vacíos antes de tocar la base:
+        // un nombre en blanco generaría una fila de atributo con slug ""
+        // que quedaría reciclándose entre productos distintos.
+        const opciones = opcionesRaw
+          .map((op) => ({
+            nombre: op.nombre?.trim(),
+            valores: (op.valores ?? [])
+              .map((v) => v?.trim())
+              .filter((v): v is string => Boolean(v)),
+          }))
+          .filter(
+            (op): op is { nombre: string; valores: string[] } =>
+              Boolean(op.nombre) && op.valores.length > 0,
+          );
 
-      // A. Crear o reciclar Opciones
-      for (const op of opciones) {
-        const slugAttr = slugify(op.nombre);
-        let { data: attr } = await supabase
-          .from("atributos")
-          .select("id")
-          .eq("slug", slugAttr)
-          .single();
-        if (!attr) {
-          const { data: newAttr } = await supabase
-            .from("atributos")
+        const variantes = variantesRaw.filter(
+          (v) =>
+            v.valores &&
+            Object.entries(v.valores).some(
+              ([k, val]) => k.trim() && val?.trim(),
+            ),
+        );
+
+        if (opciones.length === 0 || variantes.length === 0) {
+          return {
+            error:
+              "Las variantes no tienen propiedades o valores válidos. Revisa la grilla antes de guardar.",
+            success: false,
+          };
+        }
+
+        const attrMap: Record<string, string> = {};
+        const valMap: Record<string, Record<string, string>> = {};
+
+        // A. Crear o reciclar Opciones
+        for (const op of opciones) {
+          const slugAttr = slugify(op.nombre);
+          const { data: attrSelectData, error: attrSelectError } =
+            await supabase
+              .from("atributos")
+              .select("id")
+              .eq("slug", slugAttr)
+              .single();
+          if (attrSelectError && attrSelectError.code !== "PGRST116") {
+            throw attrSelectError;
+          }
+          let attr = attrSelectData;
+          if (!attr) {
+            const { data: newAttr, error: attrInsertError } = await supabase
+              .from("atributos")
+              .insert({
+                nombre: op.nombre,
+                slug: slugAttr,
+                tipo: "TEXT",
+                activo: true,
+              })
+              .select("id")
+              .single();
+            if (attrInsertError) throw attrInsertError;
+            attr = newAttr;
+          }
+          if (attr) {
+            attrMap[op.nombre] = attr.id;
+            valMap[op.nombre] = {};
+            for (const v of op.valores) {
+              const slugVal = slugify(v);
+              const { data: valSelectData, error: valSelectError } =
+                await supabase
+                  .from("atributo_valores")
+                  .select("id")
+                  .eq("atributo_id", attr.id)
+                  .eq("slug", slugVal)
+                  .single();
+              if (valSelectError && valSelectError.code !== "PGRST116") {
+                throw valSelectError;
+              }
+              let valData = valSelectData;
+              if (!valData) {
+                const { data: newVal, error: valInsertError } = await supabase
+                  .from("atributo_valores")
+                  .insert({
+                    atributo_id: attr.id,
+                    valor: v,
+                    slug: slugVal,
+                    activo: true,
+                  })
+                  .select("id")
+                  .single();
+                if (valInsertError) throw valInsertError;
+                valData = newVal;
+              }
+              if (valData) valMap[op.nombre][v] = valData.id;
+            }
+          }
+        }
+
+        // Borramos variantes viejas para refrescar la grilla limpia
+        const { error: delVarError } = await supabase
+          .from("producto_variantes")
+          .delete()
+          .eq("producto_id", id);
+        if (delVarError) throw delVarError;
+
+        const { error: delStockError } = await supabase
+          .from("productos_stock")
+          .delete()
+          .eq("producto_id", id); // legacy
+        if (delStockError) throw delStockError;
+
+        // B. Guardar las Variantes nuevas
+        for (const v of variantes) {
+          const nombreDisplay = opciones
+            .map((op) => v.valores[op.nombre])
+            .filter(Boolean)
+            .join(" / ");
+
+          const vPrecio = v.precio ? Number.parseFloat(v.precio) : null;
+          const vCosto = v.precio_costo
+            ? Number.parseFloat(v.precio_costo)
+            : null;
+          const vStock = Number.parseInt(v.stock || "0");
+
+          const { data: varData, error: varInsertError } = await supabase
+            .from("producto_variantes")
             .insert({
-              nombre: op.nombre,
-              slug: slugAttr,
-              tipo: "TEXT",
-              activo: true,
+              producto_id: id,
+              nombre_display: nombreDisplay,
+              atributos: v.valores,
+              precio: vPrecio,
+              costo: vCosto,
+              stock: vStock,
+              sku: v.sku || null,
             })
             .select("id")
             .single();
-          attr = newAttr;
-        }
-        if (attr) {
-          attrMap[op.nombre] = attr.id;
-          valMap[op.nombre] = {};
-          for (const v of op.valores) {
-            const slugVal = slugify(v);
-            let { data: valData } = await supabase
-              .from("atributo_valores")
-              .select("id")
-              .eq("atributo_id", attr.id)
-              .eq("slug", slugVal)
-              .single();
-            if (!valData) {
-              const { data: newVal } = await supabase
-                .from("atributo_valores")
-                .insert({
-                  atributo_id: attr.id,
-                  valor: v,
-                  slug: slugVal,
-                  activo: true,
-                })
-                .select("id")
-                .single();
-              valData = newVal;
+          if (varInsertError) throw varInsertError;
+
+          if (varData) {
+            const varValores = [];
+            for (const [opNombre, opValor] of Object.entries(v.valores)) {
+              const aId = attrMap[opNombre];
+              const avId = valMap[opNombre]?.[opValor as string];
+              if (aId && avId) {
+                varValores.push({
+                  variante_id: varData.id,
+                  atributo_id: aId,
+                  atributo_valor_id: avId,
+                });
+              }
             }
-            if (valData) valMap[op.nombre][v] = valData.id;
-          }
-        }
-      }
-
-      // Borramos variantes viejas para refrescar la grilla limpia
-      await supabase.from("producto_variantes").delete().eq("producto_id", id);
-      await supabase.from("productos_stock").delete().eq("producto_id", id); // legacy
-
-      // B. Guardar las Variantes nuevas
-      for (const v of variantes) {
-        const nombreDisplay = opciones
-          .map((op) => v.valores[op.nombre])
-          .filter(Boolean)
-          .join(" / ");
-
-        const vPrecio = v.precio ? Number.parseFloat(v.precio) : null;
-        const vCosto = v.precio_costo
-          ? Number.parseFloat(v.precio_costo)
-          : null;
-        const vStock = Number.parseInt(v.stock || "0");
-
-        const { data: varData } = await supabase
-          .from("producto_variantes")
-          .insert({
-            producto_id: id,
-            nombre_display: nombreDisplay,
-            atributos: v.valores,
-            precio: vPrecio,
-            costo: vCosto,
-            stock: vStock,
-            sku: v.sku || null,
-          })
-          .select("id")
-          .single();
-
-        if (varData) {
-          const varValores = [];
-          for (const [opNombre, opValor] of Object.entries(v.valores)) {
-            const aId = attrMap[opNombre];
-            const avId = valMap[opNombre]?.[opValor as string];
-            if (aId && avId) {
-              varValores.push({
-                variante_id: varData.id,
-                atributo_id: aId,
-                atributo_valor_id: avId,
-              });
+            if (varValores.length > 0) {
+              const { error: varValoresError } = await supabase
+                .from("producto_variante_valores")
+                .insert(varValores);
+              if (varValoresError) throw varValoresError;
             }
           }
-          if (varValores.length > 0)
-            await supabase.from("producto_variante_valores").insert(varValores);
-        }
 
-        // Legacy support
-        await supabase
-          .from("productos_stock")
-          .insert({
-            producto_id: id,
-            variante: nombreDisplay,
-            cantidad: vStock,
-          });
+          // Legacy support
+          const { error: stockInsertError } = await supabase
+            .from("productos_stock")
+            .insert({
+              producto_id: id,
+              variante: nombreDisplay,
+              cantidad: vStock,
+            });
+          if (stockInsertError) throw stockInsertError;
+        }
       }
     }
+  } catch (error) {
+    console.error("[EDIT PRODUCT ERROR]", error);
+
+    const pgError = error as { code?: string; message?: string };
+
+    if (pgError?.code === "42501") {
+      return {
+        error:
+          "No tenés permisos para guardar estos cambios (política de seguridad RLS).",
+        success: false,
+      };
+    }
+    if (pgError?.code === "23503") {
+      return {
+        error:
+          "Alguno de los datos hace referencia a un registro que ya no existe (violación de clave foránea).",
+        success: false,
+      };
+    }
+
+    return {
+      error: "Hubo un error al guardar las variantes del producto.",
+      success: false,
+    };
   }
 
   revalidatePath("/stock");

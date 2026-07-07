@@ -30,6 +30,12 @@ import type {
   VarianteInput,
   VariantDataState,
 } from "../types";
+import {
+  buildVariantKey,
+  isSingleVariantProduct,
+  parseLegacyVariant,
+} from "../utils/parse-legacy-variant";
+import { findDuplicatePropertyNames } from "../utils/validate-opciones";
 import { CreateProductFooter } from "./create-product/create-product-footer";
 import { ProductBasicInfoSection } from "./create-product/product-basic-info-section";
 import { ProductCategorySection } from "./create-product/product-category-section";
@@ -51,74 +57,6 @@ type ProductEditDetailSheetProps = {
   hideTrigger?: boolean;
 };
 
-function buildVariantKey(values: Record<string, string>) {
-  return Object.entries(values)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}:${value}`)
-    .join("|");
-}
-
-function isSingleLegacyVariant(producto: EditableProducto) {
-  const variantName = producto.stock?.[0]?.variante;
-  return (
-    producto.stock?.length === 1 &&
-    (variantName === "Único" || variantName === "Ãšnico")
-  );
-}
-
-function getLegacyVariants(
-  producto: EditableProducto,
-  isSimpleProduct: boolean,
-): VarianteInput[] {
-  if (!producto.stock || producto.stock.length === 0 || isSimpleProduct) {
-    return [];
-  }
-
-  return producto.stock.map((stockItem) => {
-    const parts = stockItem.variante.split(" / ");
-    const valores: Record<string, string> = {};
-
-    if (parts.length > 1) {
-      valsFromParts(parts).forEach(([key, value]) => {
-        valores[key] = value;
-      });
-    } else {
-      valores.Variante = parts[0];
-    }
-
-    return {
-      key: buildVariantKey(valores) || stockItem.variante,
-      valores,
-      stock: stockItem.cantidad.toString(),
-      precio: "",
-      precio_costo: "",
-      sku: "",
-    };
-  });
-}
-
-function valsFromParts(parts: string[]) {
-  return parts.map(
-    (value, index) => [`Propiedad ${index + 1}`, value] as const,
-  );
-}
-
-function getLegacyOptions(variants: VarianteInput[]): Opcion[] {
-  if (variants.length === 0) return [];
-
-  return Object.keys(variants[0].valores).map((propName) => {
-    const uniqueVals = Array.from(
-      new Set(variants.map((variant) => variant.valores[propName])),
-    );
-
-    return {
-      id: crypto.randomUUID(),
-      nombre: propName,
-      valores: uniqueVals,
-    };
-  });
-}
-
 function buildVariantsFromOptions(
   opciones: Opcion[],
   currentVariants: VarianteInput[],
@@ -129,34 +67,46 @@ function buildVariantsFromOptions(
 
   if (opcionesValidas.length === 0) return currentVariants;
 
-  let results: Record<string, string>[] = [{}];
+  let combinaciones: string[][] = [[]];
   for (const opcion of opcionesValidas) {
-    const nextResults: Record<string, string>[] = [];
-    for (const res of results) {
+    const nextCombinaciones: string[][] = [];
+    for (const combo of combinaciones) {
       for (const val of opcion.valores) {
-        nextResults.push({ ...res, [opcion.nombre]: val });
+        nextCombinaciones.push([...combo, val]);
       }
     }
-    results = nextResults;
+    combinaciones = nextCombinaciones;
   }
 
-  return results.map((res) => {
-    const key = buildVariantKey(res);
-    const legacyName = Object.values(res).join(" / ");
-    const existente = currentVariants.find(
-      (variant) => variant.key === key || variant.key === legacyName,
-    );
+  return combinaciones.map((valoresPosicionales) => {
+    const valores: Record<string, string> = {};
+    opcionesValidas.forEach((opcion, i) => {
+      valores[opcion.nombre] = valoresPosicionales[i];
+    });
 
-    return (
-      existente || {
-        key,
-        valores: res,
-        stock: "",
-        precio: "",
-        precio_costo: "",
-        sku: "",
-      }
-    );
+    const key = buildVariantKey(valores);
+    // Los valores posicionales son estables mientras se renombra una propiedad
+    // (el nombre cambia en cada tecla, pero el orden/valores de las opciones no).
+    const signature = valoresPosicionales.join("|");
+    const existente = currentVariants.find((variant) => {
+      if (variant.key === key) return true;
+      const variantValores = Object.values(variant.valores);
+      return (
+        variantValores.length === valoresPosicionales.length &&
+        variantValores.join("|") === signature
+      );
+    });
+
+    return existente
+      ? { ...existente, key, valores }
+      : {
+          key,
+          valores,
+          stock: "",
+          precio: "",
+          precio_costo: "",
+          sku: "",
+        };
   });
 }
 
@@ -186,14 +136,13 @@ export function ProductEditDetailSheet({
   onOpenChange,
   hideTrigger = false,
 }: Readonly<ProductEditDetailSheetProps>) {
-  const isSimpleProduct = isSingleLegacyVariant(producto);
-  const initialVariants = useMemo(
-    () => getLegacyVariants(producto, isSimpleProduct),
+  const isSimpleProduct = isSingleVariantProduct(producto);
+  // Fuente única de verdad para reconstruir opciones/variantes al cargar:
+  // prioriza producto_variantes (nombres de atributo reales) y limpia
+  // formatos legacy tipo "TALLE: L" antes de repartirlos en el form.
+  const parsedProducto = useMemo(
+    () => parseLegacyVariant(producto, isSimpleProduct),
     [producto, isSimpleProduct],
-  );
-  const initialOptions = useMemo(
-    () => getLegacyOptions(initialVariants),
-    [initialVariants],
   );
 
   const [internalOpen, setInternalOpen] = useState(false);
@@ -215,14 +164,21 @@ export function ProductEditDetailSheet({
   const [precioVenta, setPrecioVenta] = useState(
     producto.precio?.toString() || "",
   );
-  const [opciones, setOpciones] = useState<Opcion[]>(initialOptions);
-  const [variantes, setVariantes] = useState<VarianteInput[]>(initialVariants);
+  const [opciones, setOpciones] = useState<Opcion[]>(parsedProducto.opciones);
+  const [variantes, setVariantes] = useState<VarianteInput[]>(
+    parsedProducto.variantes,
+  );
   const [customTypeMode, setCustomTypeMode] = useState<Record<string, boolean>>(
-    () => getCustomTypeMode(initialOptions),
+    () => getCustomTypeMode(parsedProducto.opciones),
   );
   const [focusedOptionId, setFocusedOptionId] = useState<string | null>(null);
   const isOpen = open ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
+
+  const duplicatePropertyNames = useMemo(
+    () => findDuplicatePropertyNames(opciones),
+    [opciones],
+  );
 
   useEffect(() => {
     const fetchCats = async () => {
@@ -257,9 +213,9 @@ export function ProductEditDetailSheet({
     setShowVariants(!isSimpleProduct);
     setPrecioCosto(producto.precio_costo?.toString() || "");
     setPrecioVenta(producto.precio?.toString() || "");
-    setOpciones(initialOptions);
-    setVariantes(initialVariants);
-    setCustomTypeMode(getCustomTypeMode(initialOptions));
+    setOpciones(parsedProducto.opciones);
+    setVariantes(parsedProducto.variantes);
+    setCustomTypeMode(getCustomTypeMode(parsedProducto.opciones));
     setFocusedOptionId(null);
   };
 
@@ -391,6 +347,11 @@ export function ProductEditDetailSheet({
       return;
     }
 
+    if (showVariants && duplicatePropertyNames.size > 0) {
+      toast.error("Resolvé los nombres de propiedad duplicados antes de guardar.");
+      return;
+    }
+
     if (archivos.length > 0) {
       setIsCompressing(true);
       formData.delete("imagenes");
@@ -503,6 +464,7 @@ export function ProductEditDetailSheet({
               setFocusedOptionId={setFocusedOptionId}
               precioVenta={precioVenta}
               variantes={variantes}
+              duplicatePropertyNames={duplicatePropertyNames}
               handleAddOption={handleAddOption}
               handleRemoveOption={handleRemoveOption}
               handleUpdateOptionName={handleUpdateOptionName}
@@ -522,6 +484,11 @@ export function ProductEditDetailSheet({
           formId="edit-product-form"
           cancelLabel="Descartar cambios"
           idleLabel="Guardar Cambios"
+          blockedReason={
+            duplicatePropertyNames.size > 0
+              ? "Resolvé los nombres de propiedad duplicados antes de guardar."
+              : null
+          }
         />
       </SheetContent>
     </Sheet>

@@ -105,6 +105,7 @@ export function CrearProductoSheet() {
                 setFocusedOptionId={form.setFocusedOptionId}
                 precioVenta={form.precioVenta}
                 variantes={form.variantes}
+                duplicatePropertyNames={form.duplicatePropertyNames}
                 handleAddOption={form.handleAddOption}
                 handleRemoveOption={form.handleRemoveOption}
                 handleUpdateOptionName={form.handleUpdateOptionName}
@@ -112,6 +113,13 @@ export function CrearProductoSheet() {
                 handleRemoveOptionValue={form.handleRemoveOptionValue}
                 handleVarChange={form.handleVarChange}
                 getSuggestions={form.getSuggestions}
+                baseVariants={form.baseVariants}
+                selectedCombinations={form.selectedCombinations}
+                onToggleCombination={form.handleToggleCombination}
+                onBulkSetSelection={form.handleBulkSetSelection}
+                onInvertSelection={form.handleInvertSelection}
+                pivotSelections={form.pivotSelections}
+                onPivotChange={form.handlePivotChange}
               />
             </form>
           </div>
@@ -120,6 +128,11 @@ export function CrearProductoSheet() {
             isPending={form.isPending}
             isCompressing={form.isCompressing}
             onCancel={() => form.handleOpenChange(false)}
+            blockedReason={
+              form.duplicatePropertyNames.size > 0
+                ? "Resolvé los nombres de propiedad duplicados antes de guardar."
+                : null
+            }
           />
         </SheetContent>
       </Sheet>

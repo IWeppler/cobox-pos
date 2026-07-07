@@ -53,6 +53,7 @@ import Link from "next/link";
 import { ItemResuelto, OrdenCompra } from "@/entities/compras/types";
 import { Producto } from "@/entities/productos/types";
 import { createClient } from "@/shared/config/supabase/client";
+import { parseAttributeSegment } from "@/features/stock/utils/parse-legacy-variant";
 
 interface MergeTableProps {
   orden: OrdenCompra;
@@ -541,20 +542,47 @@ export function MergeTable({
                       </p>
                       {/* Sub-bloques de variantes integrados */}
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {group.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-1.5 bg-background border border-border/80 px-2 py-1 rounded text-xs text-muted-foreground"
-                          >
-                            <Layers className="w-3 h-3 opacity-60" />
-                            <span className="truncate max-w-[150px]">
-                              {item.raw_variante}
-                            </span>
-                            <span className="font-bold text-emerald-600 bg-emerald-50 px-1 rounded ml-1">
-                              +{item.cantidad}
-                            </span>
-                          </div>
-                        ))}
+                        {group.map((item, idx) => {
+                          const segmentosDetectados = item.raw_variante
+                            .split(" / ")
+                            .map((segmento) => parseAttributeSegment(segmento))
+                            .filter(
+                              (
+                                segmento,
+                              ): segmento is {
+                                nombre: string;
+                                valor: string;
+                              } => segmento !== null,
+                            );
+
+                          return (
+                            <div key={idx} className="flex flex-col gap-1">
+                              <div className="flex items-center gap-1.5 bg-background border border-border/80 px-2 py-1 rounded text-xs text-muted-foreground">
+                                <Layers className="w-3 h-3 opacity-60" />
+                                <span className="truncate max-w-[150px]">
+                                  {item.raw_variante}
+                                </span>
+                                <span className="font-bold text-emerald-600 bg-emerald-50 px-1 rounded ml-1">
+                                  +{item.cantidad}
+                                </span>
+                              </div>
+                              {segmentosDetectados.length > 0 && (
+                                <div className="flex flex-wrap gap-1 pl-1">
+                                  {segmentosDetectados.map(
+                                    (segmento, segIdx) => (
+                                      <span
+                                        key={`${segmento.nombre}-${segIdx}`}
+                                        className="inline-flex items-center gap-1 bg-muted px-1.5 py-0.5 rounded text-[10px] text-muted-foreground font-semibold border border-border/50"
+                                      >
+                                        {segmento.nombre}: {segmento.valor}
+                                      </span>
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                       <div className="mt-2 text-xs font-semibold text-muted-foreground">
                         Total a ingresar:{" "}

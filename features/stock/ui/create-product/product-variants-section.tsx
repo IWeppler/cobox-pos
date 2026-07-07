@@ -12,7 +12,13 @@ import {
   SelectValue,
 } from "@/shared/ui/select";
 import { PREDEFINED_VARIANTS } from "../../types/constants";
-import type { Opcion, VarianteInput, VariantDataState } from "@/features/stock/types";
+import type {
+  BaseVariant,
+  Opcion,
+  VarianteInput,
+  VariantDataState,
+} from "@/features/stock/types";
+import { VariantSelectionMatrix } from "./variant-selection-matrix";
 
 type ProductVariantsSectionProps = {
   showVariants: boolean;
@@ -25,6 +31,7 @@ type ProductVariantsSectionProps = {
   setFocusedOptionId: (id: string | null) => void;
   precioVenta: string;
   variantes: VarianteInput[];
+  duplicatePropertyNames: Set<string>;
   handleAddOption: () => void;
   handleRemoveOption: (id: string) => void;
   handleUpdateOptionName: (id: string, newName: string) => void;
@@ -37,6 +44,13 @@ type ProductVariantsSectionProps = {
   ) => void;
   getSuggestions: (nombre: string, currentValues: string[]) => string[];
   showAdvancedColumns?: boolean;
+  baseVariants?: BaseVariant[];
+  selectedCombinations?: Record<string, boolean>;
+  onToggleCombination?: (key: string) => void;
+  onBulkSetSelection?: (keys: string[], value: boolean) => void;
+  onInvertSelection?: (keys: string[]) => void;
+  pivotSelections?: Record<string, string>;
+  onPivotChange?: (propName: string, value: string) => void;
 };
 
 export function ProductVariantsSection({
@@ -50,6 +64,7 @@ export function ProductVariantsSection({
   setFocusedOptionId,
   precioVenta,
   variantes,
+  duplicatePropertyNames,
   handleAddOption,
   handleRemoveOption,
   handleUpdateOptionName,
@@ -58,7 +73,38 @@ export function ProductVariantsSection({
   handleVarChange,
   getSuggestions,
   showAdvancedColumns = false,
+  baseVariants,
+  selectedCombinations,
+  onToggleCombination,
+  onBulkSetSelection,
+  onInvertSelection,
+  pivotSelections,
+  onPivotChange,
 }: ProductVariantsSectionProps) {
+  const matrixProps =
+    baseVariants &&
+    selectedCombinations &&
+    onToggleCombination &&
+    onBulkSetSelection &&
+    onInvertSelection &&
+    pivotSelections &&
+    onPivotChange
+      ? {
+          baseVariants,
+          selectedCombinations,
+          onToggleCombination,
+          onBulkSetSelection,
+          onInvertSelection,
+          pivotSelections,
+          onPivotChange,
+        }
+      : null;
+
+  const showMatrix =
+    matrixProps !== null &&
+    matrixProps.baseVariants.length > 0 &&
+    opciones.some((o) => o.nombre.trim() && o.valores.length > 0);
+
   return (
     <div className="bg-card">
       <div
@@ -111,6 +157,10 @@ export function ProductVariantsSection({
             {opciones.map((op) => {
               const isCustom = customTypeMode[op.id];
               const suggestions = getSuggestions(op.nombre, op.valores);
+              const normalizedNombre = op.nombre.trim().toLowerCase();
+              const isDuplicateName =
+                normalizedNombre !== "" &&
+                duplicatePropertyNames.has(normalizedNombre);
 
               return (
                 <div
@@ -140,7 +190,11 @@ export function ProductVariantsSection({
                             onChange={(e) =>
                               handleUpdateOptionName(op.id, e.target.value)
                             }
-                            className="h-10 shadow-none bg-card"
+                            className={`h-10 shadow-none bg-card ${
+                              isDuplicateName
+                                ? "border-destructive focus-visible:ring-destructive"
+                                : ""
+                            }`}
                             autoFocus
                           />
                         ) : (
@@ -162,7 +216,13 @@ export function ProductVariantsSection({
                               }
                             }}
                           >
-                            <SelectTrigger className="h-10 shadow-none bg-card">
+                            <SelectTrigger
+                              className={`h-10 shadow-none bg-card ${
+                                isDuplicateName
+                                  ? "border-destructive focus-visible:ring-destructive"
+                                  : ""
+                              }`}
+                            >
                               <SelectValue placeholder="Seleccionar..." />
                             </SelectTrigger>
                             <SelectContent>
@@ -180,6 +240,11 @@ export function ProductVariantsSection({
                               </SelectItem>
                             </SelectContent>
                           </Select>
+                        )}
+                        {isDuplicateName && (
+                          <p className="text-xs text-destructive">
+                            Ya existe una propiedad con este nombre
+                          </p>
                         )}
                       </div>
                       <div className="space-y-2">
@@ -268,6 +333,10 @@ export function ProductVariantsSection({
             </Button>
           </div>
 
+          {showMatrix && matrixProps && (
+            <VariantSelectionMatrix opciones={opciones} {...matrixProps} />
+          )}
+
           <div className="pt-4 border-t border-border mt-6">
             <Label className="text-sm font-bold mb-3 block">
               Variantes generadas
@@ -285,55 +354,37 @@ export function ProductVariantsSection({
                 </p>
               </div>
             ) : (
-              <div className="border border-border rounded-xl overflow-hidden shadow-none">
-                <table className="w-full text-sm text-left whitespace-nowrap bg-card">
-                  <thead className="bg-sidebar text-muted-foreground text-[10px] uppercase font-bold tracking-widest border-b border-border">
-                    <tr>
-                      <th className="px-4 py-3 w-16">Image</th>
-                      <th className="px-4 py-3">Variante</th>
-                      <th className="px-4 py-3 w-32">Precio ($)</th>
-                      {showAdvancedColumns && (
-                        <th className="px-4 py-3 w-32">Costo ($)</th>
-                      )}
-                      <th className="px-4 py-3 w-28">Stock</th>
-                      {showAdvancedColumns && (
-                        <th className="px-4 py-3 w-32">SKU</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/60">
-                    {variantes.map((v) => (
-                      <tr
-                        key={v.key}
-                        className="hover:bg-muted/5 transition-colors"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="w-8 h-8 rounded bg-[#f4f4f5] border border-border flex items-center justify-center cursor-not-allowed opacity-50">
-                            <ImageIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-foreground">
-                          {Object.values(v.valores).join(" / ")}
-                        </td>
-                        <td className="px-2 py-2">
-                          <div className="relative">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
-                              $
-                            </span>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="any"
-                              placeholder={precioVenta || "0"}
-                              className="h-8 shadow-none pl-6 text-xs bg-transparent"
-                              value={v.precio}
-                              onChange={(e) =>
-                                handleVarChange(v.key, "precio", e.target.value)
-                              }
-                            />
-                          </div>
-                        </td>
+              <div className="border border-border rounded-xl shadow-none">
+                <div className="w-full overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap bg-card">
+                    <thead className="bg-sidebar text-muted-foreground text-[10px] uppercase font-bold tracking-widest border-b border-border">
+                      <tr>
+                        <th className="px-4 py-3 w-16">Image</th>
+                        <th className="px-4 py-3">Variante</th>
+                        <th className="px-4 py-3 w-32">Precio ($)</th>
                         {showAdvancedColumns && (
+                          <th className="px-4 py-3 w-32">Costo ($)</th>
+                        )}
+                        <th className="px-4 py-3 w-28">Stock</th>
+                        {showAdvancedColumns && (
+                          <th className="px-4 py-3 w-32">SKU</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {variantes.map((v) => (
+                        <tr
+                          key={v.key}
+                          className="hover:bg-muted/5 transition-colors"
+                        >
+                          <td className="px-4 py-3">
+                            <div className="w-8 h-8 rounded bg-[#f4f4f5] border border-border flex items-center justify-center cursor-not-allowed opacity-50">
+                              <ImageIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-foreground">
+                            {Object.values(v.valores).join(" / ")}
+                          </td>
                           <td className="px-2 py-2">
                             <div className="relative">
                               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
@@ -343,48 +394,72 @@ export function ProductVariantsSection({
                                 type="number"
                                 min="0"
                                 step="any"
-                                placeholder="Hereda"
+                                placeholder={precioVenta || "0"}
                                 className="h-8 shadow-none pl-6 text-xs bg-transparent"
-                                value={v.precio_costo}
+                                value={v.precio}
                                 onChange={(e) =>
                                   handleVarChange(
                                     v.key,
-                                    "precio_costo",
+                                    "precio",
                                     e.target.value,
                                   )
                                 }
                               />
                             </div>
                           </td>
-                        )}
-                        <td className="px-2 py-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            className="h-8 shadow-none px-2 text-xs bg-transparent"
-                            value={v.stock}
-                            onChange={(e) =>
-                              handleVarChange(v.key, "stock", e.target.value)
-                            }
-                          />
-                        </td>
-                        {showAdvancedColumns && (
+                          {showAdvancedColumns && (
+                            <td className="px-2 py-2">
+                              <div className="relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
+                                  $
+                                </span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  placeholder="Hereda"
+                                  className="h-8 shadow-none pl-6 text-xs bg-transparent"
+                                  value={v.precio_costo}
+                                  onChange={(e) =>
+                                    handleVarChange(
+                                      v.key,
+                                      "precio_costo",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </div>
+                            </td>
+                          )}
                           <td className="px-2 py-2">
                             <Input
-                              placeholder="-"
-                              className="h-8 shadow-none px-2 text-xs bg-transparent uppercase"
-                              value={v.sku}
+                              type="number"
+                              min="0"
+                              placeholder="0"
+                              className="h-8 shadow-none px-2 text-xs bg-transparent"
+                              value={v.stock}
                               onChange={(e) =>
-                                handleVarChange(v.key, "sku", e.target.value)
+                                handleVarChange(v.key, "stock", e.target.value)
                               }
                             />
                           </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          {showAdvancedColumns && (
+                            <td className="px-2 py-2">
+                              <Input
+                                placeholder="-"
+                                className="h-8 shadow-none px-2 text-xs bg-transparent uppercase"
+                                value={v.sku}
+                                onChange={(e) =>
+                                  handleVarChange(v.key, "sku", e.target.value)
+                                }
+                              />
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>

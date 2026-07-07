@@ -8,6 +8,7 @@ type CreateProductFooterProps = {
   formId?: string;
   cancelLabel?: string;
   idleLabel?: string;
+  blockedReason?: string | null;
 };
 
 export function CreateProductFooter({
@@ -17,9 +18,15 @@ export function CreateProductFooter({
   formId = "create-product-form",
   cancelLabel = "Cancelar",
   idleLabel = "Añadir Producto",
+  blockedReason = null,
 }: CreateProductFooterProps) {
+  const isBlocked = Boolean(blockedReason);
+
   return (
-    <div className="shrink-0 border-t border-border bg-card px-8 py-4 flex justify-end gap-3 z-10">
+    <div className="shrink-0 border-t border-border bg-card px-8 py-4 flex items-center justify-end gap-3 z-10">
+      {blockedReason && (
+        <p className="text-xs text-destructive mr-auto">{blockedReason}</p>
+      )}
       <Button
         type="button"
         variant="outline"
@@ -31,7 +38,7 @@ export function CreateProductFooter({
       <Button
         type="submit"
         form={formId}
-        disabled={isPending || isCompressing}
+        disabled={isPending || isCompressing || isBlocked}
       >
         {isCompressing || isPending ? (
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />

@@ -13,7 +13,10 @@ import { createClient } from "@/shared/config/supabase/client";
 import { optimizarImagen } from "@/shared/utils/image-optimizer";
 import { crearProductoAction } from "../actions/create-product";
 import { PREDEFINED_COLORS, PREDEFINED_SIZES } from "../types/constants";
+import { buildVariantKey } from "../utils/parse-legacy-variant";
+import { findDuplicatePropertyNames } from "../utils/validate-opciones";
 import type {
+  BaseVariant,
   CategoriaOption,
   Opcion,
   ProductActionState,
@@ -21,14 +24,7 @@ import type {
   VariantDataState,
 } from "@/features/stock/types";
 
-function buildVariantKey(values: Record<string, string>) {
-  return Object.entries(values)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}:${value}`)
-    .join("|");
-}
-
-function buildCartesianVariants(opciones: Opcion[]) {
+function buildCartesianVariants(opciones: Opcion[]): BaseVariant[] {
   const opcionesValidas = opciones.filter(
     (o) => o.nombre.trim() && o.valores.length > 0,
   );
@@ -75,6 +71,12 @@ export function useCreateProductForm() {
     {},
   );
   const [focusedOptionId, setFocusedOptionId] = useState<string | null>(null);
+  const [selectedCombinations, setSelectedCombinations] = useState<
+    Record<string, boolean>
+  >({});
+  const [pivotSelections, setPivotSelections] = useState<
+    Record<string, string>
+  >({});
 
   useEffect(() => {
     const fetchCats = async () => {
@@ -105,16 +107,34 @@ export function useCreateProductForm() {
     return buildCartesianVariants(opciones);
   }, [opciones, showVariants]);
 
+  const opcionesValidasCount = useMemo(
+    () => opciones.filter((o) => o.nombre.trim() && o.valores.length > 0).length,
+    [opciones],
+  );
+
+  // Con una sola propiedad activa, todas las combinaciones arrancan
+  // seleccionadas (paridad con el comportamiento anterior). Con 2 o más,
+  // el vendedor elige a mano en la matriz. No se escribe nada en
+  // selectedCombinations hasta que el usuario interactúa.
   const variantes: VarianteInput[] = useMemo(() => {
-    return baseVariants.map((b) => ({
-      key: b.key,
-      valores: b.valores,
-      stock: variantData[b.key]?.stock || "",
-      precio: variantData[b.key]?.precio || "",
-      precio_costo: variantData[b.key]?.precio_costo || "",
-      sku: variantData[b.key]?.sku || "",
-    }));
-  }, [baseVariants, variantData]);
+    return baseVariants
+      .filter(
+        (b) => selectedCombinations[b.key] ?? opcionesValidasCount === 1,
+      )
+      .map((b) => ({
+        key: b.key,
+        valores: b.valores,
+        stock: variantData[b.key]?.stock || "",
+        precio: variantData[b.key]?.precio || "",
+        precio_costo: variantData[b.key]?.precio_costo || "",
+        sku: variantData[b.key]?.sku || "",
+      }));
+  }, [baseVariants, variantData, selectedCombinations, opcionesValidasCount]);
+
+  const duplicatePropertyNames = useMemo(
+    () => findDuplicatePropertyNames(opciones),
+    [opciones],
+  );
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
@@ -131,6 +151,8 @@ export function useCreateProductForm() {
       setPrecioVenta("");
       setCustomTypeMode({});
       setFocusedOptionId(null);
+      setSelectedCombinations({});
+      setPivotSelections({});
     }
   };
 
@@ -192,6 +214,37 @@ export function useCreateProductForm() {
     }));
   };
 
+  const handleToggleCombination = (key: string) => {
+    setSelectedCombinations((prev) => ({
+      ...prev,
+      [key]: !(prev[key] ?? opcionesValidasCount === 1),
+    }));
+  };
+
+  const handleBulkSetSelection = (keys: string[], value: boolean) => {
+    setSelectedCombinations((prev) => {
+      const next = { ...prev };
+      keys.forEach((key) => {
+        next[key] = value;
+      });
+      return next;
+    });
+  };
+
+  const handleInvertSelection = (keys: string[]) => {
+    setSelectedCombinations((prev) => {
+      const next = { ...prev };
+      keys.forEach((key) => {
+        next[key] = !(prev[key] ?? opcionesValidasCount === 1);
+      });
+      return next;
+    });
+  };
+
+  const handlePivotChange = (propName: string, value: string) => {
+    setPivotSelections((prev) => ({ ...prev, [propName]: value }));
+  };
+
   const getSuggestions = (nombre: string, currentValues: string[]) => {
     if (nombre === "Color") {
       return PREDEFINED_COLORS.filter((c) => !currentValues.includes(c));
@@ -242,6 +295,11 @@ export function useCreateProductForm() {
       return;
     }
 
+    if (showVariants && duplicatePropertyNames.size > 0) {
+      toast.error("Resolvé los nombres de propiedad duplicados antes de guardar.");
+      return;
+    }
+
     if (archivos.length > 0) {
       setIsCompressing(true);
       formData.delete("imagenes");
@@ -285,6 +343,10 @@ export function useCreateProductForm() {
     focusedOptionId,
     setFocusedOptionId,
     variantes,
+    baseVariants,
+    selectedCombinations,
+    pivotSelections,
+    duplicatePropertyNames,
     isPending,
     handleSubmit,
     handleAddOption,
@@ -293,6 +355,10 @@ export function useCreateProductForm() {
     handleAddOptionValue,
     handleRemoveOptionValue,
     handleVarChange,
+    handleToggleCombination,
+    handleBulkSetSelection,
+    handleInvertSelection,
+    handlePivotChange,
     getSuggestions,
   };
 }

@@ -16,6 +16,11 @@ export type VarianteInput = {
   valores: Record<string, string>;
 } & VariantDataState;
 
+export type BaseVariant = {
+  key: string;
+  valores: Record<string, string>;
+};
+
 export type CategoriaOption = {
   id: string;
   nombre: string;
