@@ -1,4 +1,5 @@
 import type { Producto } from "@/entities/productos/types";
+import { parseRawVariantString } from "@/entities/productos/lib/parse-variant-attributes";
 import type { Opcion, VarianteInput } from "../types";
 
 export function buildVariantKey(values: Record<string, string>) {
@@ -75,87 +76,25 @@ function fromProductoVariantes(producto: Producto): VarianteInput[] | null {
   return variantes.length > 0 ? variantes : null;
 }
 
-function capitalizar(texto: string): string {
-  if (!texto) return texto;
-  return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
-}
-
-/** Compara claves ignorando mayúsculas/acentos (ej. "GÉNERO", "genero", "gÉnero" son la misma clave). */
-const DIACRITICOS_REGEX = new RegExp("[\\u0300-\\u036f]", "g");
-
-function normalizarParaComparar(texto: string): string {
-  return texto
-    .normalize("NFKD")
-    .replace(DIACRITICOS_REGEX, "")
-    .trim()
-    .toLowerCase();
-}
-
-/**
- * Parsea un segmento tipo "TALLE: S" en { nombre: "Talle", valor: "S" }.
- * Devuelve null si el segmento no tiene el patrón "CLAVE: VALOR" (ej. un
- * valor legacy suelto como "S" o "M" sin ninguna clave asociada).
- */
-export function parseAttributeSegment(
-  segment: string,
-): { nombre: string; valor: string } | null {
-  if (!segment) return null;
-
-  const sepIndex = segment.indexOf(":");
-  if (sepIndex === -1) return null;
-
-  const keyRaw = segment.slice(0, sepIndex).trim();
-  const valRaw = segment.slice(sepIndex + 1).trim();
-
-  if (!keyRaw || !valRaw) return null;
-
-  let nombre = capitalizar(keyRaw);
-  const claveComparable = normalizarParaComparar(keyRaw);
-
-  if (claveComparable === "genero") {
-    nombre = "Género";
-  } else if (claveComparable === "color") {
-    nombre = "Color";
-  } else if (claveComparable === "talle") {
-    nombre = "Talle";
-  }
-
-  return { nombre, valor: valRaw };
-}
-
-function valsFromParts(parts: string[]) {
-  return parts.map((segment, index) => {
-    const parsed = parseAttributeSegment(segment);
-    if (parsed) return [parsed.nombre, parsed.valor] as const;
-    return [`Propiedad ${index + 1}`, segment.trim()] as const;
-  });
-}
-
 /** Fallback para productos viejos que solo tienen el string plano de `productos_stock`. */
 function fromLegacyStock(producto: Producto): VarianteInput[] {
   if (!producto.stock || producto.stock.length === 0) return [];
 
-  return producto.stock.map((stockItem) => {
-    const parts = stockItem.variante.split(" / ");
-    const valores: Record<string, string> = {};
+  return producto.stock
+    .map((stockItem) => {
+      const valores = parseRawVariantString(stockItem.variante);
+      if (Object.keys(valores).length === 0) return null;
 
-    if (parts.length > 1) {
-      valsFromParts(parts).forEach(([key, value]) => {
-        valores[key] = value;
-      });
-    } else {
-      valores.Variante = cleanAttributeValue("Variante", parts[0]);
-    }
-
-    return {
-      key: buildVariantKey(valores) || stockItem.variante,
-      valores,
-      stock: stockItem.cantidad.toString(),
-      precio: "",
-      precio_costo: "",
-      sku: "",
-    };
-  });
+      return {
+        key: buildVariantKey(valores) || stockItem.variante,
+        valores,
+        stock: stockItem.cantidad.toString(),
+        precio: "",
+        precio_costo: "",
+        sku: "",
+      };
+    })
+    .filter((v): v is VarianteInput => v !== null);
 }
 
 function buildOpcionesFromVariantes(variantes: VarianteInput[]): Opcion[] {
@@ -199,12 +138,6 @@ export function isSingleVariantProduct(producto: Producto): boolean {
   );
 }
 
-/**
- * Reconstruye variantes y opciones para el formulario de edición.
- * Prioriza `producto_variantes` (nombres de atributo reales, ej. "Talle")
- * y solo recurre al string plano legacy de `productos_stock` para
- * productos que nunca se migraron a la tabla normalizada.
- */
 export function parseLegacyVariant(
   producto: Producto,
   isSimpleProduct: boolean,

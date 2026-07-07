@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { ItemResuelto } from "@/entities/compras/types";
 import { slugify } from "@/shared/utils/slugify";
-import { parseAttributeSegment } from "@/features/stock/utils/parse-legacy-variant";
+import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-attributes";
 
 type SupabaseDb = ReturnType<typeof createClient>;
 

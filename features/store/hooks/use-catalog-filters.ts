@@ -1,5 +1,10 @@
 import { useMemo } from "react";
 import { Producto } from "@/entities/productos/types";
+import { parseRawVariantString } from "@/entities/productos/lib/parse-variant-attributes";
+import {
+  buildPropiedadesFiltro,
+  resolverAtributosVariante,
+} from "@/entities/productos/lib/build-propiedades-filtro";
 
 export const DEFAULT_TIPO = "todos";
 export const DEFAULT_ORDEN = "mas_vendidos";
@@ -32,65 +37,6 @@ interface UseCatalogFiltersProps {
   visibleCount: number;
 }
 
-export function parseLegacyVariant(raw: string): Record<string, string> {
-  const v = raw?.trim() || "";
-  if (!v || v.toLowerCase() === "unico" || v.toLowerCase() === "único")
-    return {};
-
-  const result: Record<string, string> = {};
-
-  // Formato Constructor de Variantes (Ej: Color:Rojo|Talle:M)
-  if (v.includes("|") && v.includes(":")) {
-    v.split("|").forEach((part) => {
-      const [key, ...vals] = part.split(":");
-      if (key && vals.length > 0) result[key.trim()] = vals.join(":").trim();
-    });
-    return result;
-  }
-
-  // Formato Excel (Ej: TALLE: S / COLOR: NEGRO) o Viejo (Ej: S / Negro)
-  if (v.includes("/") || v.includes("-")) {
-    const separator = v.includes("/") ? "/" : "-";
-    const parts = v.split(separator).map((p) => p.trim());
-
-    const hasKeys = parts.some((p) => p.includes(":"));
-
-    // Si viene del Excel con etiquetas (TALLE: S)
-    if (hasKeys) {
-      parts.forEach((part, idx) => {
-        if (part.includes(":")) {
-          const [key, ...vals] = part.split(":");
-          result[key.trim()] = vals.join(":").trim();
-        } else {
-          result[`Opción ${idx + 1}`] = part;
-        }
-      });
-      return result;
-    }
-
-    // Si es el formato viejo sin etiquetas (S / Negro)
-    if (parts.length >= 2) {
-      result["Color"] = parts[0];
-      result["Talle"] = parts[1];
-      for (let i = 2; i < parts.length; i++) {
-        result[`Opción ${i + 1}`] = parts[i];
-      }
-      return result;
-    }
-  }
-
-  // Un solo atributo explícito (Ej: TALLE: S)
-  if (v.includes(":")) {
-    const [key, ...vals] = v.split(":");
-    result[key.trim()] = vals.join(":").trim();
-    return result;
-  }
-
-  // Fallback final
-  result["Opción"] = v;
-  return result;
-}
-
 export function useCatalogFilters({
   productos,
   categorias = [],
@@ -101,45 +47,14 @@ export function useCatalogFilters({
   orden,
   visibleCount,
 }: UseCatalogFiltersProps) {
-  const propiedadesGlobales = useMemo(() => {
-    const propsMap: Record<string, Set<string>> = {};
-
-    productos.forEach((p) => {
-      p.producto_variantes?.forEach((v) => {
-        if (config?.mostrar_sin_stock === false && v.stock <= 0) return;
-
-        if (v.atributos && Object.keys(v.atributos).length > 0) {
-          Object.entries(v.atributos).forEach(([key, val]) => {
-            if (!propsMap[key]) propsMap[key] = new Set();
-            propsMap[key].add((val as string).trim());
-          });
-        } else if (v.nombre_display) {
-          const parsed = parseLegacyVariant(v.nombre_display);
-          Object.entries(parsed).forEach(([key, val]) => {
-            if (!propsMap[key]) propsMap[key] = new Set();
-            propsMap[key].add(val);
-          });
-        }
-      });
-
-      p.stock?.forEach((s) => {
-        if (config?.mostrar_sin_stock === false && s.cantidad <= 0) return;
-        const parsed = parseLegacyVariant(s.variante);
-        Object.entries(parsed).forEach(([key, val]) => {
-          if (!propsMap[key]) propsMap[key] = new Set();
-          propsMap[key].add(val);
-        });
-      });
-    });
-
-    const result: Record<string, string[]> = {};
-    Object.keys(propsMap)
-      .sort()
-      .forEach((k) => {
-        result[k] = Array.from(propsMap[k]).sort();
-      });
-    return result;
-  }, [productos, config]);
+  const propiedadesGlobales = useMemo(
+    () =>
+      buildPropiedadesFiltro(productos, {
+        ocultarSinStock: config?.mostrar_sin_stock === false,
+        incluirStockLegacy: true,
+      }),
+    [productos, config],
+  );
 
   const conteosRaw = useMemo(() => {
     const conteos: Record<string, number> = {};
@@ -226,19 +141,16 @@ export function useCatalogFilters({
           const matchNew =
             c.producto_variantes?.some((pv) => {
               if (pv.stock <= 0) return false;
-              if (pv.atributos && Object.keys(pv.atributos).length > 0) {
-                return (
-                  pv.atributos[propKey]?.toLowerCase() === propVal.toLowerCase()
-                );
-              }
-              const parsed = parseLegacyVariant(pv.nombre_display || "");
-              return parsed[propKey]?.toLowerCase() === propVal.toLowerCase();
+              const atributos = resolverAtributosVariante(pv);
+              return (
+                atributos[propKey]?.toLowerCase() === propVal.toLowerCase()
+              );
             }) ?? false;
 
           const matchOld =
             c.stock?.some((s) => {
               if (s.cantidad <= 0) return false;
-              const parsed = parseLegacyVariant(s.variante || "");
+              const parsed = parseRawVariantString(s.variante || "");
               return parsed[propKey]?.toLowerCase() === propVal.toLowerCase();
             }) ?? false;
 

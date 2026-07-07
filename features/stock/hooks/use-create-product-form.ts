@@ -115,6 +115,13 @@ export function useCreateProductForm() {
       return;
     }
 
+    if (showVariants && variantSelection.genericPropertyNames.size > 0) {
+      toast.error(
+        "Renombrá las propiedades con nombre genérico (Propiedad/Opción) antes de guardar.",
+      );
+      return;
+    }
+
     if (archivos.length > 0) {
       setIsCompressing(true);
       formData.delete("imagenes");
@@ -162,6 +169,7 @@ export function useCreateProductForm() {
     selectedCombinations: variantSelection.selectedCombinations,
     pivotSelections: variantSelection.pivotSelections,
     duplicatePropertyNames: variantSelection.duplicatePropertyNames,
+    genericPropertyNames: variantSelection.genericPropertyNames,
     isPending,
     handleSubmit,
     handleAddOption: variantSelection.handleAddOption,

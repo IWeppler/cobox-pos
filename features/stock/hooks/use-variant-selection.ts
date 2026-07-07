@@ -3,7 +3,10 @@
 import { useMemo, useState } from "react";
 import { PREDEFINED_COLORS, PREDEFINED_SIZES } from "../types/constants";
 import { buildVariantKey } from "../utils/parse-legacy-variant";
-import { findDuplicatePropertyNames } from "../utils/validate-opciones";
+import {
+  findDuplicatePropertyNames,
+  findGenericPropertyNames,
+} from "../utils/validate-opciones";
 import type {
   BaseVariant,
   Opcion,
@@ -134,6 +137,11 @@ export function useVariantSelection({
     [opciones],
   );
 
+  const genericPropertyNames = useMemo(
+    () => findGenericPropertyNames(opciones),
+    [opciones],
+  );
+
   const reset = (
     nextOpciones: Opcion[] = [],
     nextVariantes: VarianteInput[] = [],
@@ -258,6 +266,7 @@ export function useVariantSelection({
     selectedCombinations,
     pivotSelections,
     duplicatePropertyNames,
+    genericPropertyNames,
     reset,
     handleAddOption,
     handleRemoveOption,

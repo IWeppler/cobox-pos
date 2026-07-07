@@ -32,6 +32,7 @@ type ProductVariantsSectionProps = {
   precioVenta: string;
   variantes: VarianteInput[];
   duplicatePropertyNames: Set<string>;
+  genericPropertyNames: Set<string>;
   handleAddOption: () => void;
   handleRemoveOption: (id: string) => void;
   handleUpdateOptionName: (id: string, newName: string) => void;
@@ -65,6 +66,7 @@ export function ProductVariantsSection({
   precioVenta,
   variantes,
   duplicatePropertyNames,
+  genericPropertyNames,
   handleAddOption,
   handleRemoveOption,
   handleUpdateOptionName,
@@ -161,6 +163,10 @@ export function ProductVariantsSection({
               const isDuplicateName =
                 normalizedNombre !== "" &&
                 duplicatePropertyNames.has(normalizedNombre);
+              const isGenericName =
+                normalizedNombre !== "" &&
+                genericPropertyNames.has(normalizedNombre);
+              const hasNameError = isDuplicateName || isGenericName;
 
               return (
                 <div
@@ -191,7 +197,7 @@ export function ProductVariantsSection({
                               handleUpdateOptionName(op.id, e.target.value)
                             }
                             className={`h-10 shadow-none bg-card ${
-                              isDuplicateName
+                              hasNameError
                                 ? "border-destructive focus-visible:ring-destructive"
                                 : ""
                             }`}
@@ -218,7 +224,7 @@ export function ProductVariantsSection({
                           >
                             <SelectTrigger
                               className={`h-10 shadow-none bg-card ${
-                                isDuplicateName
+                                hasNameError
                                   ? "border-destructive focus-visible:ring-destructive"
                                   : ""
                               }`}
@@ -244,6 +250,13 @@ export function ProductVariantsSection({
                         {isDuplicateName && (
                           <p className="text-xs text-destructive">
                             Ya existe una propiedad con este nombre
+                          </p>
+                        )}
+                        {isGenericName && (
+                          <p className="text-xs text-destructive">
+                            Este es un nombre genérico auto-generado.
+                            Renombralo (ej. &quot;Color&quot;, &quot;Talle&quot;,
+                            &quot;Material&quot;).
                           </p>
                         )}
                       </div>

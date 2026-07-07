@@ -3,7 +3,10 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { slugify } from "@/shared/utils/slugify";
+import {
+  canonicalizarValores,
+  construirCacheAtributos,
+} from "@/features/stock/lib/normalize-atributo";
 
 export async function editarProductoAction(
   prevState: { error: string | null; success: boolean },
@@ -156,6 +159,21 @@ export async function editarProductoAction(
               Boolean(op.nombre) && op.valores.length > 0,
           );
 
+        // Red de seguridad: "Propiedad N"/"Opción N" son los fallbacks que
+        // usa el parser de variantes legacy cuando no puede saber el
+        // nombre real de una propiedad (ver parse-variant-attributes.ts).
+        // Si el formulario de edición los precarga y el vendedor guarda
+        // sin renombrarlos, no deben persistirse como si fueran reales.
+        const nombreGenerico = opciones.find((op) =>
+          /^(propiedad|opci[oó]n)\s*\d*$/i.test(op.nombre),
+        );
+        if (nombreGenerico) {
+          return {
+            error: `La propiedad "${nombreGenerico.nombre}" es un nombre genérico auto-generado. Renombrala (ej. "Color", "Talle", "Material") antes de guardar.`,
+            success: false,
+          };
+        }
+
         const variantesConAtributos = variantesRaw.filter(
           (v) =>
             v.valores &&
@@ -197,70 +215,15 @@ export async function editarProductoAction(
           };
         }
 
-        const attrMap: Record<string, string> = {};
-        const valMap: Record<string, Record<string, string>> = {};
-
-        // A. Crear o reciclar Opciones
-        for (const op of opciones) {
-          const slugAttr = slugify(op.nombre);
-          const { data: attrSelectData, error: attrSelectError } =
-            await supabase
-              .from("atributos")
-              .select("id")
-              .eq("slug", slugAttr)
-              .single();
-          if (attrSelectError && attrSelectError.code !== "PGRST116") {
-            throw attrSelectError;
-          }
-          let attr = attrSelectData;
-          if (!attr) {
-            const { data: newAttr, error: attrInsertError } = await supabase
-              .from("atributos")
-              .insert({
-                nombre: op.nombre,
-                slug: slugAttr,
-                tipo: "TEXT",
-                activo: true,
-              })
-              .select("id")
-              .single();
-            if (attrInsertError) throw attrInsertError;
-            attr = newAttr;
-          }
-          if (attr) {
-            attrMap[op.nombre] = attr.id;
-            valMap[op.nombre] = {};
-            for (const v of op.valores) {
-              const slugVal = slugify(v);
-              const { data: valSelectData, error: valSelectError } =
-                await supabase
-                  .from("atributo_valores")
-                  .select("id")
-                  .eq("atributo_id", attr.id)
-                  .eq("slug", slugVal)
-                  .single();
-              if (valSelectError && valSelectError.code !== "PGRST116") {
-                throw valSelectError;
-              }
-              let valData = valSelectData;
-              if (!valData) {
-                const { data: newVal, error: valInsertError } = await supabase
-                  .from("atributo_valores")
-                  .insert({
-                    atributo_id: attr.id,
-                    valor: v,
-                    slug: slugVal,
-                    activo: true,
-                  })
-                  .select("id")
-                  .single();
-                if (valInsertError) throw valInsertError;
-                valData = newVal;
-              }
-              if (valData) valMap[op.nombre][v] = valData.id;
-            }
-          }
-        }
+        // A. Normalizamos cada (propiedad, valor) contra lo que ya existe
+        // en atributos/atributo_valores (case/tilde-insensitive vía slug)
+        // y cacheamos la forma canónica — "COLOR" y "Color" terminan
+        // siendo siempre la misma fila y el mismo string en el JSONB,
+        // en vez de lo que se haya tipeado en esta sesión puntual.
+        const atributoCache = await construirCacheAtributos(
+          supabase,
+          opciones,
+        );
 
         // Borramos variantes viejas para refrescar la grilla limpia
         const { error: delVarError } = await supabase
@@ -275,10 +238,20 @@ export async function editarProductoAction(
           .eq("producto_id", id); // legacy
         if (delStockError) throw delStockError;
 
-        // B. Guardar las Variantes nuevas
+        // B. Guardar las Variantes nuevas, con atributos ya canonicalizados
         for (const v of variantes) {
+          const valoresCanonicos = canonicalizarValores(
+            v.valores,
+            atributoCache,
+          );
+
           const nombreDisplay = opciones
-            .map((op) => v.valores[op.nombre])
+            .map(
+              (op) =>
+                valoresCanonicos[
+                  atributoCache[op.nombre]?.nombreCanonico ?? op.nombre
+                ],
+            )
             .filter(Boolean)
             .join(" / ");
 
@@ -293,7 +266,7 @@ export async function editarProductoAction(
             .insert({
               producto_id: id,
               nombre_display: nombreDisplay,
-              atributos: v.valores,
+              atributos: valoresCanonicos,
               precio: vPrecio,
               costo: vCosto,
               stock: vStock,
@@ -306,13 +279,13 @@ export async function editarProductoAction(
           if (varData) {
             const varValores = [];
             for (const [opNombre, opValor] of Object.entries(v.valores)) {
-              const aId = attrMap[opNombre];
-              const avId = valMap[opNombre]?.[opValor as string];
-              if (aId && avId) {
+              const entry = atributoCache[opNombre];
+              const valorEntry = entry?.valores[opValor as string];
+              if (entry && valorEntry) {
                 varValores.push({
                   variante_id: varData.id,
-                  atributo_id: aId,
-                  atributo_valor_id: avId,
+                  atributo_id: entry.atributoId,
+                  atributo_valor_id: valorEntry.valorId,
                 });
               }
             }

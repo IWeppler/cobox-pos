@@ -13,7 +13,8 @@ export async function getProductosAction() {
     .select(
       `
       *,
-      stock:productos_stock(id, variante, cantidad)
+      stock:productos_stock(id, variante, cantidad),
+      producto_variantes(id, nombre_display, precio, stock, atributos)
     `,
     )
     .eq("publicado", true)
@@ -37,7 +38,8 @@ export async function getProductoBySlugAction(slug: string) {
     .select(
       `
       *,
-      stock:productos_stock(id, variante, cantidad)
+      stock:productos_stock(id, variante, cantidad),
+      producto_variantes(id, nombre_display, precio, stock, atributos)
     `,
     )
     .eq("slug", slug)

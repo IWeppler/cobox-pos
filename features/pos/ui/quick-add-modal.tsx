@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Producto } from "@/entities/productos/types";
 import {
   Dialog,
@@ -11,7 +11,8 @@ import {
 import { useCartStore } from "@/shared/store/cart-store";
 import { toast } from "sonner";
 import { Layers } from "lucide-react";
-import { parseLegacyVariant } from "@/features/store/hooks/use-catalog-filters";
+import { parseRawVariantString } from "@/entities/productos/lib/parse-variant-attributes";
+import { resolverAtributosVariante } from "@/entities/productos/lib/build-propiedades-filtro";
 
 interface QuickAddModalProps {
   producto: Producto | null;
@@ -24,29 +25,61 @@ export function QuickAddModal({
   isOpen,
   onClose,
 }: Readonly<QuickAddModalProps>) {
-  const [selecciones, setSelecciones] = useState<Record<string, string>>({});
+  if (!producto) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      {isOpen ? (
+        <QuickAddModalContent
+          key={producto.id}
+          producto={producto}
+          isOpen={isOpen}
+          onClose={onClose}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function QuickAddModalContent({
+  producto,
+  isOpen,
+  onClose,
+}: Readonly<{
+  producto: Producto;
+  isOpen: boolean;
+  onClose: () => void;
+}>) {
   const addItem = useCartStore((state) => state.addItem);
   const setIsOpenCart = useCartStore((state) => state.setIsOpen);
 
   const variantesArray = useMemo(() => {
-    if (!producto) return [];
     const list: Array<{
       variante: string;
       cantidad: number;
       id_real: string;
       atributos?: Record<string, string>;
     }> = [];
-    producto.producto_variantes?.forEach((v) =>
+    let tieneAtributosEstructurados = false;
+    producto.producto_variantes?.forEach((v) => {
+      const atributos = resolverAtributosVariante(v);
+      if (Object.keys(atributos).length > 0) tieneAtributosEstructurados = true;
       list.push({
         variante: v.nombre_display,
         cantidad: v.stock,
         id_real: v.id,
-        atributos: v.atributos,
-      }),
-    );
-    producto.stock?.forEach((s) =>
-      list.push({ variante: s.variante, cantidad: s.cantidad, id_real: s.id }),
-    );
+        atributos,
+      });
+    });
+
+    // Solo se recurre al stock legacy si el producto nunca se migró a
+    // producto_variantes.atributos — si no, se duplican los grupos porque
+    // ambas fuentes describen las mismas variantes.
+    if (!tieneAtributosEstructurados) {
+      producto.stock?.forEach((s) =>
+        list.push({ variante: s.variante, cantidad: s.cantidad, id_real: s.id }),
+      );
+    }
     return list;
   }, [producto]);
 
@@ -60,7 +93,7 @@ export function QuickAddModal({
           props[k].add(val as string);
         });
       } else {
-        const parsed = parseLegacyVariant(s.variante || "");
+        const parsed = parseRawVariantString(s.variante || "");
         Object.entries(parsed).forEach(([k, val]) => {
           if (!props[k]) props[k] = new Set();
           props[k].add(val);
@@ -73,23 +106,20 @@ export function QuickAddModal({
     return { properties: result };
   }, [variantesArray]);
 
-  // 🚀 FIX UX: Auto-seleccionar opciones únicas para ahorrar clics al vendedor
-  useEffect(() => {
-    if (isOpen && producto) {
-      const autoSelections: Record<string, string> = {};
+  const autoSelections = useMemo(() => {
+    const selections: Record<string, string> = {};
 
-      Object.entries(parsedVariants.properties).forEach(
-        ([propName, values]) => {
-          // Si la propiedad solo tiene 1 valor (Ej: Color: Negro), se selecciona sola
-          if (values.length === 1) {
-            autoSelections[propName] = values[0];
-          }
-        },
-      );
+    Object.entries(parsedVariants.properties).forEach(([propName, values]) => {
+      if (values.length === 1) {
+        selections[propName] = values[0];
+      }
+    });
 
-      setSelecciones(autoSelections);
-    }
-  }, [isOpen, producto, parsedVariants]);
+    return selections;
+  }, [parsedVariants]);
+
+  const [selecciones, setSelecciones] =
+    useState<Record<string, string>>(autoSelections);
 
   const isOptionAvailable = (propName: string, val: string) => {
     const testSelections = { ...selecciones, [propName]: val };
@@ -99,7 +129,7 @@ export function QuickAddModal({
       const attrs =
         s.atributos && Object.keys(s.atributos).length > 0
           ? s.atributos
-          : parseLegacyVariant(s.variante || "");
+          : parseRawVariantString(s.variante || "");
 
       return Object.entries(testSelections).every(
         ([k, selVal]) => attrs[k] === selVal,
@@ -108,7 +138,7 @@ export function QuickAddModal({
   };
 
   useEffect(() => {
-    if (!producto || !isOpen) return;
+    if (!isOpen) return;
 
     const dimensionsCount = Object.keys(parsedVariants.properties).length;
     const selectionsCount = Object.keys(selecciones).length;
@@ -118,7 +148,7 @@ export function QuickAddModal({
         const attrs =
           s.atributos && Object.keys(s.atributos).length > 0
             ? s.atributos
-            : parseLegacyVariant(s.variante || "");
+            : parseRawVariantString(s.variante || "");
         return Object.entries(selecciones).every(
           ([k, selVal]) => attrs[k] === selVal,
         );
@@ -163,62 +193,56 @@ export function QuickAddModal({
     onClose,
   ]);
 
-  if (!producto) return null;
-
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-card border-border">
-        <DialogHeader className="p-5 pb-3 border-b border-border bg-muted/20">
-          <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-            <Layers className="w-5 h-5 text-primary" />
-            {producto.nombre}
-          </DialogTitle>
-          <p className="text-sm text-muted-foreground mt-1">
-            Selecciona la variante a vender.
-          </p>
-        </DialogHeader>
+    <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-card border-border">
+      <DialogHeader className="p-5 pb-3 border-b border-border bg-muted/20">
+        <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+          <Layers className="w-5 h-5 text-primary" />
+          {producto.nombre}
+        </DialogTitle>
+        <p className="text-sm text-muted-foreground mt-1">
+          Selecciona la variante a vender.
+        </p>
+      </DialogHeader>
 
-        <div className="p-5 space-y-6">
-          {Object.entries(parsedVariants.properties).map(
-            ([propName, values]) => (
-              <div key={propName}>
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
-                  {propName}
-                </h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {values.map((val) => {
-                    const isSelected = selecciones[propName] === val;
-                    const hasStock = isOptionAvailable(propName, val);
+      <div className="p-5 space-y-6">
+        {Object.entries(parsedVariants.properties).map(([propName, values]) => (
+          <div key={propName}>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+              {propName}
+            </h3>
+            <div className="grid grid-cols-3 gap-2">
+              {values.map((val) => {
+                const isSelected = selecciones[propName] === val;
+                const hasStock = isOptionAvailable(propName, val);
 
-                    return (
-                      <button
-                        key={val}
-                        type="button"
-                        disabled={!hasStock}
-                        onClick={() =>
-                          setSelecciones((prev) => ({
-                            ...prev,
-                            [propName]: val,
-                          }))
-                        }
-                        className={`h-12 rounded-xl text-xs font-bold uppercase transition-all border ${
-                          isSelected
-                            ? "border-primary bg-primary text-primary-foreground ring-2 ring-primary/20 cursor-pointer scale-[0.98]"
-                            : hasStock
-                              ? "border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted cursor-pointer"
-                              : "border-border/30 bg-muted/30 text-muted-foreground opacity-50 cursor-not-allowed line-through decoration-muted-foreground/40"
-                        }`}
-                      >
-                        {val}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ),
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    disabled={!hasStock}
+                    onClick={() =>
+                      setSelecciones((prev) => ({
+                        ...prev,
+                        [propName]: val,
+                      }))
+                    }
+                    className={`h-12 rounded-xl text-xs font-bold uppercase transition-all border ${
+                      isSelected
+                        ? "border-primary bg-primary text-primary-foreground ring-2 ring-primary/20 cursor-pointer scale-[0.98]"
+                        : hasStock
+                          ? "border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted cursor-pointer"
+                          : "border-border/30 bg-muted/30 text-muted-foreground opacity-50 cursor-not-allowed line-through decoration-muted-foreground/40"
+                    }`}
+                  >
+                    {val}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </DialogContent>
   );
 }

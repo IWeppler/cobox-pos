@@ -106,6 +106,7 @@ export function CrearProductoSheet() {
                 precioVenta={form.precioVenta}
                 variantes={form.variantes}
                 duplicatePropertyNames={form.duplicatePropertyNames}
+                genericPropertyNames={form.genericPropertyNames}
                 handleAddOption={form.handleAddOption}
                 handleRemoveOption={form.handleRemoveOption}
                 handleUpdateOptionName={form.handleUpdateOptionName}
@@ -131,7 +132,9 @@ export function CrearProductoSheet() {
             blockedReason={
               form.duplicatePropertyNames.size > 0
                 ? "Resolvé los nombres de propiedad duplicados antes de guardar."
-                : null
+                : form.genericPropertyNames.size > 0
+                  ? "Renombrá las propiedades con nombre genérico (Propiedad/Opción) antes de guardar."
+                  : null
             }
           />
         </SheetContent>

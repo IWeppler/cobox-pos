@@ -4,6 +4,10 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { slugify } from "@/shared/utils/slugify";
+import {
+  canonicalizarValores,
+  construirCacheAtributos,
+} from "@/features/stock/lib/normalize-atributo";
 
 export async function crearProductoAction(
   prevState: { error: string | null; success: boolean },
@@ -114,56 +118,182 @@ export async function crearProductoAction(
       variante: "Único",
       cantidad: stockBase,
     });
-  } else {
-    // Producto con opciones dinámicas
+
+    revalidatePath("/stock");
+    revalidatePath("/store");
+    return { error: null, success: true };
+  }
+
+  // Producto con opciones dinámicas
+  try {
     const opcionesStr = formData.get("opciones") as string;
     const variantesStr = formData.get("variantes") as string;
 
-    if (opcionesStr && variantesStr) {
-      const opciones = JSON.parse(opcionesStr) as {
-        nombre: string;
-        valores: string[];
-      }[];
-      const variantes = JSON.parse(variantesStr) as any[];
-
-      // BATCH INSERT: Preparamos arrays para insertar todo de un solo golpe
-      const variantesToInsert = [];
-      const stockLegacyToInsert = [];
-
-      for (const v of variantes) {
-        // Ordenamos el nombre para que quede lindo (Ej: "Rojo / S")
-        const nombreDisplay = opciones
-          .map((op) => v.valores[op.nombre])
-          .filter(Boolean)
-          .join(" / ");
-
-        const vPrecio = v.precio ? Number.parseFloat(v.precio) : null;
-        const vCosto = v.precio_costo
-          ? Number.parseFloat(v.precio_costo)
-          : null;
-        const vStock = Number.parseInt(v.stock || "0");
-
-        variantesToInsert.push({
-          producto_id: nuevoProducto.id,
-          nombre_display: nombreDisplay,
-          atributos: v.valores,
-          precio: vPrecio,
-          costo: vCosto,
-          stock: vStock,
-          sku: v.sku || null,
-        });
-
-        stockLegacyToInsert.push({
-          producto_id: nuevoProducto.id,
-          variante: nombreDisplay,
-          cantidad: vStock,
-        });
-      }
-
-      // Hacemos el insert masivo (Muchísimo más rápido y eficiente en Supabase)
-      await supabase.from("producto_variantes").insert(variantesToInsert);
-      await supabase.from("productos_stock").insert(stockLegacyToInsert);
+    if (!opcionesStr || !variantesStr) {
+      revalidatePath("/stock");
+      revalidatePath("/store");
+      return { error: null, success: true };
     }
+
+    const opcionesRaw = JSON.parse(opcionesStr) as {
+      nombre: string;
+      valores: string[];
+    }[];
+    const variantesRaw = JSON.parse(variantesStr) as {
+      valores: Record<string, string>;
+      precio?: string;
+      precio_costo?: string;
+      stock?: string;
+      sku?: string;
+    }[];
+
+    // Mismo saneamiento que editarProductoAction: descartamos propiedades
+    // o valores vacíos antes de tocar la base.
+    const opciones = opcionesRaw
+      .map((op) => ({
+        nombre: op.nombre?.trim(),
+        valores: (op.valores ?? [])
+          .map((v) => v?.trim())
+          .filter((v): v is string => Boolean(v)),
+      }))
+      .filter(
+        (op): op is { nombre: string; valores: string[] } =>
+          Boolean(op.nombre) && op.valores.length > 0,
+      );
+
+    const nombreGenerico = opciones.find((op) =>
+      /^(propiedad|opci[oó]n)\s*\d*$/i.test(op.nombre),
+    );
+    if (nombreGenerico) {
+      return {
+        error: `La propiedad "${nombreGenerico.nombre}" es un nombre genérico auto-generado. Renombrala (ej. "Color", "Talle", "Material") antes de guardar.`,
+        success: false,
+      };
+    }
+
+    const variantes = variantesRaw.filter(
+      (v) =>
+        v.valores &&
+        Object.entries(v.valores).some(([k, val]) => k.trim() && val?.trim()),
+    );
+
+    if (opciones.length === 0 || variantes.length === 0) {
+      return {
+        error:
+          "Las variantes no tienen propiedades o valores válidos. Revisa la grilla antes de guardar.",
+        success: false,
+      };
+    }
+
+    // Mismo camino que editarProductoAction: normalizamos cada
+    // (propiedad, valor) contra lo que ya existe en
+    // atributos/atributo_valores antes de escribir el JSONB, para que un
+    // producto nuevo no introduzca otra variante de casing de una
+    // propiedad que ya existe (ej. "color" cuando ya existe "Color").
+    const atributoCache = await construirCacheAtributos(supabase, opciones);
+
+    const variantesToInsert = [];
+    const stockLegacyToInsert = [];
+    const relacionesPorIndice: {
+      valoresOriginales: Record<string, string>;
+    }[] = [];
+
+    for (const v of variantes) {
+      const valoresCanonicos = canonicalizarValores(v.valores, atributoCache);
+
+      const nombreDisplay = opciones
+        .map(
+          (op) =>
+            valoresCanonicos[
+              atributoCache[op.nombre]?.nombreCanonico ?? op.nombre
+            ],
+        )
+        .filter(Boolean)
+        .join(" / ");
+
+      const vPrecio = v.precio ? Number.parseFloat(v.precio) : null;
+      const vCosto = v.precio_costo ? Number.parseFloat(v.precio_costo) : null;
+      const vStock = Number.parseInt(v.stock || "0");
+
+      variantesToInsert.push({
+        producto_id: nuevoProducto.id,
+        nombre_display: nombreDisplay,
+        atributos: valoresCanonicos,
+        precio: vPrecio,
+        costo: vCosto,
+        stock: vStock,
+        sku: v.sku || null,
+      });
+
+      stockLegacyToInsert.push({
+        producto_id: nuevoProducto.id,
+        variante: nombreDisplay,
+        cantidad: vStock,
+      });
+
+      relacionesPorIndice.push({ valoresOriginales: v.valores });
+    }
+
+    const { data: variantesInsertadas, error: varInsertError } =
+      await supabase
+        .from("producto_variantes")
+        .insert(variantesToInsert)
+        .select("id");
+    if (varInsertError) throw varInsertError;
+
+    const { error: stockInsertError } = await supabase
+      .from("productos_stock")
+      .insert(stockLegacyToInsert);
+    if (stockInsertError) throw stockInsertError;
+
+    const varValores = (variantesInsertadas ?? []).flatMap((varData, idx) => {
+      const { valoresOriginales } = relacionesPorIndice[idx];
+      return Object.entries(valoresOriginales).flatMap(
+        ([opNombre, opValor]) => {
+          const entry = atributoCache[opNombre];
+          const valorEntry = entry?.valores[opValor];
+          if (!entry || !valorEntry) return [];
+          return [
+            {
+              variante_id: varData.id,
+              atributo_id: entry.atributoId,
+              atributo_valor_id: valorEntry.valorId,
+            },
+          ];
+        },
+      );
+    });
+
+    if (varValores.length > 0) {
+      const { error: varValoresError } = await supabase
+        .from("producto_variante_valores")
+        .insert(varValores);
+      if (varValoresError) throw varValoresError;
+    }
+  } catch (error) {
+    console.error("[CREATE PRODUCT ERROR]", error);
+
+    const pgError = error as { code?: string; message?: string };
+
+    if (pgError?.code === "42501") {
+      return {
+        error:
+          "No tenés permisos para guardar estos cambios (política de seguridad RLS).",
+        success: false,
+      };
+    }
+    if (pgError?.code === "23503") {
+      return {
+        error:
+          "Alguno de los datos hace referencia a un registro que ya no existe (violación de clave foránea).",
+        success: false,
+      };
+    }
+
+    return {
+      error: "Hubo un error al guardar las variantes del producto.",
+      success: false,
+    };
   }
 
   revalidatePath("/stock");

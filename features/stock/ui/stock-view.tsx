@@ -2,6 +2,10 @@
 
 import { useState, useMemo } from "react";
 import { Producto } from "@/entities/productos/types";
+import {
+  buildPropiedadesFiltro,
+  resolverAtributosVariante,
+} from "@/entities/productos/lib/build-propiedades-filtro";
 import { StockTable } from "./stock-table";
 import { StockGrid } from "./stock-grid";
 import { Button } from "@/shared/ui/button";
@@ -11,25 +15,6 @@ import { StockFiltersToolbar } from "./stock-filters-toolbar";
 interface StockViewProps {
   productos: Producto[];
   userRole: string;
-}
-
-function getAtributosVariante(
-  variante: NonNullable<Producto["producto_variantes"]>[number],
-) {
-  if (variante.atributos && Object.keys(variante.atributos).length > 0) {
-    return variante.atributos;
-  }
-
-  const atributos: Record<string, string> = {};
-  variante.producto_variante_valores?.forEach((relacion) => {
-    const propiedad = relacion.atributo?.nombre?.trim();
-    const valor = relacion.atributo_valor?.valor?.trim();
-    if (propiedad && valor) {
-      atributos[propiedad] = valor;
-    }
-  });
-
-  return atributos;
 }
 
 export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
@@ -44,40 +29,16 @@ export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
 
   const isAdmin = userRole === "ADMIN";
 
-  const propiedadesGlobales = useMemo(() => {
-    const propsMap: Record<string, Set<string>> = {};
-
-    productos.forEach((producto) => {
-      producto.producto_variantes?.forEach((variante) => {
-        const atributos = getAtributosVariante(variante);
-
-        if (Object.keys(atributos).length > 0) {
-          Object.entries(atributos).forEach(([propiedad, valor]) => {
-            const valorLimpio = valor?.trim();
-            if (!valorLimpio) return;
-            if (!propsMap[propiedad]) propsMap[propiedad] = new Set();
-            propsMap[propiedad].add(valorLimpio);
-          });
-          return;
-        }
-
-        const nombreVariante = variante.nombre_display?.trim();
-        if (nombreVariante && nombreVariante.toLowerCase() !== "unico") {
-          if (!propsMap["Opcion"]) propsMap["Opcion"] = new Set();
-          propsMap["Opcion"].add(nombreVariante);
-        }
-      });
-    });
-
-    const propiedades: Record<string, string[]> = {};
-    Object.keys(propsMap)
-      .sort()
-      .forEach((propiedad) => {
-        propiedades[propiedad] = Array.from(propsMap[propiedad]).sort();
-      });
-
-    return propiedades;
-  }, [productos]);
+  // La vista de stock no lee productos_stock (tabla legacy) para el
+  // matching de filtros más abajo, así que tampoco la incluimos acá — un
+  // grupo que aparezca en la lista pero que el matching no sepa reconocer
+  // sería un filtro que no filtra nada. Si soporta el join relacional
+  // (producto_variante_valores), a diferencia del catálogo público.
+  const propiedadesGlobales = useMemo(
+    () =>
+      buildPropiedadesFiltro(productos, { incluirFallbackRelacional: true }),
+    [productos],
+  );
 
   // Lógica de filtrado por producto adaptada al modelo dinámico
   const productosFiltrados = useMemo(() => {
@@ -99,17 +60,11 @@ export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
 
           return (
             p.producto_variantes?.some((variante) => {
-              const atributos = getAtributosVariante(variante);
-
-              if (Object.keys(atributos).length > 0) {
-                return (
-                  atributos[propiedad]?.toLowerCase() === valor.toLowerCase()
-                );
-              }
-
+              const atributos = resolverAtributosVariante(variante, {
+                incluirFallbackRelacional: true,
+              });
               return (
-                propiedad === "Opcion" &&
-                variante.nombre_display?.toLowerCase() === valor.toLowerCase()
+                atributos[propiedad]?.toLowerCase() === valor.toLowerCase()
               );
             }) ?? false
           );

@@ -53,7 +53,7 @@ import Link from "next/link";
 import { ItemResuelto, OrdenCompra } from "@/entities/compras/types";
 import { Producto } from "@/entities/productos/types";
 import { createClient } from "@/shared/config/supabase/client";
-import { parseAttributeSegment } from "@/features/stock/utils/parse-legacy-variant";
+import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-attributes";
 
 interface MergeTableProps {
   orden: OrdenCompra;

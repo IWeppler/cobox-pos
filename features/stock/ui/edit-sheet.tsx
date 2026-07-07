@@ -196,6 +196,13 @@ export function ProductEditDetailSheet({
       return;
     }
 
+    if (showVariants && variantSelection.genericPropertyNames.size > 0) {
+      toast.error(
+        "Renombrá las propiedades con nombre genérico (Propiedad/Opción) antes de guardar.",
+      );
+      return;
+    }
+
     if (archivos.length > 0) {
       setIsCompressing(true);
       formData.delete("imagenes");
@@ -306,6 +313,7 @@ export function ProductEditDetailSheet({
               precioVenta={precioVenta}
               variantes={variantSelection.variantes}
               duplicatePropertyNames={variantSelection.duplicatePropertyNames}
+              genericPropertyNames={variantSelection.genericPropertyNames}
               handleAddOption={variantSelection.handleAddOption}
               handleRemoveOption={variantSelection.handleRemoveOption}
               handleUpdateOptionName={variantSelection.handleUpdateOptionName}
@@ -335,7 +343,9 @@ export function ProductEditDetailSheet({
           blockedReason={
             variantSelection.duplicatePropertyNames.size > 0
               ? "Resolvé los nombres de propiedad duplicados antes de guardar."
-              : null
+              : variantSelection.genericPropertyNames.size > 0
+                ? "Renombrá las propiedades con nombre genérico (Propiedad/Opción) antes de guardar."
+                : null
           }
         />
       </SheetContent>

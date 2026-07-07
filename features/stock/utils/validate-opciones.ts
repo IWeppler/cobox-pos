@@ -22,3 +22,27 @@ export function findDuplicatePropertyNames(opciones: Opcion[]): Set<string> {
 
   return duplicados;
 }
+
+const GENERIC_NAME_PATTERN = /^(propiedad|opci[oó]n)\s*\d*$/i;
+
+/**
+ * Devuelve los nombres de propiedad (normalizados) que matchean el patrón
+ * genérico "Propiedad N" / "Opción N" — el fallback que usa el parser de
+ * variantes legacy (parse-variant-attributes.ts) cuando no puede saber el
+ * nombre real de una propiedad. El form de edición precarga esos nombres
+ * en `opciones`; si el vendedor guarda sin renombrarlos, no deberían
+ * persistirse como si fueran nombres reales.
+ */
+export function findGenericPropertyNames(opciones: Opcion[]): Set<string> {
+  const genericos = new Set<string>();
+
+  for (const opcion of opciones) {
+    const normalizado = opcion.nombre.trim().toLowerCase();
+    if (!normalizado) continue;
+    if (GENERIC_NAME_PATTERN.test(normalizado)) {
+      genericos.add(normalizado);
+    }
+  }
+
+  return genericos;
+}
