@@ -359,7 +359,7 @@ export function ProductVariantsSection({
                   <table className="w-full text-sm text-left whitespace-nowrap bg-card">
                     <thead className="bg-sidebar text-muted-foreground text-[10px] uppercase font-bold tracking-widest border-b border-border">
                       <tr>
-                        <th className="px-4 py-3 w-16">Image</th>
+                        {/* <th className="px-4 py-3 w-16">Image</th> */}
                         <th className="px-4 py-3">Variante</th>
                         <th className="px-4 py-3 w-32">Precio ($)</th>
                         {showAdvancedColumns && (
@@ -377,11 +377,11 @@ export function ProductVariantsSection({
                           key={v.key}
                           className="hover:bg-muted/5 transition-colors"
                         >
-                          <td className="px-4 py-3">
+                          {/* <td className="px-4 py-3">
                             <div className="w-8 h-8 rounded bg-[#f4f4f5] border border-border flex items-center justify-center cursor-not-allowed opacity-50">
                               <ImageIcon className="w-3.5 h-3.5 text-muted-foreground" />
                             </div>
-                          </td>
+                          </td> */}
                           <td className="px-4 py-3 font-semibold text-foreground">
                             {Object.values(v.valores).join(" / ")}
                           </td>

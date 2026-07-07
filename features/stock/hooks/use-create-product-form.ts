@@ -4,7 +4,6 @@ import {
   startTransition,
   useActionState,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 import type { FormEvent } from "react";
@@ -12,41 +11,8 @@ import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
 import { optimizarImagen } from "@/shared/utils/image-optimizer";
 import { crearProductoAction } from "../actions/create-product";
-import { PREDEFINED_COLORS, PREDEFINED_SIZES } from "../types/constants";
-import { buildVariantKey } from "../utils/parse-legacy-variant";
-import { findDuplicatePropertyNames } from "../utils/validate-opciones";
-import type {
-  BaseVariant,
-  CategoriaOption,
-  Opcion,
-  ProductActionState,
-  VarianteInput,
-  VariantDataState,
-} from "@/features/stock/types";
-
-function buildCartesianVariants(opciones: Opcion[]): BaseVariant[] {
-  const opcionesValidas = opciones.filter(
-    (o) => o.nombre.trim() && o.valores.length > 0,
-  );
-
-  if (opcionesValidas.length === 0) return [];
-
-  let results: Record<string, string>[] = [{}];
-  for (const opcion of opcionesValidas) {
-    const nextResults: Record<string, string>[] = [];
-    for (const res of results) {
-      for (const val of opcion.valores) {
-        nextResults.push({ ...res, [opcion.nombre]: val });
-      }
-    }
-    results = nextResults;
-  }
-
-  return results.map((res) => ({
-    key: buildVariantKey(res),
-    valores: res,
-  }));
-}
+import { useVariantSelection } from "./use-variant-selection";
+import type { CategoriaOption, ProductActionState } from "@/features/stock/types";
 
 export function useCreateProductForm() {
   const [isOpen, setIsOpen] = useState(false);
@@ -63,20 +29,7 @@ export function useCreateProductForm() {
   const [precioCosto, setPrecioCosto] = useState("");
   const [precioVenta, setPrecioVenta] = useState("");
 
-  const [opciones, setOpciones] = useState<Opcion[]>([]);
-  const [variantData, setVariantData] = useState<
-    Record<string, VariantDataState>
-  >({});
-  const [customTypeMode, setCustomTypeMode] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [focusedOptionId, setFocusedOptionId] = useState<string | null>(null);
-  const [selectedCombinations, setSelectedCombinations] = useState<
-    Record<string, boolean>
-  >({});
-  const [pivotSelections, setPivotSelections] = useState<
-    Record<string, string>
-  >({});
+  const variantSelection = useVariantSelection();
 
   useEffect(() => {
     const fetchCats = async () => {
@@ -102,40 +55,6 @@ export function useCreateProductForm() {
       ? ((gananciaNeta / costoNum) * 100).toFixed(1)
       : "0";
 
-  const baseVariants = useMemo(() => {
-    if (!showVariants) return [];
-    return buildCartesianVariants(opciones);
-  }, [opciones, showVariants]);
-
-  const opcionesValidasCount = useMemo(
-    () => opciones.filter((o) => o.nombre.trim() && o.valores.length > 0).length,
-    [opciones],
-  );
-
-  // Con una sola propiedad activa, todas las combinaciones arrancan
-  // seleccionadas (paridad con el comportamiento anterior). Con 2 o más,
-  // el vendedor elige a mano en la matriz. No se escribe nada en
-  // selectedCombinations hasta que el usuario interactúa.
-  const variantes: VarianteInput[] = useMemo(() => {
-    return baseVariants
-      .filter(
-        (b) => selectedCombinations[b.key] ?? opcionesValidasCount === 1,
-      )
-      .map((b) => ({
-        key: b.key,
-        valores: b.valores,
-        stock: variantData[b.key]?.stock || "",
-        precio: variantData[b.key]?.precio || "",
-        precio_costo: variantData[b.key]?.precio_costo || "",
-        sku: variantData[b.key]?.sku || "",
-      }));
-  }, [baseVariants, variantData, selectedCombinations, opcionesValidasCount]);
-
-  const duplicatePropertyNames = useMemo(
-    () => findDuplicatePropertyNames(opciones),
-    [opciones],
-  );
-
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (!open) {
@@ -143,116 +62,12 @@ export function useCreateProductForm() {
       setShowPrice(false);
       setShowInventory(false);
       setShowVariants(false);
-      setOpciones([]);
-      setVariantData({});
       setStatus("active");
       setCategoriaSeleccionada("");
       setPrecioCosto("");
       setPrecioVenta("");
-      setCustomTypeMode({});
-      setFocusedOptionId(null);
-      setSelectedCombinations({});
-      setPivotSelections({});
+      variantSelection.reset();
     }
-  };
-
-  const handleAddOption = () => {
-    setOpciones((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), nombre: "", valores: [] },
-    ]);
-  };
-
-  const handleRemoveOption = (id: string) => {
-    setOpciones((prev) => prev.filter((o) => o.id !== id));
-    setCustomTypeMode((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  };
-
-  const handleUpdateOptionName = (id: string, newName: string) => {
-    setOpciones((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, nombre: newName } : o)),
-    );
-  };
-
-  const handleAddOptionValue = (id: string, value: string) => {
-    const val = value.trim();
-    setOpciones((prev) =>
-      prev.map((o) => {
-        if (o.id === id && val && !o.valores.includes(val)) {
-          return { ...o, valores: [...o.valores, val] };
-        }
-        return o;
-      }),
-    );
-  };
-
-  const handleRemoveOptionValue = (id: string, valueToRemove: string) => {
-    setOpciones((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? { ...o, valores: o.valores.filter((v) => v !== valueToRemove) }
-          : o,
-      ),
-    );
-  };
-
-  const handleVarChange = (
-    key: string,
-    field: keyof VariantDataState,
-    value: string,
-  ) => {
-    setVariantData((prev) => ({
-      ...prev,
-      [key]: {
-        ...(prev[key] || { stock: "", precio: "", precio_costo: "", sku: "" }),
-        [field]: value,
-      },
-    }));
-  };
-
-  const handleToggleCombination = (key: string) => {
-    setSelectedCombinations((prev) => ({
-      ...prev,
-      [key]: !(prev[key] ?? opcionesValidasCount === 1),
-    }));
-  };
-
-  const handleBulkSetSelection = (keys: string[], value: boolean) => {
-    setSelectedCombinations((prev) => {
-      const next = { ...prev };
-      keys.forEach((key) => {
-        next[key] = value;
-      });
-      return next;
-    });
-  };
-
-  const handleInvertSelection = (keys: string[]) => {
-    setSelectedCombinations((prev) => {
-      const next = { ...prev };
-      keys.forEach((key) => {
-        next[key] = !(prev[key] ?? opcionesValidasCount === 1);
-      });
-      return next;
-    });
-  };
-
-  const handlePivotChange = (propName: string, value: string) => {
-    setPivotSelections((prev) => ({ ...prev, [propName]: value }));
-  };
-
-  const getSuggestions = (nombre: string, currentValues: string[]) => {
-    if (nombre === "Color") {
-      return PREDEFINED_COLORS.filter((c) => !currentValues.includes(c));
-    }
-    if (nombre === "Talle") {
-      return PREDEFINED_SIZES.filter((s) => !currentValues.includes(s));
-    }
-    return [];
   };
 
   const [, formAction, isPending] = useActionState(
@@ -262,8 +77,8 @@ export function useCreateProductForm() {
     ): Promise<ProductActionState> => {
       formData.append("tieneVariantes", showVariants.toString());
       if (showVariants) {
-        formData.append("opciones", JSON.stringify(opciones));
-        formData.append("variantes", JSON.stringify(variantes));
+        formData.append("opciones", JSON.stringify(variantSelection.opciones));
+        formData.append("variantes", JSON.stringify(variantSelection.variantes));
       }
 
       const result = await crearProductoAction(prevState, formData);
@@ -295,7 +110,7 @@ export function useCreateProductForm() {
       return;
     }
 
-    if (showVariants && duplicatePropertyNames.size > 0) {
+    if (showVariants && variantSelection.duplicatePropertyNames.size > 0) {
       toast.error("Resolvé los nombres de propiedad duplicados antes de guardar.");
       return;
     }
@@ -336,29 +151,29 @@ export function useCreateProductForm() {
     setPrecioVenta,
     gananciaNeta,
     margenPorcentaje,
-    opciones,
-    setOpciones,
-    customTypeMode,
-    setCustomTypeMode,
-    focusedOptionId,
-    setFocusedOptionId,
-    variantes,
-    baseVariants,
-    selectedCombinations,
-    pivotSelections,
-    duplicatePropertyNames,
+    opciones: variantSelection.opciones,
+    setOpciones: variantSelection.setOpciones,
+    customTypeMode: variantSelection.customTypeMode,
+    setCustomTypeMode: variantSelection.setCustomTypeMode,
+    focusedOptionId: variantSelection.focusedOptionId,
+    setFocusedOptionId: variantSelection.setFocusedOptionId,
+    variantes: variantSelection.variantes,
+    baseVariants: variantSelection.baseVariants,
+    selectedCombinations: variantSelection.selectedCombinations,
+    pivotSelections: variantSelection.pivotSelections,
+    duplicatePropertyNames: variantSelection.duplicatePropertyNames,
     isPending,
     handleSubmit,
-    handleAddOption,
-    handleRemoveOption,
-    handleUpdateOptionName,
-    handleAddOptionValue,
-    handleRemoveOptionValue,
-    handleVarChange,
-    handleToggleCombination,
-    handleBulkSetSelection,
-    handleInvertSelection,
-    handlePivotChange,
-    getSuggestions,
+    handleAddOption: variantSelection.handleAddOption,
+    handleRemoveOption: variantSelection.handleRemoveOption,
+    handleUpdateOptionName: variantSelection.handleUpdateOptionName,
+    handleAddOptionValue: variantSelection.handleAddOptionValue,
+    handleRemoveOptionValue: variantSelection.handleRemoveOptionValue,
+    handleVarChange: variantSelection.handleVarChange,
+    handleToggleCombination: variantSelection.handleToggleCombination,
+    handleBulkSetSelection: variantSelection.handleBulkSetSelection,
+    handleInvertSelection: variantSelection.handleInvertSelection,
+    handlePivotChange: variantSelection.handlePivotChange,
+    getSuggestions: variantSelection.getSuggestions,
   };
 }

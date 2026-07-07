@@ -22,20 +22,12 @@ import {
   SheetTrigger,
 } from "@/shared/ui/sheet";
 import { editarProductoAction } from "../actions/edit-product";
-import { PREDEFINED_COLORS, PREDEFINED_SIZES } from "../types/constants";
-import type {
-  CategoriaOption,
-  Opcion,
-  ProductActionState,
-  VarianteInput,
-  VariantDataState,
-} from "../types";
+import { useVariantSelection } from "../hooks/use-variant-selection";
+import type { CategoriaOption, ProductActionState } from "../types";
 import {
-  buildVariantKey,
   isSingleVariantProduct,
   parseLegacyVariant,
 } from "../utils/parse-legacy-variant";
-import { findDuplicatePropertyNames } from "../utils/validate-opciones";
 import { CreateProductFooter } from "./create-product/create-product-footer";
 import { ProductBasicInfoSection } from "./create-product/product-basic-info-section";
 import { ProductCategorySection } from "./create-product/product-category-section";
@@ -57,59 +49,6 @@ type ProductEditDetailSheetProps = {
   hideTrigger?: boolean;
 };
 
-function buildVariantsFromOptions(
-  opciones: Opcion[],
-  currentVariants: VarianteInput[],
-) {
-  const opcionesValidas = opciones.filter(
-    (opcion) => opcion.nombre.trim() && opcion.valores.length > 0,
-  );
-
-  if (opcionesValidas.length === 0) return currentVariants;
-
-  let combinaciones: string[][] = [[]];
-  for (const opcion of opcionesValidas) {
-    const nextCombinaciones: string[][] = [];
-    for (const combo of combinaciones) {
-      for (const val of opcion.valores) {
-        nextCombinaciones.push([...combo, val]);
-      }
-    }
-    combinaciones = nextCombinaciones;
-  }
-
-  return combinaciones.map((valoresPosicionales) => {
-    const valores: Record<string, string> = {};
-    opcionesValidas.forEach((opcion, i) => {
-      valores[opcion.nombre] = valoresPosicionales[i];
-    });
-
-    const key = buildVariantKey(valores);
-    // Los valores posicionales son estables mientras se renombra una propiedad
-    // (el nombre cambia en cada tecla, pero el orden/valores de las opciones no).
-    const signature = valoresPosicionales.join("|");
-    const existente = currentVariants.find((variant) => {
-      if (variant.key === key) return true;
-      const variantValores = Object.values(variant.valores);
-      return (
-        variantValores.length === valoresPosicionales.length &&
-        variantValores.join("|") === signature
-      );
-    });
-
-    return existente
-      ? { ...existente, key, valores }
-      : {
-          key,
-          valores,
-          stock: "",
-          precio: "",
-          precio_costo: "",
-          sku: "",
-        };
-  });
-}
-
 function parseProductImages(imagenUrl: EditableProducto["imagen_url"]) {
   if (Array.isArray(imagenUrl)) return imagenUrl;
   if (typeof imagenUrl !== "string" || !imagenUrl) return [];
@@ -120,13 +59,6 @@ function parseProductImages(imagenUrl: EditableProducto["imagen_url"]) {
   } catch {
     return [imagenUrl];
   }
-}
-
-function getCustomTypeMode(opciones: Opcion[]) {
-  return opciones.reduce<Record<string, boolean>>((acc, opcion) => {
-    acc[opcion.id] = !["Color", "Talle"].includes(opcion.nombre);
-    return acc;
-  }, {});
 }
 
 export function ProductEditDetailSheet({
@@ -164,21 +96,18 @@ export function ProductEditDetailSheet({
   const [precioVenta, setPrecioVenta] = useState(
     producto.precio?.toString() || "",
   );
-  const [opciones, setOpciones] = useState<Opcion[]>(parsedProducto.opciones);
-  const [variantes, setVariantes] = useState<VarianteInput[]>(
-    parsedProducto.variantes,
-  );
-  const [customTypeMode, setCustomTypeMode] = useState<Record<string, boolean>>(
-    () => getCustomTypeMode(parsedProducto.opciones),
-  );
-  const [focusedOptionId, setFocusedOptionId] = useState<string | null>(null);
+
+  // Las combinaciones que ya existen en producto_variantes (reconstruidas
+  // arriba por parseLegacyVariant) arrancan tildadas en la matriz — el
+  // vendedor no debe perder Stock/Precio/SKU ya cargados solo por abrir
+  // el formulario de edición.
+  const variantSelection = useVariantSelection({
+    initialOpciones: parsedProducto.opciones,
+    initialVariantes: parsedProducto.variantes,
+  });
+
   const isOpen = open ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
-
-  const duplicatePropertyNames = useMemo(
-    () => findDuplicatePropertyNames(opciones),
-    [opciones],
-  );
 
   useEffect(() => {
     const fetchCats = async () => {
@@ -213,97 +142,12 @@ export function ProductEditDetailSheet({
     setShowVariants(!isSimpleProduct);
     setPrecioCosto(producto.precio_costo?.toString() || "");
     setPrecioVenta(producto.precio?.toString() || "");
-    setOpciones(parsedProducto.opciones);
-    setVariantes(parsedProducto.variantes);
-    setCustomTypeMode(getCustomTypeMode(parsedProducto.opciones));
-    setFocusedOptionId(null);
+    variantSelection.reset(parsedProducto.opciones, parsedProducto.variantes);
   };
 
   const handleOpenChange = (open: boolean) => {
     setOpen(open);
     if (!open) resetFormState();
-  };
-
-  const updateOpciones = (nextOpciones: Opcion[]) => {
-    setOpciones(nextOpciones);
-    if (showVariants) {
-      setVariantes((prev) => buildVariantsFromOptions(nextOpciones, prev));
-    }
-  };
-
-  const handleAddOption = () => {
-    updateOpciones([
-      ...opciones,
-      { id: crypto.randomUUID(), nombre: "", valores: [] },
-    ]);
-  };
-
-  const handleRemoveOption = (id: string) => {
-    updateOpciones(opciones.filter((opcion) => opcion.id !== id));
-    setCustomTypeMode((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  };
-
-  const handleUpdateOptionName = (id: string, newName: string) => {
-    updateOpciones(
-      opciones.map((opcion) =>
-        opcion.id === id ? { ...opcion, nombre: newName } : opcion,
-      ),
-    );
-  };
-
-  const handleAddOptionValue = (id: string, value: string) => {
-    const val = value.trim();
-    updateOpciones(
-      opciones.map((opcion) => {
-        if (opcion.id === id && val && !opcion.valores.includes(val)) {
-          return { ...opcion, valores: [...opcion.valores, val] };
-        }
-        return opcion;
-      }),
-    );
-  };
-
-  const handleRemoveOptionValue = (id: string, valueToRemove: string) => {
-    updateOpciones(
-      opciones.map((opcion) =>
-        opcion.id === id
-          ? {
-              ...opcion,
-              valores: opcion.valores.filter(
-                (valor) => valor !== valueToRemove,
-              ),
-            }
-          : opcion,
-      ),
-    );
-  };
-
-  const handleVarChange = (
-    key: string,
-    field: keyof VariantDataState,
-    value: string,
-  ) => {
-    setVariantes((prev) =>
-      prev.map((variant) =>
-        variant.key === key ? { ...variant, [field]: value } : variant,
-      ),
-    );
-  };
-
-  const getSuggestions = (nombre: string, currentValues: string[]) => {
-    if (nombre === "Color") {
-      return PREDEFINED_COLORS.filter(
-        (color) => !currentValues.includes(color),
-      );
-    }
-    if (nombre === "Talle") {
-      return PREDEFINED_SIZES.filter((size) => !currentValues.includes(size));
-    }
-    return [];
   };
 
   const [, formAction, isPending] = useActionState(
@@ -314,8 +158,8 @@ export function ProductEditDetailSheet({
       formData.append("id", producto.id);
       formData.append("tieneVariantes", showVariants.toString());
       if (showVariants) {
-        formData.append("opciones", JSON.stringify(opciones));
-        formData.append("variantes", JSON.stringify(variantes));
+        formData.append("opciones", JSON.stringify(variantSelection.opciones));
+        formData.append("variantes", JSON.stringify(variantSelection.variantes));
       }
 
       const result = await editarProductoAction(prevState, formData);
@@ -347,7 +191,7 @@ export function ProductEditDetailSheet({
       return;
     }
 
-    if (showVariants && duplicatePropertyNames.size > 0) {
+    if (showVariants && variantSelection.duplicatePropertyNames.size > 0) {
       toast.error("Resolvé los nombres de propiedad duplicados antes de guardar.");
       return;
     }
@@ -406,7 +250,7 @@ export function ProductEditDetailSheet({
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-8 py-4">
+        <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4">
           <form
             onSubmit={handleSubmit}
             id="edit-product-form"
@@ -453,26 +297,30 @@ export function ProductEditDetailSheet({
             <ProductVariantsSection
               showVariants={showVariants}
               onShowVariantsChange={setShowVariants}
-              opciones={opciones}
-              resetOpciones={() => {
-                setOpciones([]);
-                setVariantes([]);
-              }}
-              customTypeMode={customTypeMode}
-              setCustomTypeMode={setCustomTypeMode}
-              focusedOptionId={focusedOptionId}
-              setFocusedOptionId={setFocusedOptionId}
+              opciones={variantSelection.opciones}
+              resetOpciones={() => variantSelection.reset()}
+              customTypeMode={variantSelection.customTypeMode}
+              setCustomTypeMode={variantSelection.setCustomTypeMode}
+              focusedOptionId={variantSelection.focusedOptionId}
+              setFocusedOptionId={variantSelection.setFocusedOptionId}
               precioVenta={precioVenta}
-              variantes={variantes}
-              duplicatePropertyNames={duplicatePropertyNames}
-              handleAddOption={handleAddOption}
-              handleRemoveOption={handleRemoveOption}
-              handleUpdateOptionName={handleUpdateOptionName}
-              handleAddOptionValue={handleAddOptionValue}
-              handleRemoveOptionValue={handleRemoveOptionValue}
-              handleVarChange={handleVarChange}
-              getSuggestions={getSuggestions}
+              variantes={variantSelection.variantes}
+              duplicatePropertyNames={variantSelection.duplicatePropertyNames}
+              handleAddOption={variantSelection.handleAddOption}
+              handleRemoveOption={variantSelection.handleRemoveOption}
+              handleUpdateOptionName={variantSelection.handleUpdateOptionName}
+              handleAddOptionValue={variantSelection.handleAddOptionValue}
+              handleRemoveOptionValue={variantSelection.handleRemoveOptionValue}
+              handleVarChange={variantSelection.handleVarChange}
+              getSuggestions={variantSelection.getSuggestions}
               showAdvancedColumns
+              baseVariants={variantSelection.baseVariants}
+              selectedCombinations={variantSelection.selectedCombinations}
+              onToggleCombination={variantSelection.handleToggleCombination}
+              onBulkSetSelection={variantSelection.handleBulkSetSelection}
+              onInvertSelection={variantSelection.handleInvertSelection}
+              pivotSelections={variantSelection.pivotSelections}
+              onPivotChange={variantSelection.handlePivotChange}
             />
           </form>
         </div>
@@ -485,7 +333,7 @@ export function ProductEditDetailSheet({
           cancelLabel="Descartar cambios"
           idleLabel="Guardar Cambios"
           blockedReason={
-            duplicatePropertyNames.size > 0
+            variantSelection.duplicatePropertyNames.size > 0
               ? "Resolvé los nombres de propiedad duplicados antes de guardar."
               : null
           }

@@ -156,7 +156,7 @@ export async function editarProductoAction(
               Boolean(op.nombre) && op.valores.length > 0,
           );
 
-        const variantes = variantesRaw.filter(
+        const variantesConAtributos = variantesRaw.filter(
           (v) =>
             v.valores &&
             Object.entries(v.valores).some(
@@ -164,10 +164,35 @@ export async function editarProductoAction(
             ),
         );
 
-        if (opciones.length === 0 || variantes.length === 0) {
+        if (opciones.length === 0 || variantesConAtributos.length === 0) {
           return {
             error:
               "Las variantes no tienen propiedades o valores válidos. Revisa la grilla antes de guardar.",
+            success: false,
+          };
+        }
+
+        // Red de seguridad: el chequeo anterior solo valida que la
+        // combinación tenga atributos (Talle, Color, etc.), lo cual es
+        // SIEMPRE cierto en un cross-join — no filtra nada por sí solo. La
+        // matriz de selección del cliente ya debería mandar solo las
+        // combinaciones marcadas, pero si ese estado llega desincronizado
+        // por cualquier motivo, no persistimos filas sin ningún dato real
+        // cargado (precio, costo, stock o SKU).
+        const variantes = variantesConAtributos.filter((v) => {
+          const stock = Number.parseInt(v.stock || "0");
+          return Boolean(
+            v.precio?.trim() ||
+              v.precio_costo?.trim() ||
+              (Number.isFinite(stock) && stock > 0) ||
+              v.sku?.trim(),
+          );
+        });
+
+        if (variantes.length === 0) {
+          return {
+            error:
+              "Ninguna de las combinaciones tiene precio o stock cargado. Revisá la grilla antes de guardar.",
             success: false,
           };
         }

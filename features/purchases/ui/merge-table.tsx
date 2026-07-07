@@ -562,7 +562,7 @@ export function MergeTable({
                                 <span className="truncate max-w-[150px]">
                                   {item.raw_variante}
                                 </span>
-                                <span className="font-bold text-emerald-600 bg-emerald-50 px-1 rounded ml-1">
+                                <span className="font-semibold text-emerald-600 ">
                                   +{item.cantidad}
                                 </span>
                               </div>
