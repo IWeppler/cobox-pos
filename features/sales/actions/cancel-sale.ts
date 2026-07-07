@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
 
 export async function anularVentaAction(
   ventaId: string,
@@ -22,12 +23,11 @@ export async function anularVentaAction(
       .from("ventas")
       .select(
         `
-        id, 
+        id,
         estado_operacion,
         monto_cobrado,
         monto_pendiente,
         cliente_id,
-        turno_caja_id,
         ventas_items ( producto_id, variante, cantidad )
       `,
       )
@@ -41,6 +41,25 @@ export async function anularVentaAction(
     // 2. Anulación lógica: preservamos ticket, items, pagos y relaciones contables.
     if (venta.estado_operacion === "ANULADA") {
       return { error: "La venta ya se encuentra anulada.", success: false };
+    }
+
+    // La devolución en efectivo sale de la caja abierta AHORA (no de la
+    // caja original de la venta, que puede estar cerrada hace rato).
+    // Se resuelve antes de mutar nada para no dejar la anulación a medias
+    // si la caja está cerrada y la política lo exige.
+    let turnoDevolucionId: string | null = null;
+    if (venta.monto_cobrado > 0) {
+      const { turnoId, requiereCajaAbierta } = await resolverTurnoActivo(
+        supabase,
+        user.id,
+      );
+      if (requiereCajaAbierta && !turnoId) {
+        return {
+          error: "Necesitas abrir la caja antes de anular esta venta.",
+          success: false,
+        };
+      }
+      turnoDevolucionId = turnoId;
     }
 
     const { error: updateVentaError } = await supabase
@@ -78,6 +97,7 @@ export async function anularVentaAction(
         concepto: `Devolución Venta #${ventaId.split("-")[0].toUpperCase()}`,
         monto: venta.monto_cobrado,
         creado_por: user.id,
+        turno_caja_id: turnoDevolucionId,
       });
     }
 

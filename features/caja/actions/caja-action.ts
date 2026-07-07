@@ -4,6 +4,7 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { CajaActionState } from "@/entities/caja/types";
+import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
 
 // ============================================================================
 // 1. OBTENER CAJA ACTIVA (Según Configuración)
@@ -25,15 +26,15 @@ export async function getTurnoActivoAction() {
   if (!config)
     return { turno: null, config: null, error: "Configuración no encontrada" };
 
-  let query = supabase.from("turnos_caja").select("*").eq("estado", "ABIERTO");
+  const { turnoId } = await resolverTurnoActivo(supabase, user.id);
 
-  if (config.modo_caja === "UNICA") {
-    query = query.eq("modo", "UNICA");
-  } else if (config.modo_caja === "POR_USUARIO") {
-    query = query.eq("modo", "POR_USUARIO").eq("usuario_id", user.id);
-  }
+  if (!turnoId) return { turno: null, config, error: null };
 
-  const { data: turnoAbierto } = await query.maybeSingle();
+  const { data: turnoAbierto } = await supabase
+    .from("turnos_caja")
+    .select("*")
+    .eq("id", turnoId)
+    .single();
 
   return { turno: turnoAbierto || null, config, error: null };
 }
@@ -59,28 +60,12 @@ export async function abrirTurnoAction(
 
   if (!user) return { error: "No autorizado.", success: false };
 
-  const { data: config } = await supabase
-    .from("configuracion_pos")
-    .select("modo_caja")
-    .single();
-  const modoCaja = config?.modo_caja || "UNICA";
+  const { turnoId: turnoColisionId, modoCaja } = await resolverTurnoActivo(
+    supabase,
+    user.id,
+  );
 
-  let validacionQuery = supabase
-    .from("turnos_caja")
-    .select("id")
-    .eq("estado", "ABIERTO");
-
-  if (modoCaja === "UNICA") {
-    validacionQuery = validacionQuery.eq("modo", "UNICA");
-  } else {
-    validacionQuery = validacionQuery
-      .eq("modo", "POR_USUARIO")
-      .eq("usuario_id", user.id);
-  }
-
-  const { data: turnoColision } = await validacionQuery.maybeSingle();
-
-  if (turnoColision) {
+  if (turnoColisionId) {
     return {
       error: `Ya existe una caja abierta en modo ${modoCaja.replace("_", " ")}.`,
       success: false,
@@ -118,7 +103,6 @@ export async function cerrarTurnoAction(
 ) {
   const turnoId = formData.get("turno_id") as string;
   const montoDeclarado = Number(formData.get("monto_final"));
-  const efectivoEsperado = Number(formData.get("efectivo_esperado"));
 
   if (!turnoId || isNaN(montoDeclarado)) {
     return { error: "Faltan datos para cerrar la caja.", success: false };
@@ -130,9 +114,54 @@ export async function cerrarTurnoAction(
     data: { user },
   } = await supabase.auth.getUser();
 
+  const { data: turno, error: turnoError } = await supabase
+    .from("turnos_caja")
+    .select("monto_inicial, estado")
+    .eq("id", turnoId)
+    .single();
+
+  if (turnoError || !turno) {
+    return { error: "No se encontró el turno a cerrar.", success: false };
+  }
+  if (turno.estado !== "ABIERTO") {
+    return { error: "Esta caja ya fue cerrada.", success: false };
+  }
+
+  // Recalculamos el efectivo esperado server-side. El cliente ya no envía
+  // este valor: se ignora cualquier dato de efectivo_esperado que llegue
+  // por formData.
+  //
+  // El total de egresos se calcula vía RPC (SECURITY DEFINER) en vez de un
+  // SELECT directo: en modo_caja='UNICA' varios cajeros no-admin comparten
+  // el mismo turno_caja_id, y la policy egresos_select_propio_o_admin solo
+  // deja ver a cada uno sus propios egresos. Un SUM corrido con la sesión
+  // del cajero que cierra subestimaría el total e inflaría el esperado.
+  const [ventaPagosRes, egresosSumRes] = await Promise.all([
+    supabase
+      .from("venta_pagos")
+      .select("monto_bruto")
+      .eq("turno_caja_id", turnoId)
+      .eq("metodo_tipo", "EFECTIVO")
+      .neq("estado_pago_operacion", "ANULADO"),
+    supabase.rpc("calcular_egresos_turno", { p_turno_id: turnoId }),
+  ]);
+
+  if (egresosSumRes.error) {
+    console.error("Error calculando egresos del turno:", egresosSumRes.error);
+    return { error: "Ocurrió un error al calcular el cierre.", success: false };
+  }
+
+  const ingresosEfectivo = (ventaPagosRes.data || []).reduce(
+    (acc, p) => acc + Number(p.monto_bruto),
+    0,
+  );
+  const totalEgresos = Number(egresosSumRes.data ?? 0);
+
+  const efectivoEsperado =
+    Number(turno.monto_inicial) + ingresosEfectivo - totalEgresos;
   const diferenciaCaja = montoDeclarado - efectivoEsperado;
 
-  const { error } = await supabase
+  const { data: turnoCerrado, error } = await supabase
     .from("turnos_caja")
     .update({
       monto_final: montoDeclarado,
@@ -143,11 +172,17 @@ export async function cerrarTurnoAction(
       fecha_cierre: new Date().toISOString(),
       estado: "CERRADO",
     })
-    .eq("id", turnoId);
+    .eq("id", turnoId)
+    .eq("estado", "ABIERTO")
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.error("Error cerrando caja:", error);
     return { error: "Ocurrió un error al cerrar la caja.", success: false };
+  }
+  if (!turnoCerrado) {
+    return { error: "Esta caja ya fue cerrada.", success: false };
   }
 
   revalidatePath("/caja");
@@ -160,16 +195,10 @@ export async function cerrarTurnoAction(
 // ============================================================================
 // 4. OBTENER DETALLES DEL TURNO (Cierre Z / Auditoría)
 // ============================================================================
-export async function getDetallesTurnoAction(
-  turnoId: string,
-  fechaInicio: string,
-  fechaFin: string | null,
-) {
+export async function getDetallesTurnoAction(turnoId: string) {
   try {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
-
-    const endDate = fechaFin || new Date().toISOString();
 
     const [ventasRes, pagosSueltosRes, egresosRes] = await Promise.all([
       supabase
@@ -197,8 +226,7 @@ export async function getDetallesTurnoAction(
       supabase
         .from("egresos")
         .select("id, concepto, monto, fecha, perfiles(nombre)")
-        .gte("fecha", fechaInicio)
-        .lte("fecha", endDate)
+        .eq("turno_caja_id", turnoId)
         .order("fecha", { ascending: false }),
     ]);
 
@@ -243,10 +271,23 @@ export async function registrarEgresoAction(
     return { error: "No autorizado.", success: false };
   }
 
+  const { turnoId, requiereCajaAbierta } = await resolverTurnoActivo(
+    supabase,
+    user.id,
+  );
+
+  if (requiereCajaAbierta && !turnoId) {
+    return {
+      error: "Necesitas abrir la caja antes de registrar un gasto.",
+      success: false,
+    };
+  }
+
   const { error } = await supabase.from("egresos").insert({
     concepto,
     monto,
     creado_por: user.id,
+    turno_caja_id: turnoId,
   });
 
   if (error) {

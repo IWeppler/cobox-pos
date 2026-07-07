@@ -67,12 +67,6 @@ export default async function CajaPage() {
 
   // 5. Traemos los movimientos SOLAMENTE si hay cajas abiertas
   if (turnosAbiertosIds.length > 0) {
-    // Calculamos la fecha más antigua de las cajas abiertas para filtrar egresos
-    const fechaMinimaApertura = turnosAbiertos.reduce((min, t) => {
-      const d = new Date(t.fecha_apertura);
-      return d < min ? d : min;
-    }, new Date());
-
     const [ventasRes, pagosSueltosRes, egresosRes] = await Promise.all([
       supabase
         .from("ventas")
@@ -93,8 +87,10 @@ export default async function CajaPage() {
         .order("creado_en", { ascending: false }),
       supabase
         .from("egresos")
-        .select("id, concepto, monto, fecha, creado_por, perfiles(nombre)")
-        .gte("fecha", fechaMinimaApertura.toISOString())
+        .select(
+          "id, concepto, monto, fecha, creado_por, turno_caja_id, perfiles(nombre)",
+        )
+        .in("turno_caja_id", turnosAbiertosIds)
         .order("fecha", { ascending: false }),
     ]);
 

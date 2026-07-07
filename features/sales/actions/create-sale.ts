@@ -4,6 +4,7 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { CreateSalePaymentInput } from "@/entities/ventas/types";
+import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
 
 export async function registrarVentaAction(
   prevState: { error: string | null; success: boolean },
@@ -33,26 +34,10 @@ export async function registrarVentaAction(
   if (authError || !user) return { error: "No autorizado.", success: false };
 
   // BLOQUEO Y ASIGNACIÓN DE CAJA (MODO DINÁMICO)
-  const { data: config } = await supabase
-    .from("configuracion_pos")
-    .select("modo_caja, requiere_caja_abierta")
-    .single();
-  const requiereCaja = config?.requiere_caja_abierta ?? true;
-  const modoCaja = config?.modo_caja || "UNICA";
+  const { turnoId: turnoAbiertoId, requiereCajaAbierta: requiereCaja } =
+    await resolverTurnoActivo(supabase, user.id);
 
-  let turnoQuery = supabase
-    .from("turnos_caja")
-    .select("id")
-    .eq("estado", "ABIERTO");
-  if (modoCaja === "UNICA") {
-    turnoQuery = turnoQuery.eq("modo", "UNICA");
-  } else if (modoCaja === "POR_USUARIO") {
-    turnoQuery = turnoQuery.eq("modo", "POR_USUARIO").eq("usuario_id", user.id);
-  }
-
-  const { data: turnoAbierto } = await turnoQuery.maybeSingle();
-
-  if (requiereCaja && !turnoAbierto) {
+  if (requiereCaja && !turnoAbiertoId) {
     return { error: "CAJA_CERRADA", success: false };
   }
 
@@ -212,7 +197,7 @@ export async function registrarVentaAction(
       comision_monto: comisionMonto,
       monto_neto: montoNeto,
       acreditacion_dias: metodoData.acreditacion_dias || 0,
-      turno_caja_id: turnoAbierto?.id || null,
+      turno_caja_id: turnoAbiertoId,
     });
   }
 
@@ -231,7 +216,7 @@ export async function registrarVentaAction(
   const payloadVentas = {
     vendedor_id: user.id,
     cliente_id: clienteId || null,
-    turno_caja_id: turnoAbierto?.id || null,
+    turno_caja_id: turnoAbiertoId,
     estado_operacion: "CONFIRMADA",
     metodo_pago: metodoPagoSafe,
     total: totalConDescuentoYRecargo,

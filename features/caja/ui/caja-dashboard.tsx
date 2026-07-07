@@ -238,10 +238,7 @@ export function CajaDashboard({
 
     const totalEgresos = egresosMapeados.reduce((acc, m) => acc + m.monto, 0);
     const fondoInicial = Number(turno.monto_inicial);
-    const efectivoEsperado = Math.max(
-      0,
-      fondoInicial + ingresosEfectivo - totalEgresos,
-    );
+    const efectivoEsperado = fondoInicial + ingresosEfectivo - totalEgresos;
 
     return {
       movimientos: todos,
@@ -391,20 +388,28 @@ export function CajaDashboard({
                         <span className="text-foreground">
                           Efectivo Esperado
                         </span>
-                        <span className="text-emerald-700">
+                        <span
+                          className={
+                            totales.efectivoEsperado < 0
+                              ? "text-rose-600"
+                              : "text-emerald-700"
+                          }
+                        >
                           {formatearMoneda(totales.efectivoEsperado)}
                         </span>
                       </div>
+                      {totales.efectivoEsperado < 0 && (
+                        <p className="text-xs text-rose-600 font-semibold flex items-center gap-1.5 pt-1">
+                          <Info className="w-3.5 h-3.5 shrink-0" />
+                          Revisar: el efectivo esperado dio negativo. Puede
+                          haber egresos mal atribuidos a este turno.
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <form action={cerrarAction} className="px-6 pb-6 space-y-5">
                     <input type="hidden" name="turno_id" value={turno.id} />
-                    <input
-                      type="hidden"
-                      name="efectivo_esperado"
-                      value={totales.efectivoEsperado}
-                    />
                     <div className="space-y-3">
                       <Label className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
                         Efectivo real en cajon
@@ -449,12 +454,24 @@ export function CajaDashboard({
                   <Banknote className="w-4 h-4 text-emerald-500" />
                   Efectivo en Cajon
                 </h3>
-                <div className="text-3xl font-bold text-foreground mb-2">
+                <div
+                  className={`text-3xl font-bold mb-2 ${
+                    totales.efectivoEsperado < 0
+                      ? "text-rose-600"
+                      : "text-foreground"
+                  }`}
+                >
                   {formatearMoneda(totales.efectivoEsperado)}
                 </div>
-                <p className="text-sm text-muted-foreground font-medium">
-                  Efectivo total esperado al cierre
-                </p>
+                {totales.efectivoEsperado < 0 ? (
+                  <p className="text-sm text-rose-600 font-semibold">
+                    ⚠ Revisar: efectivo esperado negativo
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground font-medium">
+                    Efectivo total esperado al cierre
+                  </p>
+                )}
               </div>
               <div className="mt-8 space-y-3">
                 <div className="flex justify-between items-center text-sm font-medium">

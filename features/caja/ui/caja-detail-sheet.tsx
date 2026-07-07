@@ -71,11 +71,7 @@ export function CajaDetailSheet({
 
     const fetchDetalles = async () => {
       setIsLoading(true);
-      const res = await getDetallesTurnoAction(
-        turno.id,
-        turno.fecha_apertura,
-        turno.fecha_cierre,
-      );
+      const res = await getDetallesTurnoAction(turno.id);
 
       if (res.data) {
         const ventas = res.data.ventas as unknown as VentaCaja[];
@@ -186,8 +182,9 @@ export function CajaDetailSheet({
   const idCorto = turno.id.split("-")[0].toUpperCase();
 
   const final = Number(turno.monto_final || 0);
-  const esperado = Math.max(0, Number(turno.efectivo_esperado));
+  const esperado = Number(turno.efectivo_esperado);
   const diferencia = final - esperado;
+  const esperadoNegativo = !isAbierto && esperado < 0;
 
   return (
     <Sheet
@@ -272,7 +269,9 @@ export function CajaDetailSheet({
               </div>
               <div className="flex justify-between items-center text-muted-foreground">
                 <span>Efectivo Esperado (Sistema):</span>
-                <span className="font-medium text-foreground">
+                <span
+                  className={`font-medium ${esperadoNegativo ? "text-rose-600" : "text-foreground"}`}
+                >
                   {isAbierto ? "-" : formatearMoneda(esperado)}
                 </span>
               </div>
@@ -282,6 +281,12 @@ export function CajaDetailSheet({
                   {isAbierto ? "-" : formatearMoneda(final)}
                 </span>
               </div>
+              {esperadoNegativo && (
+                <p className="text-xs text-rose-600 font-semibold flex items-center gap-1.5 pt-1">
+                  ⚠ Revisar: el esperado dio negativo. Puede haber egresos
+                  mal atribuidos a este turno.
+                </p>
+              )}
             </div>
           </div>
 

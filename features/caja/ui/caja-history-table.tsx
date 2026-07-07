@@ -156,12 +156,20 @@ export function CajaHistoryTable({
                                 );
 
                               const final = Number(h.monto_final || 0);
-                              const esperado = Math.max(
-                                0,
-                                Number(h.efectivo_esperado),
-                              );
+                              const esperado = Number(h.efectivo_esperado);
                               const diferencia = final - esperado;
 
+                              if (esperado < 0) {
+                                return (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-rose-50/50 dark:bg-rose-100 text-rose-700 border-rose-200 shadow-none text-[10px]"
+                                    title="El efectivo esperado calculado dio negativo"
+                                  >
+                                    ⚠ Esperado negativo
+                                  </Badge>
+                                );
+                              }
                               if (diferencia === 0) {
                                 return (
                                   <Badge

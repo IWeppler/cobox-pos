@@ -76,6 +76,7 @@ export interface EgresoCaja {
   concepto: string;
   fecha: string;
   creado_por?: string | null;
+  turno_caja_id?: string | null;
   perfiles?: {
     nombre?: string | null;
   } | null;
