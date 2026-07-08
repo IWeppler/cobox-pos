@@ -16,6 +16,7 @@ import Image from "next/image";
 import { useCartStore } from "@/shared/store/cart-store";
 import { toast } from "sonner";
 import { ConfiguracionPOS } from "@/entities/config/types";
+import { resolverAtributosVariante } from "@/entities/productos/lib/build-propiedades-filtro";
 
 interface ProductDetailProps {
   producto: Producto;
@@ -58,18 +59,26 @@ export function ProductDetail({
       atributos?: Record<string, string>;
     }> = [];
 
+    let tieneAtributosEstructurados = false;
     producto.producto_variantes?.forEach((v) => {
+      const atributos = resolverAtributosVariante(v);
+      if (Object.keys(atributos).length > 0) tieneAtributosEstructurados = true;
       list.push({
         variante: v.nombre_display,
         cantidad: v.stock,
         id_real: v.id,
-        atributos: v.atributos, // El nuevo JSONB
+        atributos,
       });
     });
 
-    producto.stock?.forEach((s) => {
-      list.push({ variante: s.variante, cantidad: s.cantidad, id_real: s.id });
-    });
+    // Solo se recurre al stock legacy si el producto nunca se migró a
+    // producto_variantes.atributos — si no, se duplican los grupos porque
+    // ambas fuentes describen las mismas variantes.
+    if (!tieneAtributosEstructurados) {
+      producto.stock?.forEach((s) => {
+        list.push({ variante: s.variante, cantidad: s.cantidad, id_real: s.id });
+      });
+    }
     return list;
   }, [producto.producto_variantes, producto.stock]);
 

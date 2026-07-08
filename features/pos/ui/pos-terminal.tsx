@@ -26,13 +26,20 @@ interface VarianteDisponible {
 }
 
 const getStockTotal = (producto: Producto) => {
-  const stockViejos =
-    producto.stock?.reduce((acc, s) => acc + Number(s.cantidad || 0), 0) || 0;
   const stockNuevos =
     producto.producto_variantes?.reduce(
       (acc, v) => acc + Number(v.stock || 0),
       0,
     ) || 0;
+
+  // Solo se suma el stock legacy si el producto no tiene producto_variantes
+  // — si no, se duplica el total porque ambas fuentes describen el mismo stock.
+  if (producto.producto_variantes && producto.producto_variantes.length > 0) {
+    return stockNuevos;
+  }
+
+  const stockViejos =
+    producto.stock?.reduce((acc, s) => acc + Number(s.cantidad || 0), 0) || 0;
 
   return stockViejos + stockNuevos;
 };
@@ -102,14 +109,20 @@ export function PosTerminal({
   };
 
   const handleProductClick = (producto: Producto) => {
-    // 1. Calculamos stock real unificado
+    // 1. Calculamos stock real unificado. Solo se recurre al stock legacy
+    // si el producto no tiene producto_variantes — si no, se duplica el
+    // conteo porque ambas fuentes describen el mismo stock.
     const variantesArray: VarianteDisponible[] = [];
     producto.producto_variantes?.forEach((v) =>
       variantesArray.push({ variante: v.nombre_display, cantidad: v.stock }),
     );
-    producto.stock?.forEach((s) =>
-      variantesArray.push({ variante: s.variante, cantidad: s.cantidad }),
-    );
+    const tieneVariantesMigradas =
+      (producto.producto_variantes?.length ?? 0) > 0;
+    if (!tieneVariantesMigradas) {
+      producto.stock?.forEach((s) =>
+        variantesArray.push({ variante: s.variante, cantidad: s.cantidad }),
+      );
+    }
 
     const variantesParaVender = variantesArray.filter((v) => v.cantidad > 0);
 
