@@ -213,6 +213,7 @@ export function MergeTable({
     nombre: "",
     precio: 0,
     categoria: "",
+    origenPrecio: "",
   });
   const [categoriasDB, setCategoriasDB] = useState<
     { id: string; nombre: string }[]
@@ -250,7 +251,10 @@ export function MergeTable({
           return {
             ...item,
             producto_id: newProductId,
-            precio_venta_actualizado: prod?.precio || 0,
+            // Si ya se calculó un precio (margen global o edición manual), lo respetamos.
+            // Solo caemos al precio actual del producto si todavía no hay nada calculado.
+            precio_venta_actualizado:
+              item.precio_venta_actualizado || prod?.precio || 0,
             estado_match:
               item.estado_match === "DESCONOCIDO"
                 ? "NUEVO_ALIAS"
@@ -609,10 +613,29 @@ export function MergeTable({
                             className="h-8 text-xs border-dashed text-primary hover:bg-primary/10 hover:text-primary hover:border-primary w-full justify-start"
                             onClick={() => {
                               setGroupToCreateName(rawNombre);
+
+                              // Si ya hay un precio calculado para esta fila (margen global
+                              // aplicado o edición manual), lo usamos como sugerencia.
+                              // Si no, caemos al fallback por defecto de costo + 50%.
+                              const margenYaAplicado =
+                                (firstItem.precio_venta_actualizado || 0) > 0;
+                              const precioSugerido = margenYaAplicado
+                                ? (firstItem.precio_venta_actualizado as number)
+                                : Math.ceil(firstItem.precio_costo * 1.5);
+
+                              const origenPrecio = margenYaAplicado
+                                ? `Costo $${firstItem.precio_costo.toLocaleString("es-AR")} + ${(
+                                    ((precioSugerido - firstItem.precio_costo) /
+                                      firstItem.precio_costo) *
+                                    100
+                                  ).toFixed(1)}% margen = $${precioSugerido.toLocaleString("es-AR")}`
+                                : "Precio sugerido por defecto (sin margen aplicado todavía)";
+
                               setNuevoProductoData({
                                 nombre: rawNombre,
-                                precio: Math.ceil(firstItem.precio_costo * 1.5), // Sugerencia de precio base
+                                precio: precioSugerido,
                                 categoria: firstItem.raw_categoria || "",
+                                origenPrecio,
                               });
                             }}
                           >
@@ -781,6 +804,11 @@ export function MergeTable({
                   }
                 />
               </div>
+              {nuevoProductoData.origenPrecio && (
+                <p className="text-xs text-muted-foreground">
+                  {nuevoProductoData.origenPrecio}
+                </p>
+              )}
             </div>
 
             <div className="pt-2 flex justify-end gap-2">
