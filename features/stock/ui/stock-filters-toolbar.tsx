@@ -32,6 +32,7 @@ import {
 import { ImportarPedidoModal } from "@/features/purchases/ui/create-purchase-modal";
 import { CrearProductoSheet } from "@/features/stock/ui/create-sheet";
 import { UpdatePricesModal } from "./update-prices-modal";
+import { PriceHistoryModal } from "./price-history-modal";
 
 type CategoriaToolbar =
   | string
@@ -235,6 +236,7 @@ export function StockFiltersToolbar({
                 >
                   <div className="flex flex-col gap-0.5 [&_button]:w-full [&_button]:justify-start [&_button]:h-9 [&_button]:px-2 [&_button]:bg-transparent [&_button]:border-0 [&_button]:shadow-none [&_button]:font-medium [&_button]:text-sm [&_button:hover]:bg-muted [&_button]:rounded-md [&_button_span.hidden]:!inline-block [&_button_svg]:mr-2 [&_button_svg]:w-4 [&_button_svg]:h-4 [&_button_svg]:shrink-0">
                     <UpdatePricesModal />
+                    <PriceHistoryModal />
                     <Button
                       type="button"
                       variant="ghost"

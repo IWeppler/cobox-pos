@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -16,7 +16,10 @@ import { Label } from "@/shared/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
@@ -29,6 +32,8 @@ import {
   CheckCircle2,
   Percent,
   Target,
+  AlertTriangle,
+  Search,
 } from "lucide-react";
 import {
   simularPreciosAction,
@@ -38,6 +43,7 @@ import {
   CampoObjetivo,
   TipoRedondeo,
   PrevisualizacionItem,
+  AdvertenciasPrecio,
 } from "../actions/update-prices";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { useActiveCategories } from "../hooks/use-active-categories";
@@ -63,7 +69,14 @@ export function UpdatePricesModal() {
   const [isSimulating, setIsSimulating] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [previewData, setPreviewData] = useState<PrevisualizacionItem[]>([]);
+  const [advertencias, setAdvertencias] = useState<AdvertenciasPrecio | null>(
+    null,
+  );
   const [confirmado, setConfirmado] = useState(false);
+  const [confirmadoReduccionTotal, setConfirmadoReduccionTotal] =
+    useState(false);
+  const [busquedaPreview, setBusquedaPreview] = useState("");
+  const [ordenPreview, setOrdenPreview] = useState<"cambio" | "az">("cambio");
 
   // --- HANDLERS ---
   const handleOpenChange = (open: boolean) => {
@@ -81,7 +94,11 @@ export function UpdatePricesModal() {
     setRedondeo("SIN_REDONDEO");
     setNombreLote("");
     setPreviewData([]);
+    setAdvertencias(null);
     setConfirmado(false);
+    setConfirmadoReduccionTotal(false);
+    setBusquedaPreview("");
+    setOrdenPreview("cambio");
   };
 
   const handleSimular = async () => {
@@ -106,9 +123,32 @@ export function UpdatePricesModal() {
       toast.error(res.error);
     } else if (res.preview) {
       setPreviewData(res.preview);
+      setAdvertencias(res.advertencias || null);
+      setConfirmadoReduccionTotal(false);
+      setBusquedaPreview("");
+      setOrdenPreview("cambio");
       setStep(3);
     }
   };
+
+  const previewFiltrado = useMemo(() => {
+    const query = busquedaPreview.trim().toLowerCase();
+    const lista = query
+      ? previewData.filter((item) => item.nombre.toLowerCase().includes(query))
+      : previewData;
+
+    // Cambio "principal" a efectos de ordenar por magnitud: si se está
+    // tocando el costo exclusivamente, ordena por ese delta; en cualquier
+    // otro caso (PRECIO o AMBOS) ordena por el delta de precio, que es el
+    // número que más le importa al usuario.
+    const cambioPrincipal = (item: PrevisualizacionItem) =>
+      campo === "COSTO" ? item.diferencia_costo : item.diferencia_precio;
+
+    return [...lista].sort((a, b) => {
+      if (ordenPreview === "az") return a.nombre.localeCompare(b.nombre, "es");
+      return Math.abs(cambioPrincipal(b)) - Math.abs(cambioPrincipal(a));
+    });
+  }, [previewData, busquedaPreview, ordenPreview, campo]);
 
   const handleAplicar = async () => {
     setIsApplying(true);
@@ -267,15 +307,24 @@ export function UpdatePricesModal() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="AUMENTAR_PORCENTAJE">
-                        Aumento (%)
-                      </SelectItem>
-                      <SelectItem value="REDUCIR_PORCENTAJE">
-                        Descuento (%)
-                      </SelectItem>
-                      <SelectItem value="FIJAR_MARGEN">
-                        Fijar Margen (%)
-                      </SelectItem>
+                      <SelectGroup>
+                        <SelectLabel>
+                          Ajuste directo sobre el precio actual
+                        </SelectLabel>
+                        <SelectItem value="AUMENTAR_PORCENTAJE">
+                          Aumentar precio actual (+%)
+                        </SelectItem>
+                        <SelectItem value="REDUCIR_PORCENTAJE">
+                          Reducir precio actual (-%)
+                        </SelectItem>
+                      </SelectGroup>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel>Margen sobre precio de venta</SelectLabel>
+                        <SelectItem value="FIJAR_MARGEN">
+                          Fijar Margen (%)
+                        </SelectItem>
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </div>
@@ -363,64 +412,195 @@ export function UpdatePricesModal() {
                 </p>
               </div>
 
+              <div className="flex gap-2">
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    value={busquedaPreview}
+                    onChange={(e) => setBusquedaPreview(e.target.value)}
+                    placeholder="Buscar producto..."
+                    className="h-9 pl-8 text-xs rounded-lg"
+                  />
+                </div>
+                <Select
+                  value={ordenPreview}
+                  onValueChange={(v) => setOrdenPreview(v as "cambio" | "az")}
+                >
+                  <SelectTrigger className="h-9 rounded-lg w-44 shrink-0 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cambio">Mayor cambio primero</SelectItem>
+                    <SelectItem value="az">A-Z</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <ScrollArea className="h-50 border border-border rounded-xl bg-muted/20">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-muted text-muted-foreground font-bold sticky top-0">
                     <tr>
                       <th className="px-3 py-2">Producto</th>
                       {(campo === "COSTO" || campo === "AMBOS") && (
-                        <th className="px-3 py-2 text-right">Nuevo Costo</th>
+                        <th className="px-3 py-2 text-right">
+                          Costo antes / después
+                        </th>
                       )}
                       {(campo === "PRECIO" || campo === "AMBOS") && (
-                        <th className="px-3 py-2 text-right">Nuevo Precio</th>
+                        <th className="px-3 py-2 text-right">
+                          Precio antes / después
+                        </th>
                       )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {previewData.slice(0, 50).map((item) => (
-                      <tr key={item.producto_id}>
-                        <td className="px-3 py-2 font-medium truncate max-w-30">
-                          {item.nombre}
+                    {previewFiltrado.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={campo === "AMBOS" ? 3 : 2}
+                          className="px-3 py-6 text-center text-muted-foreground"
+                        >
+                          Ningún producto coincide con la búsqueda.
                         </td>
-
-                        {(campo === "COSTO" || campo === "AMBOS") && (
-                          <td className="px-3 py-2 text-right">
-                            <div className="font-bold">
-                              {formatearMoneda(item.costo_nuevo)}
-                            </div>
-                            <div
-                              className={`text-[10px] font-bold ${item.diferencia_costo > 0 ? "text-green-700" : item.diferencia_costo < 0 ? "text-destuctive" : "text-muted-foreground"}`}
-                            >
-                              {item.diferencia_costo > 0 ? "+" : ""}
-                              {formatearMoneda(item.diferencia_costo)}
-                            </div>
-                          </td>
-                        )}
-
-                        {(campo === "PRECIO" || campo === "AMBOS") && (
-                          <td className="px-3 py-2 text-right">
-                            <div className="font-bold">
-                              {formatearMoneda(item.precio_nuevo)}
-                            </div>
-                            <div
-                              className={`text-[10px] font-bold ${item.diferencia_precio > 0 ? "text-green-700" : item.diferencia_precio < 0 ? "text-destructive" : "text-muted-foreground"}`}
-                            >
-                              {item.diferencia_precio > 0 ? "+" : ""}
-                              {formatearMoneda(item.diferencia_precio)}
-                            </div>
-                          </td>
-                        )}
                       </tr>
-                    ))}
+                    )}
+
+                    {previewFiltrado.slice(0, 30).map((item) => {
+                      const precioEnRiesgo =
+                        (campo === "PRECIO" || campo === "AMBOS") &&
+                        item.precio_nuevo <= 0;
+
+                      return (
+                        <tr
+                          key={item.producto_id}
+                          className={
+                            precioEnRiesgo ? "bg-[var(--bg-danger)]" : ""
+                          }
+                        >
+                          <td className="px-3 py-2 font-medium truncate max-w-30">
+                            {item.nombre}
+                          </td>
+
+                          {(campo === "COSTO" || campo === "AMBOS") && (
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="text-muted-foreground line-through decoration-muted-foreground/60">
+                                  {formatearMoneda(item.costo_anterior)}
+                                </span>
+                                <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                                <span className="font-bold">
+                                  {formatearMoneda(item.costo_nuevo)}
+                                </span>
+                              </div>
+                              <div
+                                className={`text-[10px] font-bold ${item.diferencia_costo > 0 ? "text-green-700" : item.diferencia_costo < 0 ? "text-destructive" : "text-muted-foreground"}`}
+                              >
+                                {item.diferencia_costo > 0 ? "+" : ""}
+                                {formatearMoneda(item.diferencia_costo)}
+                              </div>
+                            </td>
+                          )}
+
+                          {(campo === "PRECIO" || campo === "AMBOS") && (
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="text-muted-foreground line-through decoration-muted-foreground/60">
+                                  {formatearMoneda(item.precio_anterior)}
+                                </span>
+                                <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                                <span
+                                  className={`font-bold ${precioEnRiesgo ? "text-destructive" : ""}`}
+                                >
+                                  {formatearMoneda(item.precio_nuevo)}
+                                </span>
+                              </div>
+                              <div
+                                className={`text-[10px] font-bold ${item.diferencia_precio > 0 ? "text-green-700" : item.diferencia_precio < 0 ? "text-destructive" : "text-muted-foreground"}`}
+                              >
+                                {item.diferencia_precio > 0 ? "+" : ""}
+                                {formatearMoneda(item.diferencia_precio)}
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
-                {previewData.length > 50 && (
+                {previewFiltrado.length > 30 && (
                   <div className="text-center py-2 text-xs text-muted-foreground bg-muted/30">
-                    Mostrando los primeros 50 de {previewData.length}{" "}
-                    productos...
+                    Mostrando los primeros 30 de {previewFiltrado.length}{" "}
+                    productos{busquedaPreview ? " que coinciden" : ""}...
                   </div>
                 )}
               </ScrollArea>
+
+              {advertencias &&
+                (advertencias.productosPrecioCero > 0 ||
+                  advertencias.variantesPrecioCero > 0) && (
+                  <div className="flex items-start gap-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-amber-900 leading-tight font-medium text-xs">
+                      {advertencias.productosPrecioCero > 0 && (
+                        <>
+                          {advertencias.productosPrecioCero} producto
+                          {advertencias.productosPrecioCero === 1 ? "" : "s"}{" "}
+                        </>
+                      )}
+                      {advertencias.productosPrecioCero > 0 &&
+                        advertencias.variantesPrecioCero > 0 &&
+                        "y "}
+                      {advertencias.variantesPrecioCero > 0 && (
+                        <>
+                          {advertencias.variantesPrecioCero} variante
+                          {advertencias.variantesPrecioCero === 1 ? "" : "s"}{" "}
+                        </>
+                      )}
+                      ya {advertencias.productosPrecioCero +
+                        advertencias.variantesPrecioCero ===
+                      1
+                        ? "tiene"
+                        : "tienen"}{" "}
+                      precio $0 — el ajuste por porcentaje no va a tener
+                      ningún efecto en ellos.
+                    </p>
+                  </div>
+                )}
+
+              {advertencias?.reduccionTotal && (
+                <div className="flex items-start gap-2 bg-red-50 p-3 rounded-lg border border-red-300">
+                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-red-900 leading-tight font-medium text-xs mb-2">
+                      Estás reduciendo el precio en un 100% o más. Esto va a
+                      dejar {advertencias.productosResultanCeroONegativo}{" "}
+                      producto
+                      {advertencias.productosResultanCeroONegativo === 1
+                        ? ""
+                        : "s"}{" "}
+                      en $0 o menos.
+                    </p>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="confirm_reduccion_total"
+                        checked={confirmadoReduccionTotal}
+                        onChange={(e) =>
+                          setConfirmadoReduccionTotal(e.target.checked)
+                        }
+                        className="w-4 h-4 rounded border-red-300 text-red-600 focus:ring-red-500 accent-red-600 cursor-pointer"
+                      />
+                      <Label
+                        htmlFor="confirm_reduccion_total"
+                        className="text-red-900 cursor-pointer leading-tight font-medium text-xs"
+                      >
+                        Confirmo que quiero dejar estos productos en $0 o
+                        menos.
+                      </Label>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center space-x-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
                 <input
@@ -450,7 +630,11 @@ export function UpdatePricesModal() {
                 </Button>
                 <Button
                   onClick={handleAplicar}
-                  disabled={!confirmado || isApplying}
+                  disabled={
+                    !confirmado ||
+                    isApplying ||
+                    (advertencias?.reduccionTotal && !confirmadoReduccionTotal)
+                  }
                   className="bg-primary hover:bg-primary text-white rounded-xl shadow-none h-11 px-6"
                 >
                   {isApplying && (

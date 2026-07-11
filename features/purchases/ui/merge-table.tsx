@@ -208,7 +208,7 @@ export function MergeTable({
   }, [items]);
 
   // Estados para nuevas funcionalidades
-  const [margenGlobal, setMargenGlobal] = useState<number | "">("");
+  const [recargoGlobal, setRecargoGlobal] = useState<number | "">("");
   const [nuevoProductoData, setNuevoProductoData] = useState({
     nombre: "",
     precio: 0,
@@ -251,7 +251,7 @@ export function MergeTable({
           return {
             ...item,
             producto_id: newProductId,
-            // Si ya se calculó un precio (margen global o edición manual), lo respetamos.
+            // Si ya se calculó un precio (recargo global o edición manual), lo respetamos.
             // Solo caemos al precio actual del producto si todavía no hay nada calculado.
             precio_venta_actualizado:
               item.precio_venta_actualizado || prod?.precio || 0,
@@ -303,19 +303,19 @@ export function MergeTable({
     toast.info("Agrupación descartada de la conciliación.");
   };
 
-  const handleAplicarMargenGlobal = () => {
-    if (margenGlobal === "" || margenGlobal < 0) return;
+  const handleAplicarRecargoGlobal = () => {
+    if (recargoGlobal === "" || recargoGlobal < 0) return;
 
     setItems((prevItems) =>
       prevItems.map((item) => ({
         ...item,
         precio_venta_actualizado: Math.ceil(
-          item.precio_costo * (1 + Number(margenGlobal) / 100),
+          item.precio_costo * (1 + Number(recargoGlobal) / 100),
         ),
       })),
     );
     toast.success(
-      `Margen del ${margenGlobal}% aplicado a todos los productos.`,
+      `Recargo del ${recargoGlobal}% aplicado a todos los productos.`,
     );
   };
 
@@ -423,27 +423,27 @@ export function MergeTable({
         </Button>
       </div>
 
-      {/* Acciones Rápidas (Margen Global) */}
+      {/* Acciones Rápidas (Recargo Global) */}
       <div className="flex flex-col sm:flex-row items-center gap-4 bg-background p-4 rounded-xl border border-border">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <Percent className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-medium whitespace-nowrap">
-            Aplicar margen global a todos:
+            Aplicar recargo global a todos:
           </span>
           <Input
             type="number"
             placeholder="Ej: 30"
             className="w-20 h-8 text-center"
-            value={margenGlobal}
+            value={recargoGlobal}
             onChange={(e) =>
-              setMargenGlobal(e.target.value ? Number(e.target.value) : "")
+              setRecargoGlobal(e.target.value ? Number(e.target.value) : "")
             }
           />
           <span className="text-sm text-muted-foreground">%</span>
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleAplicarMargenGlobal}
+            onClick={handleAplicarRecargoGlobal}
             className="hover:bg-foreground hover:text-white"
           >
             Aplicar
@@ -614,22 +614,22 @@ export function MergeTable({
                             onClick={() => {
                               setGroupToCreateName(rawNombre);
 
-                              // Si ya hay un precio calculado para esta fila (margen global
+                              // Si ya hay un precio calculado para esta fila (recargo global
                               // aplicado o edición manual), lo usamos como sugerencia.
                               // Si no, caemos al fallback por defecto de costo + 50%.
-                              const margenYaAplicado =
+                              const recargoYaAplicado =
                                 (firstItem.precio_venta_actualizado || 0) > 0;
-                              const precioSugerido = margenYaAplicado
+                              const precioSugerido = recargoYaAplicado
                                 ? (firstItem.precio_venta_actualizado as number)
                                 : Math.ceil(firstItem.precio_costo * 1.5);
 
-                              const origenPrecio = margenYaAplicado
+                              const origenPrecio = recargoYaAplicado
                                 ? `Costo $${firstItem.precio_costo.toLocaleString("es-AR")} + ${(
                                     ((precioSugerido - firstItem.precio_costo) /
                                       firstItem.precio_costo) *
                                     100
-                                  ).toFixed(1)}% margen = $${precioSugerido.toLocaleString("es-AR")}`
-                                : "Precio sugerido por defecto (sin margen aplicado todavía)";
+                                  ).toFixed(1)}% recargo = $${precioSugerido.toLocaleString("es-AR")}`
+                                : "Precio sugerido por defecto (sin recargo aplicado todavía)";
 
                               setNuevoProductoData({
                                 nombre: rawNombre,

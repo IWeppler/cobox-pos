@@ -24,6 +24,56 @@ export interface PrevisualizacionItem {
   diferencia_precio: number;
 }
 
+export interface AdvertenciasPrecio {
+  productosPrecioCero: number;
+  variantesPrecioCero: number;
+  reduccionTotal: boolean;
+  productosResultanCeroONegativo: number;
+}
+
+export interface AjustePrecioHistorialItem {
+  id: string;
+  nombre: string;
+  tipo_alcance: AlcancePrecio;
+  tipo_operacion: OperacionPrecio;
+  campo_objetivo: CampoObjetivo;
+  valor: number;
+  estado: string;
+  creado_en: string;
+  revertido_en: string | null;
+  productosAfectados: number;
+  variantesAfectadas: number;
+  tieneAuditoriaVariantes: boolean;
+}
+
+export interface RevertirPreviewItem {
+  producto_id: string;
+  variante_id: string | null;
+  nombre: string;
+  precio_actual: number;
+  precio_al_revertir: number;
+  costo_actual: number;
+  costo_al_revertir: number;
+  cambia: boolean;
+}
+
+async function esUsuarioAdmin(
+  supabase: ReturnType<typeof createClient>,
+): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data: perfil } = await supabase
+    .from("perfiles")
+    .select("rol")
+    .eq("id", user.id)
+    .single();
+
+  return perfil?.rol === "ADMIN";
+}
+
 // ----------------------------------------------------------------------
 // HELPER: Lógica matemática de aplicación y redondeo
 // ----------------------------------------------------------------------
@@ -83,6 +133,31 @@ export async function simularPreciosAction(
     return { error: "No se pudieron cargar los productos para la simulación." };
   }
 
+  // Chequeo de precio $0 en variantes del alcance (el operador de % directo
+  // no tiene ningún efecto sobre una base en $0, y no había ninguna alerta
+  // de esto antes de aplicar el ajuste).
+  const productoIds = productos.map((p) => p.id);
+  const { data: variantesEnAlcance } = await supabase
+    .from("producto_variantes")
+    .select("id, producto_id, precio")
+    .in("producto_id", productoIds.length > 0 ? productoIds : [""]);
+
+  const esAjustePorcentualSobrePrecio =
+    (operacion === "AUMENTAR_PORCENTAJE" ||
+      operacion === "REDUCIR_PORCENTAJE") &&
+    (campo === "PRECIO" || campo === "AMBOS");
+
+  const productosPrecioCero = esAjustePorcentualSobrePrecio
+    ? productos.filter((p) => (Number(p.precio) || 0) === 0).length
+    : 0;
+
+  const variantesPrecioCero = esAjustePorcentualSobrePrecio
+    ? (variantesEnAlcance || []).filter((v) => (Number(v.precio) || 0) === 0)
+        .length
+    : 0;
+
+  const reduccionTotal = operacion === "REDUCIR_PORCENTAJE" && valor >= 100;
+
   const preview: PrevisualizacionItem[] = productos.map((prod) => {
     // Blindaje matemático: si viene null/undefined, es 0.
     const costoBase = Number(prod.precio_costo) || 0;
@@ -123,7 +198,19 @@ export async function simularPreciosAction(
     };
   });
 
-  return { preview };
+  const productosResultanCeroONegativo =
+    campo === "PRECIO" || campo === "AMBOS"
+      ? preview.filter((item) => item.precio_nuevo <= 0).length
+      : 0;
+
+  const advertencias: AdvertenciasPrecio = {
+    productosPrecioCero,
+    variantesPrecioCero,
+    reduccionTotal,
+    productosResultanCeroONegativo,
+  };
+
+  return { preview, advertencias };
 }
 
 // 2. APLICAR CAMBIOS Y GUARDAR LOTE (BATCH)
@@ -168,12 +255,21 @@ export async function aplicarPreciosAction(
     if (loteError || !lote)
       throw new Error("Error creando el registro de actualización.");
 
-    const itemsHistorial = [];
+    const itemsHistorial: {
+      lote_id: string;
+      producto_id: string;
+      variante_id: string | null;
+      costo_anterior: number;
+      costo_nuevo: number;
+      precio_anterior: number;
+      precio_nuevo: number;
+    }[] = [];
 
     for (const item of previewData) {
       itemsHistorial.push({
         lote_id: lote.id,
         producto_id: item.producto_id,
+        variante_id: null,
         costo_anterior: item.costo_anterior,
         costo_nuevo: item.costo_nuevo,
         precio_anterior: item.precio_anterior,
@@ -193,6 +289,25 @@ export async function aplicarPreciosAction(
           `Error actualizando producto ${item.producto_id}`,
           updateError,
         );
+
+      // Leemos el valor previo REAL de cada variante antes de sobreescribirlo,
+      // para poder auditarlo y revertirlo puntualmente si hace falta.
+      const { data: variantesPrevias } = await supabase
+        .from("producto_variantes")
+        .select("id, precio, costo")
+        .eq("producto_id", item.producto_id);
+
+      for (const variante of variantesPrevias || []) {
+        itemsHistorial.push({
+          lote_id: lote.id,
+          producto_id: item.producto_id,
+          variante_id: variante.id,
+          costo_anterior: Number(variante.costo) || 0,
+          costo_nuevo: item.costo_nuevo,
+          precio_anterior: Number(variante.precio) || 0,
+          precio_nuevo: item.precio_nuevo,
+        });
+      }
 
       const { error: variantesUpdateError } = await supabase
         .from("producto_variantes")
@@ -224,40 +339,215 @@ export async function aplicarPreciosAction(
   }
 }
 
-// 3. DESHACER LOTE (ROLLBACK)
+// 3. LISTAR HISTORIAL DE AJUSTES
+export async function listarHistorialPreciosAction(): Promise<
+  { data: AjustePrecioHistorialItem[]; error?: undefined } | { error: string }
+> {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  if (!(await esUsuarioAdmin(supabase))) {
+    return { error: "Solo un administrador puede ver el historial de ajustes de precio." };
+  }
+
+  const { data: lotes, error: lotesError } = await supabase
+    .from("actualizaciones_precio")
+    .select(
+      "id, nombre, tipo_alcance, tipo_operacion, campo_objetivo, valor, estado, creado_en, revertido_en, cantidad_afectada",
+    )
+    .order("creado_en", { ascending: false });
+
+  if (lotesError || !lotes) {
+    return { error: "No se pudo cargar el historial de ajustes." };
+  }
+
+  if (lotes.length === 0) return { data: [] };
+
+  const loteIds = lotes.map((l) => l.id);
+  const { data: filasVariante } = await supabase
+    .from("actualizaciones_precio_items")
+    .select("lote_id")
+    .in("lote_id", loteIds)
+    .not("variante_id", "is", null);
+
+  const variantesPorLote = new Map<string, number>();
+  (filasVariante || []).forEach((f) => {
+    variantesPorLote.set(f.lote_id, (variantesPorLote.get(f.lote_id) || 0) + 1);
+  });
+
+  const data: AjustePrecioHistorialItem[] = lotes.map((lote) => {
+    const variantesAfectadas = variantesPorLote.get(lote.id) || 0;
+    return {
+      id: lote.id,
+      nombre: lote.nombre,
+      tipo_alcance: lote.tipo_alcance as AlcancePrecio,
+      tipo_operacion: lote.tipo_operacion as OperacionPrecio,
+      campo_objetivo: lote.campo_objetivo as CampoObjetivo,
+      valor: Number(lote.valor),
+      estado: lote.estado,
+      creado_en: lote.creado_en,
+      revertido_en: lote.revertido_en,
+      productosAfectados: lote.cantidad_afectada ?? 0,
+      variantesAfectadas,
+      tieneAuditoriaVariantes: variantesAfectadas > 0,
+    };
+  });
+
+  return { data };
+}
+
+// 4. PREVISUALIZAR REVERSIÓN DE UN LOTE
+export async function previsualizarRevertirPreciosAction(
+  loteId: string,
+): Promise<
+  { preview: RevertirPreviewItem[]; error?: undefined } | { error: string }
+> {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  if (!(await esUsuarioAdmin(supabase))) {
+    return { error: "Solo un administrador puede revertir un ajuste de precios." };
+  }
+
+  const { data: items, error: fetchError } = await supabase
+    .from("actualizaciones_precio_items")
+    .select("producto_id, variante_id, costo_anterior, precio_anterior")
+    .eq("lote_id", loteId);
+
+  if (fetchError || !items || items.length === 0)
+    return { error: "No se encontraron los datos de este ajuste para previsualizar." };
+
+  const productoIds = [...new Set(items.map((i) => i.producto_id))];
+  const varianteIds = items
+    .filter((i) => i.variante_id)
+    .map((i) => i.variante_id as string);
+
+  const { data: productos } = await supabase
+    .from("productos")
+    .select("id, nombre, precio, precio_costo")
+    .in("id", productoIds);
+
+  const { data: variantes } =
+    varianteIds.length > 0
+      ? await supabase
+          .from("producto_variantes")
+          .select("id, nombre_display, precio, costo")
+          .in("id", varianteIds)
+      : { data: [] };
+
+  const productosMap = new Map((productos || []).map((p) => [p.id, p]));
+  const variantesMap = new Map((variantes || []).map((v) => [v.id, v]));
+
+  const preview: RevertirPreviewItem[] = items.map((item) => {
+    const producto = productosMap.get(item.producto_id);
+    const precioAlRevertir = Number(item.precio_anterior) || 0;
+    const costoAlRevertir = Number(item.costo_anterior) || 0;
+
+    if (item.variante_id) {
+      const variante = variantesMap.get(item.variante_id);
+      const precioActual = Number(variante?.precio) || 0;
+      const costoActual = Number(variante?.costo) || 0;
+      return {
+        producto_id: item.producto_id,
+        variante_id: item.variante_id,
+        nombre: `${producto?.nombre ?? "Producto eliminado"} — ${variante?.nombre_display ?? "variante eliminada"}`,
+        precio_actual: precioActual,
+        precio_al_revertir: precioAlRevertir,
+        costo_actual: costoActual,
+        costo_al_revertir: costoAlRevertir,
+        cambia: precioActual !== precioAlRevertir || costoActual !== costoAlRevertir,
+      };
+    }
+
+    const precioActual = Number(producto?.precio) || 0;
+    const costoActual = Number(producto?.precio_costo) || 0;
+    return {
+      producto_id: item.producto_id,
+      variante_id: null,
+      nombre: producto?.nombre ?? "Producto eliminado",
+      precio_actual: precioActual,
+      precio_al_revertir: precioAlRevertir,
+      costo_actual: costoActual,
+      costo_al_revertir: costoAlRevertir,
+      cambia: precioActual !== precioAlRevertir || costoActual !== costoAlRevertir,
+    };
+  });
+
+  return { preview };
+}
+
+// 5. DESHACER LOTE (ROLLBACK)
 export async function revertirPreciosAction(loteId: string) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
+  if (!(await esUsuarioAdmin(supabase))) {
+    return { error: "Solo un administrador puede revertir un ajuste de precios." };
+  }
+
+  const { data: lote } = await supabase
+    .from("actualizaciones_precio")
+    .select("estado")
+    .eq("id", loteId)
+    .single();
+
+  if (lote?.estado === "REVERTIDO") {
+    return { error: "Este ajuste ya fue revertido anteriormente." };
+  }
+
   const { data: items, error: fetchError } = await supabase
     .from("actualizaciones_precio_items")
-    .select("producto_id, costo_anterior, precio_anterior")
+    .select("producto_id, variante_id, costo_anterior, precio_anterior")
     .eq("lote_id", loteId);
 
   if (fetchError || !items)
     return { error: "No se encontraron los datos para revertir." };
 
-  for (const item of items) {
-    await supabase
-      .from("productos")
-      .update({
-        precio_costo: item.costo_anterior,
-        precio: item.precio_anterior,
-      })
-      .eq("id", item.producto_id);
+  // Lotes creados antes de que se registrara variante_id no tienen ninguna
+  // fila a nivel variante: para esos, mantenemos el comportamiento anterior
+  // (revertir todas las variantes del producto al valor del producto), ya
+  // que no hay valor por-variante que restaurar.
+  const productosConFilaDeVariante = new Set(
+    items.filter((i) => i.variante_id).map((i) => i.producto_id),
+  );
 
-    await supabase
-      .from("producto_variantes")
-      .update({
-        costo: item.costo_anterior,
-        precio: item.precio_anterior,
-      })
-      .eq("producto_id", item.producto_id);
+  for (const item of items) {
+    if (item.variante_id) {
+      // Fila a nivel variante: revertir solo esa variante puntual.
+      await supabase
+        .from("producto_variantes")
+        .update({
+          costo: item.costo_anterior,
+          precio: item.precio_anterior,
+        })
+        .eq("id", item.variante_id);
+    } else {
+      // Fila a nivel producto.
+      await supabase
+        .from("productos")
+        .update({
+          precio_costo: item.costo_anterior,
+          precio: item.precio_anterior,
+        })
+        .eq("id", item.producto_id);
+
+      // Fallback para lotes históricos sin filas de variante: revertir en
+      // bloque, igual que antes de esta migración.
+      if (!productosConFilaDeVariante.has(item.producto_id)) {
+        await supabase
+          .from("producto_variantes")
+          .update({
+            costo: item.costo_anterior,
+            precio: item.precio_anterior,
+          })
+          .eq("producto_id", item.producto_id);
+      }
+    }
   }
 
   await supabase
     .from("actualizaciones_precio")
-    .update({ estado: "REVERTIDO" })
+    .update({ estado: "REVERTIDO", revertido_en: new Date().toISOString() })
     .eq("id", loteId);
 
   revalidatePath("/stock");
