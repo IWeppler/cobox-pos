@@ -6,10 +6,10 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-background">
       {/* PANEL IZQUIERDO — BRANDING SAAS (Oculto en móvil) */}
-      <div className="hidden lg:flex relative bg-[#0052FF] flex-col justify-between p-12 overflow-hidden">
+      <div className="hidden lg:flex relative bg-primary flex-col justify-between p-12 overflow-hidden">
         {/* Decoraciones de fondo abstracto (Estilo Hexágonos/Blur de la referencia) */}
         <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-white/10 rounded-full mix-blend-overlay filter blur-3xl opacity-50" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-[#0033CC] rounded-full filter blur-3xl opacity-50" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-primary rounded-full filter blur-3xl opacity-50" />
 
         {/* Logo Superior Izquierdo */}
         <div className="relative z-10 flex items-center gap-3">
@@ -99,7 +99,7 @@ export default function AuthPage() {
         </div>
 
         {/* Copy Inferior & Paginación */}
-        <div className="relative z-10 text-center mt-20 max-w-md mx-auto space-y-4">
+        <div className="relative z-10 text-center mt-20 max-w-xl mx-auto space-y-4">
           <h2 className="text-2xl font-bold text-white leading-tight">
             Gestión comercial inteligente en tiempo real.
           </h2>
@@ -129,7 +129,7 @@ export default function AuthPage() {
                   alt="Logo"
                   width={56}
                   height={56}
-                  className="object-contain"
+                  className="object-contain rounded-lg"
                 />
               </div>
               <span className="font-bold text-xl tracking-tight text-foreground">

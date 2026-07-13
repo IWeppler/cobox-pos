@@ -59,7 +59,7 @@ export default async function ProductoPage({ params }: Readonly<PageProps>) {
   const baseUrl = `${protocol}://${host}`;
 
   return (
-    <div className="min-h-screen bg-[#fffefe] flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       <main className="flex-1 max-w-7xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-8 w-full">
         <ProductDetail
           producto={producto}

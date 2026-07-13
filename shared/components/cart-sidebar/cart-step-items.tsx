@@ -14,6 +14,7 @@ interface CartStepItemsProps {
   onRemoveItem: (productoId: string, variante: string) => void;
   totalCarrito: number;
   onContinueToPayment: () => void;
+  continueLabel?: string;
 }
 
 export function CartStepItems({
@@ -22,6 +23,7 @@ export function CartStepItems({
   onRemoveItem,
   totalCarrito,
   onContinueToPayment,
+  continueLabel = "Continuar al Pago",
 }: Readonly<CartStepItemsProps>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
@@ -137,9 +139,9 @@ export function CartStepItems({
           <Button
             type="button"
             onClick={onContinueToPayment}
-            className="h-12 w-full bg-primary text-background hover:bg-primary/90"
+            className="h-12 w-full"
           >
-            Continuar al Pago
+            {continueLabel}
           </Button>
         </div>
       ) : null}

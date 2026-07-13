@@ -207,6 +207,21 @@ export function MergeTable({
     return Array.from(map.entries());
   }, [items]);
 
+  // Grupo activo del modal "Crear Producto Múltiple" y si tiene costos
+  // dispersos entre sus filas (para advertir que el precio unificado no
+  // va a aplicar por igual a todas las variantes).
+  const grupoParaCrear = useMemo(
+    () =>
+      groupToCreateName
+        ? items.filter((i) => i.raw_nombre === groupToCreateName)
+        : [],
+    [items, groupToCreateName],
+  );
+  const grupoTieneCostoDisperso = useMemo(
+    () => new Set(grupoParaCrear.map((i) => i.precio_costo)).size > 1,
+    [grupoParaCrear],
+  );
+
   // Estados para nuevas funcionalidades
   const [recargoGlobal, setRecargoGlobal] = useState<number | "">("");
   const [nuevoProductoData, setNuevoProductoData] = useState({
@@ -808,6 +823,16 @@ export function MergeTable({
                 <p className="text-xs text-muted-foreground">
                   {nuevoProductoData.origenPrecio}
                 </p>
+              )}
+              {grupoTieneCostoDisperso && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-md p-2.5 mt-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-900 font-medium leading-tight">
+                    Este grupo tiene variantes con distinto costo — se va a
+                    aplicar el precio calculado por variante, no un valor
+                    único.
+                  </p>
+                </div>
               )}
             </div>
 

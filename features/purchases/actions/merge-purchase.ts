@@ -216,7 +216,11 @@ async function actualizarPrecios(item: ItemResuelto, supabase: SupabaseDb) {
   );
 }
 
-async function actualizarStock(item: ItemResuelto, supabase: SupabaseDb) {
+async function actualizarStock(
+  item: ItemResuelto,
+  supabase: SupabaseDb,
+  precioBaseProducto: number,
+) {
   if (!item.producto_id) return;
 
   const variante = item.variante_match || item.raw_variante || "Unico";
@@ -248,14 +252,22 @@ async function actualizarStock(item: ItemResuelto, supabase: SupabaseDb) {
       varianteUpdateError,
     );
   } else {
+    // Si el precio de esta fila difiere del precio unificado que ya se
+    // escribió a nivel producto, la variante lleva su propio precio/costo
+    // (tal cual los vio el usuario en la conciliación, sin recalcular). Si
+    // coincide, se deja en null para heredar del producto y no duplicar
+    // filas idénticas.
+    const difierePrecio =
+      (item.precio_venta_actualizado || 0) !== precioBaseProducto;
+
     const { error: varianteInsertError } = await supabase
       .from("producto_variantes")
       .insert({
         producto_id: item.producto_id,
         nombre_display: variante,
         atributos,
-        precio: null,
-        costo: null,
+        precio: difierePrecio ? (item.precio_venta_actualizado ?? null) : null,
+        costo: difierePrecio ? item.precio_costo : null,
         stock: item.cantidad,
       });
 
@@ -340,6 +352,9 @@ export async function aprobarOrdenAction(
     // Sets de control para evitar golpear la DB repetidas veces por el mismo producto padre
     const productosActualizados = new Set<string>();
     const aliasRegistrados = new Set<string>();
+    // Precio unificado que efectivamente se escribió a nivel producto, por
+    // producto_id — referencia para saber si una variante puntual difiere.
+    const precioBasePorProducto = new Map<string, number>();
 
     for (const item of itemsResueltos) {
       if (!item.producto_id) continue;
@@ -348,10 +363,18 @@ export async function aprobarOrdenAction(
       if (!productosActualizados.has(item.producto_id)) {
         await actualizarPrecios(item, supabase);
         productosActualizados.add(item.producto_id);
+        precioBasePorProducto.set(
+          item.producto_id,
+          item.precio_venta_actualizado || 0,
+        );
       }
 
       // 2. Actualizar stock (Se ejecuta siempre, por CADA variante individual)
-      await actualizarStock(item, supabase);
+      await actualizarStock(
+        item,
+        supabase,
+        precioBasePorProducto.get(item.producto_id) ?? 0,
+      );
 
       // 3. Registrar Alias en el Diccionario (Solo 1 vez por nombre crudo)
       const aliasKey = item.raw_nombre.trim().toLowerCase();

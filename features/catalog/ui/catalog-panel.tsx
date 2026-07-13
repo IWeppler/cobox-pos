@@ -15,6 +15,7 @@ import {
   Store,
   ShoppingBag,
   Type,
+  Truck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
@@ -40,9 +41,12 @@ export function CatalogPanel({ config }: Readonly<CatalogPanelProps>) {
     facebook: config.facebook || "",
     marquee_activo: config.marquee_activo ?? false,
     marquee_texto: config.marquee_texto || "",
+    localidad_negocio: config.localidad_negocio || "",
+    envio_costo_local: config.envio_costo_local ?? 0,
+    envio_mensaje_lejos: config.envio_mensaje_lejos || "",
   });
 
-  const handleChange = (field: string, value: string | boolean) => {
+  const handleChange = (field: string, value: string | boolean | number) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -263,6 +267,62 @@ export function CatalogPanel({ config }: Readonly<CatalogPanelProps>) {
                 value={formData.facebook}
                 onChange={(e) => handleChange("facebook", e.target.value)}
                 placeholder="https://facebook.com/tu_vivero"
+                className="bg-muted/50 border-border"
+              />
+            </div>
+          </div>
+
+          {/* MÓDULO ENVÍOS */}
+          <div className="bg-card border border-border rounded-2xl p-5 space-y-5">
+            <h3 className="font-bold text-foreground flex items-center gap-2 border-b border-border/50 pb-3">
+              <Truck className="w-4 h-4 text-muted-foreground" /> Envíos del
+              Catálogo
+            </h3>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-foreground uppercase tracking-widest">
+                Localidad del Negocio
+              </Label>
+              <Input
+                value={formData.localidad_negocio}
+                onChange={(e) =>
+                  handleChange("localidad_negocio", e.target.value)
+                }
+                placeholder="Ej: Tostado"
+                className="bg-muted/50 border-border"
+              />
+              <p className="text-xs text-muted-foreground">
+                Si un cliente escribe esta localidad al pedir envío, se le
+                cobra el costo fijo de abajo. Si escribe otra, ve el aviso de
+                &quot;a convenir&quot; en su lugar.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-foreground uppercase tracking-widest">
+                Costo de Envío Local
+              </Label>
+              <Input
+                type="number"
+                value={formData.envio_costo_local}
+                onChange={(e) =>
+                  handleChange("envio_costo_local", Number(e.target.value))
+                }
+                placeholder="Ej: 2000"
+                className="bg-muted/50 border-border"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-foreground uppercase tracking-widest">
+                Mensaje para Envíos Fuera de la Localidad
+              </Label>
+              <Input
+                value={formData.envio_mensaje_lejos}
+                onChange={(e) =>
+                  handleChange("envio_mensaje_lejos", e.target.value)
+                }
+                placeholder="Envío a convenir — te contactamos por WhatsApp para coordinar"
                 className="bg-muted/50 border-border"
               />
             </div>

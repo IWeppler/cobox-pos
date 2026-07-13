@@ -25,9 +25,9 @@ export function Navbar({ branding }: Readonly<NavbarProps>) {
       )}
 
       {/* HEADER INTELIGENTE */}
-      <header className="bg-white border-b border-border sticky top-0 z-40 flex flex-col">
+      <header className="bg-card border-b border-border sticky top-0 z-40 flex flex-col">
         {/* LÍNEA PRINCIPAL (Logo, Buscador, Carrito) */}
-        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between bg-white z-20">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between z-20">
           {/* LADO IZQUIERDO: Menú Hamburguesa (Mobile) */}
           <div className="flex items-center md:hidden w-1/3">
             <button
@@ -75,7 +75,7 @@ export function Navbar({ branding }: Readonly<NavbarProps>) {
         </div>
 
         {/*  SUB-BARRA DE INFORMACIÓN (Solo Desktop) */}
-        <div className="hidden md:flex w-full bg-[#fcfcfc] border-t border-border text-[10px] font-semibold tracking-wider py-1.5 px-4 sm:px-6 lg:px-8 justify-between items-center text-muted-foreground">
+        <div className="hidden md:flex w-full bg-sidebar text-[10px] font-semibold tracking-wider py-1.5 px-4 sm:px-6 lg:px-8 justify-between items-center text-muted-foreground">
           <div className="flex items-center gap-6">
             {branding.direccion_visible && branding.direccion && (
               <div className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-default">
@@ -128,7 +128,7 @@ export function Navbar({ branding }: Readonly<NavbarProps>) {
 
         {/* MENÚ HAMBURGUESA DESPLEGABLE (Mobile) */}
         {isMenuOpen && (
-          <div className="md:hidden absolute top-16 left-0 w-full bg-white border-b border-border animate-in slide-in-from-top-2 z-40">
+          <div className="md:hidden absolute top-16 left-0 w-full bg-card border-b border-border animate-in slide-in-from-top-2 z-40">
             <div className="p-5 flex flex-col gap-4">
               {branding.direccion_visible && branding.direccion && (
                 <div className="flex items-start gap-3 text-sm text-muted-foreground font-medium">

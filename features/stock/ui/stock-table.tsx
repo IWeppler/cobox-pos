@@ -89,7 +89,27 @@ type StockTableVariant = {
   nombre_display?: string;
   stock?: number | string | null;
   cantidad?: number | string | null;
+  precio?: number | string | null;
+  costo?: number | string | null;
 };
+
+/** Costo/precio "efectivo" de una variante: el propio si está seteado, o el del producto si la variante lo hereda (precio/costo null). */
+function precioEfectivoVariante(
+  variante: StockTableVariant,
+  campo: "precio" | "costo",
+  fallback: number,
+) {
+  const valor = variante[campo];
+  return valor === null || valor === undefined || valor === ""
+    ? fallback
+    : Number(valor);
+}
+
+function calcularRango(valores: number[]) {
+  const min = Math.min(...valores);
+  const max = Math.max(...valores);
+  return { min, max, esUniforme: min === max };
+}
 
 export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
   const { isAdmin } = useStockCartActions(userRole);
@@ -104,7 +124,10 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
   const [productoEnEdicion, setProductoEnEdicion] = useState<Producto | null>(
     null,
   );
-  const selectedIdsArray = useMemo(() => Array.from(selectedIds), [selectedIds]);
+  const selectedIdsArray = useMemo(
+    () => Array.from(selectedIds),
+    [selectedIds],
+  );
 
   // --- LÓGICA DE SELECCIÓN MASIVA ---
   const toggleAll = () => {
@@ -142,7 +165,9 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
       if (result.success) {
         toast.success(
           `${selectedIdsArray.length} ${
-            selectedIdsArray.length === 1 ? "producto movido" : "productos movidos"
+            selectedIdsArray.length === 1
+              ? "producto movido"
+              : "productos movidos"
           } de categoria.`,
         );
         clearSelection();
@@ -451,6 +476,27 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
               const margenPorcentaje =
                 costo > 0 ? Math.round((gananciaNeta / precio) * 100) : 100;
 
+              // Rango de costo/precio cuando las variantes no son uniformes:
+              // cada variante hereda el precio/costo del producto salvo que
+              // tenga su propio override en producto_variantes.
+              const rangoCosto = hasVariantes
+                ? calcularRango(
+                    variantesVisibles.map((v: StockTableVariant) =>
+                      precioEfectivoVariante(v, "costo", costo),
+                    ),
+                  )
+                : null;
+              const rangoPrecio = hasVariantes
+                ? calcularRango(
+                    variantesVisibles.map((v: StockTableVariant) =>
+                      precioEfectivoVariante(v, "precio", precio),
+                    ),
+                  )
+                : null;
+              const preciosVarian = rangoCosto
+                ? !rangoCosto.esUniforme || !rangoPrecio!.esUniforme
+                : false;
+
               // 3. Status Dot (Puntito) para el stock
               let dotColor = "bg-emerald-500"; // Normal
               if (totalUnidades === 0)
@@ -516,7 +562,7 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
 
                         <div className="flex flex-col">
                           <ProductEditDetailSheet producto={producto}>
-                            <button className="font-semibold text-foreground text-xs sm:text-sm hover:text-primary transition-colors text-left truncate max-w-[120px] sm:max-w-[200px] cursor-pointer">
+                            <button className="font-semibold text-foreground text-xs sm:text-sm hover:text-primary transition-colors text-left truncate max-w-[120px] sm:max-w-[240px] cursor-pointer">
                               {producto.nombre}
                             </button>
                           </ProductEditDetailSheet>
@@ -552,16 +598,27 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                     {/* COSTO */}
                     {isAdmin && (
                       <TableCell className="text-right font-medium text-muted-foreground hidden md:table-cell py-2.5">
-                        {formatearMoneda(costo)}
+                        {rangoCosto && !rangoCosto.esUniforme ? (
+                          <span title="Las variantes tienen costos distintos">
+                            {formatearMoneda(rangoCosto.min)} -{" "}
+                            {formatearMoneda(rangoCosto.max)}
+                          </span>
+                        ) : (
+                          formatearMoneda(costo)
+                        )}
                       </TableCell>
                     )}
 
                     {/* MARGEN DE GANANCIA */}
                     {isAdmin && (
                       <TableCell className="text-right hidden lg:table-cell py-2.5">
-                        {costo > 0 ? (
+                        {preciosVarian ? (
+                          <span className="text-xs text-muted-foreground italic">
+                            Variable
+                          </span>
+                        ) : costo > 0 ? (
                           <div className="flex flex-col items-end">
-                            <span className="text-emerald-600 font-bold text-sm">
+                            <span className="text-emerald-600 font-semibold text-xs">
                               +{formatearMoneda(gananciaNeta)}
                             </span>
                             <span className="text-xs text-muted-foreground font-medium">
@@ -577,8 +634,15 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                     )}
 
                     {/* PRECIO (Adaptado) */}
-                    <TableCell className="text-right font-bold text-xs sm:text-base px-0 py-1.5 sm:py-2.5">
-                      {formatearMoneda(precio)}
+                    <TableCell className="text-right font-semibold text-xs sm:text-sm px-0 py-1.5 sm:py-2.5">
+                      {rangoPrecio && !rangoPrecio.esUniforme ? (
+                        <span title="Las variantes tienen precios distintos">
+                          {formatearMoneda(rangoPrecio.min)} -{" "}
+                          {formatearMoneda(rangoPrecio.max)}
+                        </span>
+                      ) : (
+                        formatearMoneda(precio)
+                      )}
                     </TableCell>
 
                     {/* ACCIONES (Paddings reducidos en móviles) */}
@@ -658,40 +722,95 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                                   <th className="px-2 sm:px-4 py-2 sm:py-2.5 text-center font-semibold w-20 sm:w-32">
                                     Stock
                                   </th>
+                                  {isAdmin && (
+                                    <th className="px-2 sm:px-4 py-2 sm:py-2.5 text-right font-semibold w-24 sm:w-28">
+                                      Costo
+                                    </th>
+                                  )}
+                                  <th className="px-2 sm:px-4 py-2 sm:py-2.5 text-right font-semibold w-24 sm:w-28">
+                                    Precio
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border/40">
-                                {variantesVisibles.map((v: StockTableVariant) => {
-                                  const varStock = v.stock ?? v.cantidad ?? 0;
+                                {variantesVisibles.map(
+                                  (v: StockTableVariant) => {
+                                    const varStock = v.stock ?? v.cantidad ?? 0;
+                                    const varCostoHeredado =
+                                      v.costo === null || v.costo === undefined;
+                                    const varPrecioHeredado =
+                                      v.precio === null ||
+                                      v.precio === undefined;
+                                    const varCosto = precioEfectivoVariante(
+                                      v,
+                                      "costo",
+                                      costo,
+                                    );
+                                    const varPrecio = precioEfectivoVariante(
+                                      v,
+                                      "precio",
+                                      precio,
+                                    );
 
-                                  return (
-                                    <tr
-                                      key={v.id || v.variante}
-                                      className="hover:bg-muted/30 transition-colors"
-                                    >
-                                      <td className="px-2 sm:px-4 py-1.5 sm:py-2.5 font-medium text-xs sm:text-sm text-foreground">
-                                        {v.nombre_display || v.variante}
-                                      </td>
-                                      <td className="px-2 sm:px-4 py-1.5 sm:py-2.5 text-center">
-                                        <div className="flex items-center justify-center gap-1 sm:gap-1.5">
-                                          <div
-                                            className={`w-1.5 h-1.5 rounded-full ${
-                                              varStock === 0
-                                                ? "bg-rose-500"
-                                                : "bg-emerald-500"
-                                            }`}
-                                          />
-                                          <span className="font-semibold text-xs sm:text-sm text-foreground">
-                                            {varStock}{" "}
-                                            <span className="text-[9px] sm:text-[10px] font-medium opacity-70 uppercase tracking-widest">
-                                              u.
+                                    return (
+                                      <tr
+                                        key={v.id || v.variante}
+                                        className="hover:bg-muted/30 transition-colors"
+                                      >
+                                        <td className="px-2 sm:px-4 py-1.5 sm:py-2.5 font-medium text-xs sm:text-sm text-foreground">
+                                          {v.nombre_display || v.variante}
+                                        </td>
+                                        <td className="px-2 sm:px-4 py-1.5 sm:py-2.5 text-center">
+                                          <div className="flex items-center justify-center gap-1 sm:gap-1.5">
+                                            <div
+                                              className={`w-1.5 h-1.5 rounded-full ${
+                                                varStock === 0
+                                                  ? "bg-rose-500"
+                                                  : "bg-emerald-500"
+                                              }`}
+                                            />
+                                            <span className="font-semibold text-xs sm:text-sm text-foreground">
+                                              {varStock}{" "}
+                                              <span className="text-[9px] sm:text-[10px] font-medium opacity-70 uppercase tracking-widest">
+                                                u.
+                                              </span>
                                             </span>
-                                          </span>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
+                                          </div>
+                                        </td>
+                                        {isAdmin && (
+                                          <td
+                                            className={`px-2 sm:px-4 py-1.5 sm:py-2.5 text-right text-xs sm:text-sm ${
+                                              varCostoHeredado
+                                                ? "text-muted-foreground italic"
+                                                : "font-medium text-foreground"
+                                            }`}
+                                            title={
+                                              varCostoHeredado
+                                                ? "Hereda el costo del producto"
+                                                : undefined
+                                            }
+                                          >
+                                            {formatearMoneda(varCosto)}
+                                          </td>
+                                        )}
+                                        <td
+                                          className={`px-2 sm:px-4 py-1.5 sm:py-2.5 text-right text-xs sm:text-sm ${
+                                            varPrecioHeredado
+                                              ? "text-muted-foreground italic"
+                                              : "font-semibold text-foreground"
+                                          }`}
+                                          title={
+                                            varPrecioHeredado
+                                              ? "Hereda el precio del producto"
+                                              : undefined
+                                          }
+                                        >
+                                          {formatearMoneda(varPrecio)}
+                                        </td>
+                                      </tr>
+                                    );
+                                  },
+                                )}
                               </tbody>
                             </table>
                           </div>

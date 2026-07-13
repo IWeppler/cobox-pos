@@ -41,7 +41,7 @@ export function RelatedProducts({ productos }: Readonly<RelatedProductsProps>) {
               href={linkDestino}
               className="group flex flex-col"
             >
-              <div className="relative aspect-[4/5] bg-[#f7f7f7] w-full overflow-hidden border border-border/40 transition-all group-hover:border-border">
+              <div className="relative aspect-[4/5] bg-card w-full overflow-hidden border border-border/40 transition-all group-hover:border-border">
                 {primeraImagen ? (
                   <Image
                     src={primeraImagen}
@@ -57,7 +57,7 @@ export function RelatedProducts({ productos }: Readonly<RelatedProductsProps>) {
                 )}
               </div>
               <div className="pt-3">
-                <h4 className="font-semibold text-xs sm:text-sm text-foreground uppercase tracking-wide truncate">
+                <h4 className="font-medium text-xs sm:text-sm text-foreground uppercase tracking-wide truncate">
                   {producto.nombre}
                 </h4>
                 <p className="font-bold text-xs sm:text-sm mt-1">

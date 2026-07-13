@@ -29,6 +29,7 @@ const TIPO_REGLA_OPTIONS = [
   { value: "METODO_PAGO", label: "Por Método de Pago" },
   { value: "CATEGORIA", label: "Por Categoría de Producto" },
   { value: "MONTO_MINIMO", label: "Por Monto Mínimo de Compra" },
+  { value: "CANAL_PUBLICO", label: "Solo Catálogo Público (/store)" },
 ] as const;
 
 const METODO_PAGO_OPTIONS = [
@@ -205,6 +206,12 @@ export function EditPromotionModal({
                     required
                   />
                 </div>
+              )}
+
+              {tipoRegla === "CANAL_PUBLICO" && (
+                <p className="text-xs text-muted-foreground animate-in fade-in slide-in-from-top-2">
+                  Se muestra como aviso informativo en el carrito del catálogo. No aplica en el POS presencial.
+                </p>
               )}
             </div>
 

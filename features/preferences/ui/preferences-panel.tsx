@@ -10,7 +10,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useThemeStore } from "@/shared/store/theme-store";
+import { useTheme } from "next-themes";
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -53,7 +53,7 @@ const getDeferredPwaPrompt = () => {
 
 export function PreferencesPanel() {
   const [mounted, setMounted] = useState(false);
-  const { theme, setTheme, initTheme } = useThemeStore();
+  const { theme, setTheme } = useTheme();
 
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(getDeferredPwaPrompt);
@@ -62,8 +62,6 @@ export function PreferencesPanel() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setMounted(true);
-      // Aplicamos el tema guardado en Zustand al DOM apenas monta el panel
-      initTheme();
       setDeferredPrompt(getDeferredPwaPrompt());
     }, 0);
 
@@ -90,7 +88,7 @@ export function PreferencesPanel() {
       );
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
-  }, [initTheme]);
+  }, []);
 
   const handleInstallClick = async () => {
     if (isInstalled) return;

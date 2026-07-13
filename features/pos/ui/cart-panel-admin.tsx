@@ -36,7 +36,7 @@ const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
 type CheckoutStep = "CART" | "PAYMENT";
 
-export function PosCart({
+export function CartPanelAdmin({
   numeroWhatsApp,
 }: Readonly<{ numeroWhatsApp?: string }>) {
   const {
@@ -182,6 +182,7 @@ export function PosCart({
       pagos,
       items,
       metodosPago: metodosPagoDB,
+      canal: "POS",
     });
   }, [promocionesDB, totalCarrito, pagos, items, metodosPagoDB]);
 

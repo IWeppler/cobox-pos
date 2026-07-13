@@ -18,6 +18,7 @@ export async function getProductosAction() {
     `,
     )
     .eq("publicado", true)
+    .eq("producto_variantes.activa", true)
     .order("creado_en", { ascending: false });
 
   if (error) {
@@ -44,6 +45,7 @@ export async function getProductoBySlugAction(slug: string) {
     )
     .eq("slug", slug)
     .eq("publicado", true)
+    .eq("producto_variantes.activa", true)
     .single();
 
   if (error) {

@@ -51,7 +51,12 @@ export function useCatalogFilters({
     () =>
       buildPropiedadesFiltro(productos, {
         ocultarSinStock: config?.mostrar_sin_stock === false,
-        incluirStockLegacy: true,
+        // Confirmado: ningún producto publicado depende del fallback legacy
+        // (productos_stock.variante) para aparecer en Filtros Extra — el
+        // único caso sin producto_variantes tampoco tiene stock legacy. Se
+        // desactiva acá para que "Propiedad N" no pueda volver a filtrarse
+        // en el catálogo público sin importar cómo fluctúe el stock.
+        incluirStockLegacy: false,
       }),
     [productos, config],
   );

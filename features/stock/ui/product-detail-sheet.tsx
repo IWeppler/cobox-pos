@@ -76,6 +76,14 @@ export function ProductDetailSheet({
 
   const stockDisponible = producto.stock?.filter((s) => s.cantidad > 0) || [];
 
+  // La tabla legacy `productos_stock` no tiene columna de precio: buscamos
+  // el precio propio de la variante por nombre en `producto_variantes`
+  // (misma fuente que ya usa stock-table.tsx), y si no está seteado (null =
+  // hereda) o no hay match, caemos al precio del producto.
+  const precioPorVariante = new Map(
+    (producto.producto_variantes ?? []).map((v) => [v.nombre_display, v.precio]),
+  );
+
   const [varianteSeleccionada, setVarianteSeleccionada] = useState<string>(
     stockDisponible.length > 0 ? stockDisponible[0].variante : "",
   );
@@ -96,7 +104,7 @@ export function ProductDetailSheet({
       tipo: producto.tipo,
       variante: varianteSeleccionada,
       cantidad: 1,
-      precio: producto.precio,
+      precio: precioPorVariante.get(varianteSeleccionada) ?? producto.precio,
       imagenUrl: primeraImagen,
       stockMaximo: stockDeVariante,
     });

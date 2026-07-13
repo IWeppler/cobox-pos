@@ -59,6 +59,7 @@ function QuickAddModalContent({
       cantidad: number;
       id_real: string;
       atributos?: Record<string, string>;
+      precio: number | null;
     }> = [];
     let tieneAtributosEstructurados = false;
     producto.producto_variantes?.forEach((v) => {
@@ -69,6 +70,7 @@ function QuickAddModalContent({
         cantidad: v.stock,
         id_real: v.id,
         atributos,
+        precio: v.precio,
       });
     });
 
@@ -77,7 +79,12 @@ function QuickAddModalContent({
     // ambas fuentes describen las mismas variantes.
     if (!tieneAtributosEstructurados) {
       producto.stock?.forEach((s) =>
-        list.push({ variante: s.variante, cantidad: s.cantidad, id_real: s.id }),
+        list.push({
+          variante: s.variante,
+          cantidad: s.cantidad,
+          id_real: s.id,
+          precio: null,
+        }),
       );
     }
     return list;
@@ -171,7 +178,7 @@ function QuickAddModalContent({
           nombre: producto.nombre || "Sin nombre",
           tipo: producto.tipo || "",
           variante: stockDeVariante.variante,
-          precio: producto.precio,
+          precio: stockDeVariante.precio ?? producto.precio,
           cantidad: 1,
           imagenUrl: imagenes[0] || null,
           stockMaximo: stockDeVariante.cantidad,

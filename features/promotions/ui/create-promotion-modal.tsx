@@ -137,9 +137,20 @@ export function CreatePromotionModal() {
                     <SelectItem value="MONTO_MINIMO">
                       Por Monto Mínimo de Compra
                     </SelectItem>
+                    <SelectItem value="CANAL_PUBLICO">
+                      Solo Catálogo Público (/store)
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {tipoRegla === "CANAL_PUBLICO" && (
+                <p className="text-xs text-muted-foreground animate-in fade-in slide-in-from-top-2">
+                  Se muestra como aviso informativo en el carrito del catálogo
+                  online, sin necesidad de iniciar sesión. No aplica en el
+                  POS presencial.
+                </p>
+              )}
 
               {tipoRegla === "METODO_PAGO" && (
                 <div className="space-y-2 animate-in fade-in slide-in-from-top-2">

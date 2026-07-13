@@ -23,13 +23,20 @@ export function useStockCartActions(userRole: string) {
       return false;
     }
 
+    // La variante llega como nombre; buscamos su precio propio en
+    // producto_variantes (null = hereda del producto) antes de caer al
+    // precio del producto.
+    const varianteData = producto.producto_variantes?.find(
+      (v) => v.nombre_display === variante,
+    );
+
     addItem({
       productoId: producto.id,
       nombre: producto.nombre,
       tipo: producto.tipo,
       variante,
       cantidad: 1,
-      precio: producto.precio,
+      precio: varianteData?.precio ?? producto.precio,
       imagenUrl: obtenerPrimeraImagen(producto.imagen_url),
       stockMaximo: stockMax,
     });

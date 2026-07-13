@@ -27,7 +27,7 @@ export function ProductCard({ producto }: Readonly<ProductCardProps>) {
     <div key={producto.id} className="group relative flex flex-col transition-all">
       <Link
         href={linkDestino}
-        className="aspect-[4/5] bg-[#f7f7f7] relative overflow-hidden flex items-center justify-center w-full shadow-none border border-border/40"
+        className="aspect-[4/5] bg-card relative overflow-hidden flex items-center justify-center w-full shadow-none border border-border/40"
       >
         {primeraImagen ? (
           <div className="relative w-full h-full overflow-hidden">

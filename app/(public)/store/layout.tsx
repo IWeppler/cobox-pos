@@ -1,5 +1,5 @@
 import { Navbar } from "@/shared/components/navbar";
-import { CartSidebar } from "@/shared/components/cart-sidebar";
+import { CartPanelPublico } from "@/features/store/components/cart-panel-publico";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import Link from "next/link";
@@ -25,7 +25,7 @@ export default async function PublicLayout({
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar branding={config} />
-      <CartSidebar numeroWhatsApp={config?.whatsapp} />
+      <CartPanelPublico numeroWhatsApp={config?.whatsapp} />
       {children}
 
       {/* FOOTER BÁSICO */}

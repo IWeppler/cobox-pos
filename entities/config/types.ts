@@ -19,6 +19,11 @@ export interface ConfiguracionPOS {
   facebook?: string;
   horario_texto?: string;
 
+  // Envíos del catálogo público
+  localidad_negocio?: string | null;
+  envio_costo_local?: number | null;
+  envio_mensaje_lejos?: string | null;
+
   // Banner Promocional
   banner_activo?: boolean;
   banner_imagen?: string;

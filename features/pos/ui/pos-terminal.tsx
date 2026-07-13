@@ -23,6 +23,7 @@ interface PosTerminalProps {
 interface VarianteDisponible {
   variante: string;
   cantidad: number;
+  precio: number | null;
 }
 
 const getStockTotal = (producto: Producto) => {
@@ -114,13 +115,21 @@ export function PosTerminal({
     // conteo porque ambas fuentes describen el mismo stock.
     const variantesArray: VarianteDisponible[] = [];
     producto.producto_variantes?.forEach((v) =>
-      variantesArray.push({ variante: v.nombre_display, cantidad: v.stock }),
+      variantesArray.push({
+        variante: v.nombre_display,
+        cantidad: v.stock,
+        precio: v.precio,
+      }),
     );
     const tieneVariantesMigradas =
       (producto.producto_variantes?.length ?? 0) > 0;
     if (!tieneVariantesMigradas) {
       producto.stock?.forEach((s) =>
-        variantesArray.push({ variante: s.variante, cantidad: s.cantidad }),
+        variantesArray.push({
+          variante: s.variante,
+          cantidad: s.cantidad,
+          precio: null,
+        }),
       );
     }
 
@@ -149,7 +158,7 @@ export function PosTerminal({
         nombre: producto.nombre || "Sin nombre",
         tipo: producto.tipo || "",
         variante: variantesParaVender[0].variante,
-        precio: producto.precio,
+        precio: variantesParaVender[0].precio ?? producto.precio,
         cantidad: 1,
         imagenUrl: imagenes[0] || null,
         stockMaximo: variantesParaVender[0].cantidad,

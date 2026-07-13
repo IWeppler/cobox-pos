@@ -23,8 +23,9 @@ export function obtenerPrimeraImagen(imagenUrl: unknown): string | null {
 }
 
 export function getTotalStock(producto: any) {
-  const listaVariantes = producto.variantes || producto.stock || [];
-  
+  const listaVariantes =
+    producto.producto_variantes || producto.stock || [];
+
   return listaVariantes.reduce((acc: number, curr: any) => {
     // Busca 'stock' (nuevo modelo) o 'cantidad' (viejo modelo)
     const cantidadStr = curr.stock !== undefined ? curr.stock : curr.cantidad;
@@ -47,7 +48,8 @@ export function ordenarStockVariantes(variantes: any[] = []) {
 }
 
 export function getVariantesVisibles(producto: any, isAdmin: boolean) {
-  const listaVariantes = producto.variantes || producto.stock || [];
+  const listaVariantes =
+    producto.producto_variantes || producto.stock || [];
   const stockOrdenado = ordenarStockVariantes(listaVariantes);
   
   return isAdmin

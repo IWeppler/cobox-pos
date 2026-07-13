@@ -7,6 +7,10 @@ export interface PromocionDB {
   tipo_descuento: string;
   valor_descuento: number;
   monto_minimo: number;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
+  limite_usos?: number | null;
+  usos_actuales?: number | null;
   promociones_metodos_pago?: { metodo_pago: string }[];
   promociones_categorias?: { categoria_nombre: string }[];
 }

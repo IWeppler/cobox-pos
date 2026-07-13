@@ -33,7 +33,7 @@ import {
 export interface Promotion {
   id: string;
   nombre: string;
-  tipo_regla: "METODO_PAGO" | "CATEGORIA" | "MONTO_MINIMO";
+  tipo_regla: "METODO_PAGO" | "CATEGORIA" | "MONTO_MINIMO" | "CANAL_PUBLICO";
   tipo_descuento: "PORCENTAJE" | "MONTO_FIJO";
   valor_descuento: number;
   activa: boolean;
@@ -103,6 +103,14 @@ export function PromotionsPanel({
           <span>
             Comprando más de <strong>${promo.monto_minimo}</strong>
           </span>
+        </div>
+      );
+    }
+
+    if (promo.tipo_regla === "CANAL_PUBLICO") {
+      return (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <span>Solo catálogo público (/store)</span>
         </div>
       );
     }

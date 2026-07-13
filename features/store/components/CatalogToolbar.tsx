@@ -172,7 +172,7 @@ export function CatalogToolbar({
       </div>
 
       {/* ── TOOLBAR DESKTOP ── */}
-      <div className="hidden sm:flex items-center justify-between py-3 border-b border-border bg-[#fffefe] sticky top-23 z-30 mb-8">
+      <div className="hidden sm:flex items-center justify-between p-3 rounded-lg border-b dark:border border-border bg-card sticky top-23 z-30 mb-8">
         <div className="flex items-center gap-3">
           <span className="uppercase tracking-widest text-[10px] font-bold text-muted-foreground mr-1">
             Filtros Extra:

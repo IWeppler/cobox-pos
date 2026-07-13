@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/shared/ui/sonner";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
@@ -42,7 +43,11 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={cn("h-full", "antialiased", "font-sans", inter.variable)}>
+    <html
+      lang="es"
+      className={cn("h-full", "antialiased", "font-sans", inter.variable)}
+      suppressHydrationWarning
+    >
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -56,8 +61,15 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col font-sans text-foreground">
-        {children}
-        <Toaster />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -57,6 +57,7 @@ export function ProductDetail({
       cantidad: number;
       id_real: string;
       atributos?: Record<string, string>;
+      precio: number | null;
     }> = [];
 
     let tieneAtributosEstructurados = false;
@@ -68,6 +69,7 @@ export function ProductDetail({
         cantidad: v.stock,
         id_real: v.id,
         atributos,
+        precio: v.precio,
       });
     });
 
@@ -76,7 +78,12 @@ export function ProductDetail({
     // ambas fuentes describen las mismas variantes.
     if (!tieneAtributosEstructurados) {
       producto.stock?.forEach((s) => {
-        list.push({ variante: s.variante, cantidad: s.cantidad, id_real: s.id });
+        list.push({
+          variante: s.variante,
+          cantidad: s.cantidad,
+          id_real: s.id,
+          precio: null,
+        });
       });
     }
     return list;
@@ -173,13 +180,13 @@ export function ProductDetail({
       nombre: producto.nombre || "Sin nombre",
       tipo: producto.tipo || "",
       variante: stockDeVariante ? stockDeVariante.variante : "Unico",
-      precio: producto.precio,
+      precio: stockDeVariante?.precio ?? producto.precio,
       cantidad: 1,
       imagenUrl: imagenes[0] || null,
       stockMaximo: stockMaximo,
     });
 
-    toast.success("Añadido al carrito de compras");
+    // toast.success("Añadido al carrito de compras");
   };
 
   const handlePrevImage = () =>
@@ -270,7 +277,7 @@ export function ProductDetail({
 
         {/* Galería Desktop (Imagen principal + Miniaturas) */}
         <div className="hidden md:flex flex-col gap-3">
-          <div className="relative aspect-4/5 bg-[#f7f7f7] w-full flex items-center justify-center group overflow-hidden border border-border/60">
+          <div className="relative aspect-4/5 bg-card w-full flex items-center justify-center group overflow-hidden border border-border/60">
             {imagenes.length > 0 ? (
               <Image
                 src={imagenes[currentImageIndex]}
@@ -383,7 +390,7 @@ export function ProductDetail({
                 )}
 
                 {errorVariante && (
-                  <p className="text-rose-600 text-xs font-bold tracking-wide flex items-center animate-in fade-in slide-in-from-top-1">
+                  <p className="text-rose-600 text-xs font-medium tracking-wide flex items-center animate-in fade-in slide-in-from-top-1">
                     <AlertCircle className="w-3.5 h-3.5 mr-1.5" /> Faltan
                     opciones por seleccionar
                   </p>
@@ -421,7 +428,7 @@ export function ProductDetail({
                 className={`w-full flex items-center justify-center gap-3 py-4 rounded-none font-bold text-xs uppercase tracking-widest transition-colors cursor-pointer ${
                   estaAgotado
                     ? "bg-muted text-muted-foreground cursor-not-allowed border border-border"
-                    : "bg-neutral-950 hover:bg-neutral-800 text-white"
+                    : "bg-primary"
                 }`}
               >
                 <ShoppingCart className="w-4 h-4" />
