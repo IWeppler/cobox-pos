@@ -46,7 +46,7 @@ export function CreateClientDialog({
 
         <form action={action} onSubmit={onSubmit} className="space-y-4 pt-2">
           <div className="space-y-2">
-            <Label htmlFor="nombre" className="text-xs font-bold">
+            <Label htmlFor="nombre" className="text-sm font-medium">
               Nombre Completo <span className="text-rose-500">*</span>
             </Label>
             <Input
@@ -59,7 +59,7 @@ export function CreateClientDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="whatsapp" className="text-xs font-bold">
+            <Label htmlFor="whatsapp" className="text-sm font-medium">
               Telefono / WhatsApp <span className="text-rose-500">*</span>
             </Label>
             <Input
@@ -73,7 +73,7 @@ export function CreateClientDialog({
 
           {includeDni ? (
             <div className="space-y-2">
-              <Label htmlFor="dni" className="text-xs font-bold">
+              <Label htmlFor="dni" className="text-sm font-medium">
                 DNI / CUIT
               </Label>
               <Input
@@ -86,7 +86,7 @@ export function CreateClientDialog({
           ) : null}
 
           <div className="space-y-2">
-            <Label htmlFor="notas" className="text-xs font-bold">
+            <Label htmlFor="notas" className="text-sm font-medium">
               Notas (Opcional)
             </Label>
             <Input

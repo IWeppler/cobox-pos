@@ -440,7 +440,7 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                     </button>
                   </TableHead>
                   <TableHead className="text-right hidden lg:table-cell text-muted-foreground w-28">
-                    Margen
+                    Recargo
                   </TableHead>
                 </>
               )}
@@ -469,12 +469,12 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
               const hasVariantes = variantesVisibles.length > 1;
               const variantesEstanAbiertas = variantesAbiertas[producto.id];
 
-              // Cálculos de Margen
+              // Cálculos de Recargo (sobre costo, no sobre precio de venta)
               const costo = producto.precio_costo || 0;
               const precio = producto.precio || 0;
               const gananciaNeta = precio - costo;
-              const margenPorcentaje =
-                costo > 0 ? Math.round((gananciaNeta / precio) * 100) : 100;
+              const recargoPorcentaje =
+                costo > 0 ? Math.round((gananciaNeta / costo) * 100) : 100;
 
               // Rango de costo/precio cuando las variantes no son uniformes:
               // cada variante hereda el precio/costo del producto salvo que
@@ -609,7 +609,7 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                       </TableCell>
                     )}
 
-                    {/* MARGEN DE GANANCIA */}
+                    {/* RECARGO DE GANANCIA */}
                     {isAdmin && (
                       <TableCell className="text-right hidden lg:table-cell py-2.5">
                         {preciosVarian ? (
@@ -618,11 +618,11 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                           </span>
                         ) : costo > 0 ? (
                           <div className="flex flex-col items-end">
-                            <span className="text-emerald-600 font-semibold text-xs">
+                            <span className="text-emerald-700 dark:text-emerald-500 font-medium text-xs">
                               +{formatearMoneda(gananciaNeta)}
                             </span>
                             <span className="text-xs text-muted-foreground font-medium">
-                              {margenPorcentaje}% margen
+                              {recargoPorcentaje}% recargo
                             </span>
                           </div>
                         ) : (

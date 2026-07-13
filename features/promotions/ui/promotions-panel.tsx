@@ -14,6 +14,8 @@ import {
   Trash2,
   Power,
   CalendarDays,
+  Layers,
+  ArrowUpNarrowWide,
 } from "lucide-react";
 import { CreatePromotionModal } from "./create-promotion-modal";
 import { EditPromotionModal } from "./edit-promotion-modal";
@@ -33,13 +35,16 @@ import {
 export interface Promotion {
   id: string;
   nombre: string;
-  tipo_regla: "METODO_PAGO" | "CATEGORIA" | "MONTO_MINIMO" | "CANAL_PUBLICO";
+  tipo_regla: "METODO_PAGO" | "CATEGORIA" | "MONTO_MINIMO" | null;
   tipo_descuento: "PORCENTAJE" | "MONTO_FIJO";
   valor_descuento: number;
   activa: boolean;
   fecha_inicio?: string | null;
   fecha_fin?: string | null;
   monto_minimo?: number;
+  mostrar_en_catalogo?: boolean;
+  acumulable?: boolean;
+  prioridad?: number;
   promociones_metodos_pago?: { metodo_pago: string }[];
   promociones_categorias?: { categoria_nombre: string }[];
 }
@@ -107,15 +112,11 @@ export function PromotionsPanel({
       );
     }
 
-    if (promo.tipo_regla === "CANAL_PUBLICO") {
-      return (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <span>Solo catálogo público (/store)</span>
-        </div>
-      );
-    }
-
-    return <span className="text-muted-foreground">Condición desconocida</span>;
+    return (
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <span>Sin condición (aplica siempre)</span>
+      </div>
+    );
   };
 
   return (
@@ -187,7 +188,35 @@ export function PromotionsPanel({
 
                       {/* CONDICIÓN DE ACTIVACIÓN */}
                       <td className="px-5 py-4 text-sm font-medium">
-                        {renderDetalleCondicion(promo)}
+                        <div className="flex flex-col gap-1">
+                          {renderDetalleCondicion(promo)}
+                          {promo.mostrar_en_catalogo && (
+                            <Badge
+                              variant="outline"
+                              className="w-fit text-[10px] font-normal text-muted-foreground"
+                            >
+                              Catálogo público (/store)
+                            </Badge>
+                          )}
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Badge
+                              variant="outline"
+                              className="w-fit text-[10px] font-normal text-muted-foreground"
+                            >
+                              <Layers className="w-2.5 h-2.5 mr-1 inline-block" />
+                              {promo.acumulable ? "Acumulable" : "Exclusiva"}
+                            </Badge>
+                            {!!promo.prioridad && (
+                              <Badge
+                                variant="outline"
+                                className="w-fit text-[10px] font-normal text-muted-foreground"
+                              >
+                                <ArrowUpNarrowWide className="w-2.5 h-2.5 mr-1 inline-block" />
+                                Prioridad {promo.prioridad}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                       </td>
 
                       {/* BENEFICIO (El Descuento) */}

@@ -3,6 +3,8 @@ export type CartItem = {
   nombre: string;
   tipo: string;
   variante: string;
+  /** producto_variantes.id real, cuando la variante existe como fila propia. */
+  varianteId?: string;
   cantidad: number;
   precioUnitario: number;
 };
@@ -12,6 +14,8 @@ export interface CartItemStore {
   nombre: string;
   tipo: string;
   variante: string;
+  /** producto_variantes.id real, cuando la variante existe como fila propia. */
+  varianteId?: string;
   precio: number;
   cantidad: number;
   imagenUrl?: string | null;

@@ -65,13 +65,13 @@ export function PaymentModal({
 
     return (
       <Dialog open onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[400px] bg-white p-6 rounded-2xl border-border shadow-xl">
+        <DialogContent className="sm:max-w-[400px] bg-card p-6 rounded-2xl border-border shadow-xl">
           <DialogHeader className="mb-2">
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               {isEfectivoOnly ? (
                 <Calculator className="w-5 h-5 text-primary" />
               ) : (
-                <CreditCard className="w-5 h-5 text-blue-600" />
+                <CreditCard className="w-5 h-5 text-primary" />
               )}
               {isEfectivoOnly ? "Calculadora de Vuelto" : "Confirmar Cobro"}
             </DialogTitle>
@@ -92,14 +92,14 @@ export function PaymentModal({
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Monto a cobrar</Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                     $
                   </span>
                   <Input
                     value={totalFinal.toLocaleString("es-AR")}
                     readOnly
                     disabled
-                    className="pl-8 bg-slate-50 font-bold h-11 text-lg text-slate-700"
+                    className="pl-8 font-medium h-11 text-lg text-foreground"
                   />
                 </div>
               </div>

@@ -112,6 +112,7 @@ export async function crearProductoAlVueloAction(
   costo: number,
   precio: number,
   categoriaNombre?: string,
+  archivos: File[] = [],
 ) {
   try {
     const cookieStore = await cookies();
@@ -160,6 +161,27 @@ export async function crearProductoAlVueloAction(
       }
     }
 
+    // Subir imágenes (opcional): mismo bucket/naming/formato que create-product.ts.
+    let imagen_url: string | null = null;
+    const validFiles = archivos.filter((f) => f.size > 0);
+    if (validFiles.length > 0) {
+      const urls: string[] = [];
+      for (const file of validFiles) {
+        const fileExt = file.name.split(".").pop();
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("productos")
+          .upload(fileName, file);
+        if (!uploadError) {
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from("productos").getPublicUrl(fileName);
+          urls.push(publicUrl);
+        }
+      }
+      if (urls.length > 0) imagen_url = JSON.stringify(urls);
+    }
+
     const { data: nuevoProducto, error } = await supabase
       .from("productos")
       .insert({
@@ -171,6 +193,7 @@ export async function crearProductoAlVueloAction(
         categoria_id: categoria_id,
         publicado: true,
         atributos_globales: {},
+        imagen_url,
       })
       .select("*")
       .single();

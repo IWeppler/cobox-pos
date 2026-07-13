@@ -54,6 +54,8 @@ import { ItemResuelto, OrdenCompra } from "@/entities/compras/types";
 import { Producto } from "@/entities/productos/types";
 import { createClient } from "@/shared/config/supabase/client";
 import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-attributes";
+import { ProductMediaSection } from "@/features/stock/ui/create-product/product-media-section";
+import { optimizarImagen } from "@/shared/utils/image-optimizer";
 
 interface MergeTableProps {
   orden: OrdenCompra;
@@ -106,7 +108,7 @@ function SearchableSelect({
     <div className="relative w-full" ref={wrapperRef}>
       {/* Botón Trigger (Gatillo) */}
       <div
-        className="flex items-center justify-between w-full h-10 px-3 py-2 text-sm bg-white border border-rose-300 rounded-md cursor-pointer focus:ring-2 focus:ring-rose-500 hover:bg-muted/10 transition-colors"
+        className="flex items-center justify-between w-full h-10 px-3 py-2 text-sm bg-card border border-border rounded-md cursor-pointer"
         onClick={() => {
           setIsOpen(!isOpen);
           setSearch(""); // Reseteamos la búsqueda al abrir
@@ -230,6 +232,9 @@ export function MergeTable({
     categoria: "",
     origenPrecio: "",
   });
+  const [archivosNuevoProducto, setArchivosNuevoProducto] = useState<File[]>(
+    [],
+  );
   const [categoriasDB, setCategoriasDB] = useState<
     { id: string; nombre: string }[]
   >([]);
@@ -343,11 +348,20 @@ export function MergeTable({
     if (!itemActual) return;
 
     setIsSubmitting(true);
+
+    const archivosComprimidos =
+      archivosNuevoProducto.length > 0
+        ? await Promise.all(
+            archivosNuevoProducto.map((f) => optimizarImagen(f)),
+          )
+        : [];
+
     const res = await crearProductoAlVueloAction(
       nuevoProductoData.nombre,
       itemActual.precio_costo,
       nuevoProductoData.precio,
       nuevoProductoData.categoria,
+      archivosComprimidos,
     );
     setIsSubmitting(false);
 
@@ -383,6 +397,7 @@ export function MergeTable({
       `Producto "${nuevoProd.nombre}" creado y asignado a ${items.filter((i) => i.raw_nombre === groupToCreateName).length} variantes.`,
     );
     setGroupToCreateName(null);
+    setArchivosNuevoProducto([]);
   };
 
   const handleAprobar = async () => {
@@ -459,7 +474,6 @@ export function MergeTable({
             variant="secondary"
             size="sm"
             onClick={handleAplicarRecargoGlobal}
-            className="hover:bg-foreground hover:text-white"
           >
             Aplicar
           </Button>
@@ -530,7 +544,7 @@ export function MergeTable({
                 if (isInflacion)
                   rowClassName = "bg-amber-50/30 hover:bg-amber-50/50";
                 else if (isDesconocido)
-                  rowClassName = "bg-rose-50/40 hover:bg-rose-50/60";
+                  rowClassName = "bg-rose-50/10 hover:bg-rose-50/20";
 
                 return (
                   <tr
@@ -543,14 +557,10 @@ export function MergeTable({
                         <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
                       )}
                       {isInflacion && (
-                        <AlertTriangle
-                          className="w-6 h-6 text-amber-500 mx-auto"
-                        />
+                        <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto" />
                       )}
                       {isDesconocido && (
-                        <HelpCircle
-                          className="w-6 h-6 text-rose-500 animate-pulse mx-auto"
-                        />
+                        <HelpCircle className="w-6 h-6 text-rose-500 mx-auto" />
                       )}
                     </td>
 
@@ -625,7 +635,7 @@ export function MergeTable({
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-8 text-xs border-dashed text-primary hover:bg-primary/10 hover:text-primary hover:border-primary w-full justify-start"
+                            className="h-8 text-xs border-dashed text-foreground hover:border-primary w-full justify-start"
                             onClick={() => {
                               setGroupToCreateName(rawNombre);
 
@@ -643,7 +653,9 @@ export function MergeTable({
                                     ((precioSugerido - firstItem.precio_costo) /
                                       firstItem.precio_costo) *
                                     100
-                                  ).toFixed(1)}% recargo = $${precioSugerido.toLocaleString("es-AR")}`
+                                  ).toFixed(
+                                    1,
+                                  )}% recargo = $${precioSugerido.toLocaleString("es-AR")}`
                                 : "Precio sugerido por defecto (sin recargo aplicado todavía)";
 
                               setNuevoProductoData({
@@ -652,10 +664,11 @@ export function MergeTable({
                                 categoria: firstItem.raw_categoria || "",
                                 origenPrecio,
                               });
+                              setArchivosNuevoProducto([]);
                             }}
                           >
-                            <PlusCircle className="w-4 h-4 mr-2" /> Crear
-                            Producto Nuevo
+                            <PlusCircle className="w-4 h-4 mr-2" />
+                            Crear Producto Nuevo
                           </Button>
                         </div>
                       ) : (
@@ -754,7 +767,12 @@ export function MergeTable({
       {/* Modal para Crear Al Vuelo */}
       <Dialog
         open={groupToCreateName !== null}
-        onOpenChange={(open) => !open && setGroupToCreateName(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setGroupToCreateName(null);
+            setArchivosNuevoProducto([]);
+          }
+        }}
       >
         <DialogContent aria-describedby="crear-producto-description">
           <DialogHeader>
@@ -779,6 +797,12 @@ export function MergeTable({
                 placeholder="Ej: Ficus Benjamina"
               />
             </div>
+
+            <ProductMediaSection
+              archivos={archivosNuevoProducto}
+              onArchivosChange={setArchivosNuevoProducto}
+              inputId="imagenes-merge-table"
+            />
 
             <div className="space-y-2">
               <Label>Categoría</Label>
@@ -829,8 +853,7 @@ export function MergeTable({
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-900 font-medium leading-tight">
                     Este grupo tiene variantes con distinto costo — se va a
-                    aplicar el precio calculado por variante, no un valor
-                    único.
+                    aplicar el precio calculado por variante, no un valor único.
                   </p>
                 </div>
               )}
@@ -839,7 +862,10 @@ export function MergeTable({
             <div className="pt-2 flex justify-end gap-2">
               <Button
                 variant="outline"
-                onClick={() => setGroupToCreateName(null)}
+                onClick={() => {
+                  setGroupToCreateName(null);
+                  setArchivosNuevoProducto([]);
+                }}
                 disabled={isSubmitting}
               >
                 Cancelar

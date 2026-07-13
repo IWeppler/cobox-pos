@@ -128,7 +128,7 @@ export function ProductEditDetailSheet({
   const costoNum = parseFloat(precioCosto) || 0;
   const ventaNum = parseFloat(precioVenta) || 0;
   const gananciaNeta = ventaNum > costoNum ? ventaNum - costoNum : 0;
-  const margenPorcentaje =
+  const recargoPorcentaje =
     costoNum > 0 && gananciaNeta > 0
       ? ((gananciaNeta / costoNum) * 100).toFixed(1)
       : "0";
@@ -291,7 +291,7 @@ export function ProductEditDetailSheet({
               precioVenta={precioVenta}
               onPrecioVentaChange={setPrecioVenta}
               gananciaNeta={gananciaNeta}
-              margenPorcentaje={margenPorcentaje}
+              recargoPorcentaje={recargoPorcentaje}
             />
 
             <ProductInventorySection

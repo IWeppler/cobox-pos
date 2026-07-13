@@ -35,6 +35,7 @@ export function useStockCartActions(userRole: string) {
       nombre: producto.nombre,
       tipo: producto.tipo,
       variante,
+      varianteId: varianteData?.id,
       cantidad: 1,
       precio: varianteData?.precio ?? producto.precio,
       imagenUrl: obtenerPrimeraImagen(producto.imagen_url),

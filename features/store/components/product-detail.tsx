@@ -428,7 +428,7 @@ export function ProductDetail({
                 className={`w-full flex items-center justify-center gap-3 py-4 rounded-none font-bold text-xs uppercase tracking-widest transition-colors cursor-pointer ${
                   estaAgotado
                     ? "bg-muted text-muted-foreground cursor-not-allowed border border-border"
-                    : "bg-primary"
+                    : "bg-primary text-white"
                 }`}
               >
                 <ShoppingCart className="w-4 h-4" />

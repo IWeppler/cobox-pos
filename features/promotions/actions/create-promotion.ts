@@ -10,9 +10,13 @@ export async function createPromotionAction(
 ) {
   try {
     const nombre = formData.get("nombre") as string;
-    const tipo_regla = formData.get("tipo_regla") as string;
+    const tipoReglaRaw = formData.get("tipo_regla") as string;
+    const tipo_regla = tipoReglaRaw === "SIN_CONDICION" ? null : tipoReglaRaw;
     const tipo_descuento = formData.get("tipo_descuento") as string;
     const valor_descuento = Number(formData.get("valor_descuento"));
+    const mostrar_en_catalogo = formData.get("mostrar_en_catalogo") === "true";
+    const acumulable = formData.get("acumulable") === "true";
+    const prioridad = Number(formData.get("prioridad") || 0);
 
     // Fechas de vigencia (opcionales)
     const fecha_inicio = formData.get("fecha_inicio") as string;
@@ -23,7 +27,7 @@ export async function createPromotionAction(
     const categoria_nombre = formData.get("categoria_nombre") as string;
     const monto_minimo = Number(formData.get("monto_minimo") || 0);
 
-    if (!nombre || !tipo_regla || !tipo_descuento || isNaN(valor_descuento)) {
+    if (!nombre || !tipoReglaRaw || !tipo_descuento || isNaN(valor_descuento)) {
       return { error: "Faltan datos obligatorios.", success: false };
     }
 
@@ -46,6 +50,9 @@ export async function createPromotionAction(
         monto_minimo: tipo_regla === "MONTO_MINIMO" ? monto_minimo : 0,
         fecha_inicio: fecha_inicio ? fecha_inicio : null,
         fecha_fin: fecha_fin ? fecha_fin : null,
+        mostrar_en_catalogo,
+        acumulable,
+        prioridad,
         creado_por: user.id,
         activa: true,
       })

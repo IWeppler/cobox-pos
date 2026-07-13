@@ -24,6 +24,8 @@ interface VarianteDisponible {
   variante: string;
   cantidad: number;
   precio: number | null;
+  /** producto_variantes.id real; undefined en el fallback legacy (productos_stock). */
+  varianteId: string | undefined;
 }
 
 const getStockTotal = (producto: Producto) => {
@@ -119,16 +121,20 @@ export function PosTerminal({
         variante: v.nombre_display,
         cantidad: v.stock,
         precio: v.precio,
+        varianteId: v.id,
       }),
     );
     const tieneVariantesMigradas =
       (producto.producto_variantes?.length ?? 0) > 0;
     if (!tieneVariantesMigradas) {
+      // productos_stock, no producto_variantes: varianteId indefinido a
+      // propósito, nunca el id de la fila de stock legacy.
       producto.stock?.forEach((s) =>
         variantesArray.push({
           variante: s.variante,
           cantidad: s.cantidad,
           precio: null,
+          varianteId: undefined,
         }),
       );
     }
@@ -158,6 +164,7 @@ export function PosTerminal({
         nombre: producto.nombre || "Sin nombre",
         tipo: producto.tipo || "",
         variante: variantesParaVender[0].variante,
+        varianteId: variantesParaVender[0].varianteId,
         precio: variantesParaVender[0].precio ?? producto.precio,
         cantidad: 1,
         imagenUrl: imagenes[0] || null,

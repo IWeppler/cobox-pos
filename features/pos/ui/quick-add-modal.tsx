@@ -57,7 +57,7 @@ function QuickAddModalContent({
     const list: Array<{
       variante: string;
       cantidad: number;
-      id_real: string;
+      varianteId: string | undefined;
       atributos?: Record<string, string>;
       precio: number | null;
     }> = [];
@@ -68,7 +68,7 @@ function QuickAddModalContent({
       list.push({
         variante: v.nombre_display,
         cantidad: v.stock,
-        id_real: v.id,
+        varianteId: v.id,
         atributos,
         precio: v.precio,
       });
@@ -76,13 +76,15 @@ function QuickAddModalContent({
 
     // Solo se recurre al stock legacy si el producto nunca se migró a
     // producto_variantes.atributos — si no, se duplican los grupos porque
-    // ambas fuentes describen las mismas variantes.
+    // ambas fuentes describen las mismas variantes. Estas filas vienen de
+    // productos_stock, NO de producto_variantes: varianteId queda
+    // undefined a propósito, nunca el id de la fila de stock legacy.
     if (!tieneAtributosEstructurados) {
       producto.stock?.forEach((s) =>
         list.push({
           variante: s.variante,
           cantidad: s.cantidad,
-          id_real: s.id,
+          varianteId: undefined,
           precio: null,
         }),
       );
@@ -178,6 +180,7 @@ function QuickAddModalContent({
           nombre: producto.nombre || "Sin nombre",
           tipo: producto.tipo || "",
           variante: stockDeVariante.variante,
+          varianteId: stockDeVariante.varianteId,
           precio: stockDeVariante.precio ?? producto.precio,
           cantidad: 1,
           imagenUrl: imagenes[0] || null,

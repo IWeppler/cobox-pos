@@ -9,6 +9,7 @@ import { slugify } from "@/shared/utils/slugify";
 import { CartSidebarHeader } from "@/shared/components/cart-sidebar/cart-sidebar-header";
 import { CartStepItems } from "@/shared/components/cart-sidebar/cart-step-items";
 import {
+  calcularDescuentoCarritoPublico,
   generarLinkWhatsAppPublico,
   getPromocionesElegibles,
   ModalidadEntregaPublica,
@@ -115,6 +116,14 @@ export function CartPanelPublico({
     });
   }, [promocionesDB, totalCarrito, items]);
 
+  const descuentoCarrito = useMemo(() => {
+    return calcularDescuentoCarritoPublico({
+      promocionesElegibles,
+      totalCarrito,
+      items,
+    });
+  }, [promocionesElegibles, totalCarrito, items]);
+
   // Compara la localidad tipeada contra la localidad del negocio con el
   // mismo criterio de normalización que ya usa normalizarAtributoKeyValor
   // (slugify: sin tildes, case-insensitive, tolera espacios/puntuación).
@@ -219,22 +228,28 @@ export function CartPanelPublico({
             {items.length > 0 ? (
               <CartFooterPublico
                 totalCarrito={totalCarrito}
+                totalConDescuento={descuentoCarrito.totalConDescuento}
                 costoEnvio={costoEnvio}
-                promocionesElegibles={promocionesElegibles}
+                calculablesAplicadas={descuentoCarrito.calculablesAplicadas}
+                informativasCondicionales={
+                  descuentoCarrito.informativasCondicionales
+                }
                 puedeEnviar={puedeEnviar}
                 motivoInvalido={motivoInvalido}
                 whatsappHref={generarLinkWhatsAppPublico({
                   numeroWhatsApp,
                   nombreComercio: branding?.posName,
                   items,
-                  total: totalCarrito + costoEnvio,
+                  total: descuentoCarrito.totalConDescuento + costoEnvio,
                   nombreCliente: nombre,
                   modalidad,
                   direccion,
                   localidad,
                   costoEnvio,
                   nota,
-                  promocionesMostradas: promocionesElegibles,
+                  promocionesAplicadas: descuentoCarrito.calculablesAplicadas,
+                  promocionesCondicionales:
+                    descuentoCarrito.informativasCondicionales,
                 })}
                 onEnviarPedido={handleEnviarPedido}
                 onClearCart={clearCartAndResetStep}

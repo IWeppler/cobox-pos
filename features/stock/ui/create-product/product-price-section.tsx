@@ -11,7 +11,7 @@ type ProductPriceSectionProps = {
   precioVenta: string;
   onPrecioVentaChange: (value: string) => void;
   gananciaNeta: number;
-  margenPorcentaje: string;
+  recargoPorcentaje: string;
 };
 
 export function ProductPriceSection({
@@ -22,7 +22,7 @@ export function ProductPriceSection({
   precioVenta,
   onPrecioVentaChange,
   gananciaNeta,
-  margenPorcentaje,
+  recargoPorcentaje,
 }: ProductPriceSectionProps) {
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -120,13 +120,13 @@ export function ProductPriceSection({
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground">
-                Margen
+                Recargo
               </Label>
               <div className="relative">
                 <Input
                   readOnly
                   disabled
-                  value={margenPorcentaje !== "0" ? margenPorcentaje : ""}
+                  value={recargoPorcentaje !== "0" ? recargoPorcentaje : ""}
                   placeholder="0.0"
                   className="h-10 pr-7 shadow-none rounded-lg bg-muted/30 cursor-not-allowed font-medium text-emerald-600"
                 />

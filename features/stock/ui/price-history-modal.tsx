@@ -28,7 +28,7 @@ import { formatearMoneda, formatearFechaHora } from "@/shared/utils/formatters";
 const LABEL_OPERACION: Record<OperacionPrecio, string> = {
   AUMENTAR_PORCENTAJE: "Aumentar precio actual",
   REDUCIR_PORCENTAJE: "Reducir precio actual",
-  FIJAR_MARGEN: "Fijar Margen",
+  FIJAR_MARGEN: "Fijar Recargo",
 };
 
 export function PriceHistoryModal() {

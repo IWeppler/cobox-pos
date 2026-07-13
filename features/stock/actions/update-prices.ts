@@ -172,9 +172,13 @@ export async function simularPreciosAction(
 
     if (campo === "PRECIO" || campo === "AMBOS") {
       if (operacion === "FIJAR_MARGEN") {
+        // El tipo se llama FIJAR_MARGEN por compatibilidad con el
+        // historial ya guardado en actualizaciones_precio(_items), pero la
+        // fórmula es de recargo sobre costo (mismo criterio que
+        // handleAplicarRecargoGlobal en merge-table.tsx), no margen sobre
+        // precio de venta.
         const costoReferencia = campo === "AMBOS" ? nuevoCosto : costoBase;
-        const margenDecimal = valor >= 100 ? 0.99 : valor / 100;
-        nuevoPrecio = costoReferencia / (1 - margenDecimal);
+        nuevoPrecio = costoReferencia * (1 + valor / 100);
       } else {
         nuevoPrecio = calcularNuevoValor(precioBase, operacion, valor);
       }

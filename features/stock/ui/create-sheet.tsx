@@ -85,7 +85,7 @@ export function CrearProductoSheet() {
                 precioVenta={form.precioVenta}
                 onPrecioVentaChange={form.setPrecioVenta}
                 gananciaNeta={form.gananciaNeta}
-                margenPorcentaje={form.margenPorcentaje}
+                recargoPorcentaje={form.recargoPorcentaje}
               />
 
               <ProductInventorySection

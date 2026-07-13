@@ -3,7 +3,7 @@ import { MetodoPago } from "@/entities/payments/types";
 export interface PromocionDB {
   id: string;
   nombre: string;
-  tipo_regla: string;
+  tipo_regla: string | null;
   tipo_descuento: string;
   valor_descuento: number;
   monto_minimo: number;
@@ -11,6 +11,9 @@ export interface PromocionDB {
   fecha_fin?: string | null;
   limite_usos?: number | null;
   usos_actuales?: number | null;
+  mostrar_en_catalogo?: boolean;
+  acumulable?: boolean;
+  prioridad?: number;
   promociones_metodos_pago?: { metodo_pago: string }[];
   promociones_categorias?: { categoria_nombre: string }[];
 }

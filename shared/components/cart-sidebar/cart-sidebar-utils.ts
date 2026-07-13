@@ -44,7 +44,16 @@ export function getPromocionesElegibles({
       return false;
     }
 
+    if (canal === "PUBLICO" && !promo.mostrar_en_catalogo) {
+      return false;
+    }
+
     switch (promo.tipo_regla) {
+      case null:
+        // Sin condición específica: aplica siempre (incluye "mostrar en
+        // catálogo" ya validado arriba para el canal público).
+        return true;
+
       case "METODO_PAGO": {
         // En el carrito público todavía no se eligió medio de pago (eso se
         // define después por WhatsApp) — se muestra como informativo sin
@@ -79,9 +88,6 @@ export function getPromocionesElegibles({
         // Ya validado arriba (chequeo de monto_minimo es general a todo tipo_regla).
         return true;
 
-      case "CANAL_PUBLICO":
-        return canal === "PUBLICO";
-
       default:
         console.warn(
           `[promociones] tipo_regla desconocido: "${promo.tipo_regla}" en la promoción "${promo.nombre}" (id: ${promo.id}) — se descarta por seguridad.`,
@@ -102,24 +108,11 @@ export function getPromocionActivaId(
     : "ninguna";
 }
 
-export function getDescuentoDetalle({
-  promocionActivaId,
-  promocionesElegibles,
-  totalCarrito,
-  items,
-}: {
-  promocionActivaId: string;
-  promocionesElegibles: PromocionDB[];
-  totalCarrito: number;
-  items: CartItemStore[];
-}): DescuentoDetalle {
-  if (promocionActivaId === "ninguna") return { monto: 0, nombre: "" };
-
-  const promo = promocionesElegibles.find(
-    (item) => item.id === promocionActivaId,
-  );
-  if (!promo) return { monto: 0, nombre: "" };
-
+function calcularDescuentoPromo(
+  promo: PromocionDB,
+  totalCarrito: number,
+  items: CartItemStore[],
+): number {
   let montoBase = totalCarrito;
 
   if (promo.tipo_regla === "CATEGORIA") {
@@ -141,9 +134,100 @@ export function getDescuentoDetalle({
       ? (montoBase * promo.valor_descuento) / 100
       : promo.valor_descuento;
 
+  return Math.round(Math.min(descuento, totalCarrito));
+}
+
+export function getDescuentoDetalle({
+  promocionActivaId,
+  promocionesElegibles,
+  totalCarrito,
+  items,
+}: {
+  promocionActivaId: string;
+  promocionesElegibles: PromocionDB[];
+  totalCarrito: number;
+  items: CartItemStore[];
+}): DescuentoDetalle {
+  if (promocionActivaId === "ninguna") return { monto: 0, nombre: "" };
+
+  const promo = promocionesElegibles.find(
+    (item) => item.id === promocionActivaId,
+  );
+  if (!promo) return { monto: 0, nombre: "" };
+
   return {
-    monto: Math.round(Math.min(descuento, totalCarrito)),
+    monto: calcularDescuentoPromo(promo, totalCarrito, items),
     nombre: promo.nombre,
+  };
+}
+
+export interface DescuentoCarritoPublico {
+  /** Promos que ya restan del total mostrado: todo menos METODO_PAGO. */
+  calculablesAplicadas: PromocionDB[];
+  /** METODO_PAGO: depende de un dato que este checkout no tiene (cómo paga), queda como aviso aparte. */
+  informativasCondicionales: PromocionDB[];
+  totalDescuento: number;
+  totalConDescuento: number;
+}
+
+/**
+ * Entre las calculables, "acumulable" decide si se suman todas (true) o si
+ * compiten por una sola (false: gana la de mayor descuento en pesos;
+ * empate exacto lo resuelve "prioridad", mayor gana).
+ */
+export function calcularDescuentoCarritoPublico({
+  promocionesElegibles,
+  totalCarrito,
+  items,
+}: {
+  promocionesElegibles: PromocionDB[];
+  totalCarrito: number;
+  items: CartItemStore[];
+}): DescuentoCarritoPublico {
+  const calculables = promocionesElegibles.filter(
+    (p) => p.tipo_regla !== "METODO_PAGO",
+  );
+  const informativasCondicionales = promocionesElegibles.filter(
+    (p) => p.tipo_regla === "METODO_PAGO",
+  );
+
+  const acumulables = calculables.filter((p) => p.acumulable);
+  const exclusivas = calculables.filter((p) => !p.acumulable);
+
+  const descuentoAcumulables = acumulables.map((promo) => ({
+    promo,
+    descuento: calcularDescuentoPromo(promo, totalCarrito, items),
+  }));
+
+  let mejorExclusiva: { promo: PromocionDB; descuento: number } | null = null;
+  for (const promo of exclusivas) {
+    const descuento = calcularDescuentoPromo(promo, totalCarrito, items);
+    if (
+      !mejorExclusiva ||
+      descuento > mejorExclusiva.descuento ||
+      (descuento === mejorExclusiva.descuento &&
+        (promo.prioridad ?? 0) > (mejorExclusiva.promo.prioridad ?? 0))
+    ) {
+      mejorExclusiva = { promo, descuento };
+    }
+  }
+
+  const calculablesAplicadas = [
+    ...descuentoAcumulables.map((d) => d.promo),
+    ...(mejorExclusiva ? [mejorExclusiva.promo] : []),
+  ];
+
+  const totalDescuento = Math.min(
+    totalCarrito,
+    descuentoAcumulables.reduce((acc, d) => acc + d.descuento, 0) +
+      (mejorExclusiva?.descuento ?? 0),
+  );
+
+  return {
+    calculablesAplicadas,
+    informativasCondicionales,
+    totalDescuento,
+    totalConDescuento: totalCarrito - totalDescuento,
   };
 }
 
@@ -175,8 +259,6 @@ export function formatearPromoPublica(promo: PromocionDB): string {
     }
     case "MONTO_MINIMO":
       return `${valor} a partir de $${promo.monto_minimo.toLocaleString("es-AR")}`;
-    case "CANAL_PUBLICO":
-      return `${valor} exclusivo por el catálogo online`;
     default:
       return `${valor}`;
   }
@@ -225,11 +307,13 @@ export function generarLinkWhatsAppPublico({
   localidad,
   costoEnvio,
   nota,
-  promocionesMostradas,
+  promocionesAplicadas,
+  promocionesCondicionales,
 }: {
   numeroWhatsApp?: string;
   nombreComercio?: string | null;
   items: CartItemStore[];
+  /** Ya con el descuento de las promos calculables restado. */
   total: number;
   nombreCliente: string;
   modalidad: ModalidadEntregaPublica;
@@ -237,7 +321,10 @@ export function generarLinkWhatsAppPublico({
   localidad?: string;
   costoEnvio?: number;
   nota?: string;
-  promocionesMostradas?: PromocionDB[];
+  /** Ya restadas del total de arriba. */
+  promocionesAplicadas?: PromocionDB[];
+  /** Dependen del método de pago: aviso aparte, no afectan el total. */
+  promocionesCondicionales?: PromocionDB[];
 }) {
   if (!numeroWhatsApp) return "#";
 
@@ -251,7 +338,7 @@ export function generarLinkWhatsAppPublico({
     ).toLocaleString("es-AR")}\n`;
   });
 
-  mensaje += `\nTOTAL: $${total.toLocaleString("es-AR")}\n`;
+  mensaje += `\nTOTAL (con descuento aplicado): $${total.toLocaleString("es-AR")}\n`;
 
   mensaje += `\nNombre: ${nombreCliente}`;
   if (modalidad === "ENVIO") {
@@ -269,9 +356,16 @@ export function generarLinkWhatsAppPublico({
     mensaje += `\nNota: ${nota.trim()}`;
   }
 
-  if (promocionesMostradas && promocionesMostradas.length > 0) {
-    mensaje += `\n\nPromociones que vi disponibles:`;
-    promocionesMostradas.forEach((promo) => {
+  if (promocionesAplicadas && promocionesAplicadas.length > 0) {
+    mensaje += `\n\nDescuentos aplicados:`;
+    promocionesAplicadas.forEach((promo) => {
+      mensaje += `\n- ${formatearPromoPublica(promo)}`;
+    });
+  }
+
+  if (promocionesCondicionales && promocionesCondicionales.length > 0) {
+    mensaje += `\n\nPromos según método de pago (a confirmar):`;
+    promocionesCondicionales.forEach((promo) => {
       mensaje += `\n- ${formatearPromoPublica(promo)}`;
     });
   }

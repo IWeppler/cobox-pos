@@ -320,9 +320,9 @@ export function UpdatePricesModal() {
                       </SelectGroup>
                       <SelectSeparator />
                       <SelectGroup>
-                        <SelectLabel>Margen sobre precio de venta</SelectLabel>
+                        <SelectLabel>Recargo sobre costo</SelectLabel>
                         <SelectItem value="FIJAR_MARGEN">
-                          Fijar Margen (%)
+                          Fijar Recargo (%)
                         </SelectItem>
                       </SelectGroup>
                     </SelectContent>

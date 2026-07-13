@@ -79,14 +79,14 @@ export function CartSidebarFooter({
 
   return (
     <>
-      <div className="shrink-0 border-t border-border bg-white p-5 z-10">
+      <div className="shrink-0 border-t border-border bg-card p-5 z-10">
         <div className="space-y-2 mb-4">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>Subtotal</span>
             <span>{formatCurrency(totalCarrito)}</span>
           </div>
           {descuentoDetalle.monto > 0 ? (
-            <div className="flex items-center justify-between text-sm text-emerald-700">
+            <div className="flex items-center justify-between text-sm text-emerald-700 dark:text-emerald-400">
               <span>Promocion: {descuentoDetalle.nombre}</span>
               <span>-{formatCurrency(descuentoDetalle.monto)}</span>
             </div>

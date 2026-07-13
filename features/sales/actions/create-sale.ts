@@ -68,28 +68,20 @@ export async function registrarVentaAction(
     }
   }
 
-  let totalElegible = 0;
-  items.forEach((item) => {
-    const elegible =
-      !promoData || promoData.tipo_regla !== "CATEGORIA"
-        ? true
-        : categoriasPromo.includes((item.tipo || "").toLowerCase());
-    if (elegible)
-      totalElegible +=
-        Number(item.precioUnitario ?? item.precio ?? 0) *
-        Number(item.cantidad ?? 1);
-  });
-
-  // --- 1. VALIDAR STOCK Y PRORRATEAR DESCUENTOS ---
-  const itemsProcesados = [];
-  let totalVentaBrutaItems = 0;
-  let costoTotalVenta = 0;
-
+  // --- 0. RESOLVER PRECIO Y COSTO REALES SERVER-SIDE ---
+  // item.precio / item.precioUnitario vienen del cliente y son solo para
+  // pintar el carrito antes de confirmar: cualquiera con el request
+  // interceptado podría mandar el valor que quiera. El precio (y el costo,
+  // que define el margen reportado) que efectivamente se cobra y persiste
+  // sale siempre de la variante o, si esta no tiene su propio valor, del
+  // producto — nunca del payload del cliente.
+  const itemsResueltos = [];
   for (const item of items) {
     const productoIdReal = item.productoId ?? item.id;
+
     const { data: stockActual } = await supabase
       .from("productos_stock")
-      .select("cantidad, id, producto:productos(precio_costo)")
+      .select("cantidad, id, producto:productos(precio, precio_costo)")
       .eq("producto_id", productoIdReal)
       .eq("variante", item.variante)
       .single();
@@ -97,11 +89,90 @@ export async function registrarVentaAction(
     if (!stockActual)
       return { error: `Error de stock en ${item.variante}.`, success: false };
 
-    const precioCostoReal = Number(
-      (stockActual.producto as any)?.precio_costo || 0,
-    );
-    const precioUnitario = Number(item.precioUnitario ?? item.precio ?? 0);
-    const cantidadFinal = Number(item.cantidad ?? 1);
+    const productoData = stockActual.producto as any;
+    const precioProducto = Number(productoData?.precio) || 0;
+    const costoProducto = Number(productoData?.precio_costo) || 0;
+
+    // Match por PK cuando el carrito trae varianteId (sin ambigüedad
+    // posible). Si no viene — carrito armado antes de este cambio, todavía
+    // en localStorage, o producto sin variante real — caemos al match por
+    // nombre_display; si tampoco encuentra nada ahí, dejamos rastro en vez
+    // de heredar el precio de producto en silencio.
+    let varianteData: { precio: number | null; costo: number | null } | null =
+      null;
+    if (item.varianteId) {
+      const { data } = await supabase
+        .from("producto_variantes")
+        .select("precio, costo")
+        .eq("id", item.varianteId)
+        .maybeSingle();
+      varianteData = data;
+    } else {
+      const { data } = await supabase
+        .from("producto_variantes")
+        .select("precio, costo")
+        .eq("producto_id", productoIdReal)
+        .eq("nombre_display", item.variante)
+        .maybeSingle();
+      varianteData = data;
+
+      if (!varianteData) {
+        console.warn("[VENTA VARIANTE SIN MATCH]", {
+          vendedorId: user.id,
+          productoId: productoIdReal,
+          variante: item.variante,
+        });
+      }
+    }
+
+    const precioServer =
+      varianteData?.precio != null
+        ? Number(varianteData.precio)
+        : precioProducto;
+    const costoServer =
+      varianteData?.costo != null ? Number(varianteData.costo) : costoProducto;
+
+    const precioCliente = Number(item.precioUnitario ?? item.precio ?? 0);
+    if (Math.abs(precioCliente - precioServer) > 0.01) {
+      console.error("[VENTA PRECIO MISMATCH]", {
+        vendedorId: user.id,
+        productoId: productoIdReal,
+        variante: item.variante,
+        precioCliente,
+        precioServer,
+      });
+    }
+
+    itemsResueltos.push({
+      productoIdReal,
+      variante: item.variante,
+      tipo: item.tipo,
+      cantidad: Number(item.cantidad ?? 1),
+      stockActual,
+      precioServer,
+      costoServer,
+    });
+  }
+
+  let totalElegible = 0;
+  itemsResueltos.forEach((item) => {
+    const elegible =
+      !promoData || promoData.tipo_regla !== "CATEGORIA"
+        ? true
+        : categoriasPromo.includes((item.tipo || "").toLowerCase());
+    if (elegible) totalElegible += item.precioServer * item.cantidad;
+  });
+
+  // --- 1. VALIDAR STOCK Y PRORRATEAR DESCUENTOS ---
+  const itemsProcesados = [];
+  let totalVentaBrutaItems = 0;
+  let costoTotalVenta = 0;
+
+  for (const item of itemsResueltos) {
+    const { productoIdReal, stockActual } = item;
+    const cantidadFinal = item.cantidad;
+    const precioCostoReal = item.costoServer;
+    const precioUnitario = item.precioServer;
 
     const elegible =
       !promoData || promoData.tipo_regla !== "CATEGORIA"

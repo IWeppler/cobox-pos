@@ -19,6 +19,7 @@ import {
 } from "@/shared/ui/select";
 import { Loader2, Tag } from "lucide-react";
 import { ScrollArea } from "@/shared/ui/scroll-area";
+import { Switch } from "@/shared/ui/switch";
 import { editPromotionAction } from "../actions/manage-promotions";
 import { Promotion } from "./promotions-panel";
 import { toast } from "sonner";
@@ -29,7 +30,7 @@ const TIPO_REGLA_OPTIONS = [
   { value: "METODO_PAGO", label: "Por Método de Pago" },
   { value: "CATEGORIA", label: "Por Categoría de Producto" },
   { value: "MONTO_MINIMO", label: "Por Monto Mínimo de Compra" },
-  { value: "CANAL_PUBLICO", label: "Solo Catálogo Público (/store)" },
+  { value: "SIN_CONDICION", label: "Sin condición (aplica siempre)" },
 ] as const;
 
 const METODO_PAGO_OPTIONS = [
@@ -59,7 +60,9 @@ export function EditPromotionModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [tipoRegla, setTipoRegla] = useState<TipoRegla>(promo.tipo_regla);
+  const [tipoRegla, setTipoRegla] = useState<TipoRegla>(
+    promo.tipo_regla ?? "SIN_CONDICION",
+  );
   const [tipoDescuento, setTipoDescuento] = useState<TipoDescuento>(
     promo.tipo_descuento,
   );
@@ -67,6 +70,13 @@ export function EditPromotionModal({
     promo.promociones_metodos_pago?.[0]?.metodo_pago || "",
   );
   const [categoriaId, setCategoriaId] = useState("");
+  const [mostrarEnCatalogo, setMostrarEnCatalogo] = useState(
+    promo.mostrar_en_catalogo ?? false,
+  );
+  const [acumulable, setAcumulable] = useState(promo.acumulable ?? false);
+  const [prioridad, setPrioridad] = useState(
+    promo.prioridad != null ? String(promo.prioridad) : "",
+  );
   const categorias = useActiveCategories();
   const categoriaInicialNombre =
     promo.promociones_categorias?.[0]?.categoria_nombre || "";
@@ -79,6 +89,9 @@ export function EditPromotionModal({
       formData.append("id", promo.id);
       formData.append("tipo_regla", tipoRegla);
       formData.append("tipo_descuento", tipoDescuento);
+      formData.append("mostrar_en_catalogo", String(mostrarEnCatalogo));
+      formData.append("acumulable", String(acumulable));
+      formData.append("prioridad", prioridad || "0");
 
       if (tipoRegla === "METODO_PAGO")
         formData.append("metodo_pago", metodoPago);
@@ -208,11 +221,22 @@ export function EditPromotionModal({
                 </div>
               )}
 
-              {tipoRegla === "CANAL_PUBLICO" && (
-                <p className="text-xs text-muted-foreground animate-in fade-in slide-in-from-top-2">
-                  Se muestra como aviso informativo en el carrito del catálogo. No aplica en el POS presencial.
-                </p>
-              )}
+              <div className="flex items-start justify-between gap-4 pt-2">
+                <div className="space-y-1">
+                  <Label htmlFor="mostrar_en_catalogo">
+                    Mostrar en catálogo público (/store)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Se muestra como aviso informativo en el carrito. No
+                    aplica en el POS presencial.
+                  </p>
+                </div>
+                <Switch
+                  id="mostrar_en_catalogo"
+                  checked={mostrarEnCatalogo}
+                  onCheckedChange={setMostrarEnCatalogo}
+                />
+              </div>
             </div>
 
             <div className="space-y-4 pt-4 border-t border-border">
@@ -255,6 +279,39 @@ export function EditPromotionModal({
                     required
                   />
                 </div>
+              </div>
+
+              <div className="flex items-start justify-between gap-4 pt-2">
+                <div className="space-y-1">
+                  <Label htmlFor="acumulable">
+                    Acumulable con otras promociones
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Si está activado, su descuento se suma al de otras promos
+                    acumulables. Si no, compite por aplicarse ella sola.
+                  </p>
+                </div>
+                <Switch
+                  id="acumulable"
+                  checked={acumulable}
+                  onCheckedChange={setAcumulable}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="prioridad">Prioridad (opcional)</Label>
+                <Input
+                  id="prioridad"
+                  type="number"
+                  step="1"
+                  placeholder="0"
+                  value={prioridad}
+                  onChange={(e) => setPrioridad(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Si dos promociones no acumulables compiten con el mismo
+                  descuento en pesos, gana la de mayor prioridad.
+                </p>
               </div>
             </div>
 

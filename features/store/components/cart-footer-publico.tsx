@@ -8,8 +8,13 @@ import { PromocionDB } from "@/shared/components/cart-sidebar/types";
 
 interface CartFooterPublicoProps {
   totalCarrito: number;
+  /** Total de items ya con las promos calculables restadas. Default: sin descuento. */
+  totalConDescuento?: number;
   costoEnvio?: number;
-  promocionesElegibles?: PromocionDB[];
+  /** Ya restadas del total: todo lo calculable menos METODO_PAGO. */
+  calculablesAplicadas?: PromocionDB[];
+  /** METODO_PAGO: aviso aparte, no afecta el total (se define después por WhatsApp). */
+  informativasCondicionales?: PromocionDB[];
   whatsappHref: string;
   puedeEnviar: boolean;
   motivoInvalido?: string;
@@ -23,8 +28,10 @@ const formatCurrency = (amount: number) =>
 
 export function CartFooterPublico({
   totalCarrito,
+  totalConDescuento,
   costoEnvio = 0,
-  promocionesElegibles = [],
+  calculablesAplicadas = [],
+  informativasCondicionales = [],
   whatsappHref,
   puedeEnviar,
   motivoInvalido,
@@ -38,24 +45,43 @@ export function CartFooterPublico({
     onEnviarPedido();
   };
 
-  const totalFinal = totalCarrito + costoEnvio;
+  const totalSinDescuento = totalCarrito + costoEnvio;
+  const totalFinal = (totalConDescuento ?? totalCarrito) + costoEnvio;
+  const hayDescuento = totalFinal < totalSinDescuento;
 
   return (
     <div className="shrink-0 bg-card  p-5 z-10">
-      {promocionesElegibles.length > 0 && (
-        <div className="mb-4 space-y-1.5">
-          {promocionesElegibles.map((promo) => (
+      {calculablesAplicadas.length > 0 && (
+        <div className="mb-3 space-y-1.5">
+          {calculablesAplicadas.map((promo) => (
             <div
               key={promo.id}
-              className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800"
+              className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 dark:bg-emerald-500/20 dark:text-emerald-100 px-2.5 py-1.5 text-xs font-medium text-emerald-800"
             >
               <Tag className="h-3.5 w-3.5 shrink-0" />
               <span>{formatearPromoPublica(promo)}</span>
             </div>
           ))}
           <p className="text-[10px] text-muted-foreground">
-            El descuento se confirma al coordinar por WhatsApp, no está
-            aplicado en el total de abajo.
+            Descuento ya aplicado en el total de abajo.
+          </p>
+        </div>
+      )}
+
+      {informativasCondicionales.length > 0 && (
+        <div className="mb-4 space-y-1.5">
+          {informativasCondicionales.map((promo) => (
+            <div
+              key={promo.id}
+              className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-500/20 dark:text-amber-100 px-2.5 py-1.5 text-xs font-medium text-amber-800"
+            >
+              <Tag className="h-3.5 w-3.5 shrink-0" />
+              <span>{formatearPromoPublica(promo)}</span>
+            </div>
+          ))}
+          <p className="text-[10px] text-muted-foreground">
+            Este descuento depende del método de pago: se confirma al
+            coordinar por WhatsApp, no está aplicado en el total de abajo.
           </p>
         </div>
       )}
@@ -73,13 +99,25 @@ export function CartFooterPublico({
             </div>
           </>
         )}
-        <div className="flex items-center justify-between border-t border-border pt-3">
-          <span className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-            Total
-          </span>
-          <span className="text-2xl font-bold text-foreground">
-            {formatCurrency(totalFinal)}
-          </span>
+        <div className="border-t border-border pt-3">
+          {hayDescuento && (
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>Precio de lista</span>
+              <span className="line-through decoration-muted-foreground/60">
+                {formatCurrency(totalSinDescuento)}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+              Total
+            </span>
+            <span
+              className={`text-2xl font-bold ${hayDescuento ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}
+            >
+              {formatCurrency(totalFinal)}
+            </span>
+          </div>
         </div>
       </div>
 
