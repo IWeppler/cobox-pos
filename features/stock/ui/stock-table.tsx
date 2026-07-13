@@ -386,7 +386,7 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
 
       {/* --- CONTENEDOR DE LA TABLA --- */}
       <div className="overflow-hidden">
-        <Table className="w-full sm:min-w-[800px]">
+        <Table className="w-full sm:min-w-200 bg-card">
           <TableHeader>
             <TableRow className="bg-muted/30 border-b border-border/60 hover:bg-muted/30">
               {/* Columna Checkbox (Oculta en móviles) */}
@@ -510,7 +510,7 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                       isSelected
                         ? "bg-primary/5 hover:bg-primary/10"
                         : variantesEstanAbiertas
-                          ? "bg-muted/15"
+                          ? "bg-muted"
                           : "hover:bg-muted/20"
                     }`}
                   >

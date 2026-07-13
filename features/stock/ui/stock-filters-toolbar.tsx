@@ -95,7 +95,7 @@ export function StockFiltersToolbar({
   return (
     <>
       {/* 1. BARRA SUPERIOR: Buscador y Acciones */}
-      <div className="flex w-full min-w-0 flex-row gap-2 overflow-hidden sm:gap-4 justify-between items-center bg-card p-2 sm:p-4">
+      <div className="flex flex-row gap-2 sm:gap-3 items-center bg-card p-2 sm:p-3 rounded-xl border border-border">
         <ImportarPedidoModal
           open={isImportModalOpen}
           onOpenChange={setIsImportModalOpen}
