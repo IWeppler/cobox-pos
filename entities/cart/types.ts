@@ -20,4 +20,6 @@ export interface CartItemStore {
   cantidad: number;
   imagenUrl?: string | null;
   stockMaximo: number;
+  /** IDs de `reservas` que esta línea del carrito viene a saldar (flujo "Confirmar venta" desde Reservas activas). */
+  reservaIds?: string[];
 }

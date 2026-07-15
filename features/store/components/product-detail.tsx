@@ -66,7 +66,7 @@ export function ProductDetail({
       if (Object.keys(atributos).length > 0) tieneAtributosEstructurados = true;
       list.push({
         variante: v.nombre_display,
-        cantidad: v.stock,
+        cantidad: v.stock_disponible ?? v.stock,
         id_real: v.id,
         atributos,
         precio: v.precio,

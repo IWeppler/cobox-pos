@@ -14,6 +14,7 @@ import type { Producto } from "@/entities/productos/types";
 import { Button } from "@/shared/ui/button";
 import { createClient } from "@/shared/config/supabase/client";
 import { optimizarImagen } from "@/shared/utils/image-optimizer";
+import { parseProductImages } from "../lib/stock-product-utils";
 import {
   Sheet,
   SheetContent,
@@ -49,18 +50,6 @@ type ProductEditDetailSheetProps = {
   hideTrigger?: boolean;
 };
 
-function parseProductImages(imagenUrl: EditableProducto["imagen_url"]) {
-  if (Array.isArray(imagenUrl)) return imagenUrl;
-  if (typeof imagenUrl !== "string" || !imagenUrl) return [];
-
-  try {
-    const parsed = JSON.parse(imagenUrl);
-    return Array.isArray(parsed) ? parsed : [imagenUrl];
-  } catch {
-    return [imagenUrl];
-  }
-}
-
 export function ProductEditDetailSheet({
   producto,
   children,
@@ -79,6 +68,13 @@ export function ProductEditDetailSheet({
 
   const [internalOpen, setInternalOpen] = useState(false);
   const [archivos, setArchivos] = useState<File[]>([]);
+  // URLs de imagen_url que el usuario tildó para borrar en esta sesión de
+  // edición. No tocamos producto.imagen_url localmente: el servidor arma
+  // el resultado final partiendo del imagen_url real en base (ver
+  // editarProductoAction), esta lista solo indica la intención del click.
+  const [imagenesExistentesAQuitar, setImagenesExistentesAQuitar] = useState<
+    string[]
+  >([]);
   const [isCompressing, setIsCompressing] = useState(false);
   const [categorias, setCategorias] = useState<CategoriaOption[]>([]);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(
@@ -135,6 +131,7 @@ export function ProductEditDetailSheet({
 
   const resetFormState = () => {
     setArchivos([]);
+    setImagenesExistentesAQuitar([]);
     setCategoriaSeleccionada(producto.categoria_id || "");
     setStatus(producto.publicado ? "active" : "inactive");
     setShowPrice(true);
@@ -157,6 +154,12 @@ export function ProductEditDetailSheet({
     ): Promise<ProductActionState> => {
       formData.append("id", producto.id);
       formData.append("tieneVariantes", showVariants.toString());
+      if (imagenesExistentesAQuitar.length > 0) {
+        formData.append(
+          "imagenesAEliminar",
+          JSON.stringify(imagenesExistentesAQuitar),
+        );
+      }
       if (showVariants) {
         formData.append("opciones", JSON.stringify(variantSelection.opciones));
         formData.append("variantes", JSON.stringify(variantSelection.variantes));
@@ -266,7 +269,12 @@ export function ProductEditDetailSheet({
             <ProductMediaSection
               archivos={archivos}
               onArchivosChange={setArchivos}
-              existingImages={parseProductImages(producto.imagen_url)}
+              existingImages={parseProductImages(producto.imagen_url).filter(
+                (url) => !imagenesExistentesAQuitar.includes(url),
+              )}
+              onRemoveExistingImage={(url) =>
+                setImagenesExistentesAQuitar((prev) => [...prev, url])
+              }
               inputId={`imagenes-edit-${producto.id}`}
             />
 

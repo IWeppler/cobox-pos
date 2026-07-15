@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { registrarVentaAction } from "@/features/sales/actions/create-sale";
+import { crearReservaAction } from "@/features/reservations/actions/manage-reservations";
 import { TicketSheet } from "@/features/sales/ui/ticket-sheet";
 import { TicketData, CreateSalePaymentInput } from "@/entities/ventas/types";
 import { ConfiguracionPOS } from "@/entities/config/types";
@@ -74,6 +75,7 @@ export function CartPanelAdmin({
   const [pagos, setPagos] = useState<CreateSalePaymentInput[]>([]);
   const [modoMixto, setModoMixto] = useState(false);
   const [isCuentaCorriente, setIsCuentaCorriente] = useState(false);
+  const [isReserva, setIsReserva] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
 
   const [promocionesDB, setPromocionesDB] = useState<PromocionDB[]>([]);
@@ -254,8 +256,56 @@ export function CartPanelAdmin({
   const handleCuentaCorrienteChange = (value: boolean) => {
     setIsCuentaCorriente(value);
     if (value) {
+      setIsReserva(false);
       setPromocionId("ninguna");
     }
+  };
+
+  const handleReservaChange = (value: boolean) => {
+    setIsReserva(value);
+    if (value) {
+      setIsCuentaCorriente(false);
+      setPromocionId("ninguna");
+    }
+  };
+
+  const handleConfirmarReserva = () => {
+    if (!clienteSeleccionado) {
+      toast.error("Selecciona un cliente para reservar.");
+      return;
+    }
+    if (items.some((item) => !item.varianteId)) {
+      toast.error(
+        "Alguno de los productos no tiene variante registrada y no se puede reservar.",
+      );
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await crearReservaAction(
+        clienteSeleccionado.id,
+        items.map((item) => ({
+          productoId: item.productoId,
+          varianteId: item.varianteId,
+          cantidad: item.cantidad,
+        })),
+      );
+
+      if (!result.success) {
+        toast.error("No se pudo registrar la reserva.", {
+          description: result.error ?? "Intenta nuevamente.",
+        });
+        return;
+      }
+
+      toast.success("Reserva registrada.");
+      clearCartAndResetStep();
+      setPromocionId("ninguna");
+      setModoMixto(false);
+      setIsReserva(false);
+      setClienteSeleccionado(null);
+      closeSidebar();
+    });
   };
 
   const handleContinueToPayment = () => {
@@ -326,6 +376,11 @@ export function CartPanelAdmin({
 
         if (clienteSeleccionado) {
           formData.append("cliente_id", clienteSeleccionado.id);
+        }
+
+        const reservaIds = items.flatMap((item) => item.reservaIds ?? []);
+        if (reservaIds.length > 0) {
+          formData.append("reserva_ids", JSON.stringify(reservaIds));
         }
 
         if (promocionActivaId !== "ninguna" && descuentoDetalle.monto > 0) {
@@ -432,6 +487,8 @@ export function CartPanelAdmin({
           totalFinal={totalFinal}
           isCuentaCorriente={isCuentaCorriente}
           onCuentaCorrienteChange={handleCuentaCorrienteChange}
+          isReserva={isReserva}
+          onReservaChange={handleReservaChange}
           modoMixto={modoMixto}
           onModoMixtoChange={setModoMixto}
           anticipoMinimo={anticipoMinimo}
@@ -451,6 +508,8 @@ export function CartPanelAdmin({
               totalFinal={totalFinal}
               sumaPagos={sumaPagos}
               isCuentaCorriente={isCuentaCorriente}
+              isReserva={isReserva}
+              onConfirmarReserva={handleConfirmarReserva}
               anticipoMinimo={anticipoMinimo}
               clienteSeleccionado={clienteSeleccionado}
               descuentoDetalle={descuentoDetalle}

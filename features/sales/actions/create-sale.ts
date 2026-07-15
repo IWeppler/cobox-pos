@@ -19,6 +19,8 @@ export async function registrarVentaAction(
   const isCuentaCorriente = formData.get("is_cuenta_corriente") === "true";
   const recargoCC = Number(formData.get("recargo_cc") || 0);
   const clienteId = formData.get("cliente_id") as string | null;
+  const reservaIdsRaw = formData.get("reserva_ids") as string | null;
+  const reservaIds: string[] = reservaIdsRaw ? JSON.parse(reservaIdsRaw) : [];
 
   if (!cartData) return { error: "El carrito está vacío.", success: false };
   const items = JSON.parse(cartData) as any[];
@@ -401,6 +403,25 @@ export async function registrarVentaAction(
       .from("productos_stock")
       .update({ cantidad: item.stockOriginal - item.cantidad })
       .eq("id", item.stockId);
+  }
+
+  // --- 10. RESOLVER RESERVAS QUE ESTA VENTA CONFIRMA ---
+  // Si el carrito venía precargado desde "Reservas activas", esas filas
+  // pasan de ACTIVA a CONFIRMADA recién acá — nunca antes, porque hasta
+  // este punto la venta podía fallar (caja cerrada, stock, pagos, etc.) y
+  // la reserva debe seguir intacta si eso pasa.
+  if (reservaIds.length > 0) {
+    const { error: reservaError } = await supabase
+      .from("reservas")
+      .update({
+        estado: "CONFIRMADA",
+        venta_id: nuevaVenta.id,
+        resuelto_en: new Date().toISOString(),
+      })
+      .in("id", reservaIds)
+      .eq("estado", "ACTIVA");
+    if (reservaError)
+      console.error("Error al confirmar reservas de la venta:", reservaError);
   }
 
   revalidatePath("/", "layout");

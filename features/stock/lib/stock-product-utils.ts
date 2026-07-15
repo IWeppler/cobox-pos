@@ -3,6 +3,18 @@ export function capitalizar(str: string) {
   return str.charAt(0).toUpperCase() + str.slice(1).replace("_", " ");
 }
 
+export function parseProductImages(imagenUrl: unknown): string[] {
+  if (Array.isArray(imagenUrl)) return imagenUrl;
+  if (typeof imagenUrl !== "string" || !imagenUrl) return [];
+
+  try {
+    const parsed = JSON.parse(imagenUrl);
+    return Array.isArray(parsed) ? parsed : [imagenUrl];
+  } catch {
+    return [imagenUrl];
+  }
+}
+
 export function obtenerPrimeraImagen(imagenUrl: unknown): string | null {
   if (!imagenUrl) return null;
   if (Array.isArray(imagenUrl) && imagenUrl.length > 0) return imagenUrl[0];

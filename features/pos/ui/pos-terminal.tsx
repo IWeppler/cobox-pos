@@ -31,7 +31,7 @@ interface VarianteDisponible {
 const getStockTotal = (producto: Producto) => {
   const stockNuevos =
     producto.producto_variantes?.reduce(
-      (acc, v) => acc + Number(v.stock || 0),
+      (acc, v) => acc + Number(v.stock_disponible ?? v.stock ?? 0),
       0,
     ) || 0;
 
@@ -119,7 +119,7 @@ export function PosTerminal({
     producto.producto_variantes?.forEach((v) =>
       variantesArray.push({
         variante: v.nombre_display,
-        cantidad: v.stock,
+        cantidad: v.stock_disponible ?? v.stock,
         precio: v.precio,
         varianteId: v.id,
       }),

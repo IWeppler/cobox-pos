@@ -50,8 +50,8 @@ export function ProductMediaSection({
   };
 
   const handleFilesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      onArchivosChange(Array.from(event.target.files));
+    if (event.target.files && event.target.files.length > 0) {
+      onArchivosChange([...archivos, ...Array.from(event.target.files)]);
     }
   };
 

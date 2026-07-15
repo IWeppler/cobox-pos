@@ -37,7 +37,7 @@ export async function getClienteDetalleAction(clienteId: string) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const [movimientosRes, ventasRes] = await Promise.all([
+  const [movimientosRes, ventasRes, reservasRes] = await Promise.all([
     supabase
       .from("cuenta_corriente_movimientos")
       .select("*")
@@ -50,11 +50,19 @@ export async function getClienteDetalleAction(clienteId: string) {
       )
       .eq("cliente_id", clienteId)
       .order("fecha_venta", { ascending: false }),
+    supabase
+      .from("reservas")
+      .select(
+        "id, nota, estado, creado_en, producto:productos(nombre), variante:producto_variantes(nombre_display, precio)",
+      )
+      .eq("cliente_id", clienteId)
+      .order("creado_en", { ascending: false }),
   ]);
 
   return {
     movimientos: movimientosRes.data || [],
     ventas: ventasRes.data || [],
+    reservas: reservasRes.data || [],
   };
 }
 

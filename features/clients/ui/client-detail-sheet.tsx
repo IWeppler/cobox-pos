@@ -20,6 +20,7 @@ import {
   TrendingUp,
   Tags,
   Star,
+  BookmarkCheck,
 } from "lucide-react";
 import { getClienteDetalleAction } from "../actions/manage-clients";
 import { RegisterPaymentModal } from "./register-payment-modal";
@@ -27,6 +28,18 @@ import { Cliente, CuentaCorrienteMovimiento } from "@/entities/clientes/type";
 import { MetodoPagoPOS } from "@/shared/components/cart-sidebar/types";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
 import { getSupabaseRelation, SupabaseRelation } from "@/entities/ventas/types";
+
+interface ReservaResumen {
+  id: string;
+  nota?: string | null;
+  estado: "ACTIVA" | "CONFIRMADA" | "DEVUELTA";
+  creado_en: string;
+  producto?: SupabaseRelation<{ nombre?: string | null }>;
+  variante?: SupabaseRelation<{
+    nombre_display?: string | null;
+    precio?: number | null;
+  }>;
+}
 
 interface VentaResumen {
   id: string;
@@ -56,9 +69,11 @@ export function ClientDetailSheet({
   const [data, setData] = useState<{
     movimientos: CuentaCorrienteMovimiento[];
     ventas: VentaResumen[];
+    reservas: ReservaResumen[];
   }>({
     movimientos: [],
     ventas: [],
+    reservas: [],
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -159,7 +174,7 @@ export function ClientDetailSheet({
             className="w-full h-full flex flex-col"
           >
             <div className="px-6 pt-4 shrink-0">
-              <TabsList className="grid w-full grid-cols-3 bg-muted/50 border border-border h-12">
+              <TabsList className="grid w-full grid-cols-4 bg-muted/50 border border-border h-12">
                 <TabsTrigger
                   value="historial"
                   className="text-xs font-bold uppercase tracking-widest"
@@ -173,6 +188,13 @@ export function ClientDetailSheet({
                 >
                   <History className="w-3.5 h-3.5 mr-1 hidden sm:block" />{" "}
                   Ventas
+                </TabsTrigger>
+                <TabsTrigger
+                  value="reservas"
+                  className="text-xs font-bold uppercase tracking-widest"
+                >
+                  <BookmarkCheck className="w-3.5 h-3.5 mr-1 hidden sm:block" />{" "}
+                  Reservas
                 </TabsTrigger>
                 <TabsTrigger
                   value="info"
@@ -307,6 +329,74 @@ export function ClientDetailSheet({
                                   )
                                   .join(", ")}
                               </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* PESTAÑA: RESERVAS */}
+                  <TabsContent
+                    value="reservas"
+                    className="m-0 animate-in fade-in-50"
+                  >
+                    <h3 className="text-sm font-semibold uppercase text-muted-foreground mb-3 border-b border-border/50 pb-2">
+                      Reservas
+                    </h3>
+                    {data.reservas.length === 0 ? (
+                      <p className="text-sm text-muted-foreground italic text-center py-8">
+                        No hay reservas registradas.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {data.reservas.map((reserva) => {
+                          const producto = getSupabaseRelation(reserva.producto);
+                          const variante = getSupabaseRelation(reserva.variante);
+                          const estadoBadge =
+                            reserva.estado === "ACTIVA"
+                              ? {
+                                  label: "Activa",
+                                  className:
+                                    "bg-blue-50 text-blue-700 border-blue-200",
+                                }
+                              : reserva.estado === "CONFIRMADA"
+                                ? {
+                                    label: "Confirmada",
+                                    className:
+                                      "bg-emerald-50 text-emerald-700 border-emerald-200",
+                                  }
+                                : {
+                                    label: "Devuelta",
+                                    className:
+                                      "bg-muted text-muted-foreground border-border",
+                                  };
+
+                          return (
+                            <div
+                              key={reserva.id}
+                              className="flex items-center justify-between p-3 bg-background border border-border rounded-lg gap-3"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-foreground truncate">
+                                  {producto?.nombre || "Producto eliminado"}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  {variante?.nombre_display || "-"} ·{" "}
+                                  {formatearFechaHora(reserva.creado_en)}
+                                </p>
+                                {reserva.nota ? (
+                                  <p className="text-xs text-muted-foreground mt-1 italic">
+                                    {reserva.nota}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] uppercase font-bold tracking-wider shrink-0 ${estadoBadge.className}`}
+                              >
+                                {estadoBadge.label}
+                              </Badge>
                             </div>
                           );
                         })}

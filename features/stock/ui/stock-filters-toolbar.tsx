@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  BookmarkCheck,
   ClipboardList,
   Filter,
   FilterX,
@@ -95,7 +96,7 @@ export function StockFiltersToolbar({
   return (
     <>
       {/* 1. BARRA SUPERIOR: Buscador y Acciones */}
-      <div className="flex flex-row gap-2 sm:gap-3 items-center bg-card p-2 sm:p-3 rounded-xl border border-border">
+      <div className="flex flex-row gap-2 sm:gap-3 items-center bg-card p-2 sm:p-3 m-2 rounded-xl border border-border">
         <ImportarPedidoModal
           open={isImportModalOpen}
           onOpenChange={setIsImportModalOpen}
@@ -246,6 +247,12 @@ export function StockFiltersToolbar({
                       <span>Ingresar Remito</span>
                     </Button>
                     <DropdownMenuSeparator className="my-1 bg-border/60" />
+                    <Link href="/stock/reservas" className="w-full block">
+                      <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors">
+                        <BookmarkCheck className="w-4 h-4 mr-2 text-primary shrink-0" />
+                        Reservas activas
+                      </button>
+                    </Link>
                     <Link href="/stock/bajas" className="w-full block">
                       <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-amber-700 hover:bg-amber-50 rounded-md hover:text-amber-800 transition-colors">
                         <ClipboardList className="w-4 h-4 mr-2 text-amber-600 shrink-0" />

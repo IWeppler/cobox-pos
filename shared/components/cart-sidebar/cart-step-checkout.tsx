@@ -35,6 +35,8 @@ interface CartStepCheckoutProps {
   totalFinal: number;
   isCuentaCorriente: boolean;
   onCuentaCorrienteChange: (value: boolean) => void;
+  isReserva?: boolean;
+  onReservaChange?: (value: boolean) => void;
   modoMixto: boolean;
   onModoMixtoChange: (value: boolean) => void;
   anticipoMinimo: number;
@@ -62,6 +64,8 @@ export function CartStepCheckout({
   totalFinal,
   isCuentaCorriente,
   onCuentaCorrienteChange,
+  isReserva = false,
+  onReservaChange,
   modoMixto,
   onModoMixtoChange,
   anticipoMinimo,
@@ -108,6 +112,11 @@ export function CartStepCheckout({
     onCuentaCorrienteChange(value);
     onModoMixtoChange(false);
     syncSinglePayment(value ? anticipoActual : totalFinal);
+  };
+
+  const handleReservaChange = (value: boolean) => {
+    onReservaChange?.(value);
+    onModoMixtoChange(false);
   };
 
   const handleAnticipoChange = (value: string) => {
@@ -182,14 +191,19 @@ export function CartStepCheckout({
             <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
               Tipo de Venta
             </h3>
-            <div className="grid grid-cols-2 gap-2">
+            <div
+              className={`grid gap-2 ${onReservaChange ? "grid-cols-3" : "grid-cols-2"}`}
+            >
               <Button
                 type="button"
-                variant={!isCuentaCorriente ? "default" : "outline"}
-                onClick={() => handleCuentaCorrienteChange(false)}
+                variant={!isCuentaCorriente && !isReserva ? "default" : "outline"}
+                onClick={() => {
+                  handleCuentaCorrienteChange(false);
+                  handleReservaChange(false);
+                }}
                 className="h-11"
               >
-                Venta Regular
+                Venta
               </Button>
               <Button
                 type="button"
@@ -197,8 +211,18 @@ export function CartStepCheckout({
                 onClick={() => handleCuentaCorrienteChange(true)}
                 className="h-11"
               >
-                Cuenta Corriente
+                C. Corriente
               </Button>
+              {onReservaChange ? (
+                <Button
+                  type="button"
+                  variant={isReserva ? "default" : "outline"}
+                  onClick={() => handleReservaChange(true)}
+                  className="h-11"
+                >
+                  Reservado
+                </Button>
+              ) : null}
             </div>
           </section>
 
@@ -220,7 +244,7 @@ export function CartStepCheckout({
           </section>
 
           {/* METODOS DE PAGO */}
-          {isPOSMode && (!isCuentaCorriente || anticipoActual > 0) ? (
+          {!isReserva && isPOSMode && (!isCuentaCorriente || anticipoActual > 0) ? (
             <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
               <div className="flex items-start justify-between gap-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
@@ -357,7 +381,7 @@ export function CartStepCheckout({
           ) : null}
 
           {/* DESCUENTOS Y PROMOCIONES */}
-          {!isCuentaCorriente ? (
+          {!isCuentaCorriente && !isReserva ? (
             <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
               <div className="flex items-center gap-2">
                 <Tag className="h-4 w-4" />

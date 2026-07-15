@@ -67,7 +67,7 @@ function QuickAddModalContent({
       if (Object.keys(atributos).length > 0) tieneAtributosEstructurados = true;
       list.push({
         variante: v.nombre_display,
-        cantidad: v.stock,
+        cantidad: v.stock_disponible ?? v.stock,
         varianteId: v.id,
         atributos,
         precio: v.precio,
@@ -187,7 +187,7 @@ function QuickAddModalContent({
           stockMaximo: stockDeVariante.cantidad,
         });
 
-        toast.success("Agregado a la cuenta");
+        // toast.success("Agregado a la cuenta");
         setIsOpenCart(true);
         onClose();
       }

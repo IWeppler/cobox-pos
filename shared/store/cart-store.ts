@@ -48,6 +48,13 @@ export const useCartStore = create<CartState>()(
             updatedItems[existingItemIndex] = {
               ...currentItem,
               cantidad: newQuantity,
+              reservaIds:
+                currentItem.reservaIds || newItem.reservaIds
+                  ? [
+                      ...(currentItem.reservaIds ?? []),
+                      ...(newItem.reservaIds ?? []),
+                    ]
+                  : undefined,
             };
 
             return { items: updatedItems, isOpen: true };

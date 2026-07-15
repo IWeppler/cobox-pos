@@ -13,6 +13,8 @@ export interface ProductoVariante {
   precio: number | null;
   costo: number | null;
   stock: number;
+  /** stock físico neto de reservas ACTIVAS. Solo lo calculan las actions que ya consultan `reservas`; si no viene, tratar como igual a `stock`. */
+  stock_disponible?: number;
   stock_minimo: number;
   activa: boolean;
   atributos?: Record<string, string>;

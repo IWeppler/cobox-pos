@@ -23,6 +23,8 @@ interface CartSidebarFooterProps {
   totalFinal: number;
   sumaPagos: number;
   isCuentaCorriente: boolean;
+  isReserva?: boolean;
+  onConfirmarReserva?: () => void;
   anticipoMinimo: number;
   clienteSeleccionado: ClienteBasico | null;
   descuentoDetalle: DescuentoDetalle;
@@ -48,6 +50,8 @@ export function CartSidebarFooter({
   clienteSeleccionado,
   descuentoDetalle,
   isCuentaCorriente,
+  isReserva = false,
+  onConfirmarReserva,
   anticipoMinimo,
   whatsappHref,
   metodosPagoDB = [],
@@ -65,9 +69,15 @@ export function CartSidebarFooter({
     metodosPagoDB?.find((m) => m.id === pagos[0]?.metodoPagoId)?.tipo ===
       "EFECTIVO";
 
-  const handleCobrar = () => setModalAbierto(true);
+  const handleCobrar = () => {
+    if (isReserva) {
+      onConfirmarReserva?.();
+      return;
+    }
+    setModalAbierto(true);
+  };
 
-  const isMissingClient = isCuentaCorriente && !clienteSeleccionado;
+  const isMissingClient = (isCuentaCorriente || isReserva) && !clienteSeleccionado;
   const isMissingAnticipo =
     isCuentaCorriente && sumaPagos + 0.05 < anticipoMinimo;
   const isPrimaryDisabled = isPending || isMissingClient || isMissingAnticipo;
@@ -118,7 +128,11 @@ export function CartSidebarFooter({
             ) : (
               <>
                 <CheckCircle2 className="w-5 h-5" />
-                {isCuentaCorriente ? "Confirmar Fiado" : "Confirmar Venta"}
+                {isReserva
+                  ? "Confirmar Reserva"
+                  : isCuentaCorriente
+                    ? "Confirmar Fiado"
+                    : "Confirmar Venta"}
               </>
             )}
           </Button>

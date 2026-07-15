@@ -7,6 +7,7 @@ import {
   canonicalizarValores,
   construirCacheAtributos,
 } from "@/features/stock/lib/normalize-atributo";
+import { parseProductImages } from "@/features/stock/lib/stock-product-utils";
 
 export async function editarProductoAction(
   prevState: { error: string | null; success: boolean },
@@ -28,6 +29,12 @@ export async function editarProductoAction(
   );
 
   const archivos = formData.getAll("imagenes") as File[];
+  const imagenesAEliminarStr = formData.get("imagenesAEliminar") as
+    | string
+    | null;
+  const imagenesAEliminar: string[] = imagenesAEliminarStr
+    ? (JSON.parse(imagenesAEliminarStr) as string[])
+    : [];
 
   if (!id || !nombre || Number.isNaN(precio) || Number.isNaN(precio_costo)) {
     return {
@@ -39,11 +46,24 @@ export async function editarProductoAction(
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  // 1. Subir imágenes si hay nuevas
+  // 1. Subir imágenes nuevas y mergear contra el imagen_url REAL en base.
+  // No confiamos en ninguna lista "existente" que pueda mandar el cliente:
+  // si el sheet quedó con datos viejos en memoria (otra pestaña, sesión
+  // larga, etc.), partir de la base evita pisar imágenes que el cliente
+  // ni sabía que estaban. El cliente solo manda qué URLs puntuales quiere
+  // borrar (imagenesAEliminar); el resultado final se arma acá.
   let imagen_url: string | undefined = undefined;
   const validFiles = archivos.filter((f) => f.size > 0);
-  if (validFiles.length > 0) {
-    const urls = [];
+  if (validFiles.length > 0 || imagenesAEliminar.length > 0) {
+    const { data: productoActual } = await supabase
+      .from("productos")
+      .select("imagen_url")
+      .eq("id", id)
+      .single();
+
+    const imagenesActuales = parseProductImages(productoActual?.imagen_url);
+
+    const urls: string[] = [];
     for (const file of validFiles) {
       const fileExt = file.name.split(".").pop();
       const fileName = `${crypto.randomUUID()}.${fileExt}`;
@@ -59,9 +79,12 @@ export async function editarProductoAction(
         urls.push(publicUrl);
       }
     }
-    if (urls.length > 0) {
-      imagen_url = JSON.stringify(urls);
-    }
+
+    const imagenesFinal = imagenesActuales
+      .filter((url) => !imagenesAEliminar.includes(url))
+      .concat(urls);
+
+    imagen_url = JSON.stringify(imagenesFinal);
   }
 
   // 2. Actualizar Cabecera de Producto

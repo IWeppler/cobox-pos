@@ -66,7 +66,10 @@ export function useCatalogFilters({
     productos.forEach((p) => {
       const stockViejos = p.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
       const stockNuevos =
-        p.producto_variantes?.reduce((acc, v) => acc + v.stock, 0) || 0;
+        p.producto_variantes?.reduce(
+          (acc, v) => acc + (v.stock_disponible ?? v.stock),
+          0,
+        ) || 0;
       const stockTotal = stockViejos + stockNuevos;
 
       if (config?.mostrar_sin_stock === false && stockTotal <= 0) return;
@@ -118,7 +121,10 @@ export function useCatalogFilters({
     const resultado = productos.filter((c) => {
       const stockViejos = c.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
       const stockNuevos =
-        c.producto_variantes?.reduce((acc, v) => acc + v.stock, 0) || 0;
+        c.producto_variantes?.reduce(
+          (acc, v) => acc + (v.stock_disponible ?? v.stock),
+          0,
+        ) || 0;
       const stockTotal = stockViejos + stockNuevos;
 
       if (config?.mostrar_sin_stock === false && stockTotal <= 0) return false;
@@ -145,7 +151,7 @@ export function useCatalogFilters({
 
           const matchNew =
             c.producto_variantes?.some((pv) => {
-              if (pv.stock <= 0) return false;
+              if ((pv.stock_disponible ?? pv.stock) <= 0) return false;
               const atributos = resolverAtributosVariante(pv);
               return (
                 atributos[propKey]?.toLowerCase() === propVal.toLowerCase()
