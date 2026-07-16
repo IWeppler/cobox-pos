@@ -41,7 +41,7 @@ const ALL_NAV_ITEMS = [
     name: "Configuración",
     href: "/configuracion",
     icon: Settings,
-    adminOnly: true,
+    adminOnly: false,
   },
 ];
 

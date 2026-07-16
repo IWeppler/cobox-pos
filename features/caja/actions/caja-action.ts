@@ -7,39 +7,6 @@ import { CajaActionState } from "@/entities/caja/types";
 import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
 
 // ============================================================================
-// 1. OBTENER CAJA ACTIVA (Según Configuración)
-// ============================================================================
-export async function getTurnoActivoAction() {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { turno: null, config: null, error: "No autorizado" };
-
-  const { data: config } = await supabase
-    .from("configuracion_pos")
-    .select("modo_caja, requiere_caja_abierta")
-    .single();
-
-  if (!config)
-    return { turno: null, config: null, error: "Configuración no encontrada" };
-
-  const { turnoId } = await resolverTurnoActivo(supabase, user.id);
-
-  if (!turnoId) return { turno: null, config, error: null };
-
-  const { data: turnoAbierto } = await supabase
-    .from("turnos_caja")
-    .select("*")
-    .eq("id", turnoId)
-    .single();
-
-  return { turno: turnoAbierto || null, config, error: null };
-}
-
-// ============================================================================
 // 2. ABRIR TURNO SEGÚN MODO
 // ============================================================================
 export async function abrirTurnoAction(
@@ -114,9 +81,11 @@ export async function cerrarTurnoAction(
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) return { error: "No autorizado.", success: false };
+
   const { data: turno, error: turnoError } = await supabase
     .from("turnos_caja")
-    .select("monto_inicial, estado")
+    .select("monto_inicial, estado, vendedor_id")
     .eq("id", turnoId)
     .single();
 
@@ -125,6 +94,15 @@ export async function cerrarTurnoAction(
   }
   if (turno.estado !== "ABIERTO") {
     return { error: "Esta caja ya fue cerrada.", success: false };
+  }
+  if (turno.vendedor_id !== user.id) {
+    const { data: esAdmin } = await supabase.rpc("is_admin");
+    if (!esAdmin) {
+      return {
+        error: "No podés cerrar una caja que no es tuya.",
+        success: false,
+      };
+    }
   }
 
   // Recalculamos el efectivo esperado server-side. El cliente ya no envía
@@ -182,6 +160,9 @@ export async function cerrarTurnoAction(
     return { error: "Ocurrió un error al cerrar la caja.", success: false };
   }
   if (!turnoCerrado) {
+    // El SELECT previo ya validó dueño/admin y estado === "ABIERTO"; si el
+    // UPDATE igual afectó 0 filas es porque otra sesión cerró este turno
+    // en el intervalo (carrera de concurrencia), no un problema de permisos.
     return { error: "Esta caja ya fue cerrada.", success: false };
   }
 

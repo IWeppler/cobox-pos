@@ -96,7 +96,7 @@
 }
 
 .dark {
-  --background: oklch(0.16 0 0);
+  --background: oklch(17.808% 0.00205 286.051);
   --foreground: oklch(0.985 0 0);
   --accent-blue: #2f96fe;
   --accent-orange: #f97d47;

@@ -130,9 +130,18 @@ export async function crearProductoAction(
     const variantesStr = formData.get("variantes") as string;
 
     if (!opcionesStr || !variantesStr) {
-      revalidatePath("/stock");
-      revalidatePath("/store");
-      return { error: null, success: true };
+      // "Tiene variantes" quedó tildado pero la grilla nunca se completó
+      // — si dejamos pasar esto como éxito, el producto queda publicado
+      // sin ninguna fila en producto_variantes ni productos_stock: no se
+      // puede vender y no hay ningún error visible que lo explique.
+      // Deshacemos la cabecera ya insertada arriba para no dejar el mismo
+      // tipo de huérfano que acabamos de corregir en la base.
+      await supabase.from("productos").delete().eq("id", nuevoProducto.id);
+      return {
+        error:
+          "Marcaste que el producto tiene variantes pero no cargaste ninguna. Completá la grilla de variantes o desmarcá la opción antes de guardar.",
+        success: false,
+      };
     }
 
     const opcionesRaw = JSON.parse(opcionesStr) as {

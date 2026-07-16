@@ -331,7 +331,7 @@ export function CrmTab({
     >
       {/* ── 1. KPIs CORE (La Salud de la Cartera) ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="border-border shadow-none bg-white">
+        <Card className="border-border shadow-none bg-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Ventas a Clientes
@@ -348,7 +348,7 @@ export function CrmTab({
           </CardContent>
         </Card>
 
-        <Card className="border-border shadow-none bg-white">
+        <Card className="border-border shadow-none bg-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Ganancia
@@ -365,7 +365,7 @@ export function CrmTab({
           </CardContent>
         </Card>
 
-        <Card className="border-border shadow-none bg-white">
+        <Card className="border-border shadow-none bg-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Saldo Pendiente
@@ -399,7 +399,7 @@ export function CrmTab({
           </CardContent>
         </Card>
 
-        <Card className="border-border shadow-none bg-white">
+        <Card className="border-border shadow-none bg-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Demora Media
@@ -423,7 +423,7 @@ export function CrmTab({
       {/* ── 2. BLOQUES ANALÍTICOS (Antigüedad y Proyección) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Antigüedad de Deuda */}
-        <Card className="border-border shadow-none bg-white">
+        <Card className="border-border shadow-none bg-card">
           <CardHeader className="border-b border-border/40 pb-4">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
               <Activity className="w-4 h-4 text-muted-foreground" /> Antigüedad
@@ -505,7 +505,7 @@ export function CrmTab({
         </Card>
 
         {/* Proyección de Cobros */}
-        <Card className="border-border shadow-none bg-white">
+        <Card className="border-border shadow-none bg-card">
           <CardHeader className="border-b border-border/40 pb-4">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-muted-foreground" />{" "}
@@ -561,7 +561,7 @@ export function CrmTab({
       </div>
 
       {/* ── 3. RANKING DE CALIDAD COMERCIAL ── */}
-      <Card className="border-border shadow-none bg-white">
+      <Card className="border-border shadow-none bg-card">
         <CardHeader className="border-b border-border/40 pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -614,7 +614,7 @@ export function CrmTab({
           {currentClients.length > 0 ? (
             <>
               <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="bg-[#f9fafb] text-muted-foreground text-[10px] uppercase font-bold tracking-widest border-b border-border/60">
+                <thead className="bg-card text-muted-foreground text-[10px] uppercase font-bold tracking-widest border-b border-border/60">
                   <tr>
                     <th
                       className="px-5 py-4 cursor-pointer hover:bg-muted/50 group"
@@ -726,7 +726,7 @@ export function CrmTab({
 
               {/* Paginación */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between px-5 py-3 border-t border-border/60 bg-[#f9fafb]">
+                <div className="flex items-center justify-between px-5 py-3 border-t border-border/60 bg-card">
                   <span className="text-xs text-muted-foreground">
                     Mostrando {(currentPage - 1) * ITEMS_POR_PAGINA + 1} -{" "}
                     {Math.min(
@@ -764,7 +764,7 @@ export function CrmTab({
               )}
             </>
           ) : (
-            <div className="text-center text-muted-foreground text-sm py-12 bg-[#f9fafb]">
+            <div className="text-center text-muted-foreground text-sm py-12 bg-card">
               No se encontraron clientes con esos filtros.
             </div>
           )}

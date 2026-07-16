@@ -130,7 +130,7 @@ export function ClientDetailSheet({
     <Sheet open={cliente !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-xl p-0 flex flex-col h-dvh bg-card border-l border-border"
+        className="w-full sm:w-4xl! p-0 flex flex-col h-dvh bg-card border-l border-border"
       >
         {/* CABECERA (Fija) */}
         <SheetHeader className="p-6 border-b border-border shrink-0 bg-muted/10">
@@ -173,34 +173,34 @@ export function ClientDetailSheet({
             defaultValue="historial"
             className="w-full h-full flex flex-col"
           >
-            <div className="px-6 pt-4 shrink-0">
+            <div className="px-2 pt-4 shrink-0">
               <TabsList className="grid w-full grid-cols-4 bg-muted/50 border border-border h-12">
                 <TabsTrigger
                   value="historial"
-                  className="text-xs font-bold uppercase tracking-widest"
+                  className="text-xs font-bold uppercase tracking-wide sm:tracking-widest"
                 >
-                  <Wallet className="w-3.5 h-3.5 mr-1 hidden sm:block" />{" "}
+                  <Wallet className="w-3.5 h-3.5 mr-0.2 hidden sm:block" />{" "}
                   Historial
                 </TabsTrigger>
                 <TabsTrigger
                   value="ventas"
-                  className="text-xs font-bold uppercase tracking-widest"
+                  className="text-xs font-bold uppercase tracking-wide sm:tracking-widest"
                 >
-                  <History className="w-3.5 h-3.5 mr-1 hidden sm:block" />{" "}
+                  <History className="w-3.5 h-3.5 mr-0.2 hidden sm:block" />{" "}
                   Ventas
                 </TabsTrigger>
                 <TabsTrigger
                   value="reservas"
-                  className="text-xs font-bold uppercase tracking-widest"
+                  className="text-xs font-bold uppercase tracking-wide sm:tracking-widest"
                 >
-                  <BookmarkCheck className="w-3.5 h-3.5 mr-1 hidden sm:block" />{" "}
+                  <BookmarkCheck className="w-3.5 h-3.5 mr-0.2 hidden sm:block" />{" "}
                   Reservas
                 </TabsTrigger>
                 <TabsTrigger
                   value="info"
-                  className="text-xs font-bold uppercase tracking-widest"
+                  className="text-xs font-bold uppercase tracking-wide sm:tracking-widest"
                 >
-                  <Info className="w-3.5 h-3.5 mr-1 hidden sm:block" /> Info
+                  <Info className="w-3.5 h-3.5 mr-0.2 hidden sm:block" /> Info
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -351,8 +351,12 @@ export function ClientDetailSheet({
                     ) : (
                       <div className="space-y-3">
                         {data.reservas.map((reserva) => {
-                          const producto = getSupabaseRelation(reserva.producto);
-                          const variante = getSupabaseRelation(reserva.variante);
+                          const producto = getSupabaseRelation(
+                            reserva.producto,
+                          );
+                          const variante = getSupabaseRelation(
+                            reserva.variante,
+                          );
                           const estadoBadge =
                             reserva.estado === "ACTIVA"
                               ? {

@@ -76,11 +76,10 @@ export async function middleware(request: NextRequest) {
   // 4. Bloqueos específicos para el VENDEDOR
   if (rol === "VENDEDOR") {
     const isDashboard = pathname === "/";
-    const isConfig = pathname.startsWith("/configuracion");
     const isCompras = pathname.startsWith("/compras");
 
     // Si intenta entrar a una ruta prohibida, lo devolvemos al inventario
-    if (isDashboard || isConfig || isCompras) {
+    if (isDashboard || isCompras) {
       const url = request.nextUrl.clone();
       url.pathname = "/stock";
       return NextResponse.redirect(url);

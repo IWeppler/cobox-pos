@@ -195,7 +195,7 @@ export function CajaDetailSheet({
     >
       <SheetContent
         side="right"
-        className="w-full sm:max-w-md p-0 flex flex-col h-dvh overflow-hidden bg-card"
+        className="w-full sm:max-w-2xl p-0 flex flex-col h-dvh overflow-hidden bg-card"
       >
         <SheetHeader className="p-6 border-b border-border z-10 shrink-0">
           <SheetTitle className="flex items-center gap-3 text-xl font-semi text-foreground">
@@ -336,7 +336,7 @@ export function CajaDetailSheet({
                 No hubo movimientos de dinero en este turno.
               </div>
             ) : (
-              <div className="bg-white border border-border rounded-xl p-2 divide-y divide-border/60">
+              <div className="bg-card border border-border rounded-xl p-2 divide-y divide-border/60">
                 {movimientos.map((mov) => (
                   <div
                     key={`${mov.tipo}-${mov.id}`}
@@ -359,7 +359,7 @@ export function CajaDetailSheet({
                         </div>
                       )}
                       <div>
-                        <p className="font-medium text-xs sm:text-sm text-foreground max-w-[200px] sm:max-w-xs truncate">
+                        <p className="font-medium text-xs sm:text-sm text-foreground max-w-[200px] truncate">
                           {mov.concepto}
                         </p>
                         <p className="text-[10px] text-muted-foreground uppercase mt-0.5">

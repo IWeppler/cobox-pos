@@ -20,7 +20,31 @@ async function aprobarBaja(
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  // 1. Obtener el stock actual de esa variante
+  // 1. Descuento atómico en producto_variantes.stock, condicionado a que
+  // alcance — `bajas` guarda `variante` como texto (nombre_display), no
+  // variante_id, así que primero hay que resolver la fila real (mismo
+  // match por nombre que ya usa merge-purchase.ts).
+  const { data: varianteRow } = await supabase
+    .from("producto_variantes")
+    .select("id")
+    .eq("producto_id", productoId)
+    .eq("nombre_display", variante)
+    .maybeSingle();
+
+  if (varianteRow) {
+    const { data: descontado, error: descuentoError } = await supabase.rpc(
+      "ajustar_stock_variante",
+      { p_variante_id: varianteRow.id, p_delta: -cantidadA_restar },
+    );
+
+    if (descuentoError || !descontado || descontado.length === 0) {
+      redirect("/stock/bajas?error=stock_insuficiente");
+    }
+  }
+
+  // 2. Espejo en productos_stock (legacy) — la validación real ya se hizo
+  // arriba si había producto_variantes; este UPDATE no necesita su propio
+  // chequeo atómico, mismo criterio que create-sale.ts.
   const { data: stockItem } = await supabase
     .from("productos_stock")
     .select("id, cantidad")
@@ -28,14 +52,13 @@ async function aprobarBaja(
     .eq("variante", variante)
     .single();
 
-  if (!stockItem) return;
-
-  // 2. Restar el stock
-  const nuevoStock = Math.max(0, stockItem.cantidad - cantidadA_restar);
-  await supabase
-    .from("productos_stock")
-    .update({ cantidad: nuevoStock })
-    .eq("id", stockItem.id);
+  if (stockItem) {
+    const nuevoStock = Math.max(0, stockItem.cantidad - cantidadA_restar);
+    await supabase
+      .from("productos_stock")
+      .update({ cantidad: nuevoStock })
+      .eq("id", stockItem.id);
+  }
 
   // 3. Cambiar el estado de la baja a APROBADA
   await supabase.from("bajas").update({ estado: "APROBADA" }).eq("id", bajasId);
@@ -55,7 +78,12 @@ async function rechazarBaja(bajaId: string) {
 }
 
 // --- PÁGINA ---
-export default async function BajasPage() {
+export default async function BajasPage({
+  searchParams,
+}: Readonly<{
+  searchParams: Promise<{ error?: string }>;
+}>) {
+  const { error: errorParam } = await searchParams;
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
@@ -123,6 +151,15 @@ export default async function BajasPage() {
           </p>
         </div>
       </div>
+
+      {errorParam === "stock_insuficiente" && (
+        <div className="flex items-center gap-2 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          No se pudo aprobar esa baja: la cantidad reportada supera el stock
+          disponible de esa variante. Revisá el stock actual antes de
+          reintentar.
+        </div>
+      )}
 
       <div className="space-y-4">
         <h2 className="text-lg font-semibold flex items-center gap-2">

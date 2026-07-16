@@ -102,7 +102,7 @@ export function CatalogToolbar({
                         onFiltroVarianteChange(propName, val)
                       }
                     >
-                      <SelectTrigger className="w-full h-12 rounded-none bg-[#f5f4f4] border-0 shadow-none uppercase tracking-widest text-xs font-bold focus:ring-0">
+                      <SelectTrigger className="w-full h-12 rounded-none bg-card border-0 shadow-none uppercase tracking-widest text-xs font-bold focus:ring-0">
                         <SelectValue placeholder={`Cualquier ${propName}`} />
                       </SelectTrigger>
                       <SelectContent className="rounded-none border-border">
@@ -189,7 +189,7 @@ export function CatalogToolbar({
                 value={filtrosVariantes[propName] || "todos"}
                 onValueChange={(val) => onFiltroVarianteChange(propName, val)}
               >
-                <SelectTrigger className="w-40 h-10 rounded-none border-0 bg-[#f5f4f4] shadow-none uppercase tracking-widest text-[10px] font-bold focus:ring-0 px-3">
+                <SelectTrigger className="w-40 h-10 rounded-none border-0 bg-card shadow-none uppercase tracking-widest text-[10px] font-bold focus:ring-0 px-3">
                   <SelectValue placeholder={propName} />
                 </SelectTrigger>
                 <SelectContent className="rounded-none border-border">
@@ -217,7 +217,7 @@ export function CatalogToolbar({
             <Button
               variant="ghost"
               onClick={onLimpiarFiltros}
-              className="h-10 rounded-none uppercase tracking-widest text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-[#f5f4f4] cursor-pointer"
+              className="h-10 rounded-none uppercase tracking-widest text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-card cursor-pointer"
             >
               Limpiar Todo
             </Button>
@@ -229,7 +229,7 @@ export function CatalogToolbar({
             Ordenar:
           </span>
           <Select value={orden} onValueChange={onOrdenChange}>
-            <SelectTrigger className="w-50 h-10 rounded-none border-0 bg-[#f5f4f4] shadow-none uppercase tracking-widest text-[10px] font-bold focus:ring-0 px-3">
+            <SelectTrigger className="w-50 h-10 rounded-none border-0 bg-card shadow-none uppercase tracking-widest text-[10px] font-bold focus:ring-0 px-3">
               <SelectValue placeholder="Ordenar por" />
             </SelectTrigger>
             <SelectContent className="rounded-none border-border">

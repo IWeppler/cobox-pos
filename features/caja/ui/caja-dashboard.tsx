@@ -72,20 +72,30 @@ export function CajaDashboard({
   historial,
   modoCaja: _modoCaja,
   userRole: _userRole,
-  userId: _userId,
+  userId,
 }: Readonly<CajaDashboardProps>) {
   const router = useRouter();
   const [isCerrarOpen, setIsCerrarOpen] = useState(false);
   const [turnosCerradosOptimistas, setTurnosCerradosOptimistas] = useState<
     string[]
   >([]);
-  const turno =
-    turnosAbiertos.find(
-      (turnoAbierto) => !turnosCerradosOptimistas.includes(turnoAbierto.id),
-    ) ?? null;
   void _modoCaja;
   void _userRole;
-  void _userId;
+
+  // El turno propio se matchea siempre por vendedor_id en modo POR_USUARIO,
+  // donde cada vendedor tiene su propia caja. En modo UNICA la caja es una
+  // sola compartida por todo el local, así que cualquier usuario opera
+  // contra el mismo turno sin importar quién lo abrió.
+  const turnosVigentes = turnosAbiertos.filter(
+    (turnoAbierto) => !turnosCerradosOptimistas.includes(turnoAbierto.id),
+  );
+  const turno =
+    turnosVigentes.find((turnoAbierto) =>
+      turnoAbierto.modo === "POR_USUARIO"
+        ? turnoAbierto.vendedor_id === userId
+        : true,
+    ) ?? null;
+  const hayCajaAjenaAbierta = !turno && turnosVigentes.length > 0;
 
   const [, abrirAction, isAbrirPending] = useActionState(
     async (prevState: CajaActionState, formData: FormData) => {
@@ -260,17 +270,19 @@ export function CajaDashboard({
       {!turno ? (
         <Card className="border-border bg-background shadow-none overflow-hidden rounded-2xl">
           <div className="flex flex-col md:flex-row">
-            <div className="p-6 md:p-10 md:w-1/2 flex flex-col justify-center">
+            <div className="p-6 md:px-10 md:w-1/2 flex flex-col justify-center">
               <div className="w-12 h-12 bg-primary/5 text-primary border border-primary/30 rounded-xl flex items-center justify-center mb-5">
                 <Lock className="w-5 h-5" />
               </div>
               <h2 className="text-2xl font-bold text-foreground mb-3 tracking-tight">
-                La caja esta cerrada
+                {hayCajaAjenaAbierta
+                  ? "No tenes una caja abierta"
+                  : "La caja esta cerrada"}
               </h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Antes de comenzar a registrar ventas o movimientos de dinero,
-                debes iniciar un nuevo turno de caja declarando el efectivo
-                inicial.
+                {hayCajaAjenaAbierta
+                  ? "Hay otras cajas abiertas en el local, pero no tenes un turno propio. Antes de registrar ventas o movimientos de dinero, inicia tu turno declarando el efectivo inicial."
+                  : "Antes de comenzar a registrar ventas o movimientos de dinero, debes iniciar un nuevo turno de caja declarando el efectivo inicial."}
               </p>
             </div>
             <div className="p-6 md:p-10 md:w-1/2 border-t md:border-t-0 md:border-l border-border bg-card flex flex-col justify-center">
@@ -292,7 +304,7 @@ export function CajaDashboard({
                       type="number"
                       min="0"
                       required
-                      className="pl-9 text-lg font-bold h-12 shadow-none rounded-xl border-border hover:border-foreground/40 transition-colors bg-[#f5f4f4] focus-visible:bg-background"
+                      className="pl-9 text-lg font-bold h-12 shadow-none rounded-xl border-border hover:border-foreground/40 transition-colors bg-card focus-visible:bg-background"
                       placeholder="Ej: 5000"
                     />
                   </div>
@@ -359,7 +371,7 @@ export function CajaDashboard({
                   </DialogHeader>
 
                   <div className="px-6 py-4">
-                    <div className="bg-[#f5f4f4] p-5 rounded-xl border border-border/50 space-y-3">
+                    <div className="bg-card p-5 rounded-xl border border-border/50 space-y-3">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground font-medium">
                           Fondo Inicial
@@ -370,7 +382,7 @@ export function CajaDashboard({
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground font-medium">
-                          Cobros (Efectivo)
+                          Cobros
                         </span>
                         <span className="font-semibold text-emerald-600">
                           +{formatearMoneda(totales.ingresosEfectivo)}
@@ -378,7 +390,7 @@ export function CajaDashboard({
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground font-medium">
-                          Gastos (Efectivo)
+                          Gastos
                         </span>
                         <span className="font-semibold text-rose-600">
                           -{formatearMoneda(totales.totalEgresos)}
@@ -542,9 +554,9 @@ export function CajaDashboard({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border overflow-hidden">
+            <div className="rounded-2xl bg-card border border-border overflow-hidden">
               <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="bg-[#f9fafb] text-muted-foreground text-[10px] uppercase font-bold tracking-widest">
+                <thead className="bg-card text-muted-foreground text-[10px] uppercase font-bold tracking-widest">
                   <tr>
                     <th className="px-6 py-4">Hora</th>
                     <th className="px-6 py-4">Concepto</th>

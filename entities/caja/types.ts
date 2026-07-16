@@ -17,6 +17,8 @@ export interface CajaActionState {
 
 export interface TurnoCajaHistorial {
   id: string;
+  vendedor_id?: string | null;
+  modo?: string | null;
   monto_inicial: number | string;
   monto_final: number | string | null;
   fecha_apertura: string;
