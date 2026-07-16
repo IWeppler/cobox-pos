@@ -100,19 +100,22 @@ export async function registrarVentaAction(
     // en localStorage, o producto sin variante real — caemos al match por
     // nombre_display; si tampoco encuentra nada ahí, dejamos rastro en vez
     // de heredar el precio de producto en silencio.
-    let varianteData: { precio: number | null; costo: number | null } | null =
-      null;
+    let varianteData: {
+      id: string;
+      precio: number | null;
+      costo: number | null;
+    } | null = null;
     if (item.varianteId) {
       const { data } = await supabase
         .from("producto_variantes")
-        .select("precio, costo")
+        .select("id, precio, costo")
         .eq("id", item.varianteId)
         .maybeSingle();
       varianteData = data;
     } else {
       const { data } = await supabase
         .from("producto_variantes")
-        .select("precio, costo")
+        .select("id, precio, costo")
         .eq("producto_id", productoIdReal)
         .eq("nombre_display", item.variante)
         .maybeSingle();
@@ -148,6 +151,7 @@ export async function registrarVentaAction(
     itemsResueltos.push({
       productoIdReal,
       variante: item.variante,
+      varianteId: item.varianteId ?? varianteData?.id ?? null,
       tipo: item.tipo,
       cantidad: Number(item.cantidad ?? 1),
       stockActual,
@@ -171,7 +175,7 @@ export async function registrarVentaAction(
   let costoTotalVenta = 0;
 
   for (const item of itemsResueltos) {
-    const { productoIdReal, stockActual } = item;
+    const { productoIdReal, varianteId, stockActual } = item;
     const cantidadFinal = item.cantidad;
     const precioCostoReal = item.costoServer;
     const precioUnitario = item.precioServer;
@@ -196,6 +200,7 @@ export async function registrarVentaAction(
     itemsProcesados.push({
       productoId: productoIdReal,
       variante: item.variante,
+      varianteId,
       cantidad: cantidadFinal,
       stockId: stockActual.id,
       stockOriginal: stockActual.cantidad,
@@ -204,6 +209,64 @@ export async function registrarVentaAction(
       descuentoMonto: itemDescuentoMonto,
       precioFinal: itemPrecioFinal,
     });
+  }
+
+  // --- 1bis. VALIDAR Y DESCONTAR STOCK (ATÓMICO) ---
+  // Se hace ACÁ, antes de crear la venta — no al final como antes. La
+  // lectura del paso 0 (stockActual) puede estar desactualizada para
+  // cuando llegamos a este punto (otra venta concurrente descontando la
+  // misma variante); la única fuente de verdad sobre "hay stock
+  // suficiente" es el UPDATE condicional en producto_variantes, atómico a
+  // nivel de fila vía la función `ajustar_stock_variante`. Si algún item
+  // no tiene stock suficiente, revertimos (sumamos de nuevo) lo que ya se
+  // hubiera descontado de items anteriores en este mismo loop y no
+  // creamos la venta — así no queda un ticket fantasma sin stock
+  // descontado detrás.
+  const itemsConStockDescontado: typeof itemsProcesados = [];
+  for (const item of itemsProcesados) {
+    if (!item.varianteId) {
+      // Producto legacy sin producto_variantes: no hay fila atómica que
+      // descontar acá, productos_stock es su única fuente de stock y se
+      // sigue tocando más abajo, igual que siempre.
+      itemsConStockDescontado.push(item);
+      continue;
+    }
+
+    const { data: descontado, error: descuentoError } = await supabase.rpc(
+      "ajustar_stock_variante",
+      { p_variante_id: item.varianteId, p_delta: -item.cantidad },
+    );
+
+    if (descuentoError) {
+      console.error("[VENTA] Error descontando stock:", descuentoError);
+      for (const previo of itemsConStockDescontado) {
+        if (!previo.varianteId) continue;
+        await supabase.rpc("ajustar_stock_variante", {
+          p_variante_id: previo.varianteId,
+          p_delta: previo.cantidad,
+        });
+      }
+      return {
+        error: `Error al descontar stock de "${item.variante}".`,
+        success: false,
+      };
+    }
+
+    if (!descontado || descontado.length === 0) {
+      for (const previo of itemsConStockDescontado) {
+        if (!previo.varianteId) continue;
+        await supabase.rpc("ajustar_stock_variante", {
+          p_variante_id: previo.varianteId,
+          p_delta: previo.cantidad,
+        });
+      }
+      return {
+        error: `Sin stock suficiente para la variante "${item.variante}".`,
+        success: false,
+      };
+    }
+
+    itemsConStockDescontado.push(item);
   }
 
   // Calculamos el Total Real del Ticket
@@ -397,7 +460,11 @@ export async function registrarVentaAction(
 
   await supabase.from("ventas_items").insert(insertItems);
 
-  // --- 9. DESCONTAR STOCK ---
+  // --- 9. ESPEJAR EL DESCUENTO EN productos_stock (legacy) ---
+  // La validación real de stock ya se hizo en el paso 1bis (atómica, por
+  // variante_id) antes de crear la venta — este UPDATE es solo el mismo
+  // patrón de sincronización que ya usan merge-purchase.ts y
+  // cancel-sale.ts, sin su propio chequeo de suficiencia.
   for (const item of itemsProcesados) {
     await supabase
       .from("productos_stock")
