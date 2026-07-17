@@ -100,9 +100,23 @@ export function buildPropiedadesFiltro(
     }
   });
 
+  // Orden fijo de propiedades: Género > Talle > Color. Cualquier otra
+  // propiedad (Opción, Propiedad N, etc.) va después, alfabética entre sí
+  // — mismo criterio que ya usa product-detail.tsx para la ficha de
+  // producto del catálogo público.
+  const ORDEN_PRIORIDAD: Record<string, number> = {
+    genero: 0,
+    talle: 1,
+    color: 2,
+  };
+
   const result: Record<string, string[]> = {};
   Object.values(propsMap)
-    .sort((a, b) => a.label.localeCompare(b.label))
+    .sort((a, b) => {
+      const pa = ORDEN_PRIORIDAD[normalizarParaComparar(a.label)] ?? 99;
+      const pb = ORDEN_PRIORIDAD[normalizarParaComparar(b.label)] ?? 99;
+      return pa - pb || a.label.localeCompare(b.label);
+    })
     .forEach(({ label, valores }) => {
       const esTalle = normalizarParaComparar(label) === "talle";
       const valoresArray = Array.from(valores.values());
