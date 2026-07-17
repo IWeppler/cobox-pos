@@ -207,9 +207,12 @@ export function CartPanelAdmin({
     : 0;
 
   const totalFinal = subtotalConDescuento + recargoCuentaCorriente;
-  const anticipoMinimo = isCuentaCorriente
-    ? (totalFinal * (branding?.cc_anticipo_default || 0)) / 100
-    : 0;
+  const clienteExceptuadoEntregaMinima =
+    clienteSeleccionado?.exceptuado_entrega_minima ?? false;
+  const anticipoMinimo =
+    isCuentaCorriente && !clienteExceptuadoEntregaMinima
+      ? (totalFinal * (branding?.cc_anticipo_default || 0)) / 100
+      : 0;
   const firstPagoId = pagos[0]?.metodoPagoId;
 
   const metodoPagoRapidoId = firstPagoId || metodosPagoDB[0]?.id || "";
@@ -336,9 +339,13 @@ export function CartPanelAdmin({
       return;
     }
 
-    if (isCuentaCorriente && montoRealAsignado + 0.05 < anticipoMinimo) {
-      toast.error("El anticipo no alcanza el minimo requerido.", {
-        description: `Minimo: $${anticipoMinimo.toLocaleString("es-AR")}`,
+    if (
+      isCuentaCorriente &&
+      montoRealAsignado + 0.05 < anticipoMinimo &&
+      branding?.entrega_minima_bloqueante
+    ) {
+      toast.error("Este cliente requiere al menos una entrega mínima.", {
+        description: `Mínimo: $${anticipoMinimo.toLocaleString("es-AR")}`,
       });
       return;
     }

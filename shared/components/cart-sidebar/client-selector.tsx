@@ -13,6 +13,7 @@ export interface ClienteBasico {
   id: string;
   nombre: string;
   telefono?: string | null;
+  exceptuado_entrega_minima?: boolean;
 }
 
 interface ClientSelectorProps {
@@ -39,7 +40,7 @@ export function ClientSelector({
       const supabase = createClient();
       const { data } = await supabase
         .from("clientes")
-        .select("id, nombre, telefono")
+        .select("id, nombre, telefono, exceptuado_entrega_minima")
         .eq("activo", true)
         .order("nombre");
 
@@ -75,7 +76,7 @@ export function ClientSelector({
         notas: notas || null,
         activo: true,
       })
-      .select("id, nombre, telefono")
+      .select("id, nombre, telefono, exceptuado_entrega_minima")
       .single();
 
     setIsCreating(false);

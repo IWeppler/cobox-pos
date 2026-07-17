@@ -3,6 +3,7 @@ import {
   normalizarParaComparar,
   parseRawVariantString,
 } from "./parse-variant-attributes";
+import { compararTalles } from "./comparar-talles";
 
 type ProductoVarianteDb = NonNullable<Producto["producto_variantes"]>[number];
 
@@ -103,7 +104,11 @@ export function buildPropiedadesFiltro(
   Object.values(propsMap)
     .sort((a, b) => a.label.localeCompare(b.label))
     .forEach(({ label, valores }) => {
-      result[label] = Array.from(valores.values()).sort();
+      const esTalle = normalizarParaComparar(label) === "talle";
+      const valoresArray = Array.from(valores.values());
+      result[label] = esTalle
+        ? valoresArray.sort(compararTalles)
+        : valoresArray.sort();
     });
 
   return result;

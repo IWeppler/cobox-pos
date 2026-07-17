@@ -185,6 +185,8 @@ export function useCreateProductForm() {
     handleBulkSetSelection: variantSelection.handleBulkSetSelection,
     handleInvertSelection: variantSelection.handleInvertSelection,
     handlePivotChange: variantSelection.handlePivotChange,
-    getSuggestions: variantSelection.getSuggestions,
+    ensureSuggestionsLoaded: variantSelection.ensureSuggestionsLoaded,
+    isLoadingSuggestions: variantSelection.isLoadingSuggestions,
+    getFilteredSuggestions: variantSelection.getFilteredSuggestions,
   };
 }

@@ -40,6 +40,7 @@ export interface ConfiguracionPOS {
   cc_activas?: boolean;
   cc_recargo_default?: number;
   cc_anticipo_default?: number;
+  entrega_minima_bloqueante?: boolean;
   cc_limite_default?: number;
   cc_plazo_mora?: number;
   crm_dias_inactivo?: number;

@@ -32,7 +32,7 @@ interface UseCatalogFiltersProps {
   config?: CatalogConfig | null;
   searchQuery: string;
   tipo: string;
-  filtrosVariantes: Record<string, string>;
+  filtrosVariantes: Record<string, string | string[]>;
   orden: string;
   visibleCount: number;
 }
@@ -147,22 +147,28 @@ export function useCatalogFilters({
 
       const matchVariante = Object.entries(filtrosVariantes).every(
         ([propKey, propVal]) => {
-          if (propVal === "todos") return true;
+          const valores = Array.isArray(propVal)
+            ? propVal
+            : propVal === "todos"
+              ? []
+              : [propVal];
+          if (valores.length === 0) return true;
+          const valoresNormalizados = valores.map((v) => v.toLowerCase());
 
           const matchNew =
             c.producto_variantes?.some((pv) => {
               if ((pv.stock_disponible ?? pv.stock) <= 0) return false;
               const atributos = resolverAtributosVariante(pv);
-              return (
-                atributos[propKey]?.toLowerCase() === propVal.toLowerCase()
-              );
+              const val = atributos[propKey]?.toLowerCase();
+              return val !== undefined && valoresNormalizados.includes(val);
             }) ?? false;
 
           const matchOld =
             c.stock?.some((s) => {
               if (s.cantidad <= 0) return false;
               const parsed = parseRawVariantString(s.variante || "");
-              return parsed[propKey]?.toLowerCase() === propVal.toLowerCase();
+              const val = parsed[propKey]?.toLowerCase();
+              return val !== undefined && valoresNormalizados.includes(val);
             }) ?? false;
 
           return matchOld || matchNew;
@@ -215,7 +221,9 @@ export function useCatalogFilters({
     tipo !== "todos" ||
     orden !== "mas_vendidos" ||
     searchQuery !== "" ||
-    Object.values(filtrosVariantes).some((v) => v !== "todos");
+    Object.values(filtrosVariantes).some((v) =>
+      Array.isArray(v) ? v.length > 0 : v !== "todos",
+    );
 
   return {
     propiedadesGlobales,

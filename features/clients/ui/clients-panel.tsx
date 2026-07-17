@@ -32,6 +32,7 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
     cc_activas: config.cc_activas ?? true,
     cc_recargo_default: config.cc_recargo_default ?? 0,
     cc_anticipo_default: config.cc_anticipo_default ?? 0,
+    entrega_minima_bloqueante: config.entrega_minima_bloqueante ?? false,
     cc_limite_default: config.cc_limite_default ?? 0,
     cc_plazo_mora: config.cc_plazo_mora ?? 30,
     crm_dias_inactivo: config.crm_dias_inactivo ?? 60,
@@ -268,6 +269,27 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
                     </span>
                   </div>
                 </div>
+
+                {formData.cc_anticipo_default > 0 && (
+                  <div className="flex items-center justify-between gap-4 pt-2 border-t border-border/50">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-semibold">
+                        Bloquear si no se cumple
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Activado: la venta no se puede confirmar sin la
+                        entrega mínima. Apagado: solo se muestra una
+                        advertencia y el vendedor puede continuar igual.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formData.entrega_minima_bloqueante}
+                      onCheckedChange={(v) =>
+                        handleChange("entrega_minima_bloqueante", v)
+                      }
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-3 pt-2 border-t border-border/50">
                   <div className="space-y-0.5">

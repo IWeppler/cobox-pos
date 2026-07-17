@@ -113,7 +113,9 @@ export function CrearProductoSheet() {
                 handleAddOptionValue={form.handleAddOptionValue}
                 handleRemoveOptionValue={form.handleRemoveOptionValue}
                 handleVarChange={form.handleVarChange}
-                getSuggestions={form.getSuggestions}
+                ensureSuggestionsLoaded={form.ensureSuggestionsLoaded}
+                isLoadingSuggestions={form.isLoadingSuggestions}
+                getFilteredSuggestions={form.getFilteredSuggestions}
                 baseVariants={form.baseVariants}
                 selectedCombinations={form.selectedCombinations}
                 onToggleCombination={form.handleToggleCombination}

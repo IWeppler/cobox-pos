@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { ImageIcon, Layers, Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -18,6 +18,8 @@ import type {
   VarianteInput,
   VariantDataState,
 } from "@/features/stock/types";
+import type { SugerenciaValorAtributo } from "@/features/stock/actions/get-attribute-suggestions";
+import { slugify } from "@/shared/utils/slugify";
 import { VariantSelectionMatrix } from "./variant-selection-matrix";
 
 type ProductVariantsSectionProps = {
@@ -43,7 +45,13 @@ type ProductVariantsSectionProps = {
     field: keyof VariantDataState,
     value: string,
   ) => void;
-  getSuggestions: (nombre: string, currentValues: string[]) => string[];
+  ensureSuggestionsLoaded: (nombre: string) => void;
+  isLoadingSuggestions: (nombre: string) => boolean;
+  getFilteredSuggestions: (
+    nombre: string,
+    query: string,
+    currentValues: string[],
+  ) => SugerenciaValorAtributo[];
   showAdvancedColumns?: boolean;
   baseVariants?: BaseVariant[];
   selectedCombinations?: Record<string, boolean>;
@@ -73,7 +81,9 @@ export function ProductVariantsSection({
   handleAddOptionValue,
   handleRemoveOptionValue,
   handleVarChange,
-  getSuggestions,
+  ensureSuggestionsLoaded,
+  isLoadingSuggestions,
+  getFilteredSuggestions,
   showAdvancedColumns = false,
   baseVariants,
   selectedCombinations,
@@ -83,6 +93,8 @@ export function ProductVariantsSection({
   pivotSelections,
   onPivotChange,
 }: ProductVariantsSectionProps) {
+  const [inputValues, setInputValues] = useState<Record<string, string>>({});
+
   const matrixProps =
     baseVariants &&
     selectedCombinations &&
@@ -158,7 +170,26 @@ export function ProductVariantsSection({
           <div className="space-y-4">
             {opciones.map((op) => {
               const isCustom = customTypeMode[op.id];
-              const suggestions = getSuggestions(op.nombre, op.valores);
+              const inputValue = inputValues[op.id] ?? "";
+              const filteredSuggestions = getFilteredSuggestions(
+                op.nombre,
+                inputValue,
+                op.valores,
+              );
+              const queryTrimmed = inputValue.trim();
+              const hasExactMatch = filteredSuggestions.some(
+                (s) => slugify(s.valor) === slugify(queryTrimmed),
+              );
+              const showCrearNuevo = queryTrimmed !== "" && !hasExactMatch;
+              const loadingSuggestions = isLoadingSuggestions(op.nombre);
+              const showDropdown =
+                focusedOptionId === op.id && op.nombre.trim() !== "";
+
+              const agregarValor = (valor: string) => {
+                handleAddOptionValue(op.id, valor);
+                setInputValues((prev) => ({ ...prev, [op.id]: "" }));
+              };
+
               const normalizedNombre = op.nombre.trim().toLowerCase();
               const isDuplicateName =
                 normalizedNombre !== "" &&
@@ -287,51 +318,85 @@ export function ProductVariantsSection({
                           <div className="relative flex-1 min-w-30">
                             <input
                               type="text"
+                              value={inputValue}
                               placeholder={
                                 op.valores.length === 0
                                   ? "Ej: S, M, L..."
                                   : "Agregar otro..."
                               }
-                              onFocus={() => setFocusedOptionId(op.id)}
+                              onChange={(e) =>
+                                setInputValues((prev) => ({
+                                  ...prev,
+                                  [op.id]: e.target.value,
+                                }))
+                              }
+                              onFocus={() => {
+                                setFocusedOptionId(op.id);
+                                ensureSuggestionsLoaded(op.nombre);
+                              }}
                               onBlur={() => setFocusedOptionId(null)}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === ",") {
                                   e.preventDefault();
-                                  handleAddOptionValue(
-                                    op.id,
-                                    e.currentTarget.value,
-                                  );
-                                  e.currentTarget.value = "";
+                                  agregarValor(e.currentTarget.value);
                                 }
                               }}
                               className="w-full bg-transparent border-none outline-none text-sm px-2 h-8 placeholder:text-muted-foreground/50"
                             />
 
-                            {focusedOptionId === op.id &&
-                              (op.nombre === "Color" ||
-                                op.nombre === "Talle") && (
-                                <div className="absolute top-full left-0 mt-2 max-h-48 w-48 overflow-y-auto bg-card border border-border rounded-lg shadow-lg z-60 p-1 flex flex-col gap-0.5">
-                                  {suggestions.length > 0 ? (
-                                    suggestions.map((sugg) => (
-                                      <button
-                                        key={sugg}
-                                        type="button"
-                                        onMouseDown={(e) => {
-                                          e.preventDefault();
-                                          handleAddOptionValue(op.id, sugg);
-                                        }}
-                                        className="w-full text-left px-2.5 py-1.5 text-sm hover:bg-muted rounded-md transition-colors"
-                                      >
-                                        {sugg}
-                                      </button>
-                                    ))
-                                  ) : (
-                                    <p className="px-2.5 py-2 text-xs text-muted-foreground">
-                                      No hay mÃ¡s sugerencias
-                                    </p>
-                                  )}
-                                </div>
-                              )}
+                            {showDropdown && (
+                              <div className="absolute top-full left-0 mt-2 max-h-56 w-56 overflow-y-auto bg-card border border-border rounded-lg shadow-lg z-60 p-1 flex flex-col gap-0.5">
+                                {loadingSuggestions ? (
+                                  <p className="px-2.5 py-2 text-xs text-muted-foreground">
+                                    Cargando sugerencias...
+                                  </p>
+                                ) : (
+                                  <>
+                                    {filteredSuggestions.length > 0 ? (
+                                      filteredSuggestions.map((sugg) => (
+                                        <button
+                                          key={sugg.valor}
+                                          type="button"
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            agregarValor(sugg.valor);
+                                          }}
+                                          className="w-full flex items-baseline justify-between gap-2 text-left px-2.5 py-1.5 text-sm hover:bg-muted rounded-md transition-colors"
+                                        >
+                                          <span className="truncate">
+                                            {sugg.valor}
+                                          </span>
+                                          <span className="text-[10px] text-muted-foreground shrink-0">
+                                            {sugg.productos} producto
+                                            {sugg.productos === 1 ? "" : "s"}
+                                          </span>
+                                        </button>
+                                      ))
+                                    ) : (
+                                      <p className="px-2.5 py-2 text-xs text-muted-foreground">
+                                        No hay sugerencias
+                                      </p>
+                                    )}
+                                    {showCrearNuevo && (
+                                      <>
+                                        <div className="h-px bg-border my-0.5" />
+                                        <button
+                                          type="button"
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            agregarValor(queryTrimmed);
+                                          }}
+                                          className="w-full text-left px-2.5 py-1.5 text-sm text-primary font-semibold hover:bg-primary/10 rounded-md transition-colors"
+                                        >
+                                          + Crear &quot;{queryTrimmed}&quot;
+                                          como nuevo
+                                        </button>
+                                      </>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

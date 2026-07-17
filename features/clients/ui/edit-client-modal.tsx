@@ -19,11 +19,13 @@ import { editClienteAction } from "../actions/manage-clients";
 interface EditClientModalProps {
   cliente: Cliente | null;
   onClose: () => void;
+  entregaMinimaActiva?: boolean;
 }
 
 export function EditClientModal({
   cliente,
   onClose,
+  entregaMinimaActiva = false,
 }: Readonly<EditClientModalProps>) {
   const [isPending, startTransition] = useTransition();
 
@@ -116,6 +118,29 @@ export function EditClientModal({
                 className="shadow-none resize-none h-20"
               />
             </div>
+
+            {entregaMinimaActiva ? (
+              <div className="flex items-start gap-2">
+                <input
+                  type="hidden"
+                  name="exceptuado_entrega_minima_editable"
+                  value="1"
+                />
+                <input
+                  type="checkbox"
+                  id="edit-exceptuado-entrega-minima"
+                  name="exceptuado_entrega_minima"
+                  defaultChecked={cliente.exceptuado_entrega_minima}
+                  className="w-4 h-4 mt-0.5 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+                />
+                <Label
+                  htmlFor="edit-exceptuado-entrega-minima"
+                  className="text-sm font-normal text-muted-foreground cursor-pointer"
+                >
+                  Exceptuado de entrega mínima en cuenta corriente
+                </Label>
+              </div>
+            ) : null}
 
             <div className="flex justify-end gap-2 pt-4">
               <Button

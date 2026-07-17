@@ -15,11 +15,13 @@ type CreateClientState = {
 interface CreateClientModalProps {
   buttonClassName?: string;
   labelClassName?: string;
+  entregaMinimaActiva?: boolean;
 }
 
 export function CreateClientModal({
   buttonClassName,
   labelClassName = "hidden md:flex",
+  entregaMinimaActiva = false,
 }: Readonly<CreateClientModalProps> = {}) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -44,6 +46,7 @@ export function CreateClientModal({
       action={formAction}
       isPending={isPending}
       includeDni
+      showExceptuadoEntregaMinima={entregaMinimaActiva}
       trigger={
         <Button title="Nuevo Cliente" className={buttonClassName}>
           <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" />

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   BookmarkCheck,
+  Check,
   ClipboardList,
   Filter,
   FilterX,
@@ -56,7 +57,7 @@ interface StockFiltersToolbarProps {
   totalProductos: number;
   hayFiltrosActivos: boolean;
   propiedadesGlobales: Record<string, string[]>;
-  filtrosVariantes: Record<string, string>;
+  filtrosVariantes: Record<string, string | string[]>;
   onFiltroVarianteChange: (propiedad: string, valor: string) => void;
   isAdmin: boolean;
   onLimpiarFiltros: () => void;
@@ -83,7 +84,7 @@ export function StockFiltersToolbar({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const propiedadesVariantes = Object.entries(propiedadesGlobales);
   const hayFiltrosVariantesActivos = Object.values(filtrosVariantes).some(
-    (valor) => valor !== "todos",
+    (valor) => (Array.isArray(valor) ? valor.length > 0 : valor !== "todos"),
   );
 
   const limpiarFiltrosVariantes = () => {
@@ -147,8 +148,12 @@ export function StockFiltersToolbar({
                       </Label>
                       <div className="flex flex-wrap gap-2">
                         {["todos", ...valores].map((valor) => {
-                          const isActive =
-                            (filtrosVariantes[propName] || "todos") === valor;
+                          const seleccion = filtrosVariantes[propName];
+                          const isActive = Array.isArray(seleccion)
+                            ? valor === "todos"
+                              ? seleccion.length === 0
+                              : seleccion.includes(valor)
+                            : (seleccion || "todos") === valor;
                           const label =
                             valor === "todos" ? "Cualquiera" : valor;
 
@@ -161,10 +166,13 @@ export function StockFiltersToolbar({
                               }
                               className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 isActive
-                                  ? "border-primary bg-primary text-white"
+                                  ? "border-primary bg-primary text-white ring-2 ring-primary/30"
                                   : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
                               }`}
                             >
+                              {isActive && valor !== "todos" && (
+                                <Check className="inline w-3 h-3 mr-1 -mt-0.5" />
+                              )}
                               {label}
                             </button>
                           );

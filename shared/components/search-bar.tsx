@@ -16,6 +16,20 @@ export function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const isSearching = term !== currentQuery;
 
+  // Resincroniza `term` cuando el "q" de la URL cambia por una navegación
+  // externa (ej. click en un producto desde los resultados de búsqueda,
+  // que aterriza en una ruta sin "q"). Sin esto, `term` queda con el valor
+  // viejo — SearchBar vive en el layout compartido de /store y no se
+  // remonta al navegar a /store/[slug] — y el efecto de debounce de abajo
+  // lo detecta como "el usuario tipeó algo distinto" y redirige de vuelta
+  // a la búsqueda apenas se entra al detalle del producto. Ajustar acá
+  // durante el render (no en un efecto) evita el re-render en cascada.
+  const [lastSyncedQuery, setLastSyncedQuery] = useState(currentQuery);
+  if (currentQuery !== lastSyncedQuery) {
+    setLastSyncedQuery(currentQuery);
+    setTerm(currentQuery);
+  }
+
   useEffect(() => {
     if (isMobileOpen && inputRef.current) {
       inputRef.current.focus();

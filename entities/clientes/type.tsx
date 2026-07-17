@@ -8,6 +8,7 @@ export interface Cliente {
   activo: boolean;
   saldo_pendiente: number;
   reglas_credito: Record<string, any>;
+  exceptuado_entrega_minima: boolean;
   creado_en: string;
 }
 

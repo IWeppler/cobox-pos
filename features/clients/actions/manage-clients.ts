@@ -191,6 +191,8 @@ export async function crearClienteAction(
   const telefono = formData.get("whatsapp") as string;
   const notas = formData.get("notas") as string;
   const dni = formData.get("dni") as string;
+  const exceptuadoEntregaMinima =
+    formData.get("exceptuado_entrega_minima") === "on";
 
   if (!nombre || !telefono) {
     return {
@@ -208,6 +210,7 @@ export async function crearClienteAction(
     dni: dni || null,
     notas: notas || null,
     activo: true,
+    exceptuado_entrega_minima: exceptuadoEntregaMinima,
   });
 
   if (error) {
@@ -229,6 +232,12 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
   const dni = formData.get("dni") as string;
   const email = formData.get("email") as string;
   const notas = formData.get("notas") as string;
+  // El checkbox solo se renderiza (y por lo tanto solo viaja en el
+  // FormData) cuando la entrega mínima está activa a nivel negocio. Sin
+  // este marcador, un guardado con la feature apagada pisaría en silencio
+  // la excepción ya guardada de un cliente con `false`.
+  const exceptuadoEditable =
+    formData.get("exceptuado_entrega_minima_editable") === "1";
 
   if (!nombre || !clienteId) {
     return { error: "El nombre es obligatorio.", success: false };
@@ -237,15 +246,21 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
+  const updatePayload: Record<string, unknown> = {
+    nombre,
+    telefono,
+    dni: dni || null,
+    email: email || null,
+    notas: notas || null,
+  };
+  if (exceptuadoEditable) {
+    updatePayload.exceptuado_entrega_minima =
+      formData.get("exceptuado_entrega_minima") === "on";
+  }
+
   const { error } = await supabase
     .from("clientes")
-    .update({
-      nombre,
-      telefono,
-      dni: dni || null,
-      email: email || null,
-      notas: notas || null,
-    })
+    .update(updatePayload)
     .eq("id", clienteId);
 
   if (error)

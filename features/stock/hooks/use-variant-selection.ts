@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PREDEFINED_COLORS, PREDEFINED_SIZES } from "../types/constants";
 import { buildVariantKey } from "../utils/parse-legacy-variant";
 import {
   findDuplicatePropertyNames,
@@ -13,6 +12,11 @@ import type {
   VarianteInput,
   VariantDataState,
 } from "../types";
+import { slugify } from "@/shared/utils/slugify";
+import {
+  getAtributoValorSuggestionsAction,
+  type SugerenciaValorAtributo,
+} from "../actions/get-attribute-suggestions";
 
 function buildCartesianVariants(opciones: Opcion[]): BaseVariant[] {
   const opcionesValidas = opciones.filter(
@@ -101,6 +105,18 @@ export function useVariantSelection({
     () => getCustomTypeModeFromOpciones(initialOpciones),
   );
   const [focusedOptionId, setFocusedOptionId] = useState<string | null>(null);
+
+  // Sugerencias de valores por atributo (Color, Talle, o cualquier
+  // propiedad libre), cacheadas por nombre normalizado — se piden una
+  // vez al enfocar el campo, no en cada tecla. La fuente real es
+  // producto_variantes.atributos vía RPC (ver
+  // get-attribute-suggestions.ts), no un catálogo estático.
+  const [suggestionsCache, setSuggestionsCache] = useState<
+    Record<string, SugerenciaValorAtributo[]>
+  >({});
+  const [loadingSuggestionsFor, setLoadingSuggestionsFor] = useState<
+    Set<string>
+  >(new Set());
 
   const baseVariants = useMemo(
     () => buildCartesianVariants(opciones),
@@ -244,14 +260,43 @@ export function useVariantSelection({
     setPivotSelections((prev) => ({ ...prev, [propName]: value }));
   };
 
-  const getSuggestions = (nombre: string, currentValues: string[]) => {
-    if (nombre === "Color") {
-      return PREDEFINED_COLORS.filter((c) => !currentValues.includes(c));
+  const ensureSuggestionsLoaded = (nombre: string) => {
+    const key = slugify(nombre);
+    if (!key || key in suggestionsCache || loadingSuggestionsFor.has(key)) {
+      return;
     }
-    if (nombre === "Talle") {
-      return PREDEFINED_SIZES.filter((s) => !currentValues.includes(s));
-    }
-    return [];
+
+    setLoadingSuggestionsFor((prev) => new Set(prev).add(key));
+
+    getAtributoValorSuggestionsAction(nombre)
+      .then((sugerencias) => {
+        setSuggestionsCache((prev) => ({ ...prev, [key]: sugerencias }));
+      })
+      .finally(() => {
+        setLoadingSuggestionsFor((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      });
+  };
+
+  const isLoadingSuggestions = (nombre: string) =>
+    loadingSuggestionsFor.has(slugify(nombre));
+
+  const getFilteredSuggestions = (
+    nombre: string,
+    query: string,
+    currentValues: string[],
+  ): SugerenciaValorAtributo[] => {
+    const cached = suggestionsCache[slugify(nombre)] ?? [];
+    const queryNormalizado = slugify(query);
+    const currentValuesNormalizados = new Set(currentValues.map(slugify));
+
+    return cached
+      .filter((s) => !currentValuesNormalizados.has(slugify(s.valor)))
+      .filter((s) => slugify(s.valor).includes(queryNormalizado))
+      .slice(0, 8);
   };
 
   return {
@@ -278,6 +323,8 @@ export function useVariantSelection({
     handleBulkSetSelection,
     handleInvertSelection,
     handlePivotChange,
-    getSuggestions,
+    ensureSuggestionsLoaded,
+    isLoadingSuggestions,
+    getFilteredSuggestions,
   };
 }

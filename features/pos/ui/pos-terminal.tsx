@@ -56,7 +56,7 @@ export function PosTerminal({
   const [searchQuery, setSearchQuery] = useState("");
   const [tipo, setTipo] = useState("todos");
   const [filtrosVariantes, setFiltrosVariantes] = useState<
-    Record<string, string>
+    Record<string, string[]>
   >({});
 
   // Estados para el Modal Rápido
@@ -103,14 +103,23 @@ export function PosTerminal({
   const hayFiltrosActivos =
     searchQuery !== "" ||
     tipo !== "todos" ||
-    Object.keys(filtrosVariantes).some(
-      (propiedad) => filtrosVariantes[propiedad] !== "todos",
-    );
+    Object.values(filtrosVariantes).some((valores) => valores.length > 0);
 
   const limpiarFiltros = () => {
     setSearchQuery("");
     setTipo("todos");
     setFiltrosVariantes({});
+  };
+
+  const handleFiltroVarianteChange = (propiedad: string, valor: string) => {
+    setFiltrosVariantes((prev) => {
+      if (valor === "todos") return { ...prev, [propiedad]: [] };
+      const actuales = prev[propiedad] ?? [];
+      const siguientes = actuales.includes(valor)
+        ? actuales.filter((v) => v !== valor)
+        : [...actuales, valor];
+      return { ...prev, [propiedad]: siguientes };
+    });
   };
 
   const handleProductClick = (producto: Producto) => {
@@ -203,9 +212,7 @@ export function PosTerminal({
           hayFiltrosActivos={hayFiltrosActivos}
           propiedadesGlobales={propiedadesGlobales}
           filtrosVariantes={filtrosVariantes}
-          onFiltroVarianteChange={(prop, val) =>
-            setFiltrosVariantes((prev) => ({ ...prev, [prop]: val }))
-          }
+          onFiltroVarianteChange={handleFiltroVarianteChange}
           isAdmin={false}
           onLimpiarFiltros={limpiarFiltros}
         />

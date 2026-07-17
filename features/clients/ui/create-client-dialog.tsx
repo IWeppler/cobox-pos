@@ -21,6 +21,7 @@ interface CreateClientDialogProps {
   onSubmit?: FormEventHandler<HTMLFormElement>;
   isPending?: boolean;
   includeDni?: boolean;
+  showExceptuadoEntregaMinima?: boolean;
 }
 
 export function CreateClientDialog({
@@ -31,6 +32,7 @@ export function CreateClientDialog({
   onSubmit,
   isPending = false,
   includeDni = false,
+  showExceptuadoEntregaMinima = false,
 }: Readonly<CreateClientDialogProps>) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -96,6 +98,23 @@ export function CreateClientDialog({
               className="h-11 shadow-none"
             />
           </div>
+
+          {showExceptuadoEntregaMinima ? (
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                id="exceptuado_entrega_minima"
+                name="exceptuado_entrega_minima"
+                className="w-4 h-4 mt-0.5 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+              />
+              <Label
+                htmlFor="exceptuado_entrega_minima"
+                className="text-sm font-normal text-muted-foreground cursor-pointer"
+              >
+                Exceptuado de entrega mínima en cuenta corriente
+              </Label>
+            </div>
+          ) : null}
 
           <div className="flex justify-end gap-2 pt-4">
             <Button

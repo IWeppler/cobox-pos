@@ -56,11 +56,13 @@ type ClienteMapeado = ClienteConVentas & {
 interface ClientsViewProps {
   clientes: ClienteConVentas[];
   metodosPago: MetodoPago[];
+  entregaMinimaActiva?: boolean;
 }
 
 export function ClientsView({
   clientes,
   metodosPago,
+  entregaMinimaActiva = false,
 }: Readonly<ClientsViewProps>) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("todos");
@@ -289,7 +291,7 @@ export function ClientsView({
             >
               <UploadCloud className="w-5 h-5 mr-2" /> Importar CSV
             </Button>
-            <CreateClientModal />
+            <CreateClientModal entregaMinimaActiva={entregaMinimaActiva} />
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:hidden">
@@ -304,6 +306,7 @@ export function ClientsView({
             <CreateClientModal
               buttonClassName="h-10 w-full justify-center"
               labelClassName="flex whitespace-nowrap"
+              entregaMinimaActiva={entregaMinimaActiva}
             />
           </div>
         </div>
@@ -535,6 +538,7 @@ export function ClientsView({
       <EditClientModal
         cliente={clientToEdit}
         onClose={() => setClientToEdit(null)}
+        entregaMinimaActiva={entregaMinimaActiva}
       />
       <AdjustClientBalanceModal
         cliente={clientToAdjust}

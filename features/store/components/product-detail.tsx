@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Producto } from "@/entities/productos/types";
 import {
   ShoppingBag,
@@ -17,6 +17,8 @@ import { useCartStore } from "@/shared/store/cart-store";
 import { toast } from "sonner";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { resolverAtributosVariante } from "@/entities/productos/lib/build-propiedades-filtro";
+import { compararTalles } from "@/entities/productos/lib/comparar-talles";
+import { normalizarParaComparar } from "@/entities/productos/lib/parse-variant-attributes";
 
 interface ProductDetailProps {
   producto: Producto;
@@ -31,6 +33,11 @@ export function ProductDetail({
 }: Readonly<ProductDetailProps>) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [descOpen, setDescOpen] = useState(false);
+  const mobileGalleryRef = useRef<HTMLDivElement>(null);
+
+  // Miniaturas verticales visibles sin scroll junto a la imagen principal
+  // (calculado para el tamaño de imagen y miniatura definidos más abajo).
+  const MAX_VISIBLE_THUMBS = 4;
 
   const [selecciones, setSelecciones] = useState<Record<string, string>>({});
   const [errorVariante, setErrorVariante] = useState(false);
@@ -118,7 +125,11 @@ export function ProductDetail({
 
     const result: Record<string, string[]> = {};
     Object.keys(props).forEach((k) => {
-      result[k] = Array.from(props[k]);
+      const valores = Array.from(props[k]);
+      result[k] =
+        normalizarParaComparar(k) === "talle"
+          ? valores.sort(compararTalles)
+          : valores;
     });
     return { properties: result };
   }, [variantesArray, config]);
@@ -198,10 +209,25 @@ export function ProductDetail({
       prev === imagenes.length - 1 ? 0 : prev + 1,
     );
 
+  const handleThumbnailClick = (index: number) => {
+    setCurrentImageIndex(index);
+    const el = mobileGalleryRef.current;
+    if (el) {
+      el.scrollTo({ left: index * el.clientWidth, behavior: "smooth" });
+    }
+  };
+
+  const handleMobileGalleryScroll = () => {
+    const el = mobileGalleryRef.current;
+    if (!el || el.clientWidth === 0) return;
+    const index = Math.round(el.scrollLeft / el.clientWidth);
+    setCurrentImageIndex(index);
+  };
+
   return (
     <div className="flex flex-col md:flex-row items-start mx-4 pb-8 md:pb-0 relative">
       {/* LADO IZQUIERDO: IMÁGENES */}
-      <div className="w-full md:w-[55%] lg:w-[60%] flex flex-col md:pr-8 lg:pr-12 md:sticky md:top-32">
+      <div className="w-full md:w-auto md:shrink-0 flex flex-col md:pr-8 md:sticky md:top-32">
         {/* Breadcrumb Oculto en Mobile, visible en Desktop */}
         <nav className="hidden md:flex items-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-6">
           <Link
@@ -241,7 +267,11 @@ export function ProductDetail({
         </nav>
 
         {/* Galería Mobile (Swipeable) */}
-        <div className="md:hidden flex overflow-x-auto snap-x snap-mandatory scrollbar-hide w-full bg-[#f7f7f7]">
+        <div
+          ref={mobileGalleryRef}
+          onScroll={handleMobileGalleryScroll}
+          className="md:hidden flex overflow-x-auto snap-x snap-mandatory scrollbar-hide w-full bg-[#f7f7f7]"
+        >
           {imagenes.length > 0 ? (
             imagenes.map((img, i) => (
               <div
@@ -275,9 +305,74 @@ export function ProductDetail({
           )}
         </div>
 
-        {/* Galería Desktop (Imagen principal + Miniaturas) */}
-        <div className="hidden md:flex flex-col gap-3">
-          <div className="relative aspect-4/5 bg-card w-full flex items-center justify-center group overflow-hidden border border-border/60">
+        {/* Miniaturas Mobile: carril horizontal debajo de la imagen principal */}
+        {imagenes.length > 1 && (
+          <div className="md:hidden flex gap-2 overflow-x-auto scrollbar-hide px-4 -mx-4 py-3">
+            {imagenes.map((img, index) => (
+              <button
+                key={`mobile-thumb-${index}`}
+                type="button"
+                onClick={() => handleThumbnailClick(index)}
+                className={`relative w-14 aspect-4/5 shrink-0 bg-background transition-all border cursor-pointer ${
+                  currentImageIndex === index
+                    ? "border-foreground opacity-100"
+                    : "border-transparent opacity-60"
+                }`}
+              >
+                <Image
+                  src={img}
+                  alt={`Miniatura ${index + 1}`}
+                  fill
+                  className="object-cover"
+                  sizes="56px"
+                />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Galería Desktop (Miniaturas verticales + Imagen principal) */}
+        <div className="hidden md:flex gap-3">
+          {imagenes.length > 1 && (
+            <div className="flex flex-col gap-2 w-16 shrink-0">
+              {imagenes.slice(0, MAX_VISIBLE_THUMBS).map((img, index) => {
+                const hiddenCount = imagenes.length - MAX_VISIBLE_THUMBS;
+                const isOverflowSlot =
+                  hiddenCount > 0 && index === MAX_VISIBLE_THUMBS - 1;
+                const isActive = currentImageIndex === index;
+
+                return (
+                  <button
+                    key={`thumb-${index}`}
+                    type="button"
+                    onClick={() => handleThumbnailClick(index)}
+                    className={`relative w-16 aspect-4/5 shrink-0 bg-background transition-all border cursor-pointer ${
+                      isActive
+                        ? "border-foreground opacity-100"
+                        : "border-transparent opacity-60 hover:opacity-100 hover:border-border"
+                    }`}
+                  >
+                    <Image
+                      src={img}
+                      alt={`Miniatura ${index + 1}`}
+                      fill
+                      className="object-cover"
+                      sizes="64px"
+                    />
+                    {isOverflowSlot && (
+                      <div className="absolute inset-0 bg-black/55 flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">
+                          +{hiddenCount + 1}
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="relative aspect-4/5 max-w-75 lg:max-w-90 xl:max-w-105 w-full bg-card flex items-center justify-center group overflow-hidden border border-border/60">
             {imagenes.length > 0 ? (
               <Image
                 src={imagenes[currentImageIndex]}
@@ -285,7 +380,7 @@ export function ProductDetail({
                 fill
                 className="object-cover transition-opacity duration-300"
                 priority
-                sizes="(max-width: 1200px) 50vw, 33vw"
+                sizes="(max-width: 1200px) 40vw, 420px"
               />
             ) : (
               <ShoppingBag
@@ -310,30 +405,11 @@ export function ProductDetail({
               </>
             )}
           </div>
-          {imagenes.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar mt-2">
-              {imagenes.map((img, index) => (
-                <button
-                  key={`thumb-${index}`}
-                  onClick={() => setCurrentImageIndex(index)}
-                  className={`relative w-20 h-28 shrink-0 bg-[#f7f7f7] transition-all border cursor-pointer ${currentImageIndex === index ? "border-foreground opacity-100" : "border-transparent opacity-60 hover:opacity-100 hover:border-border"}`}
-                >
-                  <Image
-                    src={img}
-                    alt={`Thumb ${index}`}
-                    fill
-                    className="object-cover"
-                    sizes="80px"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
       {/* LADO DERECHO: INFORMACIÓN Y CTA */}
-      <div className="w-full md:w-[45%] lg:w-[40%] flex flex-col pt-4 sm:px-0">
+      <div className="w-full md:flex-1 md:max-w-lg flex flex-col pt-4 sm:px-0">
         <h1 className="text-2xl md:text-4xl font-semibold text-foreground uppercase tracking-tight mb-2 md:mb-4">
           {producto.nombre}
         </h1>
@@ -479,7 +555,7 @@ export function ProductDetail({
       </div>
 
       {config?.pedidos_whatsapp !== false && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t border-border z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-background backdrop-blur-md border-t border-border z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
           <button
             onClick={handleAddToCart}
             disabled={estaAgotado}

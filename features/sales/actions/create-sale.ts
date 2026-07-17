@@ -211,9 +211,84 @@ export async function registrarVentaAction(
     });
   }
 
-  // --- 1bis. VALIDAR Y DESCONTAR STOCK (ATÓMICO) ---
-  // Se hace ACÁ, antes de crear la venta — no al final como antes. La
-  // lectura del paso 0 (stockActual) puede estar desactualizada para
+  // --- 1bis. TOTAL, PAGOS Y REGLAS DE CUENTA CORRIENTE ---
+  // Se valida ACÁ, antes de tocar stock — así una venta rechazada por
+  // pagos/entrega mínima nunca llega a descontar (ni necesita revertir)
+  // stock atómico. Antes este bloque corría después del descuento de
+  // stock, dejando la puerta abierta a decrementar stock real para una
+  // venta que después se rechazaba por sumaPagos/monto.
+  const { data: configVenta } = await supabase
+    .from("configuracion_pos")
+    .select("permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante")
+    .single();
+  const permitirVentaSinStock = configVenta?.permitir_venta_sin_stock ?? false;
+
+  // Calculamos el Total Real del Ticket
+  const totalConDescuentoYRecargo =
+    Math.max(0, totalVentaBrutaItems - descuentoMonto) +
+    (isNaN(recargoCC) ? 0 : recargoCC);
+
+  // --- 2. VALIDACIÓN DEL ARRAY DE PAGOS ---
+  const pagosRawArray: CreateSalePaymentInput[] = pagosRaw
+    ? JSON.parse(pagosRaw)
+    : [];
+  const pagosValidos = pagosRawArray.filter((p) => Number(p.montoAsignado) > 0);
+  const sumaPagos = pagosValidos.reduce(
+    (acc, p) => acc + Number(p.montoAsignado),
+    0,
+  );
+
+  const montoPendiente = totalConDescuentoYRecargo - sumaPagos;
+  const estadoPago = montoPendiente > 0.05 ? "PARCIAL" : "PAGADA";
+
+  if (isCuentaCorriente && !clienteId) {
+    return {
+      error: "Debes seleccionar un cliente para generar una deuda.",
+      success: false,
+    };
+  }
+  if (!isCuentaCorriente && montoPendiente > 0.05) {
+    return {
+      error: "Venta contado: El pago no cubre el total del ticket.",
+      success: false,
+    };
+  }
+  if (sumaPagos > totalConDescuentoYRecargo + 0.05) {
+    return {
+      error: "Los cobros asignados superan el total del ticket.",
+      success: false,
+    };
+  }
+
+  // --- 2bis. VALIDAR ENTREGA MÍNIMA (CUENTA CORRIENTE) ---
+  // Espejo server-side del chequeo de cart-panel-admin.tsx — ese es
+  // client-side y trivialmente bypasseable llamando esta action directo.
+  // Sin excepción de cliente y con el toggle bloqueante activo, la venta
+  // se rechaza acá también.
+  if (isCuentaCorriente && clienteId) {
+    const pctEntregaMinima = Number(configVenta?.cc_anticipo_default) || 0;
+    if (pctEntregaMinima > 0 && configVenta?.entrega_minima_bloqueante) {
+      const { data: clienteCC } = await supabase
+        .from("clientes")
+        .select("exceptuado_entrega_minima")
+        .eq("id", clienteId)
+        .single();
+
+      if (!clienteCC?.exceptuado_entrega_minima) {
+        const entregaMinimaRequerida =
+          (totalConDescuentoYRecargo * pctEntregaMinima) / 100;
+        if (sumaPagos + 0.05 < entregaMinimaRequerida) {
+          return {
+            error: `Este cliente requiere al menos $${entregaMinimaRequerida.toLocaleString("es-AR")} de entrega para esta compra.`,
+            success: false,
+          };
+        }
+      }
+    }
+  }
+
+  // --- 1ter. VALIDAR Y DESCONTAR STOCK (ATÓMICO) ---
+  // La lectura del paso 0 (stockActual) puede estar desactualizada para
   // cuando llegamos a este punto (otra venta concurrente descontando la
   // misma variante); la única fuente de verdad sobre "hay stock
   // suficiente" es el UPDATE condicional en producto_variantes, atómico a
@@ -222,12 +297,6 @@ export async function registrarVentaAction(
   // hubiera descontado de items anteriores en este mismo loop y no
   // creamos la venta — así no queda un ticket fantasma sin stock
   // descontado detrás.
-  const { data: stockConfig } = await supabase
-    .from("configuracion_pos")
-    .select("permitir_venta_sin_stock")
-    .single();
-  const permitirVentaSinStock = stockConfig?.permitir_venta_sin_stock ?? false;
-
   const itemsConStockDescontado: typeof itemsProcesados = [];
   for (const item of itemsProcesados) {
     if (!item.varianteId) {
@@ -277,43 +346,6 @@ export async function registrarVentaAction(
     }
 
     itemsConStockDescontado.push(item);
-  }
-
-  // Calculamos el Total Real del Ticket
-  const totalConDescuentoYRecargo =
-    Math.max(0, totalVentaBrutaItems - descuentoMonto) +
-    (isNaN(recargoCC) ? 0 : recargoCC);
-
-  // --- 2. VALIDACIÓN DEL ARRAY DE PAGOS ---
-  const pagosRawArray: CreateSalePaymentInput[] = pagosRaw
-    ? JSON.parse(pagosRaw)
-    : [];
-  const pagosValidos = pagosRawArray.filter((p) => Number(p.montoAsignado) > 0);
-  const sumaPagos = pagosValidos.reduce(
-    (acc, p) => acc + Number(p.montoAsignado),
-    0,
-  );
-
-  const montoPendiente = totalConDescuentoYRecargo - sumaPagos;
-  const estadoPago = montoPendiente > 0.05 ? "PARCIAL" : "PAGADA";
-
-  if (isCuentaCorriente && !clienteId) {
-    return {
-      error: "Debes seleccionar un cliente para generar una deuda.",
-      success: false,
-    };
-  }
-  if (!isCuentaCorriente && montoPendiente > 0.05) {
-    return {
-      error: "Venta contado: El pago no cubre el total del ticket.",
-      success: false,
-    };
-  }
-  if (sumaPagos > totalConDescuentoYRecargo + 0.05) {
-    return {
-      error: "Los cobros asignados superan el total del ticket.",
-      success: false,
-    };
   }
 
   // --- 3. CÁLCULO FINANCIERO MASIVO ---

@@ -331,7 +331,9 @@ export function ProductEditDetailSheet({
               handleAddOptionValue={variantSelection.handleAddOptionValue}
               handleRemoveOptionValue={variantSelection.handleRemoveOptionValue}
               handleVarChange={variantSelection.handleVarChange}
-              getSuggestions={variantSelection.getSuggestions}
+              ensureSuggestionsLoaded={variantSelection.ensureSuggestionsLoaded}
+              isLoadingSuggestions={variantSelection.isLoadingSuggestions}
+              getFilteredSuggestions={variantSelection.getFilteredSuggestions}
               showAdvancedColumns
               baseVariants={variantSelection.baseVariants}
               selectedCombinations={variantSelection.selectedCombinations}

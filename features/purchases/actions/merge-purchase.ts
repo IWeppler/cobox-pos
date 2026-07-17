@@ -6,6 +6,11 @@ import { revalidatePath } from "next/cache";
 import { ItemResuelto } from "@/entities/compras/types";
 import { slugify } from "@/shared/utils/slugify";
 import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-attributes";
+import {
+  construirCacheAtributos,
+  canonicalizarValores,
+  type AtributoCache,
+} from "@/features/stock/lib/normalize-atributo";
 
 type SupabaseDb = ReturnType<typeof createClient>;
 
@@ -243,11 +248,18 @@ async function actualizarStock(
   item: ItemResuelto,
   supabase: SupabaseDb,
   precioBaseProducto: number,
+  atributoCache: AtributoCache,
 ) {
   if (!item.producto_id) return;
 
   const variante = item.variante_match || item.raw_variante || "Unico";
-  const atributos = parseVarianteAtributos(variante);
+  // Mismo criterio que create-product.ts/edit-product.ts: el texto crudo
+  // del remito ("4xl") se resuelve contra lo que ya existe en
+  // atributos/atributo_valores ANTES de escribir el JSONB — así una
+  // variante nueva reusa la forma canónica ("4XL") en vez de multiplicar
+  // variantes por casing distinto entre pedidos/proveedores.
+  const atributosRaw = parseVarianteAtributos(variante);
+  const atributos = canonicalizarValores(atributosRaw, atributoCache);
 
   const { data: varianteExistente, error: varianteSelectError } = await supabase
     .from("producto_variantes")
@@ -379,6 +391,28 @@ export async function aprobarOrdenAction(
     // producto_id — referencia para saber si una variante puntual difiere.
     const precioBasePorProducto = new Map<string, number>();
 
+    // Normalizamos TODOS los atributos del remito (Talle/Color/...) contra
+    // lo que ya existe en atributos/atributo_valores en una sola pasada
+    // antes de tocar ninguna variante — evita un round-trip a la DB por
+    // cada fila cuando el mismo valor se repite entre items.
+    const valoresPorPropiedad: Record<string, Set<string>> = {};
+    for (const item of itemsResueltos) {
+      if (!item.producto_id) continue;
+      const variante = item.variante_match || item.raw_variante || "Unico";
+      const atributosRaw = parseVarianteAtributos(variante);
+      Object.entries(atributosRaw).forEach(([nombre, valor]) => {
+        if (!valoresPorPropiedad[nombre]) valoresPorPropiedad[nombre] = new Set();
+        valoresPorPropiedad[nombre].add(valor);
+      });
+    }
+    const opcionesAtributos = Object.entries(valoresPorPropiedad).map(
+      ([nombre, valores]) => ({ nombre, valores: Array.from(valores) }),
+    );
+    const atributoCache = await construirCacheAtributos(
+      supabase,
+      opcionesAtributos,
+    );
+
     for (const item of itemsResueltos) {
       if (!item.producto_id) continue;
 
@@ -397,6 +431,7 @@ export async function aprobarOrdenAction(
         item,
         supabase,
         precioBasePorProducto.get(item.producto_id) ?? 0,
+        atributoCache,
       );
 
       // 3. Registrar Alias en el Diccionario (Solo 1 vez por nombre crudo)
