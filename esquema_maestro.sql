@@ -202,7 +202,8 @@ CREATE TABLE IF NOT EXISTS "public"."configuracion_pos" (
     "cc_plazo_mora" integer DEFAULT 30,
     "crm_dias_inactivo" integer DEFAULT 60,
     "modo_caja" "text" DEFAULT 'UNICA'::"text" NOT NULL,
-    "requiere_caja_abierta" boolean DEFAULT true NOT NULL
+    "requiere_caja_abierta" boolean DEFAULT true NOT NULL,
+    "permitir_venta_sin_stock" boolean DEFAULT false NOT NULL
 );
 
 

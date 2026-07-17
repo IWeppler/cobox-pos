@@ -127,7 +127,7 @@ export function PreferencesPanel() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* TEMA VISUAL */}
-        <div className="bg-card p-6 rounded-2xl border border-border flex flex-col justify-between">
+        <div className="bg-card p-6 rounded-xl border border-border flex flex-col justify-between">
           <div>
             <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center mb-4">
               {theme === "dark" ? (
@@ -180,7 +180,7 @@ export function PreferencesPanel() {
         </div>
 
         {/* INSTALACIÓN PWA */}
-        <div className="bg-card p-6 rounded-2xl border border-border flex flex-col justify-between">
+        <div className="bg-card p-6 rounded-xl border border-border flex flex-col justify-between">
           <div>
             <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center mb-4">
               <Download className="w-5 h-5" />
@@ -201,7 +201,7 @@ export function PreferencesPanel() {
               isInstalled
                 ? "bg-emerald-50 text-emerald-700"
                 : deferredPrompt
-                  ? "bg-accent-lime hover:bg-emerald-700 text-white"
+                  ? "bg-primary hover:bg-primary/90 text-white"
                   : "bg-muted text-muted-foreground"
             }`}
           >

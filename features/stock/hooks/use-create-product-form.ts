@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import type { FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
 import { optimizarImagen } from "@/shared/utils/image-optimizer";
@@ -15,6 +16,7 @@ import { useVariantSelection } from "./use-variant-selection";
 import type { CategoriaOption, ProductActionState } from "@/features/stock/types";
 
 export function useCreateProductForm() {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [archivos, setArchivos] = useState<File[]>([]);
   const [isCompressing, setIsCompressing] = useState(false);
@@ -85,6 +87,7 @@ export function useCreateProductForm() {
       if (result.success) {
         toast.success("Producto creado con éxito");
         handleOpenChange(false);
+        router.refresh();
       } else if (result.error) {
         toast.error(result.error);
       }

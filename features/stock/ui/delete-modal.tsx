@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { eliminarProductoAction } from "../actions/delete-product";
 import { toast } from "sonner";
 
@@ -30,6 +31,7 @@ export function EliminarProductoModal({
   tipo,
   children,
 }: Readonly<EliminarProductoModalProps>) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
   const [isPending, startTransition] = useTransition();
@@ -41,6 +43,7 @@ export function EliminarProductoModal({
       if (result.success) {
         setIsOpen(false);
         toast.success(`El producto ${nombre} ha sido eliminado`);
+        router.refresh();
       } else if (result.error) {
         toast.error(result.error);
       }

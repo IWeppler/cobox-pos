@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -49,6 +50,7 @@ import { formatearMoneda } from "@/shared/utils/formatters";
 import { useActiveCategories } from "../hooks/use-active-categories";
 
 export function UpdatePricesModal() {
+  const router = useRouter();
   const categorias = useActiveCategories();
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -166,6 +168,7 @@ export function UpdatePricesModal() {
     } else {
       toast.success("¡Precios actualizados con éxito!");
       handleOpenChange(false);
+      router.refresh();
     }
   };
 

@@ -18,21 +18,31 @@ export default async function PosPage() {
   if (!user) redirect("/auth");
 
   // Traemos los datos para la terminal
-  const [productosRes, categoriasRes] = await Promise.all([
+  const [productosRes, categoriasRes, configRes] = await Promise.all([
     getProductosAction(),
     supabase
       .from("categorias")
       .select("*")
       .eq("activa", true)
       .order("orden", { ascending: true }),
+    supabase
+      .from("configuracion_pos")
+      .select("permitir_venta_sin_stock")
+      .single(),
   ]);
 
   const productos = productosRes.data || [];
   const categoriasDB = categoriasRes.data || [];
+  const permitirVentaSinStock =
+    configRes.data?.permitir_venta_sin_stock ?? false;
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 overflow-hidden">
-      <PosTerminal productos={productos} categorias={categoriasDB} />
+      <PosTerminal
+        productos={productos}
+        categorias={categoriasDB}
+        permitirVentaSinStock={permitirVentaSinStock}
+      />
       <CartPanelAdmin />
     </div>
   );

@@ -47,4 +47,7 @@ export interface ConfiguracionPOS {
   // Configuración de Caja
   modo_caja?: "UNICA" | "POR_USUARIO" | "POR_PUNTO_VENTA";
   requiere_caja_abierta?: boolean;
+
+  // Configuración de Stock
+  permitir_venta_sin_stock?: boolean;
 }

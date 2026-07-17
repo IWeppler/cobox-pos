@@ -18,12 +18,14 @@ interface QuickAddModalProps {
   producto: Producto | null;
   isOpen: boolean;
   onClose: () => void;
+  permitirVentaSinStock?: boolean;
 }
 
 export function QuickAddModal({
   producto,
   isOpen,
   onClose,
+  permitirVentaSinStock = false,
 }: Readonly<QuickAddModalProps>) {
   if (!producto) return null;
 
@@ -35,6 +37,7 @@ export function QuickAddModal({
           producto={producto}
           isOpen={isOpen}
           onClose={onClose}
+          permitirVentaSinStock={permitirVentaSinStock}
         />
       ) : null}
     </Dialog>
@@ -45,10 +48,12 @@ function QuickAddModalContent({
   producto,
   isOpen,
   onClose,
+  permitirVentaSinStock,
 }: Readonly<{
   producto: Producto;
   isOpen: boolean;
   onClose: () => void;
+  permitirVentaSinStock: boolean;
 }>) {
   const addItem = useCartStore((state) => state.addItem);
   const setIsOpenCart = useCartStore((state) => state.setIsOpen);
@@ -133,7 +138,7 @@ function QuickAddModalContent({
   const isOptionAvailable = (propName: string, val: string) => {
     const testSelections = { ...selecciones, [propName]: val };
     return variantesArray.some((s) => {
-      if (s.cantidad <= 0) return false;
+      if (!permitirVentaSinStock && s.cantidad <= 0) return false;
 
       const attrs =
         s.atributos && Object.keys(s.atributos).length > 0
@@ -163,7 +168,10 @@ function QuickAddModalContent({
         );
       });
 
-      if (stockDeVariante && stockDeVariante.cantidad > 0) {
+      if (
+        stockDeVariante &&
+        (permitirVentaSinStock || stockDeVariante.cantidad > 0)
+      ) {
         let imagenes: string[] = [];
         if (typeof producto.imagen_url === "string") {
           try {
@@ -198,6 +206,7 @@ function QuickAddModalContent({
     producto,
     isOpen,
     variantesArray,
+    permitirVentaSinStock,
     addItem,
     setIsOpenCart,
     onClose,

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import type { Producto } from "@/entities/productos/types";
@@ -57,6 +58,7 @@ export function ProductEditDetailSheet({
   onOpenChange,
   hideTrigger = false,
 }: Readonly<ProductEditDetailSheetProps>) {
+  const router = useRouter();
   const isSimpleProduct = isSingleVariantProduct(producto);
   // Fuente única de verdad para reconstruir opciones/variantes al cargar:
   // prioriza producto_variantes (nombres de atributo reales) y limpia
@@ -169,6 +171,7 @@ export function ProductEditDetailSheet({
       if (result.success) {
         toast.success("Producto actualizado");
         handleOpenChange(false);
+        router.refresh();
       } else if (result.error) {
         toast.error(result.error);
       }

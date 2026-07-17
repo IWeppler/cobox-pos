@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { togglePublicadoAction } from "../actions/toggle-shared";
 import { toast } from "sonner";
 
@@ -11,6 +12,7 @@ export function TogglePublicado({
   id: string;
   publicadoInicial: boolean;
 }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const handleToggle = () => {
@@ -24,6 +26,7 @@ export function TogglePublicado({
             ? "Producto visible en la tienda"
             : "Producto oculto de la tienda",
         );
+        router.refresh();
       } else {
         toast.error(res.error || "No se pudo cambiar el estado");
       }

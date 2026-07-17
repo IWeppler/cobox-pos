@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useActionState, startTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Producto } from "@/entities/productos/types";
 import { createBajaAction } from "../actions/create-baja";
 import {
@@ -36,6 +37,7 @@ type BajaActionState = {
 };
 
 export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [variante, setVariante] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -51,6 +53,7 @@ export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
         setIsOpen(false);
         setVariante("");
         setMotivo("");
+        router.refresh();
       } else if (result.error) {
         toast.error(result.error);
       }

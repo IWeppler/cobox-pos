@@ -28,6 +28,7 @@ export function CajaConfigPanel({ config }: Readonly<CajaConfigPanelProps>) {
   const [formData, setFormData] = useState({
     modo_caja: config.modo_caja || "UNICA",
     requiere_caja_abierta: config.requiere_caja_abierta ?? true,
+    permitir_venta_sin_stock: config.permitir_venta_sin_stock ?? false,
   });
 
   const handleChange = (field: string, value: string | boolean) => {
@@ -70,7 +71,7 @@ export function CajaConfigPanel({ config }: Readonly<CajaConfigPanelProps>) {
         <Button
           onClick={handleSave}
           disabled={isSaving}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
+          className="w-full sm:w-auto"
         >
           {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
           Guardar Cambios
@@ -163,6 +164,26 @@ export function CajaConfigPanel({ config }: Readonly<CajaConfigPanelProps>) {
                 checked={formData.requiere_caja_abierta}
                 onCheckedChange={(v) =>
                   handleChange("requiere_caja_abierta", v)
+                }
+                className="mt-1"
+              />
+            </div>
+
+            <div className="flex items-start justify-between gap-4 border-t border-border/50 pt-6">
+              <div className="space-y-1">
+                <Label className="text-sm font-semibold">
+                  Permitir Venta Sin Stock
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Si está activo, se puede vender una variante aunque su stock
+                  disponible sea 0, dejando el stock en negativo. Si está
+                  apagado (recomendado), la venta se bloquea.
+                </p>
+              </div>
+              <Switch
+                checked={formData.permitir_venta_sin_stock}
+                onCheckedChange={(v) =>
+                  handleChange("permitir_venta_sin_stock", v)
                 }
                 className="mt-1"
               />

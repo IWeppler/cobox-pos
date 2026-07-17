@@ -222,6 +222,12 @@ export async function registrarVentaAction(
   // hubiera descontado de items anteriores en este mismo loop y no
   // creamos la venta — así no queda un ticket fantasma sin stock
   // descontado detrás.
+  const { data: stockConfig } = await supabase
+    .from("configuracion_pos")
+    .select("permitir_venta_sin_stock")
+    .single();
+  const permitirVentaSinStock = stockConfig?.permitir_venta_sin_stock ?? false;
+
   const itemsConStockDescontado: typeof itemsProcesados = [];
   for (const item of itemsProcesados) {
     if (!item.varianteId) {
@@ -234,7 +240,11 @@ export async function registrarVentaAction(
 
     const { data: descontado, error: descuentoError } = await supabase.rpc(
       "ajustar_stock_variante",
-      { p_variante_id: item.varianteId, p_delta: -item.cantidad },
+      {
+        p_variante_id: item.varianteId,
+        p_delta: -item.cantidad,
+        p_permitir_negativo: permitirVentaSinStock,
+      },
     );
 
     if (descuentoError) {

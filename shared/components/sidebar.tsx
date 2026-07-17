@@ -16,6 +16,7 @@ import {
   Settings,
   Store,
   Users,
+  Download,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ConfiguracionPOS } from "@/entities/config/types";
@@ -41,9 +42,31 @@ const ALL_NAV_ITEMS = [
     name: "Configuración",
     href: "/configuracion",
     icon: Settings,
-    adminOnly: false,
+    adminOnly: true,
   },
 ];
+
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: string[];
+  readonly userChoice: Promise<{
+    outcome: "accepted" | "dismissed";
+    platform: string;
+  }>;
+  prompt(): Promise<void>;
+}
+
+const isRunningStandalone = () => {
+  if (typeof window === "undefined") return false;
+
+  const navigatorWithStandalone = navigator as Navigator & {
+    standalone?: boolean;
+  };
+
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    navigatorWithStandalone.standalone === true
+  );
+};
 
 interface SidebarProps {
   branding: ConfiguracionPOS;
@@ -261,6 +284,8 @@ export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
 
         {/* FOOTER / LOGOUT */}
         <div className="p-4 border-t border-border bg-muted/10 flex flex-col gap-4">
+          <InstallAppButton isCollapsed={isCollapsed} />
+
           <form action={logoutAction}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -304,5 +329,81 @@ export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
         </div>
       </aside>
     </TooltipProvider>
+  );
+}
+
+function InstallAppButton({ isCollapsed }: Readonly<{ isCollapsed: boolean }>) {
+  const [installPrompt, setInstallPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [isStandalone, setIsStandalone] = useState(isRunningStandalone);
+
+  useEffect(() => {
+    const standaloneQuery = window.matchMedia("(display-mode: standalone)");
+
+    const syncStandaloneState = () => {
+      setIsStandalone(isRunningStandalone());
+    };
+
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+
+      if (!isRunningStandalone()) {
+        setInstallPrompt(event as BeforeInstallPromptEvent);
+      }
+    };
+
+    const handleAppInstalled = () => {
+      setInstallPrompt(null);
+      setIsStandalone(true);
+    };
+
+    syncStandaloneState();
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+    standaloneQuery.addEventListener("change", syncStandaloneState);
+
+    return () => {
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt,
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+      standaloneQuery.removeEventListener("change", syncStandaloneState);
+    };
+  }, []);
+
+  const handleInstall = async () => {
+    if (!installPrompt || isStandalone) return;
+
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+    setIsStandalone(isRunningStandalone());
+  };
+
+  if (isStandalone || !installPrompt) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={handleInstall}
+          className={`flex items-center text-muted-foreground rounded-xl hover:bg-muted hover:text-foreground transition-colors cursor-pointer font-semibold ${
+            isCollapsed
+              ? "justify-center h-12 w-12 mx-auto"
+              : "w-full gap-3 px-3.5 py-3"
+          }`}
+        >
+          <Download className="w-[18px] h-[18px] shrink-0" />
+          {!isCollapsed && <span>Instalar app</span>}
+        </button>
+      </TooltipTrigger>
+      {isCollapsed && (
+        <TooltipContent side="right" className="font-semibold">
+          Instalar app
+        </TooltipContent>
+      )}
+    </Tooltip>
   );
 }

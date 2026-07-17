@@ -85,7 +85,7 @@ export function CatalogPanel({ config }: Readonly<CatalogPanelProps>) {
         <Button
           onClick={handleSave}
           disabled={isSaving}
-          className="bg-primary hover:bg-primary/90 text-white shadow-none w-full sm:w-auto"
+          className="w-full sm:w-auto"
         >
           {isSaving ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />

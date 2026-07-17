@@ -129,7 +129,6 @@ export function EditClientModal({
               <Button
                 type="submit"
                 disabled={isPending}
-                className="bg-blue-600 text-white hover:bg-blue-700"
               >
                 {isPending ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />

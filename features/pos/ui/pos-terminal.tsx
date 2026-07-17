@@ -18,6 +18,7 @@ interface PosTerminalProps {
     nombre: string;
     slug?: string | null;
   }>;
+  permitirVentaSinStock?: boolean;
 }
 
 interface VarianteDisponible {
@@ -50,6 +51,7 @@ const getStockTotal = (producto: Producto) => {
 export function PosTerminal({
   productos,
   categorias,
+  permitirVentaSinStock = false,
 }: Readonly<PosTerminalProps>) {
   const [searchQuery, setSearchQuery] = useState("");
   const [tipo, setTipo] = useState("todos");
@@ -139,7 +141,9 @@ export function PosTerminal({
       );
     }
 
-    const variantesParaVender = variantesArray.filter((v) => v.cantidad > 0);
+    const variantesParaVender = permitirVentaSinStock
+      ? variantesArray
+      : variantesArray.filter((v) => v.cantidad > 0);
 
     if (variantesParaVender.length === 0) {
       toast.error("Producto agotado.");
@@ -232,14 +236,16 @@ export function PosTerminal({
                 const primeraImagen = imagenes[0] || null;
 
                 const stockTotal = getStockTotal(producto);
+                const sinStock = stockTotal <= 0;
+                const bloqueado = sinStock && !permitirVentaSinStock;
 
                 return (
                   <button
                     key={producto.id}
                     onClick={() => handleProductClick(producto)}
-                    disabled={stockTotal <= 0}
+                    disabled={bloqueado}
                     className={`flex flex-col text-left rounded-xl border transition-all overflow-hidden cursor-pointer ${
-                      stockTotal > 0
+                      !bloqueado
                         ? "border-border hover:border-foreground/50 active:scale-95"
                         : "border-border/40 opacity-50"
                     }`}
@@ -258,7 +264,7 @@ export function PosTerminal({
                           <ShoppingBag className="w-8 h-8 text-muted-foreground/30" />
                         </div>
                       )}
-                      {stockTotal <= 0 && (
+                      {sinStock && (
                         <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center">
                           <span className="bg-white px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest text-rose-600 border border-rose-100">
                             Agotado
@@ -286,6 +292,7 @@ export function PosTerminal({
         producto={selectedProduct}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        permitirVentaSinStock={permitirVentaSinStock}
       />
     </div>
   );
