@@ -62,18 +62,31 @@ export async function anularVentaAction(
       turnoDevolucionId = turnoId;
     }
 
-    const { error: updateVentaError } = await supabase
+    const { data: ventaAnulada, error: updateVentaError } = await supabase
       .from("ventas")
       .update({
         estado_operacion: "ANULADA",
         estado_pago: "ANULADA",
       })
-      .eq("id", ventaId);
+      .eq("id", ventaId)
+      .select("id")
+      .maybeSingle();
 
     if (updateVentaError) {
       console.error(updateVentaError);
       return {
         error: "Error de BD al intentar anular la venta.",
+        success: false,
+      };
+    }
+
+    // RLS (ventas_update_propia_o_admin) exige ser dueño de la venta o
+    // tener ventas.ver_todas, Y tener ventas.anular. Si el UPDATE de
+    // arriba afectó 0 filas, esa policy lo bloqueó — cortamos ACÁ, antes
+    // de generar cualquier efecto secundario (egreso, stock, cta. cte.).
+    if (!ventaAnulada) {
+      return {
+        error: "No tenés permiso para anular esta venta.",
         success: false,
       };
     }

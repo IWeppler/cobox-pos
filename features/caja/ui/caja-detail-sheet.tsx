@@ -244,8 +244,8 @@ export function CajaDetailSheet({
                     Diferencia de Efectivo
                   </p>
                   {diferencia === 0 ? (
-                    <span className="text-xl font-semibold text-accent-indigo">
-                      Caja Cuadrada
+                    <span className="text-xl font-semibold text-emerald-700 dark:text-emerald-400">
+                      Caja OK
                     </span>
                   ) : diferencia < 0 ? (
                     <span className="text-xl font-semibold text-rose-600">

@@ -15,7 +15,8 @@ export default async function VentasPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 2. Obtener su rol de la tabla perfiles
+  // 2. Obtener su rol de la tabla perfiles (queda como está — todavía
+  // gatea el orden "Mayor ganancia neta", fuera del alcance de este cableado)
   let userRole = "VENDEDOR";
   if (user) {
     const { data: perfil } = await supabase
@@ -26,9 +27,16 @@ export default async function VentasPage() {
     if (perfil) userRole = perfil.rol;
   }
 
+  const [puedeAnularRes, puedeVerTodasRes] = await Promise.all([
+    supabase.rpc("tiene_permiso", { clave: "ventas.anular" }),
+    supabase.rpc("tiene_permiso", { clave: "ventas.ver_todas" }),
+  ]);
+  const puedeAnular = Boolean(puedeAnularRes.data);
+  const puedeVerTodas = Boolean(puedeVerTodasRes.data);
+
   // 3. Cargar las ventas y los productos
   const [ventasResponse, productosResponse] = await Promise.all([
-    getVentasAction(),
+    getVentasAction({ soloPropias: !puedeVerTodas }),
     getStockAction(),
   ]);
 
@@ -47,6 +55,7 @@ export default async function VentasPage() {
           ventas={ventas || []}
           productos={productos || []}
           userRole={userRole}
+          puedeAnular={puedeAnular}
         />
       )}
     </div>

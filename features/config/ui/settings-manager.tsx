@@ -1,7 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ConfiguracionPOS } from "@/entities/config/types";
+import type {
+  Permiso,
+  PerfilConRol,
+  Rol,
+  RolPermiso,
+} from "@/entities/roles/types";
 import {
   Store,
   Globe,
@@ -29,6 +35,7 @@ import { CatalogPanel } from "@/features/catalog/ui/catalog-panel";
 import { CategoriesPanel } from "@/features/categories/ui/categories-panel";
 import { ClientsPanel } from "@/features/clients/ui/clients-panel";
 import { CajaConfigPanel } from "@/features/clients/ui/caja-panel";
+import { EmpleadosPanel } from "./empleados-panel";
 
 const SECTIONS = [
   {
@@ -98,6 +105,11 @@ interface SettingsManagerProps {
   promociones: any[];
   pagos: any[];
   categorias?: any[];
+  isAdmin: boolean;
+  empleados: PerfilConRol[];
+  roles: Rol[];
+  permisos: Permiso[];
+  rolPermisos: RolPermiso[];
 }
 
 export function SettingsManager({
@@ -105,8 +117,21 @@ export function SettingsManager({
   promociones,
   pagos,
   categorias,
+  isAdmin,
+  empleados,
+  roles,
+  permisos,
+  rolPermisos,
 }: Readonly<SettingsManagerProps>) {
   const [activeSection, setActiveSection] = useState("comercio");
+
+  // Ocultamos el tab de Empleados y Permisos para no-admins en vez de
+  // solo bloquear su contenido — evita el "click y me topo con acceso
+  // restringido" cuando ni siquiera debería aparecer en el menú.
+  const visibleSections = useMemo(
+    () => SECTIONS.filter((s) => s.id !== "empleados" || isAdmin),
+    [isAdmin],
+  );
 
   const renderPanel = () => {
     switch (activeSection) {
@@ -126,6 +151,16 @@ export function SettingsManager({
         return <ClientsPanel config={config} />;
       case "caja":
         return <CajaConfigPanel config={config} />;
+      case "empleados":
+        return (
+          <EmpleadosPanel
+            isAdmin={isAdmin}
+            empleados={empleados}
+            roles={roles}
+            permisos={permisos}
+            rolPermisos={rolPermisos}
+          />
+        );
       default:
         return (
           <div className="bg-card text-card-foreground p-6 rounded-2xl border border-border flex flex-col items-center justify-center py-24 text-center">
@@ -150,7 +185,7 @@ export function SettingsManager({
               <SelectValue placeholder="Seleccionar sección" />
             </SelectTrigger>
             <SelectContent className="rounded-xl">
-              {SECTIONS.map((section) => (
+              {visibleSections.map((section) => (
                 <SelectItem key={section.id} value={section.id}>
                   <div className="flex items-center gap-2">
                     <section.icon className="w-4 h-4 text-muted-foreground" />
@@ -164,7 +199,7 @@ export function SettingsManager({
 
         {/* Menú Lateral Desktop */}
         <nav className="hidden md:flex flex-col gap-1.5 sticky top-24">
-          {SECTIONS.map((section) => {
+          {visibleSections.map((section) => {
             const isActive = activeSection === section.id;
             const Icon = section.icon;
 

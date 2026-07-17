@@ -13,3 +13,55 @@ export type BajaAprobadaReporte = {
   perfiles?: { nombre?: string | null } | null;
 };
 
+// ============================================================
+// Reporte de Vendedores (features/reports/actions/get-reporte-vendedores.ts)
+// ============================================================
+
+export interface VendedorResumen {
+  vendedorId: string;
+  nombre: string;
+  totalVendido: number;
+  cantidadVentas: number;
+  ticketPromedio: number;
+  cantidadAnuladas: number;
+}
+
+export interface VentaPorDiaVendedor {
+  vendedorId: string;
+  fecha: string; // yyyy-mm-dd
+  total: number;
+}
+
+export interface DesgloseMetodoVendedor {
+  vendedorId: string;
+  metodo: string;
+  monto: number;
+}
+
+export interface ProductoTopVendedor {
+  productoId: string;
+  nombre: string;
+  cantidad: number;
+  totalFacturado: number;
+}
+
+export interface VentaAnuladaVendedor {
+  id: string;
+  fecha: string;
+  producto: string;
+  monto: number;
+}
+
+export interface ReporteVendedoresData {
+  resumen: VendedorResumen[];
+  ventasPorDia: VentaPorDiaVendedor[];
+  desglosePorMetodo: DesgloseMetodoVendedor[];
+  porVendedor: Record<
+    string,
+    {
+      topProductos: ProductoTopVendedor[];
+      anuladas: VentaAnuladaVendedor[];
+    }
+  >;
+}
+

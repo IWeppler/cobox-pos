@@ -3,13 +3,13 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 
-export async function getVentasAction() {
+export async function getVentasAction(opts?: { soloPropias?: boolean }) {
   try {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     // Incluimos los nuevos campos de resumen y el array de venta_pagos
-    const { data, error } = await supabase
+    let query = supabase
       .from("ventas")
       .select(
         `
@@ -57,6 +57,15 @@ export async function getVentasAction() {
       `,
       )
       .order("fecha_venta", { ascending: false });
+
+    if (opts?.soloPropias) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) query = query.eq("vendedor_id", user.id);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching ventas:", error);

@@ -29,6 +29,11 @@ export default async function CajaPage() {
 
   const userRole = perfil?.rol || "VENDEDOR";
 
+  const { data: puedeCerrarAjenaRaw } = await supabase.rpc("tiene_permiso", {
+    clave: "caja.cerrar_ajena",
+  });
+  const puedeCerrarAjena = Boolean(puedeCerrarAjenaRaw);
+
   // 2. Traer configuración operativa
   const { data: config } = await supabase
     .from("configuracion_pos")
@@ -44,8 +49,8 @@ export default async function CajaPage() {
     .order("fecha_apertura", { ascending: false })
     .limit(30);
 
-  // Si es Vendedor y opera por usuario, solo ve sus propias cajas pasadas
-  if (userRole !== "ADMIN" && modoCaja === "POR_USUARIO") {
+  // Si no tiene caja.cerrar_ajena y opera por usuario, solo ve sus propias cajas pasadas
+  if (!puedeCerrarAjena && modoCaja === "POR_USUARIO") {
     historialQuery = historialQuery.eq("vendedor_id", user.id);
   }
 

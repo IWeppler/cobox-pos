@@ -17,6 +17,7 @@ import {
   DropletOff,
   Package,
   ShoppingCart,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import { BajasTab } from "@/features/reports/ui/bajas-tab";
@@ -26,6 +27,7 @@ import { ResumenTab } from "@/features/reports/ui/resumen-tab";
 import { BajaAprobadaReporte } from "@/entities/reportes/types";
 import { VentasTab } from "@/features/reports/ui/ventas-tab";
 import { CrmTab } from "@/features/reports/ui/crm-tab";
+import { VendedoresTab } from "@/features/reports/ui/vendedores-tab";
 import { Venta } from "@/entities/ventas/types";
 import { ConfiguracionPOS } from "@/entities/config/types";
 
@@ -45,6 +47,11 @@ export default async function ReportesPage({
 
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
+
+  const { data: puedeVerVendedoresRaw } = await supabase.rpc("tiene_permiso", {
+    clave: "reportes.ver_todos_empleados",
+  });
+  const puedeVerVendedores = Boolean(puedeVerVendedoresRaw);
 
   const [
     ventasResponse,
@@ -147,6 +154,17 @@ export default async function ReportesPage({
   const costoMercaderiaVendida = metrics.ingresos - metrics.gananciaBrutaVentas;
   const insights = getAdvisorInsights(metrics);
 
+  // yyyy-mm-dd en horario local, mismo criterio que ReportesFilterbar usa
+  // para no desfasar por UTC.
+  const formatLocal = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+  const desdeVendedores = formatLocal(startDate);
+  const hastaVendedores = formatLocal(endDate);
+
   return (
     <div className="flex flex-col gap-4 px-4 p-2">
       <AdvisorBanner insights={insights} />
@@ -191,6 +209,14 @@ export default async function ReportesPage({
               >
                 <Users className="w-4 h-4 mr-2" /> CRM & Cobranza
               </TabsTrigger>
+              {puedeVerVendedores && (
+                <TabsTrigger
+                  value="vendedores"
+                  className="rounded-sm px-2 data-[state=active]:bg-background data-[state=active]:border-border data-[state=active]:text-foreground  cursor-pointer transition-colors"
+                >
+                  <TrendingUp className="w-4 h-4 mr-2" /> Vendedores
+                </TabsTrigger>
+              )}
             </TabsList>
             <ScrollBar orientation="horizontal" className="invisible" />
           </ScrollArea>
@@ -224,6 +250,12 @@ export default async function ReportesPage({
           clientes={clientes}
           plazoMora={plazoMora}
           diasInactivo={diasInactivo}
+        />
+
+        <VendedoresTab
+          puedeVer={puedeVerVendedores}
+          desde={desdeVendedores}
+          hasta={hastaVendedores}
         />
       </Tabs>
     </div>

@@ -32,11 +32,13 @@ interface VentasTableProps {
   ventas: Venta[];
   productos: Producto[];
   userRole: string;
+  puedeAnular: boolean;
 }
 
 export function VentasTable({
   ventas = [],
   userRole,
+  puedeAnular,
 }: Readonly<VentasTableProps>) {
   const [filtroNombre, setFiltroNombre] = useState("");
   const [orden, setOrden] = useState("recientes");
@@ -373,7 +375,7 @@ export function VentasTable({
                                 <Eye className="w-4.5 h-4.5" />
                               </Button>
 
-                              {isAdmin && !isAnulada && (
+                              {puedeAnular && !isAnulada && (
                                 <AnularVentaModal
                                   id={venta.id}
                                   productoNombre={
@@ -519,7 +521,7 @@ export function VentasTable({
                         >
                           <Eye className="w-4 h-4 text-muted-foreground" />
                         </Button>
-                        {isAdmin && !isAnulada && (
+                        {puedeAnular && !isAnulada && (
                           <div className="[&>button]:h-8 [&>button]:w-8 [&>button]:rounded-lg [&>button]:border [&>button]:border-transparent [&>button:hover]:border-rose-200">
                             <AnularVentaModal
                               id={venta.id}
