@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { CreateSalePaymentInput } from "@/entities/ventas/types";
 import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
+import { calcularFechaVencimiento } from "@/features/clients/lib/calcular-fecha-vencimiento";
 
 export async function registrarVentaAction(
   prevState: { error: string | null; success: boolean },
@@ -413,7 +414,7 @@ export async function registrarVentaAction(
   const { data: nuevaVenta, error: ventaError } = await supabase
     .from("ventas")
     .insert(payloadVentas)
-    .select("id")
+    .select("id, fecha_venta")
     .single();
   if (ventaError || !nuevaVenta)
     return { error: `Fallo en BD: ${ventaError.message}`, success: false };
@@ -432,18 +433,28 @@ export async function registrarVentaAction(
       });
     if (ccError) console.error("Error al registrar deuda en CC:", ccError);
 
-    const { data: clienteActual } = await supabase
-      .from("clientes")
-      .select("saldo_pendiente")
-      .eq("id", clienteId)
-      .single();
+    const [{ data: clienteActual }, { data: configPos }] = await Promise.all([
+      supabase
+        .from("clientes")
+        .select("saldo_pendiente")
+        .eq("id", clienteId)
+        .single(),
+      supabase.from("configuracion_pos").select("cc_plazo_mora").single(),
+    ]);
 
     if (clienteActual) {
+      const plazoMora = configPos?.cc_plazo_mora ?? 30;
+      const fechaVencimientoDeuda = calcularFechaVencimiento(
+        nuevaVenta.fecha_venta,
+        plazoMora,
+      );
+
       await supabase
         .from("clientes")
         .update({
           saldo_pendiente:
             Number(clienteActual.saldo_pendiente || 0) + montoPendiente,
+          fecha_vencimiento_deuda: fechaVencimientoDeuda,
         })
         .eq("id", clienteId);
     }

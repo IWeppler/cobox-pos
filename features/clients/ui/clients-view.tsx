@@ -35,7 +35,7 @@ import { ImportClientsCsvModal } from "./import-clients-csv-modal";
 import { calcularDiasVencido } from "../lib/calcular-dias-vencido";
 
 type SortConfig = {
-  key: "nombre" | "deuda" | "ltv";
+  key: "nombre" | "deuda" | "ltv" | "vencimiento";
   direction: "asc" | "desc";
 };
 const CLIENTS_PER_PAGE = 10;
@@ -144,6 +144,18 @@ export function ClientsView({
         return sortConfig.direction === "asc"
           ? a.totalComprado - b.totalComprado
           : b.totalComprado - a.totalComprado;
+      }
+
+      if (sortConfig.key === "vencimiento") {
+        // Clientes sin fecha_vencimiento_deuda (diasVencido null) van
+        // siempre al final, sin importar la dirección — no hay "antes" o
+        // "después" que asignarles frente a una fecha real.
+        if (a.diasVencido === null && b.diasVencido === null) return 0;
+        if (a.diasVencido === null) return 1;
+        if (b.diasVencido === null) return -1;
+        return sortConfig.direction === "asc"
+          ? a.diasVencido - b.diasVencido
+          : b.diasVencido - a.diasVencido;
       }
 
       const deudaA = Number(a.saldo_pendiente);
@@ -356,8 +368,13 @@ export function ClientsView({
                     Deuda Actual {renderSortIcon("deuda")}
                   </div>
                 </th>
-                <th className="px-5 py-4 hidden lg:table-cell">
-                  Fecha de vencimiento
+                <th
+                  className="px-5 py-4 hidden lg:table-cell"
+                  onClick={() => handleSort("vencimiento")}
+                >
+                  <div className="flex items-center gap-1.5">
+                    Fecha de vencimiento {renderSortIcon("vencimiento")}
+                  </div>
                 </th>
                 <th className="px-5 py-4 text-right">Acciones</th>
               </tr>
