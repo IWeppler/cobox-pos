@@ -23,6 +23,7 @@ import {
   BookmarkCheck,
 } from "lucide-react";
 import { getClienteDetalleAction } from "../actions/manage-clients";
+import { calcularDiasVencido } from "../lib/calcular-dias-vencido";
 import { RegisterPaymentModal } from "./register-payment-modal";
 import { Cliente, CuentaCorrienteMovimiento } from "@/entities/clientes/type";
 import { MetodoPagoPOS } from "@/shared/components/cart-sidebar/types";
@@ -122,21 +123,8 @@ export function ClientDetailSheet({
   if (!cliente) return null;
   const saldo = Number(cliente.saldo_pendiente || 0);
 
-  // Aritmética en UTC de punta a punta: fecha_vencimiento_deuda es una
-  // fecha calendario pura (columna `date`, sin hora), no un instante — si
-  // se mezclara con Date.now() en hora local se corre un día según el
-  // huso horario del navegador.
   const fechaVencimiento = cliente.fecha_vencimiento_deuda ?? null;
-  let diasVencido: number | null = null;
-  if (fechaVencimiento) {
-    const [anioVenc, mesVenc, diaVenc] = fechaVencimiento
-      .split("-")
-      .map(Number);
-    const vencUTC = Date.UTC(anioVenc, mesVenc - 1, diaVenc);
-    const hoy = new Date();
-    const hoyUTC = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-    diasVencido = Math.floor((hoyUTC - vencUTC) / 86400000);
-  }
+  const diasVencido = calcularDiasVencido(fechaVencimiento);
   const mostrarAlertaVencimiento =
     diasVencido !== null && diasVencido > 0 && saldo > 0;
   const fechaVencimientoFormateada = fechaVencimiento

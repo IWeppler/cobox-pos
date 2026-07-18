@@ -15,6 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
+import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
@@ -31,6 +32,7 @@ import { AdjustClientBalanceModal } from "./adjust-client-balance-modal";
 import { ClientDetailSheet } from "./client-detail-sheet";
 import { EditClientModal } from "./edit-client-modal";
 import { ImportClientsCsvModal } from "./import-clients-csv-modal";
+import { calcularDiasVencido } from "../lib/calcular-dias-vencido";
 
 type SortConfig = {
   key: "nombre" | "deuda" | "ltv";
@@ -40,7 +42,6 @@ const CLIENTS_PER_PAGE = 10;
 
 type ClienteVentaResumen = {
   total?: number | string | null;
-  fecha_venta?: string | null;
 };
 
 type ClienteConVentas = Cliente & {
@@ -50,7 +51,9 @@ type ClienteConVentas = Cliente & {
 type ClienteMapeado = ClienteConVentas & {
   cantidadVentas: number;
   totalComprado: number;
-  ultimaCompra: string | null;
+  fechaVencimientoFormateada: string | null;
+  diasVencido: number | null;
+  mostrarAlertaVencimiento: boolean;
 };
 
 interface ClientsViewProps {
@@ -92,18 +95,27 @@ export function ClientsView({
         (total, venta) => total + Number(venta.total || 0),
         0,
       );
-      const ultimaCompra =
-        ventas
-          .map((venta) => venta.fecha_venta)
-          .filter((fecha): fecha is string => Boolean(fecha))
-          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ||
-        null;
+      const fechaVencimiento = cliente.fecha_vencimiento_deuda ?? null;
+      const diasVencido = calcularDiasVencido(fechaVencimiento);
+      const saldo = Number(cliente.saldo_pendiente || 0);
+      const mostrarAlertaVencimiento =
+        diasVencido !== null && diasVencido > 0 && saldo > 0;
+      const fechaVencimientoFormateada = fechaVencimiento
+        ? new Intl.DateTimeFormat("es-AR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            timeZone: "UTC",
+          }).format(new Date(fechaVencimiento))
+        : null;
 
       return {
         ...cliente,
         cantidadVentas: ventas.length,
         totalComprado,
-        ultimaCompra,
+        fechaVencimientoFormateada,
+        diasVencido,
+        mostrarAlertaVencimiento,
       };
     });
   }, [clientes]);
@@ -345,7 +357,7 @@ export function ClientsView({
                   </div>
                 </th>
                 <th className="px-5 py-4 hidden lg:table-cell">
-                  Ultima compra
+                  Fecha de vencimiento
                 </th>
                 <th className="px-5 py-4 text-right">Acciones</th>
               </tr>
@@ -430,15 +442,20 @@ export function ClientsView({
                       </td>
 
                       <td className="px-5 py-4 hidden lg:table-cell">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {cliente.ultimaCompra
-                            ? new Intl.DateTimeFormat("es-AR", {
-                                day: "2-digit",
-                                month: "2-digit",
-                                year: "numeric",
-                              }).format(new Date(cliente.ultimaCompra))
-                            : "Sin compras"}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {cliente.fechaVencimientoFormateada ?? "—"}
+                          </span>
+                          {cliente.mostrarAlertaVencimiento && (
+                            <Badge
+                              variant="outline"
+                              className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] uppercase font-bold tracking-wider w-fit"
+                            >
+                              Vencido hace {cliente.diasVencido} día
+                              {cliente.diasVencido === 1 ? "" : "s"}
+                            </Badge>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-5 py-4 text-right">

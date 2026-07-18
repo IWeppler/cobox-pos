@@ -6,6 +6,7 @@ import {
   UploadCloud,
   CheckCircle2,
   Loader2,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -19,6 +20,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { importarClientesCSVAction } from "../actions/manage-clients";
+import { decodeCsvBuffer } from "../lib/decode-csv-file";
 
 interface ImportClientsCsvModalProps {
   open: boolean;
@@ -53,9 +55,11 @@ export function ImportClientsCsvModal({
     }
 
     try {
-      // 🚀 FIX: Leemos el texto plano aquí en el navegador para asegurar que
-      // la información no se pierda al viajar al Server Action de Next.js
-      const text = await file.text();
+      // Leemos como bytes crudos (no file.text(), que fuerza UTF-8 y
+      // convierte silenciosamente cualquier Ñ/tilde en un CSV
+      // windows-1252 en el caracter de reemplazo U+FFFD, irrecuperable).
+      const buffer = await file.arrayBuffer();
+      const text = decodeCsvBuffer(buffer);
 
       const formData = new FormData();
       formData.append("csv_text", text);
@@ -96,6 +100,15 @@ export function ImportClientsCsvModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5 pt-4">
+          <a
+            href="/plantilla-clientes.csv"
+            download
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:underline w-fit"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Descargar plantilla
+          </a>
+
           <div className="bg-muted/30 border border-border p-4 rounded-xl">
             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">
               Formato esperado (Columnas)
@@ -117,7 +130,7 @@ export function ImportClientsCsvModal({
               className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
                 fileName
                   ? "border-emerald-500 bg-background"
-                  : "border-border bg-muted/30 hover:bg-emerald-50 hover:border-emerald-200"
+                  : "border-border bg-muted/30 hover:bg-emerald-50 dark:bg-emerald-300/10 hover:border-emerald-200"
               }`}
             >
               <div className="flex flex-col items-center justify-center text-center px-4">

@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { parseClientesCSV } from "@/features/clients/lib/parse-clientes-csv";
 
 interface ClientActionState {
   error: string | null;
@@ -19,7 +20,7 @@ export async function getClientesAction() {
     .select(
       `
       *,
-      ventas ( id, total, fecha_venta )
+      ventas ( id, total )
     `,
     )
     .order("nombre", { ascending: true });
@@ -325,40 +326,6 @@ export async function ajustarSaldoAction(
   return { error: null, success: true };
 }
 
-/**
- * Parsea una fecha en formato DD/MM/YYYY (o DD-MM-YYYY) — la convención
- * que usa el resto del sistema (formatearFechaHora, "Última compra" en
- * clients-view.tsx) — a ISO "YYYY-MM-DD" para guardar en una columna
- * `date`. Devuelve null ante cualquier formato no reconocido en vez de
- * lanzar: mismo criterio de tolerancia que ya usa el resto del parser de
- * CSV (una columna opcional mal cargada no aborta la fila).
- */
-function parseFechaDDMMYYYY(raw: string): string | null {
-  const limpio = raw?.trim().replace(/^["']|["']$/g, "");
-  if (!limpio) return null;
-
-  const match = limpio.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (!match) return null;
-
-  const dia = Number(match[1]);
-  const mes = Number(match[2]);
-  const anio = Number(match[3]);
-  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
-
-  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
-  // Rechaza fechas "desbordadas" que Date normaliza en vez de rechazar
-  // (ej. 31/02/2026 -> 03/03/2026).
-  if (
-    fecha.getUTCFullYear() !== anio ||
-    fecha.getUTCMonth() !== mes - 1 ||
-    fecha.getUTCDate() !== dia
-  ) {
-    return null;
-  }
-
-  return `${anio}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-}
-
 // 7. IMPORTACIÓN MASIVA DESDE CSV
 export async function importarClientesCSVAction(formData: FormData) {
   try {
@@ -375,60 +342,10 @@ export async function importarClientesCSVAction(formData: FormData) {
       text = await file.text();
     }
 
-    // 1. Limpiar marcas de formato raras (\uFEFF) y quitar líneas vacías
-    const cleanText = text.replace(/^\uFEFF/, "");
-    const lines = cleanText.split(/\r?\n/).filter((line) => line.trim() !== "");
-
-    if (lines.length < 2)
-      return {
-        error: "El archivo está vacío o no tiene el formato válido.",
-        success: false,
-      };
-
-    // 2. 🚀 Búsqueda inteligente de Cabeceras
-    // Ignoramos filas vacías al inicio y buscamos dónde arranca la palabra 'nombre'
-    let headerIdx = -1;
-    let separator = ",";
-
-    for (let i = 0; i < lines.length; i++) {
-      const lowerLine = lines[i].toLowerCase();
-      if (lowerLine.includes("nombre")) {
-        headerIdx = i;
-        // Detectar si Google Sheets exportó con coma o punto y coma
-        separator = lines[i].includes(";") ? ";" : ",";
-        break;
-      }
+    const parsed = parseClientesCSV(text);
+    if (parsed.error) {
+      return { error: parsed.error, success: false };
     }
-
-    if (headerIdx === -1) {
-      return {
-        error: "No se encontró la columna 'nombre' en el archivo.",
-        success: false,
-      };
-    }
-
-    const rows = lines.slice(headerIdx).map((line) => line.split(separator));
-    const headers = rows[0].map((h) =>
-      h
-        .trim()
-        .toLowerCase()
-        .replace(/^["']|["']$/g, ""),
-    );
-
-    // Tolerancia a nombres similares de columnas
-    const idxNombre = headers.findIndex(
-      (h) => h === "nombre" || h === "cliente",
-    );
-    const idxTel = headers.findIndex(
-      (h) => h === "telefono" || h === "telefono" || h === "tel",
-    );
-    const idxDni = headers.findIndex((h) => h === "dni" || h === "documento");
-    const idxDeuda = headers.findIndex(
-      (h) => h === "deuda_inicial" || h === "deuda" || h === "saldo",
-    );
-    const idxVencimiento = headers.findIndex(
-      (h) => h === "fecha_vencimiento_deuda" || h === "vencimiento",
-    );
 
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
@@ -438,39 +355,16 @@ export async function importarClientesCSVAction(formData: FormData) {
 
     let importados = 0;
 
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.length <= idxNombre || !row[idxNombre]) continue;
-
-      const nombre = row[idxNombre]?.trim().replace(/^["']|["']$/g, "");
-      if (!nombre) continue;
-
-      const whatsapp =
-        idxTel !== -1 ? row[idxTel]?.trim().replace(/^["']|["']$/g, "") : "";
-      const dni =
-        idxDni !== -1 ? row[idxDni]?.trim().replace(/^["']|["']$/g, "") : null;
-
-      // 🚀 Limpieza exhaustiva de números de deuda (por si trae comillas o signos pesos)
-      let deudaInicial = 0;
-      if (idxDeuda !== -1 && row[idxDeuda]) {
-        const rawDeuda = row[idxDeuda]
-          .replace(/^["']|["']$/g, "")
-          .replace(/[^0-9,-]+/g, "")
-          .replace(",", ".");
-        deudaInicial = parseFloat(rawDeuda) || 0;
-      }
-
-      const fechaVencimientoDeuda =
-        idxVencimiento !== -1 && row[idxVencimiento]
-          ? parseFechaDDMMYYYY(row[idxVencimiento])
-          : null;
+    for (const candidato of parsed.clientes) {
+      const { nombre, telefono, dni, deudaInicial, fechaVencimientoDeuda } =
+        candidato;
 
       // Insertamos el cliente
       const { data: nuevoCliente, error: errCli } = await supabase
         .from("clientes")
         .insert({
           nombre,
-          telefono: whatsapp,
+          telefono,
           dni: dni || null,
           saldo_pendiente: deudaInicial > 0 ? deudaInicial : 0,
           activo: true,
@@ -500,16 +394,18 @@ export async function importarClientesCSVAction(formData: FormData) {
         }
       }
 
-      // 🚀 FIX: Solo incrementamos si llegamos hasta aquí (éxito real)
       importados++;
     }
 
     revalidatePath("/clientes");
 
-    if (importados === 0 && rows.length > 1) {
+    if (importados === 0 && parsed.totalFilas > 0) {
+      const debug = parsed.debug;
+      console.error(
+        `[importarClientesCSVAction] 0 importados. separator=${JSON.stringify(debug?.separator)} idxNombre=${debug?.idxNombre} headers=${JSON.stringify(debug?.headers)} primeras líneas crudas: ${debug?.headerPreview}`,
+      );
       return {
-        error:
-          "No se importó ningún cliente. Revisa el registro de errores en la consola (ej. DNI duplicados o campos faltantes).",
+        error: `No se importó ningún cliente. Revisa el registro de errores en la consola (ej. DNI duplicados o campos faltantes). Separador detectado: ${JSON.stringify(debug?.separator)}. Primeras líneas: ${debug?.headerPreview}`,
         success: false,
         count: 0,
       };
