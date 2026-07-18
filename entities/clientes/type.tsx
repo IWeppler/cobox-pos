@@ -9,6 +9,7 @@ export interface Cliente {
   saldo_pendiente: number;
   reglas_credito: Record<string, any>;
   exceptuado_entrega_minima: boolean;
+  fecha_vencimiento_deuda?: string | null;
   creado_en: string;
 }
 

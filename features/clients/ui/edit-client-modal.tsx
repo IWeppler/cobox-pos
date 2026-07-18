@@ -95,6 +95,22 @@ export function EditClientModal({
             </div>
 
             <div className="space-y-2">
+              <Label
+                htmlFor="edit-fecha-vencimiento-deuda"
+                className="text-xs font-bold"
+              >
+                Fecha de vencimiento de deuda (Opcional)
+              </Label>
+              <Input
+                id="edit-fecha-vencimiento-deuda"
+                name="fecha_vencimiento_deuda"
+                type="date"
+                defaultValue={cliente.fecha_vencimiento_deuda || ""}
+                className="h-10 shadow-none"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="edit-email" className="text-xs font-bold">
                 Correo (Opcional)
               </Label>

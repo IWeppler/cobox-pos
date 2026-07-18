@@ -74,17 +74,34 @@ export function CreateClientDialog({
           </div>
 
           {includeDni ? (
-            <div className="space-y-2">
-              <Label htmlFor="dni" className="text-sm font-medium">
-                DNI / CUIT
-              </Label>
-              <Input
-                id="dni"
-                name="dni"
-                placeholder="Opcional"
-                className="h-11 shadow-none"
-              />
-            </div>
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="dni" className="text-sm font-medium">
+                  DNI / CUIT
+                </Label>
+                <Input
+                  id="dni"
+                  name="dni"
+                  placeholder="Opcional"
+                  className="h-11 shadow-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label
+                  htmlFor="fecha_vencimiento_deuda"
+                  className="text-sm font-medium"
+                >
+                  Fecha de vencimiento de deuda (Opcional)
+                </Label>
+                <Input
+                  id="fecha_vencimiento_deuda"
+                  name="fecha_vencimiento_deuda"
+                  type="date"
+                  className="h-11 shadow-none"
+                />
+              </div>
+            </>
           ) : null}
 
           <div className="space-y-2">

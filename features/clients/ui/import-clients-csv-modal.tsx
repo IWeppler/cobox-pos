@@ -101,12 +101,13 @@ export function ImportClientsCsvModal({
               Formato esperado (Columnas)
             </Label>
             <code className="text-xs bg-background border border-border px-2 py-1 rounded block mb-1">
-              nombre, telefono, dni, deuda_inicial
+              nombre, telefono, dni, deuda_inicial, vencimiento
             </code>
             <p className="text-[10px] text-muted-foreground mt-2">
               Nota: Si incluyes la columna &quot;deuda_inicial&quot;, el sistema
               creará automáticamente un registro de deuda en la cuenta corriente
-              del cliente.
+              del cliente. La columna &quot;vencimiento&quot; (formato DD/MM/AAAA)
+              es opcional.
             </p>
           </div>
 

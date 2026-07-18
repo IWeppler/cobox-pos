@@ -121,6 +121,32 @@ export function ClientDetailSheet({
 
   if (!cliente) return null;
   const saldo = Number(cliente.saldo_pendiente || 0);
+
+  // Aritmética en UTC de punta a punta: fecha_vencimiento_deuda es una
+  // fecha calendario pura (columna `date`, sin hora), no un instante — si
+  // se mezclara con Date.now() en hora local se corre un día según el
+  // huso horario del navegador.
+  const fechaVencimiento = cliente.fecha_vencimiento_deuda ?? null;
+  let diasVencido: number | null = null;
+  if (fechaVencimiento) {
+    const [anioVenc, mesVenc, diaVenc] = fechaVencimiento
+      .split("-")
+      .map(Number);
+    const vencUTC = Date.UTC(anioVenc, mesVenc - 1, diaVenc);
+    const hoy = new Date();
+    const hoyUTC = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    diasVencido = Math.floor((hoyUTC - vencUTC) / 86400000);
+  }
+  const mostrarAlertaVencimiento =
+    diasVencido !== null && diasVencido > 0 && saldo > 0;
+  const fechaVencimientoFormateada = fechaVencimiento
+    ? new Intl.DateTimeFormat("es-AR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(new Date(fechaVencimiento))
+    : null;
   const favCategoryLabel =
     stats.favCategory === "-"
       ? "-"
@@ -225,6 +251,22 @@ export function ClientDetailSheet({
                         <p className="text-2xl font-semibold text-foreground">
                           {formatearMoneda(saldo)}
                         </p>
+                        {fechaVencimientoFormateada && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <p className="text-[10px] text-muted-foreground">
+                              Vence: {fechaVencimientoFormateada}
+                            </p>
+                            {mostrarAlertaVencimiento && (
+                              <Badge
+                                variant="outline"
+                                className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] uppercase font-bold tracking-wider"
+                              >
+                                Vencido hace {diasVencido} día
+                                {diasVencido === 1 ? "" : "s"}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
                       {saldo > 0 && (
                         <RegisterPaymentModal

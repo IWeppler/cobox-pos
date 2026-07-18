@@ -191,6 +191,8 @@ export async function crearClienteAction(
   const telefono = formData.get("whatsapp") as string;
   const notas = formData.get("notas") as string;
   const dni = formData.get("dni") as string;
+  const fechaVencimientoDeuda =
+    (formData.get("fecha_vencimiento_deuda") as string) || null;
   const exceptuadoEntregaMinima =
     formData.get("exceptuado_entrega_minima") === "on";
 
@@ -211,6 +213,7 @@ export async function crearClienteAction(
     notas: notas || null,
     activo: true,
     exceptuado_entrega_minima: exceptuadoEntregaMinima,
+    fecha_vencimiento_deuda: fechaVencimientoDeuda,
   });
 
   if (error) {
@@ -232,6 +235,8 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
   const dni = formData.get("dni") as string;
   const email = formData.get("email") as string;
   const notas = formData.get("notas") as string;
+  const fechaVencimientoDeuda =
+    (formData.get("fecha_vencimiento_deuda") as string) || null;
   // El checkbox solo se renderiza (y por lo tanto solo viaja en el
   // FormData) cuando la entrega mínima está activa a nivel negocio. Sin
   // este marcador, un guardado con la feature apagada pisaría en silencio
@@ -252,6 +257,7 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
     dni: dni || null,
     email: email || null,
     notas: notas || null,
+    fecha_vencimiento_deuda: fechaVencimientoDeuda,
   };
   if (exceptuadoEditable) {
     updatePayload.exceptuado_entrega_minima =
@@ -317,6 +323,40 @@ export async function ajustarSaldoAction(
 
   revalidatePath("/clientes");
   return { error: null, success: true };
+}
+
+/**
+ * Parsea una fecha en formato DD/MM/YYYY (o DD-MM-YYYY) — la convención
+ * que usa el resto del sistema (formatearFechaHora, "Última compra" en
+ * clients-view.tsx) — a ISO "YYYY-MM-DD" para guardar en una columna
+ * `date`. Devuelve null ante cualquier formato no reconocido en vez de
+ * lanzar: mismo criterio de tolerancia que ya usa el resto del parser de
+ * CSV (una columna opcional mal cargada no aborta la fila).
+ */
+function parseFechaDDMMYYYY(raw: string): string | null {
+  const limpio = raw?.trim().replace(/^["']|["']$/g, "");
+  if (!limpio) return null;
+
+  const match = limpio.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (!match) return null;
+
+  const dia = Number(match[1]);
+  const mes = Number(match[2]);
+  const anio = Number(match[3]);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+  // Rechaza fechas "desbordadas" que Date normaliza en vez de rechazar
+  // (ej. 31/02/2026 -> 03/03/2026).
+  if (
+    fecha.getUTCFullYear() !== anio ||
+    fecha.getUTCMonth() !== mes - 1 ||
+    fecha.getUTCDate() !== dia
+  ) {
+    return null;
+  }
+
+  return `${anio}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
 }
 
 // 7. IMPORTACIÓN MASIVA DESDE CSV
@@ -386,6 +426,9 @@ export async function importarClientesCSVAction(formData: FormData) {
     const idxDeuda = headers.findIndex(
       (h) => h === "deuda_inicial" || h === "deuda" || h === "saldo",
     );
+    const idxVencimiento = headers.findIndex(
+      (h) => h === "fecha_vencimiento_deuda" || h === "vencimiento",
+    );
 
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
@@ -417,6 +460,11 @@ export async function importarClientesCSVAction(formData: FormData) {
         deudaInicial = parseFloat(rawDeuda) || 0;
       }
 
+      const fechaVencimientoDeuda =
+        idxVencimiento !== -1 && row[idxVencimiento]
+          ? parseFechaDDMMYYYY(row[idxVencimiento])
+          : null;
+
       // Insertamos el cliente
       const { data: nuevoCliente, error: errCli } = await supabase
         .from("clientes")
@@ -426,6 +474,7 @@ export async function importarClientesCSVAction(formData: FormData) {
           dni: dni || null,
           saldo_pendiente: deudaInicial > 0 ? deudaInicial : 0,
           activo: true,
+          fecha_vencimiento_deuda: fechaVencimientoDeuda,
         })
         .select("id")
         .single();
