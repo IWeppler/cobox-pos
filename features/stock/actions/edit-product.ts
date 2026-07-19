@@ -16,7 +16,7 @@ type AuditoriaVarianteRow = {
   variante_id_nueva: string | null;
   atributos: Record<string, string>;
   nombre_display: string | null;
-  accion: "CREADA" | "ACTUALIZADA" | "ELIMINADA";
+  accion: "CREADA" | "ACTUALIZADA" | "ELIMINADA" | "BLOQUEADO_FALTANTE";
   stock_anterior: number | null;
   stock_nuevo: number | null;
   precio_anterior: number | null;
@@ -329,6 +329,40 @@ export async function editarProductoAction(
         );
         if (nuevasKeys.size < existentesPorKey.size) {
           const faltantes = existentesPorKey.size - nuevasKeys.size;
+
+          // Dejamos registro forense de EXACTAMENTE qué variante(s) faltaban
+          // en el payload — sin esto, la próxima vez que el freno dispare
+          // solo sabríamos "algo faltó", no qué combinación puntual ni con
+          // qué stock/precio se hubiera perdido. El guardado no se aplica
+          // (return antes del DELETE), así que esto es pura evidencia.
+          const auditoriaBloqueo: AuditoriaVarianteRow[] = [];
+          for (const [key, existente] of existentesPorKey) {
+            if (nuevasKeys.has(key)) continue;
+            auditoriaBloqueo.push({
+              producto_id: id,
+              variante_id_anterior: existente.id,
+              variante_id_nueva: null,
+              atributos: (existente.atributos as Record<string, string>) ?? {},
+              nombre_display: existente.nombre_display,
+              accion: "BLOQUEADO_FALTANTE",
+              stock_anterior: existente.stock,
+              stock_nuevo: null,
+              precio_anterior: existente.precio,
+              precio_nuevo: null,
+              costo_anterior: existente.costo,
+              costo_nuevo: null,
+              editado_por: user?.id ?? null,
+            });
+          }
+          const { error: auditBloqueoError } = await supabase
+            .from("producto_variantes_auditoria")
+            .insert(auditoriaBloqueo);
+          if (auditBloqueoError)
+            console.error(
+              "[EDIT PRODUCT AUDIT BLOQUEO ERROR]",
+              auditBloqueoError,
+            );
+
           return {
             error:
               `Guardado bloqueado: se detectaron ${faltantes} variante(s) menos que las que ya existen para este producto. ` +
