@@ -8,6 +8,23 @@ import {
   construirCacheAtributos,
 } from "@/features/stock/lib/normalize-atributo";
 import { parseProductImages } from "@/features/stock/lib/stock-product-utils";
+import { buildVariantKey } from "@/features/stock/utils/parse-legacy-variant";
+
+type AuditoriaVarianteRow = {
+  producto_id: string;
+  variante_id_anterior: string | null;
+  variante_id_nueva: string | null;
+  atributos: Record<string, string>;
+  nombre_display: string | null;
+  accion: "CREADA" | "ACTUALIZADA" | "ELIMINADA";
+  stock_anterior: number | null;
+  stock_nuevo: number | null;
+  precio_anterior: number | null;
+  precio_nuevo: number | null;
+  costo_anterior: number | null;
+  costo_nuevo: number | null;
+  editado_por: string | null;
+};
 
 export async function editarProductoAction(
   prevState: { error: string | null; success: boolean },
@@ -45,6 +62,9 @@ export async function editarProductoAction(
 
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   // 1. Subir imágenes nuevas y mergear contra el imagen_url REAL en base.
   // No confiamos en ninguna lista "existente" que pueda mandar el cliente:
@@ -123,19 +143,27 @@ export async function editarProductoAction(
   // 3. Procesar Variantes Editadas
   try {
     if (!tieneVariantes) {
+      const { data: unicoAnterior } = await supabase
+        .from("producto_variantes")
+        .select("id, stock, precio, costo")
+        .eq("producto_id", id)
+        .maybeSingle();
+
       const { error: delVarError } = await supabase
         .from("producto_variantes")
         .delete()
         .eq("producto_id", id);
       if (delVarError) throw delVarError;
 
-      const { error: insVarError } = await supabase
+      const { data: unicoNuevo, error: insVarError } = await supabase
         .from("producto_variantes")
         .insert({
           producto_id: id,
           nombre_display: "Único",
           stock: stockBase,
-        });
+        })
+        .select("id")
+        .single();
       if (insVarError) throw insVarError;
 
       // Legacy support
@@ -149,6 +177,25 @@ export async function editarProductoAction(
         .from("productos_stock")
         .insert({ producto_id: id, variante: "Único", cantidad: stockBase });
       if (insStockError) throw insStockError;
+
+      const { error: auditError } = await supabase
+        .from("producto_variantes_auditoria")
+        .insert({
+          producto_id: id,
+          variante_id_anterior: unicoAnterior?.id ?? null,
+          variante_id_nueva: unicoNuevo?.id ?? null,
+          atributos: {},
+          nombre_display: "Único",
+          accion: unicoAnterior ? "ACTUALIZADA" : "CREADA",
+          stock_anterior: unicoAnterior?.stock ?? null,
+          stock_nuevo: stockBase,
+          precio_anterior: unicoAnterior?.precio ?? null,
+          precio_nuevo: null,
+          costo_anterior: unicoAnterior?.costo ?? null,
+          costo_nuevo: null,
+          editado_por: user?.id ?? null,
+        } satisfies AuditoriaVarianteRow);
+      if (auditError) console.error("[EDIT PRODUCT AUDIT ERROR]", auditError);
     } else {
       // Es producto con opciones dinámicas
       const opcionesStr = formData.get("opciones") as string;
@@ -248,6 +295,49 @@ export async function editarProductoAction(
           opciones,
         );
 
+        // Snapshot de lo que hay ANTES de borrar nada. Nos sirve para dos
+        // cosas: (1) si el payload no trae stock explícito para una
+        // combinación que ya existía, preservamos su stock real en vez de
+        // asumir 0 — el borrado+reinserción de la grilla no debe poder
+        // pisar datos que el usuario nunca tocó; y (2) auditar el
+        // antes/después de cada variante en esta edición, ya que el DELETE
+        // que sigue destruye cualquier evidencia de lo que había.
+        const { data: variantesExistentes } = await supabase
+          .from("producto_variantes")
+          .select("id, nombre_display, atributos, precio, costo, stock")
+          .eq("producto_id", id);
+
+        const existentesPorKey = new Map(
+          (variantesExistentes ?? []).map((ve) => [
+            buildVariantKey((ve.atributos as Record<string, string>) ?? {}),
+            ve,
+          ]),
+        );
+        const keysUsadas = new Set<string>();
+
+        // FRENO DE SEGURIDAD: si el payload trae menos combinaciones
+        // distintas que las que ya existen en base, hay una variante que
+        // el cliente nunca mandó — bloqueamos el guardado en vez de
+        // proceder al borrado+reinserción silencioso. Esto no diagnostica
+        // la causa (puede ser un problema real de lectura al abrir el
+        // sheet, no necesariamente algo que el usuario haya tocado), pero
+        // corta cualquier pérdida de datos mientras se investiga.
+        const nuevasKeys = new Set(
+          variantes.map((v) =>
+            buildVariantKey(canonicalizarValores(v.valores, atributoCache)),
+          ),
+        );
+        if (nuevasKeys.size < existentesPorKey.size) {
+          const faltantes = existentesPorKey.size - nuevasKeys.size;
+          return {
+            error:
+              `Guardado bloqueado: se detectaron ${faltantes} variante(s) menos que las que ya existen para este producto. ` +
+              `Esto puede borrar stock real sin que lo hayas pedido. Si de verdad querés eliminar una combinación, ` +
+              `avisá al equipo técnico — por ahora este guardado no la va a tocar.`,
+            success: false,
+          };
+        }
+
         // Borramos variantes viejas para refrescar la grilla limpia
         const { error: delVarError } = await supabase
           .from("producto_variantes")
@@ -261,12 +351,18 @@ export async function editarProductoAction(
           .eq("producto_id", id); // legacy
         if (delStockError) throw delStockError;
 
+        const auditoria: AuditoriaVarianteRow[] = [];
+
         // B. Guardar las Variantes nuevas, con atributos ya canonicalizados
         for (const v of variantes) {
           const valoresCanonicos = canonicalizarValores(
             v.valores,
             atributoCache,
           );
+
+          const varKey = buildVariantKey(valoresCanonicos);
+          const existente = existentesPorKey.get(varKey);
+          if (existente) keysUsadas.add(varKey);
 
           const nombreDisplay = opciones
             .map(
@@ -282,7 +378,12 @@ export async function editarProductoAction(
           const vCosto = v.precio_costo
             ? Number.parseFloat(v.precio_costo)
             : null;
-          const vStock = Number.parseInt(v.stock || "0");
+          // Si el payload no trae stock (vacío/undefined) y la combinación
+          // ya existía, preservamos su stock real en vez de asumir 0.
+          const stockInput = v.stock?.trim();
+          const vStock = stockInput
+            ? Number.parseInt(stockInput)
+            : (existente?.stock ?? 0);
 
           const { data: varData, error: varInsertError } = await supabase
             .from("producto_variantes")
@@ -298,6 +399,22 @@ export async function editarProductoAction(
             .select("id")
             .single();
           if (varInsertError) throw varInsertError;
+
+          auditoria.push({
+            producto_id: id,
+            variante_id_anterior: existente?.id ?? null,
+            variante_id_nueva: varData?.id ?? null,
+            atributos: valoresCanonicos,
+            nombre_display: nombreDisplay,
+            accion: existente ? "ACTUALIZADA" : "CREADA",
+            stock_anterior: existente?.stock ?? null,
+            stock_nuevo: vStock,
+            precio_anterior: existente?.precio ?? null,
+            precio_nuevo: vPrecio,
+            costo_anterior: existente?.costo ?? null,
+            costo_nuevo: vCosto,
+            editado_por: user?.id ?? null,
+          });
 
           if (varData) {
             const varValores = [];
@@ -329,6 +446,36 @@ export async function editarProductoAction(
               cantidad: vStock,
             });
           if (stockInsertError) throw stockInsertError;
+        }
+
+        // Combinaciones que existían y no vinieron en este guardado (el
+        // usuario las destildó de la matriz, o dejaron de matchear): se
+        // borran de verdad, pero dejamos registro de qué tenían antes.
+        for (const [key, existente] of existentesPorKey) {
+          if (keysUsadas.has(key)) continue;
+          auditoria.push({
+            producto_id: id,
+            variante_id_anterior: existente.id,
+            variante_id_nueva: null,
+            atributos: (existente.atributos as Record<string, string>) ?? {},
+            nombre_display: existente.nombre_display,
+            accion: "ELIMINADA",
+            stock_anterior: existente.stock,
+            stock_nuevo: null,
+            precio_anterior: existente.precio,
+            precio_nuevo: null,
+            costo_anterior: existente.costo,
+            costo_nuevo: null,
+            editado_por: user?.id ?? null,
+          });
+        }
+
+        if (auditoria.length > 0) {
+          const { error: auditError } = await supabase
+            .from("producto_variantes_auditoria")
+            .insert(auditoria);
+          if (auditError)
+            console.error("[EDIT PRODUCT AUDIT ERROR]", auditError);
         }
       }
     }

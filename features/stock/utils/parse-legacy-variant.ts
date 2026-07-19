@@ -2,8 +2,30 @@ import type { Producto } from "@/entities/productos/types";
 import { parseRawVariantString } from "@/entities/productos/lib/parse-variant-attributes";
 import type { Opcion, VarianteInput } from "../types";
 
+/**
+ * Normaliza nombre/valor de atributo para el cálculo de la key: case e
+ * tilde-insensitive. Sin esto, la misma combinación reconstruida por dos
+ * caminos distintos (relación normalizada en producto_variante_valores vs.
+ * fallback al jsonb `atributos`, que puede traer casing/acentos legacy)
+ * produce keys diferentes — la fila se ve igual en pantalla pero el hook
+ * la trata como una combinación nueva, con stock en blanco, y el próximo
+ * guardado la reinserta pisando el stock real con 0.
+ */
+function normalizeKeyPart(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
 export function buildVariantKey(values: Record<string, string>) {
   return Object.entries(values)
+    .map(
+      ([key, value]) =>
+        [normalizeKeyPart(key), normalizeKeyPart(value)] as const,
+    )
+    .filter(([key, value]) => key !== "" && value !== "")
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key}:${value}`)
     .join("|");
