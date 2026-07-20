@@ -67,6 +67,7 @@ export async function anularVentaAction(
       .update({
         estado_operacion: "ANULADA",
         estado_pago: "ANULADA",
+        motivo_anulacion: motivoDevolucion,
       })
       .eq("id", ventaId)
       .select("id")
@@ -203,6 +204,7 @@ export async function anularVentaAction(
           motivo: "Devolución de cliente por producto fallado/roto",
           estado: "APROBADA",
           creado_por: user.id,
+          origen: "DEVOLUCION_VENTA",
         });
       }
     }

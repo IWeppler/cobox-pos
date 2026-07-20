@@ -23,7 +23,7 @@ export function DashboardNavbar() {
     if (pathname.startsWith("/stock"))
       return {
         title: "Inventario",
-        description: "Gestiona el stock, precios y catálogo de tus plantas.",
+        description: "Gestiona el stock, precios y catálogo de tus productos.",
       };
     if (pathname.startsWith("/clientes"))
       return {

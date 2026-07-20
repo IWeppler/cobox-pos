@@ -154,7 +154,7 @@ export function CatalogPanel({ config }: Readonly<CatalogPanelProps>) {
                   Mostrar Productos Sin Stock
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Las plantas agotadas aparecerán tachadas al final de la lista.
+                  Los productos agotados aparecerán tachados al final de la lista.
                 </p>
               </div>
               <Switch

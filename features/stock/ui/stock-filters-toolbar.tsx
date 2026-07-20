@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  ArrowRightLeft,
   BookmarkCheck,
   Check,
   ClipboardList,
@@ -262,9 +263,15 @@ export function StockFiltersToolbar({
                       </button>
                     </Link>
                     <Link href="/stock/bajas" className="w-full block">
-                      <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-amber-700 hover:bg-amber-50 rounded-md hover:text-amber-800 transition-colors">
+                      <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-amber-50 rounded-md hover:text-amber-800 transition-colors">
                         <ClipboardList className="w-4 h-4 mr-2 text-amber-600 shrink-0" />
                         Bajas de Inventario
+                      </button>
+                    </Link>
+                    <Link href="/stock/movimientos" className="w-full block">
+                      <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors">
+                        <ArrowRightLeft className="w-4 h-4 mr-2 text-primary shrink-0" />
+                        Movimientos Stock
                       </button>
                     </Link>
                   </div>

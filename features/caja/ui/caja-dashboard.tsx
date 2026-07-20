@@ -384,7 +384,7 @@ export function CajaDashboard({
                         <span className="text-muted-foreground font-medium">
                           Cobros
                         </span>
-                        <span className="font-semibold text-emerald-600">
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                           +{formatearMoneda(totales.ingresosEfectivo)}
                         </span>
                       </div>
@@ -396,7 +396,7 @@ export function CajaDashboard({
                           -{formatearMoneda(totales.totalEgresos)}
                         </span>
                       </div>
-                      <div className="flex justify-between font-bold text-base pt-3 border-t border-border mt-1">
+                      <div className="flex justify-between font-semibold text-base pt-3 border-t border-border mt-1">
                         <span className="text-foreground">
                           Efectivo Esperado
                         </span>
@@ -404,7 +404,7 @@ export function CajaDashboard({
                           className={
                             totales.efectivoEsperado < 0
                               ? "text-rose-600"
-                              : "text-emerald-700"
+                              : "text-emerald-700 dark:text-emerald-400"
                           }
                         >
                           {formatearMoneda(totales.efectivoEsperado)}
@@ -476,8 +476,8 @@ export function CajaDashboard({
                   {formatearMoneda(totales.efectivoEsperado)}
                 </div>
                 {totales.efectivoEsperado < 0 ? (
-                  <p className="text-sm text-rose-600 font-semibold">
-                    ⚠ Revisar: efectivo esperado negativo
+                  <p className="text-sm text-rose-700 dark:text-rose-500">
+                    Revisar: efectivo esperado negativo
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground font-medium">
@@ -590,17 +590,17 @@ export function CajaDashboard({
                         <td className="px-6 py-4 font-medium text-foreground">
                           <div className="flex items-center gap-3">
                             {mov.origen === "VENTA" && (
-                              <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-md shrink-0 border border-emerald-100">
+                              <div className="p-1.5 bg-emerald-50 dark:bg-emerald-300/20 text-emerald-700 dark:text-emerald-300 rounded-md shrink-0 border">
                                 <ShoppingBag className="w-3.5 h-3.5" />
                               </div>
                             )}
                             {mov.origen === "COBRO_DEUDA" && (
-                              <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-md shrink-0 border border-indigo-100">
+                              <div className="p-1.5 bg-indigo-50 dark:bg-indigo-300/20 text-indigo-700 dark:text-indigo-300 rounded-md shrink-0 border">
                                 <BookUser className="w-3.5 h-3.5" />
                               </div>
                             )}
                             {mov.origen === "EGRESO" && (
-                              <div className="p-1.5 bg-rose-50 text-rose-600 rounded-md shrink-0 border border-rose-100">
+                              <div className="p-1.5 bg-rose-50 dark:bg-rose-300/20 text-rose-700 dark:text-rose-300 rounded-md shrink-0 border">
                                 <TrendingDown className="w-3.5 h-3.5" />
                               </div>
                             )}
@@ -612,17 +612,17 @@ export function CajaDashboard({
                         <td className="px-6 py-4">
                           <Badge
                             variant="secondary"
-                            className="text-[10px] font-bold uppercase shadow-none bg-muted"
+                            className="text-[10px] uppercase shadow-none bg-muted"
                           >
                             {mov.metodo}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4 text-right font-semibold tracking-tight">
+                        <td className="px-6 py-4 text-right">
                           <div
                             className={
                               mov.tipo === "INGRESO"
-                                ? "text-emerald-600"
-                                : "text-rose-600"
+                                ? "text-emerald-700 dark:text-emerald-500"
+                                : "text-rose-700 dark:text-rose-500"
                             }
                           >
                             {mov.tipo === "INGRESO" ? "+" : "-"}

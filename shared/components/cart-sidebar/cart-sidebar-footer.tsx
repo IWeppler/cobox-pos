@@ -77,10 +77,17 @@ export function CartSidebarFooter({
     setModalAbierto(true);
   };
 
-  const isMissingClient = (isCuentaCorriente || isReserva) && !clienteSeleccionado;
+  const isMissingClient =
+    (isCuentaCorriente || isReserva) && !clienteSeleccionado;
   const isMissingAnticipo =
     isCuentaCorriente && sumaPagos + 0.05 < anticipoMinimo;
-  const isPrimaryDisabled = isPending || isMissingClient || isMissingAnticipo;
+  // Cuenta Corriente ya no autocompleta método de pago (ver
+  // CartStepCheckout/cart-panel-admin) — sin esto, "Confirmar Fiado"
+  // podía registrar la venta con pagos=[] y ningún método real asociado.
+  const isMissingMetodo =
+    isCuentaCorriente && metodosPagoDB.length > 0 && pagos.length === 0;
+  const isPrimaryDisabled =
+    isPending || isMissingClient || isMissingAnticipo || isMissingMetodo;
 
   const handleConfirmar = (montoAnticipo?: number) => {
     setModalAbierto(false);

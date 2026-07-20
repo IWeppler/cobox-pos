@@ -248,7 +248,7 @@ export function PaymentModal({
               </p>
             </div>
           ) : (
-            <div className="flex items-center gap-3 text-emerald-800 bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+            <div className="flex items-center gap-3 text-emerald-800 bg-emerald-50 dark:bg-emerald-300/20 p-3 rounded-lg border border-emerald-300">
               <CheckCircle2 className="w-6 h-6 shrink-0" />
               <p className="text-xs font-medium leading-tight">
                 La deuda se registrará en la cuenta de{" "}

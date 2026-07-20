@@ -128,14 +128,14 @@ export function CajaHistoryTable({
                         {isAbierto ? (
                           <Badge
                             variant="outline"
-                            className="bg-emerald-50/50 dark:bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] shadow-none uppercase font-bold tracking-wider"
+                            className="bg-emerald-50/50 dark:bg-emerald-300/20 text-emerald-700 dark:text-emerald-300 text-[10px] shadow-none uppercase"
                           >
                             ABIERTO
                           </Badge>
                         ) : (
                           <Badge
                             variant="outline"
-                            className="bg-background text-muted-foreground border-border text-[10px] shadow-none uppercase font-bold tracking-wider"
+                            className="bg-background text-muted-foreground border-border text-[10px] shadow-none uppercase"
                           >
                             CERRADO
                           </Badge>
@@ -163,7 +163,7 @@ export function CajaHistoryTable({
                                 return (
                                   <Badge
                                     variant="outline"
-                                    className="bg-rose-50/50 dark:bg-rose-100 text-rose-700 border-rose-200 shadow-none text-[10px]"
+                                    className="bg-rose-50/50 dark:bg-rose-800 text-rose-700 dark:text-white border-rose-800 shadow-none text-[10px]"
                                     title="El efectivo esperado calculado dio negativo"
                                   >
                                     ⚠ Esperado negativo
@@ -174,7 +174,7 @@ export function CajaHistoryTable({
                                 return (
                                   <Badge
                                     variant="outline"
-                                    className="bg-emerald-50/50 dark:bg-emerald-100 text-emerald-700 border-emerald-200 shadow-none text-[10px]"
+                                    className="bg-emerald-50/50 dark:bg-emerald-800 text-emerald-700 dark:text-white border-emerald-800 shadow-none text-[10px]"
                                   >
                                     Perfecto
                                   </Badge>

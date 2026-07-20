@@ -32,6 +32,7 @@ export async function createBajaAction(prevState: any, formData: FormData) {
     motivo,
     creado_por: user.id,
     estado: "PENDIENTE",
+    origen: "MANUAL",
   });
 
   if (error) {

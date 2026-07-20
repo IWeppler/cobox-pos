@@ -264,38 +264,58 @@ export function ProductEditDetailSheet({
       variantSelection.variantes.map((v) => [buildVariantKey(v.valores), v]),
     );
 
-    const filas: VarianteDiffRow[] = (existentes ?? []).map((ex) => {
-      const atributos = (ex.atributos as Record<string, string>) ?? {};
-      const key = buildVariantKey(atributos);
-      const enPayload = formVariantesPorKey.get(key);
-      const stockDespues = enPayload
-        ? enPayload.stock?.trim()
-          ? Number.parseInt(enPayload.stock)
-          : ex.stock
-        : null;
-      const precioDespues = enPayload
-        ? enPayload.precio?.trim()
-          ? Number.parseFloat(enPayload.precio)
-          : null
-        : null;
+    const filas: VarianteDiffRow[] = (existentes ?? [])
+      .map((ex) => {
+        const atributos = (ex.atributos as Record<string, string>) ?? {};
+        const key = buildVariantKey(atributos);
+        const enPayload = formVariantesPorKey.get(key);
+        const stockDespues = enPayload
+          ? enPayload.stock?.trim()
+            ? Number.parseInt(enPayload.stock)
+            : ex.stock
+          : null;
+        const precioDespues = enPayload
+          ? enPayload.precio?.trim()
+            ? Number.parseFloat(enPayload.precio)
+            : null
+          : null;
 
-      return {
-        key,
-        atributosLabel:
-          Object.entries(atributos)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(" / ") ||
-          ex.nombre_display ||
-          "Variante",
-        stockAntes: ex.stock,
-        stockDespues,
-        precioAntes: ex.precio ? Number(ex.precio) : null,
-        precioDespues,
-        seVaAEliminar: !enPayload,
-      };
-    });
+        return {
+          key,
+          atributosLabel:
+            Object.entries(atributos)
+              .map(([k, v]) => `${k}: ${v}`)
+              .join(" / ") ||
+            ex.nombre_display ||
+            "Variante",
+          stockAntes: ex.stock,
+          stockDespues,
+          precioAntes: ex.precio ? Number(ex.precio) : null,
+          precioDespues,
+          seVaAEliminar: !enPayload,
+        };
+      })
+      // Ocultamos del todo lo que no cambia: si la variante sigue existiendo
+      // con el mismo stock y el mismo precio, no ocupa lugar en la tabla —
+      // solo lo que realmente va a moverse merece la atención del usuario.
+      .filter(
+        (fila) =>
+          fila.seVaAEliminar ||
+          fila.stockAntes !== fila.stockDespues ||
+          fila.precioAntes !== fila.precioDespues,
+      );
 
     filas.sort((a, b) => Number(b.seVaAEliminar) - Number(a.seVaAEliminar));
+
+    // Si de verdad no cambia nada, el modal no aporta nada — guardamos
+    // directo en vez de mostrar una tabla vacía sin explicación.
+    if (filas.length === 0) {
+      setConfirmModalOpen(false);
+      setIsLoadingDiff(false);
+      setPendingFormData(null);
+      startTransition(() => formAction(formData));
+      return;
+    }
 
     setDiffFilas(filas);
     setIsLoadingDiff(false);

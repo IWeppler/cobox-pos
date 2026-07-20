@@ -1,162 +1,66 @@
-Los labels, modulos, estan clasificados en #
-Los items que tienen ✅ al principio significa que ya estan hechos
-Los items que tienen ### al principio significa que estoy trabajando
+El backlog completo, por módulo
 
-REPORTE POR CANAL DE VENTAS: Instagram, local, POS
+# Caja / Multicaja
 
-# ✅ Core implementado
+- Atribuir devoluciones al turno original de la venta (si sigue abierto), no al turno de quien ejecuta la anulación — ya diseñado, falta implementar
+- Retiros de dueño como tipo de movimiento separado de gastos operativos
+- Marcar un "esperado negativo" como revisado/explicado (sin borrar el historial)
+- Agrupar historial por día + filtro por rango de fechas
+- Resumen diario consolidado (todos los turnos de un día en una vista)
+- Rediseño de /caja: turno propio vs. historial según estado del usuario, filtros en "Movimientos del - Turno" (egresos/ingresos/método de pago)
+- Cuenta corriente + método de pago real (arriba)
+- Conciliación de cobros digitales contra el resumen real del banco/Mercado Pago — proyecto más grande, aparte
+- Endurecer RLS de SELECT en turnos_caja (hoy abierta, sin defensa en profundidad) — pendiente de hace rato, bajo riesgo
+- compras /= gastos:
+- una tabla para admin donde aparezca cuanto dinero tengo en cada caja/banco/tarjeta/mercado pago...
 
-✅ 1 - Apertura y Cierre de Caja: Control de turnos. "El empleado Juan abrió la caja con $10.000 y la cerró con $45.000". Fundamental para la paz mental del dueño.
+# Permisos y roles
 
-✅ 2 - Ventas sin Fricción: Permitir ventas con stock negativo (mostrando una ⚠️ alerta visual). La realidad física manda; nunca bloquees una venta.
-
-✅ 3 - Métodos de Pago Base: Implementar un selector al cobrar: Efectivo (por defecto), Tarjeta, Transferencia/App.
-
-✅ 4 - Pantalla de "Venta Realizada": El modal de éxito final con el botón estrella: "Enviar Comprobante por WhatsApp". Tu motor oculto de marketing.
-
-✅ 5 - Detalle y Ganancia: La pantalla de resumen de cada venta que le muestre al dueño exactamente cuánta ganancia neta le dejó esa operación específica.
-
-✅ 6 - Devoluciones Simples: Un botón de "Registrar Devolución" con motivo, preguntando si el stock y el dinero vuelven a sus lugares. Nada de "Notas de Crédito" complejas aún.
-
-✅ 7 - Descuentos Comerciales: Botón en el carrito para aplicar descuento por % o monto fijo. Ideal para el marketing cruzado que planeaste.
-
-✅ 8 - Insights y Gráficos: Evolución de ventas y horarios pico, pero traducidos a lenguaje humano. Tarjetas con 💡 consejos (ej: "Asegura cambio a las 18hs, es tu pico de ventas"). Mantener el ranking de Mayor Rotación.
-
-# Improves:
-
-✅ mejorar ui carrito de venta
-
-✅ modificacion de precios masivos
-
-✅ boton de descargar pwa
-
-✅ ticket en formato pdf
-
-✅ dark/light mode
-
-✅ mejorar el dashboard inicial y mejorar el modulo de reportes/metricas
-
-✅ El modulo de reportes: quiero traer por fechas el Flujo de Ingresos Diarios; Ventas por Categoría no me trae correctamente las funciones; Rentabilidad por Categoría tiene el mismo problema ademas el chart no se ve bien.
-
-✅ modulo de reportes: margen operativo estimado en porcentaje, falta ver el monto en $ asociado.
-
-✅ Ingresos Brutos vs Ganancia Bruta: micro-copy. Total vendido antes de costos y gastos. y Ingresos menos costo de mercadería.
-
-✅ Reportes / Ventas: Agregaría ventas por día/hora.
-
-✅ Ventas por categoría debería tener selector de métrica: [Ingresos] [Unidades] [Tickets]
-
-✅ Reportes/Inventario: Agregaría “valor potencial de venta”
-
-✅ Además de capital inmovilizado al costo, sería útil mostrar: Valor al costo: $X; Valor potencial de venta: $Y; Ganancia potencial: $Z
-
-✅ Productos sin movimiento: definir ventana: hace 30 días - hace 60 días - hace 90 días
-
-✅ en el modulo de stock debo poder ordenar en la tabla por nombre (a-z), mas/menos stock (ej: -5, 1000), orden mayor/menor costo, orden mayor/menor precio venta, y filtro stock-bajo (solo con stock ej: 0 o -10).
-
-✅ Relación bajas/ingresos: Muy buen KPI: Bajas sobre ingresos: 2.4%. Porque $20.000 en bajas puede ser mucho o poco según cuánto vendiste.
-
-# 🐛 Bugs / Correcciones necesarias
-
-✅ Reportes: Ventas por categoría no calcula correctamente.
-✅ Reportes: Rentabilidad por categoría no calcula correctamente.
-✅ Reportes: chart de rentabilidad por categoría no se ve bien.
-✅ Revisar obtención de datos por rango de fechas.
-✅ Revisar consistencia entre ingresos, ganancia, caja y descuentos.
-
-# Features para terminar el MVP:
-
-Considero que las features postergadas son indispensables para los planes de gestion/profesional y empresa, pero no tengo clientes en esa parte, tal vez 1 para gestion profesional.
-
-# Modulo de Configuracion:
-
-✅ 1. configuracion/promociones: Mejorar la configuracion de promociones. Fecha de inicio y fin, activo/inactivo. editar, borrar.
-✅ 2. configuracion/metodos-de-pago: Métodos de pago configurables. Efectivo: 0%, acreditación inmediata; Transferencia: 0%, inmediata; Mercado Pago: 6%, 1 día; Crédito: 8%, 10 días.
+- Terminar de cablear tiene*permiso() en los gates que faltan: stock.* (remito, historial de precios, actualización masiva, baja, eliminar, editar, cambiar categoría), clientes.\_ (ver módulo, importar CSV), reportes.ver_modulo
+- Nuevo permiso granular: editar imágenes de producto sin poder tocar stock (separar de stock.editar_producto, que hoy los agrupa)
+- Filtro de egresos por rol en caja/page.tsx (hoy no usa tiene_permiso, inconsistencia menor)
 
 # Modulo de Ventas:
 
-✅ 3. Comisiones por método de pago (bruto cobrado, comisión estimada, neto estimado). Ejemplo: Tarjeta: $100.000 - Comisión: $6.000 = Neto: $94.000
-✅ 4. Método de pago mixto: una venta puede tener 2 metodos de pago. Acá tengo una observación: es muy útil, pero puede complicar bastante caja y reportes. Ejemplo: Venta $100.000; $40.000 efectivo; $60.000 transferencia.
-
--- Postergado. Lectura de código de barras
--- Postergado. Devoluciones y anulaciones. Distinguir: anular venta completa; devolución parcial; cambio de producto; devolución con reintegro; devolución a cuenta corriente
--- Postergado. tema impositivo en ticket. Facturación / integración fiscal
-
-# Modulo de Store:
-
-✅ 5. Datos del negocio ubicados en el catalogo: direccion, nombre, logo, redes sociales y whatsapp (icons) y categorias
-
-# UI:
-
-✅ 9. Revisar y corregir UX/UI para mobile. fundamental.
-✅ 12. mejorar flujo del boton de registrar venta y registrar venta en general: ahora existe un panel POS especifico para vender y deja de existir los modales y sheet
-✅ creacion de modal para saber con cuanto paga el cliente para darle el cambio
-✅ mejorar la vista en grilla
--- mejorar el envio de comprobante: actualmente se abre el link para enviar a traves de whatsapp pero demoró muchisimo la apertura en whatsapp, ademas si hay que enviar varios y que cada vez se tenga que abrir whatsapp es incomodo. Creo que la mejor opcion es descargar un pdf y que se lo envie
-
-✅ 13. En el catalogo hay que mejorar el flujo de variantes de un producto. actualmente aparecen [blanco/M] [Blanco/L] [Negro/M] [Negro/L] y quiero que aparezca [Blanco] [Negro] / [M] [L]
-✅ 14. Corregir buscador de catalogo: en el navbar tengo un el searchbar para buscar productos que es como una especie de filtro que actua instantaneamente en el catalogo, pero preferiria que en realidad simplemente busque y me aparezca abajo los resultados, ademas que se pueda buscar por productos o categorias.
-✅ 15. Corregir marquee de catalogo: actualmente no se esta moviendo y necesito que se empiece a mover..
-✅ 16. Corregir CTA de banner en catalogo: hay que chequear bien como funciona, porque actualmente parece que tiene la redireccion a # y en realidad deberia redirigir dependiendo la campaña o configuracion hacia una categoria de plantas o producto en particular o nose...
-✅ 17. corregir categorias de catalogo: actualmente aparecen todas juntas en minusculas y no como estan configuradas en el panel de administracion o aparecen en la base de datos..
-✅ 18. Corregir carrito del POS catalogo, 19. mejorar zustand carrito para clientes en catalogo: parece que son dos problemas que van de la mano hace un rato me aparecia como el carrito del pos y no para enviar pedido.
-
--- que la direccion en el catalogo sea clickeable: en configuracion dejar un input para que ponga directamente las coordenadas o link para redirección del local para que en el catalogo un usuario pueda hacer click y que lo redirija a google maps
+- Lectura de código de barras
+- tema impositivo en ticket. Facturación / integración fiscal
 
 # Creacion de un producto
 
--- producto basico, producto con variantes, producto con medidas
--- se deberia poder crear una categoria si no tengo creada... Debe haber una opcion si queremos que la categoria se muestre en la tienda/catalogo
--- no deberia aparecer si es visible o no.
--- estaria bueno que aparezcan impuestos basicos como dropdown para agregarle a un producto, por ejemplo IVA 21%
+- en creacion/edicion/csv que aparezca la opcion de impuestos basicos como dropdown para agregarle a un producto, por ejemplo IVA 21%
 
-# Fix Bug:
+# Catálogo y stock
 
-✅ 10. Advisor-Banner: aparece todo el tiempo. Deberia aparecer una vez al dia.
-✅ 11. El light/dark mode no funciona correctamente, falta un zustand o algo que persevere.
+- Historial de movimientos por producto (auditoría)
+- Compartir uno o varios productos por WhatsApp/redes sin salir del POS — necesita diseño, todavía sin resolver cómo
+- Soporte de .xlsx en importación de clientes (hoy solo CSV)
+- asistente de Orden de Compra; el sistema te sugiere que comprar y en que cantidades, en base a las ventas de un periodo determinado, stock minimo o ideal configurado, y el stock actualmente disponible.
+
+# Clientes
+
+- Chequeo de duplicados en importación CSV (re-subir el mismo archivo hoy crea clientes nuevos en vez de actualizar)
+- Envío por localidad en el checkout del catálogo público — pausado hace tiempo
+- link o algo para que un cliente pueda ver la deuda que tiene en el negocio y la pueda pagar.
+- ahora aparece en deuda y en feche de vencimiento se pone en mora. Pero quiero que fecha de vencimiento quede limpio y que en mora o vencido, sera un tercer estado.
+
 
 # Modulo de Reportes:
 
--- Postergado. Exportar datos: ventas; inventario; clientes; caja; reportes
--- Postergado. conectar promociones con modulo de reportes. total descontado,promoción más usada, ventas con promoción, impacto en margen, descuento promedio
+- Conectar promociones con modulo de reportes. total descontado,promoción más usada, ventas con promoción, impacto en margen, descuento promedio
+- fixear y mejorar la inteligencia del advisor banner de recomendaciones que aparece en el modulo de reportes, y sirve para que el dueño de negocio sepa que hacer con esos datos.
 
-✅ 6. Estandarización Dinámica: Mover Categorías y Variantes (talles, colores) a la base de datos para que cada negocio cree las suyas propias.
 
--- 8. Separacion de modulos:
-Plan 1 — Emprendedor:
-Plan 2 — Gestión / Profesional:
-Plan 3 — Empresa / Multi-sucursal:
 
-# Admin:
+# 🔮 Fase 5: Expansión y Escalabilidad (Fundación SaaS/multi-tenant)
 
--- Postergado. Presupuestos y Órdenes: Estados de venta (Cobrado, Presupuesto, A Confirmar). Clave para oficios o ventas grandes.
-
-✅ Módulo CRM: Si el negocio lo desea, puede pedir Nombre y WhatsApp/numero de telefono, al cobrar para ir armando su propia base de datos de clientes. cliente, venta fiada, saldo pendiente, pago posterior, historial de deuda
-Flujo mínimo que deberías implementar.
-
----
-
-## 🚀 Fase 3: CRM y Cuentas Corrientes (Próximos pasos)
-
-- [ ] **Tabla Clientes:** Crear el módulo de CRM (Nombre, Tel, DNI, Email, Notas).
-- [ ] **Vincular Ventas:** Selector de clientes en la Terminal POS para asignar cualquier tipo de venta (Efectivo o Crédito) al historial del cliente.
-- [ ] **Cuentas Corrientes (Ledger):**
-  - Tabla `movimientos_cc` (Cargos por compras vs. Abonos/Pagos a cuenta).
-  - Interfaz para registrar pagos parciales o dejar saldo a favor.
-- [ ] **Reglas Flexibles (JSONB):** Capacidad de asignarle a un cliente reglas dinámicas de crédito (Ej: Límite de $100.000, recargo del 15%, o exigir 50% de entrega).
-
-## 🛠 Fase 4: Operación Avanzada (Multi-Caja y Permisos)
-
-- [ ] **Sistema RBAC (Roles y Permisos Granulares):**
-  - Tabla de `roles` y `permisos` dinámicos (Ej: "ver_costos", "abrir_caja", "eliminar_venta").
-  - UI para que el dueño asigne qué puede hacer cada empleado.
-- [ ] **Multi-Caja:** Soporte para múltiples turnos de caja abiertos simultáneamente en diferentes dispositivos (Terminal 1, Celular Vendedora 2).
-- [ ] **Impresión de Tickets:** Integración con impresoras térmicas ESC/POS (Bluetooth/USB) directas desde la web.
-
-## 🔮 Fase 5: Expansión y Escalabilidad (SaaS)
-
+- [ ] **landing page**
 - [ ] **Multi-Tenant:** Refactor a `negocio_id` en todas las tablas para soportar miles de empresas en una sola base de datos (Modelo SaaS auto-gestionable).
-- [ ] **Facturación Electrónica:** Integración con AFIP (Argentina) / SII (Chile) / DIAN (Colombia) según el país objetivo.
-- [ ] **Módulo de Compras a Proveedores:** Para cargar stock automáticamente a partir de remitos e impactar en los costos promedio.
-
----
+- [ ] **Facturación Electrónica:** Integración con ARCA.
+- [ ] **Impresión de Tickets:** Integración con impresoras térmicas ESC/POS (Bluetooth/USB) directas desde la web.
+- [ ] **Presupuestos y Órdenes:** Estados de venta (Cobrado, Presupuesto, A Confirmar). Clave para oficios o ventas grandes.
+- [ ] **Separacion de modulos:** 25% off pago anual
+      Plan 1 — Emprendedor: $30.000 mensual
+      Plan 2 — Gestión / Profesional: $50.000 mensual
+      Plan 3 — Empresa / Multi-sucursal: $70.000
+- [ ] **Carga de stock por voz/texto**
+      Agente de IA (WhatsApp/app)

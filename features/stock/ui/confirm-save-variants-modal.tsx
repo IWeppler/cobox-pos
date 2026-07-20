@@ -11,6 +11,7 @@ import {
 } from "@/shared/ui/dialog";
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
+import { Badge } from "@/shared/ui/badge";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { formatearMoneda } from "@/shared/utils/formatters";
 
@@ -33,6 +34,25 @@ type ConfirmSaveVariantsModalProps = {
   onConfirm: () => void;
 };
 
+type Direccion = "sube" | "baja" | "igual";
+
+// null se trata como 0 a los fines de la comparación: un precio que pasa
+// de "sin precio propio" a "$500" es un aumento; de "$500" a "sin precio
+// propio" es una baja.
+function direccion(antes: number | null, despues: number | null): Direccion {
+  const a = antes ?? 0;
+  const d = despues ?? 0;
+  if (d > a) return "sube";
+  if (d < a) return "baja";
+  return "igual";
+}
+
+function claseValor(dir: Direccion): string {
+  if (dir === "sube") return "text-green-700 font-bold";
+  if (dir === "baja") return "text-destructive font-bold";
+  return "";
+}
+
 export function ConfirmSaveVariantsModal({
   open,
   onOpenChange,
@@ -45,6 +65,11 @@ export function ConfirmSaveVariantsModal({
 
   const eliminaciones = filas.filter((f) => f.seVaAEliminar);
   const hayEliminaciones = eliminaciones.length > 0;
+  // Defensivo: en el flujo normal edit-sheet.tsx ya filtra esto antes de
+  // abrir el modal (si no hay cambios, guarda directo sin mostrar nada),
+  // pero si alguna vez llega vacío igual explicamos por qué en vez de
+  // mostrar una tabla en blanco.
+  const sinCambios = !isLoadingDiff && filas.length === 0;
   const puedeConfirmar =
     !isLoadingDiff && !isSubmitting && (!hayEliminaciones || entendido);
 
@@ -57,7 +82,7 @@ export function ConfirmSaveVariantsModal({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden bg-card border-border">
         <DialogHeader className="p-6 pb-4 border-b border-border bg-muted/20">
-          <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+          <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
             {hayEliminaciones && (
               <AlertTriangle className="w-5 h-5 text-destructive" />
             )}
@@ -69,93 +94,105 @@ export function ConfirmSaveVariantsModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="p-6 space-y-4">
+        <div className="p-4 space-y-2">
           {isLoadingDiff ? (
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
               Comparando contra el estado actual en base...
             </div>
+          ) : sinCambios ? (
+            <div className="flex flex-col items-center justify-center gap-1 py-10 text-center">
+              <p className="text-sm font-semibold text-foreground">
+                No hay cambios que confirmar
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Ninguna variante cambia de stock o precio.
+              </p>
+            </div>
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
-                Se actualizarán{" "}
                 <strong className="text-foreground">
                   {filas.length} variante{filas.length === 1 ? "" : "s"}
                 </strong>{" "}
-                que existen hoy para este producto.
+                {filas.length === 1 ? "va" : "van"} a cambiar.
               </p>
 
               <ScrollArea className="h-64 border border-border rounded-xl bg-muted/20">
                 <table className="w-full text-xs text-left">
-                  <thead className="bg-muted text-muted-foreground font-bold sticky top-0">
+                  <thead className="bg-muted text-muted-foreground sticky top-0">
                     <tr>
                       <th className="px-3 py-2">Variante</th>
-                      <th className="px-3 py-2 text-right">
-                        Stock antes / después
-                      </th>
-                      <th className="px-3 py-2 text-right">
-                        Precio antes / después
-                      </th>
+                      <th className="px-3 py-2 text-right">Stock</th>
+                      <th className="px-3 py-2 text-right">Precio</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {filas.map((fila) => (
-                      <tr
-                        key={fila.key}
-                        className={
-                          fila.seVaAEliminar ? "bg-[var(--bg-danger)]" : ""
-                        }
-                      >
-                        <td className="px-3 py-2 font-medium">
-                          {fila.atributosLabel}
-                          {fila.seVaAEliminar && (
-                            <p className="text-destructive font-bold mt-0.5">
-                              Esta variante se ELIMINARÁ
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {fila.seVaAEliminar ? (
-                            <span className="text-destructive font-bold">
-                              {fila.stockAntes} → 0
-                            </span>
-                          ) : (
-                            <span
-                              className={
-                                fila.stockAntes !== fila.stockDespues
-                                  ? "font-bold"
-                                  : ""
-                              }
-                            >
-                              {fila.stockAntes} → {fila.stockDespues}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {fila.seVaAEliminar ? (
-                            <span className="text-destructive font-bold">
-                              —
-                            </span>
-                          ) : (
-                            <span
-                              className={
-                                fila.precioAntes !== fila.precioDespues
-                                  ? "font-bold"
-                                  : ""
-                              }
-                            >
-                              {fila.precioAntes
-                                ? formatearMoneda(fila.precioAntes)
-                                : "—"}{" "}
-                              →{" "}
-                              {fila.precioDespues
-                                ? formatearMoneda(fila.precioDespues)
-                                : "—"}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {filas.map((fila) => {
+                      const dirStock = direccion(
+                        fila.stockAntes,
+                        fila.stockDespues,
+                      );
+                      const dirPrecio = direccion(
+                        fila.precioAntes,
+                        fila.precioDespues,
+                      );
+
+                      return (
+                        <tr
+                          key={fila.key}
+                          className={
+                            fila.seVaAEliminar ? "bg-[var(--bg-danger)]" : ""
+                          }
+                        >
+                          <td className="px-3 py-2 font-medium">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span>{fila.atributosLabel}</span>
+                              {fila.seVaAEliminar && (
+                                <Badge
+                                  variant="destructive"
+                                  className="text-[10px] font-bold"
+                                >
+                                  Se eliminará
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {fila.seVaAEliminar ? (
+                              <span className="text-destructive">
+                                {fila.stockAntes} → 0
+                              </span>
+                            ) : (
+                              <span>
+                                {fila.stockAntes}{" "}
+                                <span className="text-muted-foreground">→</span>{" "}
+                                <span className={claseValor(dirStock)}>
+                                  {fila.stockDespues}
+                                </span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {fila.seVaAEliminar ? (
+                              <span className="text-destructive">—</span>
+                            ) : (
+                              <span>
+                                {fila.precioAntes
+                                  ? formatearMoneda(fila.precioAntes)
+                                  : "—"}{" "}
+                                <span className="text-muted-foreground">→</span>{" "}
+                                <span className={claseValor(dirPrecio)}>
+                                  {fila.precioDespues
+                                    ? formatearMoneda(fila.precioDespues)
+                                    : "—"}
+                                </span>
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </ScrollArea>

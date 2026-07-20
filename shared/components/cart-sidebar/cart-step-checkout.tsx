@@ -88,13 +88,23 @@ export function CartStepCheckout({
   const diferencia = montoObjetivo - sumaPagos;
 
   const syncSinglePayment = (monto: number, metodoId?: string) => {
+    // Para Cuenta Corriente no autocompletamos ningún método salvo que
+    // venga explícito (metodoId, ej. un click real sobre un botón de
+    // método): un default silencioso al primer método de la lista ya
+    // generó pagos mal asignados sin que nadie lo note.
     const currentMethodId =
-      metodoId || pagos[0]?.metodoPagoId || metodosPagoDB[0]?.id;
+      metodoId ||
+      pagos[0]?.metodoPagoId ||
+      (isCuentaCorriente ? undefined : metodosPagoDB[0]?.id);
     if (!currentMethodId) return;
     onPagosChange([{ metodoPagoId: currentMethodId, montoAsignado: monto }]);
   };
 
   useEffect(() => {
+    // Mismo criterio que syncSinglePayment: en Cuenta Corriente el
+    // selector arranca vacío y el usuario lo elige a mano. En Venta
+    // Regular se mantiene el default de siempre (primer método).
+    if (isCuentaCorriente) return;
     if (!modoMixto && metodosPagoDB.length > 0) {
       const currentMethodId = pagos[0]?.metodoPagoId || metodosPagoDB[0]?.id;
 
@@ -111,7 +121,13 @@ export function CartStepCheckout({
   const handleCuentaCorrienteChange = (value: boolean) => {
     onCuentaCorrienteChange(value);
     onModoMixtoChange(false);
-    syncSinglePayment(value ? anticipoActual : totalFinal);
+    if (value) {
+      // Entrando a Cuenta Corriente: NO heredamos el método que pudiera
+      // haber quedado seleccionado de Venta Regular — arranca vacío.
+      onPagosChange([]);
+    } else {
+      syncSinglePayment(totalFinal);
+    }
   };
 
   const handleReservaChange = (value: boolean) => {
@@ -196,7 +212,9 @@ export function CartStepCheckout({
             >
               <Button
                 type="button"
-                variant={!isCuentaCorriente && !isReserva ? "default" : "outline"}
+                variant={
+                  !isCuentaCorriente && !isReserva ? "default" : "outline"
+                }
                 onClick={() => {
                   handleCuentaCorrienteChange(false);
                   handleReservaChange(false);
@@ -243,8 +261,9 @@ export function CartStepCheckout({
             />
           </section>
 
-          {/* METODOS DE PAGO */}
-          {!isReserva && isPOSMode && (!isCuentaCorriente || anticipoActual > 0) ? (
+          {/* METODOS DE PAGO — mismo comportamiento para Venta Regular y
+              Cuenta Corriente; solo Reservado la oculta. */}
+          {!isReserva && isPOSMode ? (
             <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
               <div className="flex items-start justify-between gap-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">

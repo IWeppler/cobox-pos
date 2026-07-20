@@ -215,7 +215,14 @@ export function CartPanelAdmin({
       : 0;
   const firstPagoId = pagos[0]?.metodoPagoId;
 
-  const metodoPagoRapidoId = firstPagoId || metodosPagoDB[0]?.id || "";
+  // En Cuenta Corriente no caemos al primer método de la lista si el
+  // usuario todavía no eligió ninguno — este es el valor que efectivamente
+  // se manda al backend (ver pagosToSubmit más abajo), así que sin este
+  // guard el fix de "no autocompletar" en CartStepCheckout sería solo
+  // cosmético: la venta igual se registraría con un método que nadie
+  // eligió.
+  const metodoPagoRapidoId =
+    firstPagoId || (isCuentaCorriente ? "" : metodosPagoDB[0]?.id || "");
   const pagosSincronizados = useMemo<CreateSalePaymentInput[]>(() => {
     if (modoMixto) return pagos;
     if (!metodoPagoRapidoId) return [];

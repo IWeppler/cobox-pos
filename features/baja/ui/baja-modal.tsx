@@ -99,7 +99,7 @@ export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
 
         {variantesDisponibles.length === 0 ? (
           <div className="p-4 mt-4 text-center text-sm font-medium text-muted-foreground bg-muted rounded-md border border-border">
-            No hay stock disponible para dar de baja en esta planta.
+            No hay stock disponible para dar de baja en este producto.
           </div>
         ) : (
           <form action={handleSubmit} className="space-y-5 pt-4">
@@ -135,6 +135,8 @@ export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
               />
             </div>
 
+            {/* planta */}
+
             <div className="space-y-2">
               <Label>Motivo principal</Label>
               <Select value={motivo} onValueChange={setMotivo} required>
@@ -142,11 +144,11 @@ export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
                   <SelectValue placeholder="Por que se da de baja?" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Planta seca">
-                    Planta seca / Muerta
+                  <SelectItem value="Producto seco">
+                    Producto Dañado
                   </SelectItem>
                   <SelectItem value="Plaga/Hongos">
-                    Enferma (Plaga/Hongos)
+                    Enfermo (Plaga/Hongos)
                   </SelectItem>
                   <SelectItem value="Rotura de maceta">
                     Rotura de maceta

@@ -203,7 +203,7 @@ export function BannerManager({ config }: Readonly<BannerManagerProps>) {
             <Input
               value={formData.banner_subtitulo}
               onChange={(e) => handleChange("banner_subtitulo", e.target.value)}
-              placeholder="Ej: 15% OFF en todas las plantas de interior"
+              placeholder="Ej: 15% OFF en todos los productos de interior"
             />
           </div>
 
@@ -217,7 +217,7 @@ export function BannerManager({ config }: Readonly<BannerManagerProps>) {
                 onChange={(e) =>
                   handleChange("banner_boton_texto", e.target.value)
                 }
-                placeholder="Ej: Ver plantas"
+                placeholder="Ej: Ver productos"
               />
             </div>
             <div className="space-y-2">

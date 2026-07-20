@@ -147,7 +147,7 @@ export default async function BajasPage({
             Bajas de Inventario
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Aprueba o rechaza los reportes de plantas dañadas o faltantes.
+            Aprueba o rechaza los reportes de productos dañados o faltantes.
           </p>
         </div>
       </div>
