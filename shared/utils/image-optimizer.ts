@@ -1,27 +1,47 @@
 import imageCompression from "browser-image-compression";
 
-export async function optimizarImagen(file: File): Promise<File> {
+type TipoImagen = "thumbnail" | "main";
+export interface ProductoOptimizado {
+  main: File;
+  thumbnail: File;
+}
+
+// 1. Para logos o imágenes individuales
+export async function optimizarImagen(
+  file: File,
+  tipo: TipoImagen = "main"
+): Promise<File> {
+  const isThumb = tipo === "thumbnail";
+
   const options = {
-    maxSizeMB: 0.8, // Buscamos que ninguna foto pese más de 800kb
-    maxWidthOrHeight: 1080, // Tamaño ideal para e-commerce (pantallas HD)
-    useWebWorker: true, // Usa hilos secundarios para no congelar la pantalla
-    fileType: "image/webp" as const, // Forzamos formato ultra liviano
-    initialQuality: 0.8, // Calidad del 80% (casi indistinguible del original)
+    maxSizeMB: isThumb ? 0.03 : 0.1,
+    maxWidthOrHeight: isThumb ? 150 : 600,
+    useWebWorker: true,
+    fileType: "image/webp" as const,
+    initialQuality: 0.7,
   };
 
   try {
     const compressedBlob = await imageCompression(file, options);
+    const baseName = file.name.replace(/\.[^/.]+$/, "");
+    const suffix = isThumb ? "-thumb" : "";
 
-    // Le cambiamos la extensión al nombre original para que termine en .webp
-    const newFileName = file.name.replace(/\.[^/.]+$/, "") + ".webp";
-
-    // Convertimos el Blob comprimido de vuelta a un objeto File estándar
-    return new File([compressedBlob], newFileName, {
+    return new File([compressedBlob], `${baseName}${suffix}.webp`, {
       type: "image/webp",
       lastModified: Date.now(),
     });
   } catch (error) {
-    console.error("Error comprimiendo la imagen:", error);
-    return file; // Si por algún motivo ultra raro falla, devolvemos la original
+    console.error("Error comprimiendo imagen:", error);
+    return file;
   }
+}
+
+// 2. Para productos (Genera las 2 versiones en paralelo)
+export async function optimizarImagenProducto(file: File): Promise<ProductoOptimizado> {
+  const [main, thumbnail] = await Promise.all([
+    optimizarImagen(file, "main"),
+    optimizarImagen(file, "thumbnail"),
+  ]);
+
+  return { main, thumbnail };
 }

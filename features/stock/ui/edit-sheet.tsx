@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import type { Producto } from "@/entities/productos/types";
 import { Button } from "@/shared/ui/button";
 import { createClient } from "@/shared/config/supabase/client";
-import { optimizarImagen } from "@/shared/utils/image-optimizer";
+import { optimizarImagenProducto } from "@/shared/utils/image-optimizer";
 import { parseProductImages } from "../lib/stock-product-utils";
 import {
   Sheet,
@@ -255,10 +255,18 @@ export function ProductEditDetailSheet({
     if (archivos.length > 0) {
       setIsCompressing(true);
       formData.delete("imagenes");
-      const archivosComprimidos = await Promise.all(
-        archivos.map((file) => optimizarImagen(file)),
+      formData.delete("thumbnails");
+
+      const imagenesOptimizadas = await Promise.all(
+        archivos.map((file) => optimizarImagenProducto(file)),
       );
-      archivosComprimidos.forEach((file) => formData.append("imagenes", file));
+
+      // Desestructuramos el main y el thumbnail de cada iteración
+      imagenesOptimizadas.forEach(({ main, thumbnail }) => {
+        formData.append("imagenes", main);
+        formData.append("thumbnails", thumbnail);
+      });
+
       setIsCompressing(false);
     }
 
@@ -269,11 +277,6 @@ export function ProductEditDetailSheet({
     }
   };
 
-  // Última barrera humana antes de guardar: comparamos el payload que se
-  // va a mandar contra lo que HOY existe en producto_variantes — traído
-  // fresco en este momento, no contra variantSelection.variantes (el
-  // estado local del formulario), porque el estado local es justamente lo
-  // que puede haber perdido una combinación sin que el usuario lo note.
   const abrirConfirmacionVariantes = async (formData: FormData) => {
     setPendingFormData(formData);
     setConfirmModalOpen(true);

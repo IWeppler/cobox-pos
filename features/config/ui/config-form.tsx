@@ -32,6 +32,7 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
 
   const [state, formAction, isPending] = useActionState(
     async (prevState: any, formData: FormData) => {
+     
       const result = await updateConfiguracionAction(prevState, formData);
       if (result.success) {
         toast.success("Configuración actualizada correctamente.");

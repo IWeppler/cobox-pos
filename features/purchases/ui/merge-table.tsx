@@ -55,7 +55,7 @@ import { Producto } from "@/entities/productos/types";
 import { createClient } from "@/shared/config/supabase/client";
 import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-attributes";
 import { ProductMediaSection } from "@/features/stock/ui/create-product/product-media-section";
-import { optimizarImagen } from "@/shared/utils/image-optimizer";
+import { optimizarImagenProducto } from "@/shared/utils/image-optimizer";
 
 interface MergeTableProps {
   orden: OrdenCompra;
@@ -349,19 +349,26 @@ export function MergeTable({
 
     setIsSubmitting(true);
 
-    const archivosComprimidos =
+    // ⚡ 1. Comprimimos generando ambas versiones (main + thumbnail)
+    const imagenesProcesadas =
       archivosNuevoProducto.length > 0
         ? await Promise.all(
-            archivosNuevoProducto.map((f) => optimizarImagen(f)),
+            archivosNuevoProducto.map((f) => optimizarImagenProducto(f)),
           )
         : [];
 
+    // Separamos en dos arrays limpios
+    const archivosMain = imagenesProcesadas.map((img) => img.main);
+    const archivosThumb = imagenesProcesadas.map((img) => img.thumbnail);
+
+    // ⚡ 2. Enviamos ambos arrays a la Server Action
     const res = await crearProductoAlVueloAction(
       nuevoProductoData.nombre,
       itemActual.precio_costo,
       nuevoProductoData.precio,
+      archivosMain,
+      archivosThumb,
       nuevoProductoData.categoria,
-      archivosComprimidos,
     );
     setIsSubmitting(false);
 
@@ -504,7 +511,7 @@ export function MergeTable({
 
       {/* Tabla Interactiva Agrupada */}
       <div className="bg-background rounded-xl border border-border overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm text-left min-w-[1000px]">
+        <table className="w-full text-sm text-left min-w-250">
           <thead className="bg-muted/50 text-foreground/80 text-xs uppercase font-semibold tracking-wide border-b border-border">
             <tr>
               <th className="px-6 py-3 w-16 text-center">Estado</th>
@@ -588,7 +595,7 @@ export function MergeTable({
                             <div key={idx} className="flex flex-col gap-1">
                               <div className="flex items-center gap-1.5 bg-background border border-border/80 px-2 py-1 rounded text-xs text-muted-foreground">
                                 <Layers className="w-3 h-3 opacity-60" />
-                                <span className="truncate max-w-[150px]">
+                                <span className="truncate max-w-37">
                                   {item.raw_variante}
                                 </span>
                                 <span className="font-semibold text-emerald-600 ">

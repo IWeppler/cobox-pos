@@ -116,8 +116,9 @@ export async function crearProductoAlVueloAction(
   nombre: string,
   costo: number,
   precio: number,
+  archivosMain: File[],
+  archivosThumb: File[],
   categoriaNombre?: string,
-  archivos: File[] = [],
 ) {
   try {
     const cookieStore = await cookies();
@@ -166,26 +167,52 @@ export async function crearProductoAlVueloAction(
       }
     }
 
-    // Subir imágenes (opcional): mismo bucket/naming/formato que create-product.ts.
+    // Subir imágenes Main y Thumbnails
     let imagen_url: string | null = null;
-    const validFiles = archivos.filter((f) => f.size > 0);
-    if (validFiles.length > 0) {
-      const urls: string[] = [];
-      for (const file of validFiles) {
-        const fileExt = file.name.split(".").pop();
-        const fileName = `${crypto.randomUUID()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
+    let thumbnail_url: string | null = null;
+    const urlsMain: string[] = [];
+    const urlsThumb: string[] = [];
+
+    for (let i = 0; i < archivosMain.length; i++) {
+      const fileMain = archivosMain[i];
+      const fileThumb = archivosThumb[i];
+
+      if (fileMain && fileMain.size > 0) {
+        const fileExt = fileMain.name.split(".").pop();
+        const baseFileName = crypto.randomUUID();
+
+        // 1. Subir Main
+        const mainName = `${baseFileName}.${fileExt}`;
+        const { error: uploadMainError } = await supabase.storage
           .from("productos")
-          .upload(fileName, file);
-        if (!uploadError) {
+          .upload(mainName, fileMain);
+
+        if (!uploadMainError) {
           const {
-            data: { publicUrl },
-          } = supabase.storage.from("productos").getPublicUrl(fileName);
-          urls.push(publicUrl);
+            data: { publicUrl: urlMain },
+          } = supabase.storage.from("productos").getPublicUrl(mainName);
+          urlsMain.push(urlMain);
+        }
+
+        // 2. Subir Thumbnail (si existe en el mismo índice)
+        if (fileThumb && fileThumb.size > 0) {
+          const thumbName = `thumbs/${baseFileName}-thumb.${fileExt}`;
+          const { error: uploadThumbError } = await supabase.storage
+            .from("productos")
+            .upload(thumbName, fileThumb);
+
+          if (!uploadThumbError) {
+            const {
+              data: { publicUrl: urlThumb },
+            } = supabase.storage.from("productos").getPublicUrl(thumbName);
+            urlsThumb.push(urlThumb);
+          }
         }
       }
-      if (urls.length > 0) imagen_url = JSON.stringify(urls);
     }
+
+    if (urlsMain.length > 0) imagen_url = JSON.stringify(urlsMain);
+    if (urlsThumb.length > 0) thumbnail_url = JSON.stringify(urlsThumb);
 
     const { data: nuevoProducto, error } = await supabase
       .from("productos")
@@ -199,6 +226,7 @@ export async function crearProductoAlVueloAction(
         publicado: true,
         atributos_globales: {},
         imagen_url,
+        thumbnail_url,
       })
       .select("*")
       .single();
@@ -207,10 +235,6 @@ export async function crearProductoAlVueloAction(
       console.error("Error creando producto al vuelo:", error);
       return { error: "Error de BD al crear." };
     }
-
-    // ELIMINADO: Ya no creamos la variante "Unico" ni su stock base aquí.
-    // La función aprobarOrdenAction se encargará de inyectar dinámicamente
-    // todas las variantes detectadas (ej: Talle S, M, L) que le pase el Frontend.
 
     return { success: true, producto: nuevoProducto };
   } catch (error) {
@@ -253,11 +277,6 @@ async function actualizarStock(
   if (!item.producto_id) return;
 
   const variante = item.variante_match || item.raw_variante || "Unico";
-  // Mismo criterio que create-product.ts/edit-product.ts: el texto crudo
-  // del remito ("4xl") se resuelve contra lo que ya existe en
-  // atributos/atributo_valores ANTES de escribir el JSONB — así una
-  // variante nueva reusa la forma canónica ("4XL") en vez de multiplicar
-  // variantes por casing distinto entre pedidos/proveedores.
   const atributosRaw = parseVarianteAtributos(variante);
   const atributos = canonicalizarValores(atributosRaw, atributoCache);
 
@@ -287,11 +306,6 @@ async function actualizarStock(
       varianteUpdateError,
     );
   } else {
-    // Si el precio de esta fila difiere del precio unificado que ya se
-    // escribió a nivel producto, la variante lleva su propio precio/costo
-    // (tal cual los vio el usuario en la conciliación, sin recalcular). Si
-    // coincide, se deja en null para heredar del producto y no duplicar
-    // filas idénticas.
     const difierePrecio =
       (item.precio_venta_actualizado || 0) !== precioBaseProducto;
 
@@ -390,18 +404,14 @@ export async function aprobarOrdenAction(
     // Precio unificado que efectivamente se escribió a nivel producto, por
     // producto_id — referencia para saber si una variante puntual difiere.
     const precioBasePorProducto = new Map<string, number>();
-
-    // Normalizamos TODOS los atributos del remito (Talle/Color/...) contra
-    // lo que ya existe en atributos/atributo_valores en una sola pasada
-    // antes de tocar ninguna variante — evita un round-trip a la DB por
-    // cada fila cuando el mismo valor se repite entre items.
     const valoresPorPropiedad: Record<string, Set<string>> = {};
     for (const item of itemsResueltos) {
       if (!item.producto_id) continue;
       const variante = item.variante_match || item.raw_variante || "Unico";
       const atributosRaw = parseVarianteAtributos(variante);
       Object.entries(atributosRaw).forEach(([nombre, valor]) => {
-        if (!valoresPorPropiedad[nombre]) valoresPorPropiedad[nombre] = new Set();
+        if (!valoresPorPropiedad[nombre])
+          valoresPorPropiedad[nombre] = new Set();
         valoresPorPropiedad[nombre].add(valor);
       });
     }

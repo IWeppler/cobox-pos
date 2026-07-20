@@ -27,11 +27,6 @@ import {
 } from "lucide-react";
 import { getClienteDetalleAction } from "../actions/manage-clients";
 import { calcularDiasVencido } from "../lib/calcular-dias-vencido";
-import {
-  calcularRecargoMoraTotal,
-  calcularSaldoConRecargo,
-  RecargoMoraConfig,
-} from "../lib/calcular-saldo-con-recargo";
 import { AdjustClientBalanceModal } from "./adjust-client-balance-modal";
 import { EditClientModal } from "./edit-client-modal";
 import { RegisterPaymentModal } from "./register-payment-modal";
@@ -39,6 +34,7 @@ import { Cliente, CuentaCorrienteMovimiento } from "@/entities/clientes/type";
 import { MetodoPagoPOS } from "@/shared/components/cart-sidebar/types";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
 import { getSupabaseRelation, SupabaseRelation } from "@/entities/ventas/types";
+import { RecargoMoraConfig } from "../lib/calcular-saldo-con-recargo";
 
 interface ReservaResumen {
   id: string;
@@ -56,9 +52,7 @@ interface VentaResumen {
   id: string;
   total: number | string;
   estado_pago?: string | null;
-  monto_pendiente?: number | string | null;
   fecha_venta: string;
-  fecha_vencimiento?: string | null;
   ventas_items?: {
     cantidad: number | string;
     producto?: SupabaseRelation<{
@@ -138,13 +132,6 @@ export function ClientDetailSheet({
     };
   }, [data.ventas]);
 
-  const recargoMora = useMemo(() => {
-    const ticketsConSaldo = data.ventas.filter(
-      (venta) => Number(venta.monto_pendiente || 0) > 0,
-    );
-    return calcularRecargoMoraTotal(ticketsConSaldo, recargoMoraConfig);
-  }, [data.ventas, recargoMoraConfig]);
-
   if (!cliente) return null;
   const saldo = Number(cliente.saldo_pendiente || 0);
 
@@ -210,7 +197,7 @@ export function ClientDetailSheet({
               variant="outline"
               size="sm"
               onClick={() => setIsAdjustOpen(true)}
-              className="h-8 text-xs font-bold shadow-none border-border"
+              className="h-8 text-xs font-semibold shadow-none border-border"
             >
               <PlusCircle className="w-3.5 h-3.5 mr-1.5 text-amber-600" />
               Cargar saldo inicial
@@ -219,7 +206,7 @@ export function ClientDetailSheet({
               variant="outline"
               size="sm"
               onClick={() => setIsEditOpen(true)}
-              className="h-8 text-xs font-bold shadow-none border-border"
+              className="h-8 text-xs font-semibold shadow-none border-border"
             >
               <Edit2 className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
               Editar datos
@@ -286,8 +273,8 @@ export function ClientDetailSheet({
                           {formatearMoneda(saldo)}
                         </p>
                         {fechaVencimientoFormateada && (
-                          <div className="flex justify-betweenitems-center gap-2 mt-2">
-                            <p className="text-[10px] text-muted-foreground">
+                          <div className="flex justify-between items-center gap-2 mt-2">
+                            <p className="text-xs text-muted-foreground">
                               Vence: {fechaVencimientoFormateada}
                             </p>
                             {mostrarAlertaVencimiento && (
@@ -301,18 +288,11 @@ export function ClientDetailSheet({
                             )}
                           </div>
                         )}
-                        {recargoMora.totalRecargo > 0 && (
-                          <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold mt-1">
-                            + {formatearMoneda(recargoMora.totalRecargo)} de
-                            recargo por mora estimado
-                          </p>
-                        )}
                       </div>
                       {saldo > 0 && (
                         <RegisterPaymentModal
                           cliente={cliente}
                           metodosPago={metodosPago}
-                          recargoMoraEstimado={recargoMora.totalRecargo}
                         />
                       )}
                     </div>
@@ -383,21 +363,6 @@ export function ClientDetailSheet({
                       <div className="space-y-3">
                         {data.ventas.map((venta) => {
                           const idCorto = venta.id.split("-")[0].toUpperCase();
-                          const montoPendienteVenta = Number(
-                            venta.monto_pendiente || 0,
-                          );
-                          const saldoTicket =
-                            montoPendienteVenta > 0
-                              ? calcularSaldoConRecargo(
-                                  {
-                                    monto_pendiente: montoPendienteVenta,
-                                    fecha_vencimiento:
-                                      venta.fecha_vencimiento ?? null,
-                                  },
-                                  recargoMoraConfig,
-                                )
-                              : null;
-
                           return (
                             <div
                               key={venta.id}
@@ -427,37 +392,6 @@ export function ClientDetailSheet({
                                   )
                                   .join(", ")}
                               </div>
-                              {saldoTicket && (
-                                <div className="flex items-center justify-between gap-2 mt-1 pt-2 border-t border-border/40">
-                                  <Badge
-                                    variant="outline"
-                                    className={
-                                      saldoTicket.estaVencido
-                                        ? "bg-rose-50 text-rose-700 border-rose-200 text-[10px] uppercase font-bold tracking-wider"
-                                        : "bg-amber-50 text-amber-700 border-amber-200 text-[10px] uppercase font-bold tracking-wider"
-                                    }
-                                  >
-                                    {saldoTicket.estaVencido
-                                      ? "Vencido"
-                                      : "Pendiente"}
-                                  </Badge>
-                                  <span className="text-xs font-semibold text-foreground">
-                                    Saldo:{" "}
-                                    {formatearMoneda(
-                                      saldoTicket.saldoConRecargo,
-                                    )}
-                                    {saldoTicket.montoRecargo > 0 && (
-                                      <span className="text-[10px] text-rose-600 dark:text-rose-400 font-normal ml-1">
-                                        (incluye{" "}
-                                        {formatearMoneda(
-                                          saldoTicket.montoRecargo,
-                                        )}{" "}
-                                        de recargo)
-                                      </span>
-                                    )}
-                                  </span>
-                                </div>
-                              )}
                             </div>
                           );
                         })}

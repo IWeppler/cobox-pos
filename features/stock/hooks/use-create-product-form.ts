@@ -1,19 +1,17 @@
 "use client";
 
-import {
-  startTransition,
-  useActionState,
-  useEffect,
-  useState,
-} from "react";
+import { startTransition, useActionState, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
-import { optimizarImagen } from "@/shared/utils/image-optimizer";
+import { optimizarImagenProducto } from "@/shared/utils/image-optimizer";
 import { crearProductoAction } from "../actions/create-product";
 import { useVariantSelection } from "./use-variant-selection";
-import type { CategoriaOption, ProductActionState } from "@/features/stock/types";
+import type {
+  CategoriaOption,
+  ProductActionState,
+} from "@/features/stock/types";
 
 export function useCreateProductForm() {
   const router = useRouter();
@@ -80,7 +78,10 @@ export function useCreateProductForm() {
       formData.append("tieneVariantes", showVariants.toString());
       if (showVariants) {
         formData.append("opciones", JSON.stringify(variantSelection.opciones));
-        formData.append("variantes", JSON.stringify(variantSelection.variantes));
+        formData.append(
+          "variantes",
+          JSON.stringify(variantSelection.variantes),
+        );
       }
 
       const result = await crearProductoAction(prevState, formData);
@@ -114,7 +115,9 @@ export function useCreateProductForm() {
     }
 
     if (showVariants && variantSelection.duplicatePropertyNames.size > 0) {
-      toast.error("Resolvé los nombres de propiedad duplicados antes de guardar.");
+      toast.error(
+        "Resolvé los nombres de propiedad duplicados antes de guardar.",
+      );
       return;
     }
 
@@ -128,10 +131,17 @@ export function useCreateProductForm() {
     if (archivos.length > 0) {
       setIsCompressing(true);
       formData.delete("imagenes");
-      const archivosComprimidos = await Promise.all(
-        archivos.map((f) => optimizarImagen(f)),
+      formData.delete("thumbnails");
+
+      const imagenesOptimizadas = await Promise.all(
+        archivos.map((f) => optimizarImagenProducto(f)),
       );
-      archivosComprimidos.forEach((f) => formData.append("imagenes", f));
+
+      imagenesOptimizadas.forEach(({ main, thumbnail }) => {
+        formData.append("imagenes", main);
+        formData.append("thumbnails", thumbnail);
+      });
+
       setIsCompressing(false);
     }
 
