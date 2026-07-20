@@ -22,6 +22,7 @@ export interface CuentaCorrienteMovimiento {
   pago_id?: string | null;
   tipo: TipoMovimientoCC;
   monto: number;
+  monto_recargo: number;
   descripcion?: string | null;
   creado_por?: string | null;
   creado_en: string;

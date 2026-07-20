@@ -459,7 +459,7 @@ export function CajaDashboard({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="p-4 rounded-2xl border border-border bg-muted flex flex-col justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">

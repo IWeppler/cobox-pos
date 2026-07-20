@@ -1,44 +1,72 @@
 "use client";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  Edit2,
-  FileText,
-  MoreVertical,
-  PlusCircle,
+  CheckCircle2,
+  Clock,
   Search,
   UploadCloud,
   Users,
   Wallet,
+  type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
-import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/shared/ui/dropdown-menu";
 import { Input } from "@/shared/ui/input";
 import { Cliente } from "@/entities/clientes/type";
 import { MetodoPago } from "@/entities/payments/types";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { CreateClientModal } from "./add-client-modal";
-import { AdjustClientBalanceModal } from "./adjust-client-balance-modal";
 import { ClientDetailSheet } from "./client-detail-sheet";
-import { EditClientModal } from "./edit-client-modal";
+import {
+  ClientStatusFilterControl,
+  type ClientStatusFilter,
+} from "./client-status-filter";
 import { ImportClientsCsvModal } from "./import-clients-csv-modal";
 import { calcularDiasVencido } from "../lib/calcular-dias-vencido";
+import { RecargoMoraConfig } from "../lib/calcular-saldo-con-recargo";
 
 type SortConfig = {
   key: "nombre" | "deuda" | "ltv" | "vencimiento";
   direction: "asc" | "desc";
 };
 const CLIENTS_PER_PAGE = 10;
+
+// Una deuda solo se considera vencida si tiene fecha_vencimiento_deuda Y esa
+// fecha ya pasó. Sin fecha, o con fecha futura, es "con deuda" a secas.
+function clasificarEstadoCliente(
+  saldoPendiente: number,
+  diasVencido: number | null,
+): Exclude<ClientStatusFilter, "todos"> {
+  if (saldoPendiente <= 0) return "al_dia";
+  if (diasVencido !== null && diasVencido > 0) return "vencido";
+  return "con_deuda";
+}
+
+const ESTADO_CLIENTE_CONFIG: Record<
+  Exclude<ClientStatusFilter, "todos">,
+  { label: string; icon: LucideIcon; className: string }
+> = {
+  al_dia: {
+    label: "Al día",
+    icon: CheckCircle2,
+    className: "text-emerald-700 dark:text-accent-lime",
+  },
+  con_deuda: {
+    label: "Con deuda",
+    icon: Clock,
+    className: "text-accent-orange",
+  },
+  vencido: {
+    label: "Vencido",
+    icon: AlertTriangle,
+    className: "text-rose-600 dark:text-rose-400",
+  },
+};
 
 type ClienteVentaResumen = {
   total?: number | string | null;
@@ -53,29 +81,29 @@ type ClienteMapeado = ClienteConVentas & {
   totalComprado: number;
   fechaVencimientoFormateada: string | null;
   diasVencido: number | null;
-  mostrarAlertaVencimiento: boolean;
+  estado: Exclude<ClientStatusFilter, "todos">;
 };
 
 interface ClientsViewProps {
   clientes: ClienteConVentas[];
   metodosPago: MetodoPago[];
   entregaMinimaActiva?: boolean;
+  recargoMoraConfig: RecargoMoraConfig;
 }
 
 export function ClientsView({
   clientes,
   metodosPago,
   entregaMinimaActiva = false,
+  recargoMoraConfig,
 }: Readonly<ClientsViewProps>) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState("todos");
+  const [filterStatus, setFilterStatus] = useState<ClientStatusFilter>("todos");
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "ltv",
     direction: "desc",
   });
   const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
-  const [clientToEdit, setClientToEdit] = useState<Cliente | null>(null);
-  const [clientToAdjust, setClientToAdjust] = useState<Cliente | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -98,8 +126,6 @@ export function ClientsView({
       const fechaVencimiento = cliente.fecha_vencimiento_deuda ?? null;
       const diasVencido = calcularDiasVencido(fechaVencimiento);
       const saldo = Number(cliente.saldo_pendiente || 0);
-      const mostrarAlertaVencimiento =
-        diasVencido !== null && diasVencido > 0 && saldo > 0;
       const fechaVencimientoFormateada = fechaVencimiento
         ? new Intl.DateTimeFormat("es-AR", {
             day: "2-digit",
@@ -108,6 +134,7 @@ export function ClientsView({
             timeZone: "UTC",
           }).format(new Date(fechaVencimiento))
         : null;
+      const estado = clasificarEstadoCliente(saldo, diasVencido);
 
       return {
         ...cliente,
@@ -115,7 +142,7 @@ export function ClientsView({
         totalComprado,
         fechaVencimientoFormateada,
         diasVencido,
-        mostrarAlertaVencimiento,
+        estado,
       };
     });
   }, [clientes]);
@@ -127,10 +154,8 @@ export function ClientsView({
         (cliente.telefono && cliente.telefono.includes(searchQuery)),
     );
 
-    if (filterStatus === "con_deuda") {
-      result = result.filter((cliente) => Number(cliente.saldo_pendiente) > 0);
-    } else if (filterStatus === "al_dia") {
-      result = result.filter((cliente) => Number(cliente.saldo_pendiente) <= 0);
+    if (filterStatus !== "todos") {
+      result = result.filter((cliente) => cliente.estado === filterStatus);
     }
 
     result.sort((a, b) => {
@@ -182,7 +207,7 @@ export function ClientsView({
     setCurrentPage(1);
   };
 
-  const handleFilterChange = (status: string) => {
+  const handleFilterChange = (status: ClientStatusFilter) => {
     setFilterStatus(status);
     setCurrentPage(1);
   };
@@ -285,26 +310,10 @@ export function ClientsView({
         </div>
 
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-4">
-          <div className="grid w-full grid-cols-3 gap-1 bg-muted p-1 rounded-xl border border-border/50 sm:flex sm:w-auto sm:items-center">
-            <button
-              onClick={() => handleFilterChange("todos")}
-              className={`px-2 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all sm:px-3 ${filterStatus === "todos" ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Todos
-            </button>
-            <button
-              onClick={() => handleFilterChange("con_deuda")}
-              className={`px-2 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all sm:px-3 ${filterStatus === "con_deuda" ? "bg-background text-accent-orange" : "text-muted-foreground hover:text-accent-orange"}`}
-            >
-              Morosos
-            </button>
-            <button
-              onClick={() => handleFilterChange("al_dia")}
-              className={`px-2 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all sm:px-3 ${filterStatus === "al_dia" ? "bg-background text-emerald-600 dark:text-accent-lime" : "text-muted-foreground hover:text-emerald-600 dark:hover:text-accent-lime"}`}
-            >
-              Al Dia
-            </button>
-          </div>
+          <ClientStatusFilterControl
+            value={filterStatus}
+            onChange={handleFilterChange}
+          />
 
           <div className="hidden sm:flex gap-2">
             <Button
@@ -343,17 +352,19 @@ export function ClientsView({
             <thead className="bg-muted text-muted-foreground text-[10px] md:text-xs uppercase font-medium tracking-wide border-b border-border/60">
               <tr>
                 <th
-                  className="px-5 py-4 text-left"
+                  className="px-3 py-3 md:px-5 md:py-4 text-left"
                   onClick={() => handleSort("nombre")}
                 >
                   <div className="flex items-center gap-1.5">
                     Cliente {renderSortIcon("nombre")}
                   </div>
                 </th>
-                <th className="px-5 py-4">Estado</th>
-                <th className="px-5 py-4 hidden sm:table-cell">Contacto</th>
+                <th className="py-3 md:px-2 md:py-4">Estado</th>
+                <th className="px-3 py-3 md:px-5 md:py-4 hidden sm:table-cell">
+                  Contacto
+                </th>
                 <th
-                  className="px-5 py-4 hidden md:table-cell text-right"
+                  className="px-3 py-3 md:px-5 md:py-4 hidden md:table-cell text-right"
                   onClick={() => handleSort("ltv")}
                 >
                   <div className="flex items-center justify-end gap-1.5">
@@ -361,7 +372,7 @@ export function ClientsView({
                   </div>
                 </th>
                 <th
-                  className="px-5 py-4 text-right"
+                  className="px-3 py-3 md:px-5 md:py-4 text-right"
                   onClick={() => handleSort("deuda")}
                 >
                   <div className="flex items-center justify-end gap-1.5">
@@ -369,20 +380,19 @@ export function ClientsView({
                   </div>
                 </th>
                 <th
-                  className="px-5 py-4 hidden lg:table-cell"
+                  className="px-3 py-3 md:px-5 md:py-4 hidden lg:table-cell"
                   onClick={() => handleSort("vencimiento")}
                 >
                   <div className="flex items-center gap-1.5">
                     Fecha de vencimiento {renderSortIcon("vencimiento")}
                   </div>
                 </th>
-                <th className="px-5 py-4 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
               {clientesFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center">
+                  <td colSpan={6} className="px-2 py-12 text-center">
                     <div className="flex flex-col items-center justify-center text-muted-foreground">
                       <Users className="w-8 h-8 opacity-20 mb-2" />
                       <p className="font-medium">No se encontraron clientes.</p>
@@ -392,14 +402,16 @@ export function ClientsView({
               ) : (
                 clientesPaginados.map((cliente) => {
                   const saldo = Number(cliente.saldo_pendiente || 0);
-                  const isAlDia = saldo <= 0;
+                  const estadoConfig = ESTADO_CLIENTE_CONFIG[cliente.estado];
+                  const EstadoIcon = estadoConfig.icon;
 
                   return (
                     <tr
                       key={cliente.id}
-                      className="hover:bg-muted/30 transition-colors group"
+                      onClick={() => setSelectedClient(cliente)}
+                      className="hover:bg-muted/30 transition-colors group cursor-pointer"
                     >
-                      <td className="px-5 py-4">
+                      <td className="px-3 py-3 md:px-5 md:py-4">
                         <div className="flex flex-col">
                           <span className="font-semibold text-foreground">
                             {cliente.nombre}
@@ -412,22 +424,38 @@ export function ClientsView({
                         </div>
                       </td>
 
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="relative flex h-2.5 w-2.5">
-                            <span
-                              className={`relative inline-flex rounded-full h-2 w-2 ${isAlDia ? "bg-emerald-500 dark:bg-accent-lime" : "bg-accent-orange"}`}
-                            />
-                          </span>
-                          <span
-                            className={`text-[10px] font-bold uppercase tracking-widest ${isAlDia ? "text-emerald-700 dark:text-accent-lime" : "text-accent-orange"}`}
-                          >
-                            {isAlDia ? "Al dia" : "Con Deuda"}
-                          </span>
+                      <td className="px-2 py-3 md:py-4 text-center">
+                        <div className="flex min-h-10 flex-col justify-center gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toast(estadoConfig.label);
+                              }}
+                              className="flex items-center gap-1.5 -m-1 p-1"
+                            >
+                              <EstadoIcon
+                                className={`h-4 w-4 md:h-3.5 md:w-3.5 shrink-0 ${estadoConfig.className}`}
+                              />
+                              <span
+                                className={`hidden sm:inline text-[10px] font-bold uppercase tracking-widest ${estadoConfig.className}`}
+                              >
+                                {estadoConfig.label}
+                              </span>
+                            </button>
+                          </div>
+                          {cliente.estado === "vencido" &&
+                            cliente.diasVencido !== null && (
+                              <span className="sm:pl-5 text-[11px] font-medium text-rose-600 dark:text-rose-400">
+                                {cliente.diasVencido} día
+                                {cliente.diasVencido === 1 ? "" : "s"}
+                              </span>
+                            )}
                         </div>
                       </td>
 
-                      <td className="px-5 py-4 hidden sm:table-cell">
+                      <td className="px-3 py-3 md:px-5 md:py-4 hidden sm:table-cell">
                         <div className="flex flex-col text-xs font-medium text-muted-foreground">
                           <span>{cliente.telefono || "-"}</span>
                           {cliente.email ? (
@@ -438,7 +466,7 @@ export function ClientsView({
                         </div>
                       </td>
 
-                      <td className="px-5 py-4 hidden md:table-cell text-right">
+                      <td className="px-3 py-3 md:px-5 md:py-4 hidden md:table-cell text-right">
                         <div className="flex flex-col">
                           <span className="font-medium text-muted-foreground">
                             {formatearMoneda(cliente.totalComprado)}
@@ -446,7 +474,7 @@ export function ClientsView({
                         </div>
                       </td>
 
-                      <td className="px-5 py-4 text-right">
+                      <td className="px-2 py-3 md:px-5 md:py-4 text-right">
                         {saldo > 0 ? (
                           <span className="font-semibold text-foreground px-2 py-0.5 shadow-none text-sm">
                             {formatearMoneda(saldo)}
@@ -458,66 +486,10 @@ export function ClientsView({
                         )}
                       </td>
 
-                      <td className="px-5 py-4 hidden lg:table-cell">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs font-medium text-muted-foreground">
-                            {cliente.fechaVencimientoFormateada ?? "—"}
-                          </span>
-                          {cliente.mostrarAlertaVencimiento && (
-                            <Badge
-                              variant="outline"
-                              className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] uppercase font-bold tracking-wider w-fit"
-                            >
-                              Vencido hace {cliente.diasVencido} día
-                              {cliente.diasVencido === 1 ? "" : "s"}
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setSelectedClient(cliente)}
-                            className="bg-muted border border-border text-xs font-bold hover:bg-muted h-8"
-                          >
-                            <FileText className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-                            Ficha
-                          </Button>
-
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
-                              >
-                                <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              align="end"
-                              className="w-48 rounded-xl shadow-lg border-border"
-                            >
-                              <DropdownMenuItem
-                                onClick={() => setClientToAdjust(cliente)}
-                                className="cursor-pointer text-xs font-semibold py-2.5"
-                              >
-                                <PlusCircle className="w-4 h-4 mr-2 text-amber-600" />
-                                Cargar saldo inicial
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => setClientToEdit(cliente)}
-                                className="cursor-pointer text-xs font-semibold py-2.5"
-                              >
-                                <Edit2 className="w-4 h-4 mr-2 text-blue-600" />
-                                Editar datos
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
+                      <td className="px-3 py-3 md:px-5 md:py-4 hidden lg:table-cell">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {cliente.fechaVencimientoFormateada ?? "—"}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -567,16 +539,9 @@ export function ClientsView({
       <ClientDetailSheet
         cliente={selectedClient}
         metodosPago={metodosPago}
-        onClose={() => setSelectedClient(null)}
-      />
-      <EditClientModal
-        cliente={clientToEdit}
-        onClose={() => setClientToEdit(null)}
         entregaMinimaActiva={entregaMinimaActiva}
-      />
-      <AdjustClientBalanceModal
-        cliente={clientToAdjust}
-        onClose={() => setClientToAdjust(null)}
+        recargoMoraConfig={recargoMoraConfig}
+        onClose={() => setSelectedClient(null)}
       />
       <ImportClientsCsvModal
         open={isImportOpen}

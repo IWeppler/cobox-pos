@@ -96,14 +96,14 @@ export function ClientSelector({
 
   return (
     <>
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5 bg-background rounded-lg">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
               role="combobox"
               aria-expanded={open}
-              className={`w-full justify-between h-11 border-border shadow-none ${clienteSeleccionado ? "bg-background border-blue-200 text-primary" : "bg-background"}`}
+              className={`w-full justify-between h-11 border-border shadow-none ${clienteSeleccionado ? "bg-background border-blue-200 text-primary dark:text-blue-500" : "bg-background"}`}
             >
               <span className="truncate font-semibold">
                 {clienteSeleccionado
@@ -179,7 +179,7 @@ export function ClientSelector({
             <div className="p-2 border-t border-border bg-muted/20">
               <Button
                 variant="ghost"
-                className="w-full justify-start text-primary hover:text-primary hover:bg-primary/10 h-9 font-semibold"
+                className="w-full justify-start text-primary hover:text-primary dark:text-blue-500 hover:bg-primary/10 h-9 font-semibold"
                 onClick={() => {
                   setOpen(false);
                   setIsCreateOpen(true);

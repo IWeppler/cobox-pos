@@ -274,7 +274,7 @@ export function CartStepCheckout({
                     type="button"
                     variant="ghost"
                     onClick={handleToggleMixto}
-                    className="h-8 px-2 text-xs font-bold text-primary"
+                    className="h-8 px-2 text-xs font-semibold text-primary dark:text-blue-500"
                   >
                     <Split className="mr-1.5 h-3.5 w-3.5" />
                     {modoMixto ? "Pago rapido" : "Pago Mixto"}

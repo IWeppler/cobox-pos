@@ -27,12 +27,16 @@ import { MetodoPago } from "@/entities/payments/types";
 export function RegisterPaymentModal({
   cliente,
   metodosPago,
+  recargoMoraEstimado = 0,
 }: {
   cliente: Cliente;
   metodosPago: MetodoPago[];
+  recargoMoraEstimado?: number;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const saldoBase = Number(cliente.saldo_pendiente || 0);
+  const montoSugerido = saldoBase + recargoMoraEstimado;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,18 +86,34 @@ export function RegisterPaymentModal({
                 name="monto"
                 type="number"
                 min="1"
-                max={cliente.saldo_pendiente}
+                max={montoSugerido}
                 step="any"
-                placeholder={cliente.saldo_pendiente.toString()}
-                defaultValue={cliente.saldo_pendiente}
+                placeholder={montoSugerido.toString()}
+                defaultValue={montoSugerido}
                 required
                 className="pl-8 h-12 text-lg font-bold shadow-none border-border"
               />
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              Deuda total: $
-              {Number(cliente.saldo_pendiente).toLocaleString("es-AR")}
-            </p>
+            {recargoMoraEstimado > 0 ? (
+              <div className="text-[10px] text-muted-foreground space-y-0.5">
+                <p>Saldo base: ${saldoBase.toLocaleString("es-AR")}</p>
+                <p className="text-rose-600 dark:text-rose-400 font-semibold">
+                  Recargo por mora: $
+                  {recargoMoraEstimado.toLocaleString("es-AR")}
+                </p>
+                <p className="font-semibold text-foreground">
+                  Total sugerido: ${montoSugerido.toLocaleString("es-AR")}
+                </p>
+                <p className="italic">
+                  Estimado sobre tickets vencidos — el monto sigue siendo
+                  editable.
+                </p>
+              </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">
+                Deuda total: ${saldoBase.toLocaleString("es-AR")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

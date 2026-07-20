@@ -2,11 +2,18 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ConfiguracionPOS } from "@/entities/config/types";
+import { ConfiguracionPOS, RecargoMoraTipo } from "@/entities/config/types";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Switch } from "@/shared/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
 import {
   Loader2,
   Wallet,
@@ -16,6 +23,7 @@ import {
   Clock,
   UserX,
   UserCog,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
@@ -36,6 +44,8 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
     cc_limite_default: config.cc_limite_default ?? 0,
     cc_plazo_mora: config.cc_plazo_mora ?? 30,
     crm_dias_inactivo: config.crm_dias_inactivo ?? 60,
+    recargo_mora_tipo: config.recargo_mora_tipo ?? "NINGUNO",
+    recargo_mora_valor: config.recargo_mora_valor ?? 0,
   });
 
   const handleChange = (field: string, value: string | number | boolean) => {
@@ -277,9 +287,9 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
                         Bloquear si no se cumple
                       </Label>
                       <p className="text-xs text-muted-foreground">
-                        Activado: la venta no se puede confirmar sin la
-                        entrega mínima. Apagado: solo se muestra una
-                        advertencia y el vendedor puede continuar igual.
+                        Activado: la venta no se puede confirmar sin la entrega
+                        mínima. Apagado: solo se muestra una advertencia y el
+                        vendedor puede continuar igual.
                       </p>
                     </div>
                     <Switch
@@ -315,6 +325,69 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-xs">
                       días
                     </span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-2 border-t border-border/50">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-semibold flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />{" "}
+                      Recargo por Mora
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Se suma una única vez al saldo de un ticket cuando entra
+                      en estado Vencido (no se acumula día a día).
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Select
+                      value={formData.recargo_mora_tipo}
+                      onValueChange={(val) =>
+                        handleChange(
+                          "recargo_mora_tipo",
+                          val as RecargoMoraTipo,
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-44 bg-muted/50 border-border">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NINGUNO">Ninguno</SelectItem>
+                        <SelectItem value="MONTO_FIJO">Monto fijo $</SelectItem>
+                        <SelectItem value="PORCENTAJE">Porcentaje %</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="relative flex-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        step={
+                          formData.recargo_mora_tipo === "PORCENTAJE"
+                            ? "0.1"
+                            : "1"
+                        }
+                        disabled={formData.recargo_mora_tipo === "NINGUNO"}
+                        value={
+                          formData.recargo_mora_valor === 0
+                            ? ""
+                            : formData.recargo_mora_valor
+                        }
+                        onChange={(e) =>
+                          handleChange(
+                            "recargo_mora_valor",
+                            Number(e.target.value),
+                          )
+                        }
+                        placeholder="0"
+                        className="pr-8 bg-muted/50 border-border disabled:opacity-50"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                        {formData.recargo_mora_tipo === "PORCENTAJE"
+                          ? "%"
+                          : "$"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

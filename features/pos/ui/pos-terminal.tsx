@@ -228,7 +228,7 @@ export function PosTerminal({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pb-20 lg:pb-0">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-20 lg:pb-0">
               {productosOrdenados.map((producto) => {
                 let imagenes: string[] = [];
                 if (typeof producto.imagen_url === "string") {

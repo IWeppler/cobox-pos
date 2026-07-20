@@ -4,6 +4,10 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { parseClientesCSV } from "@/features/clients/lib/parse-clientes-csv";
+import {
+  calcularRecargoMoraTotal,
+  RecargoMoraConfig,
+} from "@/features/clients/lib/calcular-saldo-con-recargo";
 
 interface ClientActionState {
   error: string | null;
@@ -47,7 +51,7 @@ export async function getClienteDetalleAction(clienteId: string) {
     supabase
       .from("ventas")
       .select(
-        "id, total, cliente_id, clientes(nombre), monto_cobrado, monto_pendiente, estado_pago, fecha_venta, ventas_items(cantidad, producto:productos(nombre, tipo)), venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)",
+        "id, total, cliente_id, clientes(nombre), monto_cobrado, monto_pendiente, estado_pago, fecha_venta, fecha_vencimiento, ventas_items(cantidad, producto:productos(nombre, tipo)), venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)",
       )
       .eq("cliente_id", clienteId)
       .order("fecha_venta", { ascending: false }),
@@ -124,6 +128,31 @@ export async function registrarPagoDeudaAction(
   const comisionMonto = (monto * comisionPorcentaje) / 100;
   const montoNeto = monto - comisionMonto;
 
+  // C-bis. Recargo por mora — recalculado server-side, nunca confiar en
+  // lo que mande el cliente (mismo criterio que create-sale.ts con
+  // precios). "Recargo primero": si el monto cobrado no alcanza a cubrir
+  // base + recargo estimado, el recargo se salda antes que el capital.
+  const [{ data: configPos }, { data: ventasVencidas }] = await Promise.all([
+    supabase
+      .from("configuracion_pos")
+      .select("recargo_mora_tipo, recargo_mora_valor")
+      .single(),
+    supabase
+      .from("ventas")
+      .select("monto_pendiente, fecha_vencimiento")
+      .eq("cliente_id", clienteId)
+      .gt("monto_pendiente", 0),
+  ]);
+  const recargoConfig: RecargoMoraConfig = {
+    recargo_mora_tipo: configPos?.recargo_mora_tipo ?? "NINGUNO",
+    recargo_mora_valor: configPos?.recargo_mora_valor ?? 0,
+  };
+  const { totalRecargo } = calcularRecargoMoraTotal(
+    ventasVencidas ?? [],
+    recargoConfig,
+  );
+  const montoRecargoAplicado = Math.min(monto, totalRecargo);
+
   // D. Iniciar Transacción Manual
   // 1. Guardar en venta_pagos (Para que impacte en el Cierre Z de Caja)
   const { data: pagoRegistrado, error: pagoError } = await supabase
@@ -148,6 +177,11 @@ export async function registrarPagoDeudaAction(
     return { error: "Error al registrar pago en caja.", success: false };
 
   // 2. Guardar en el Ledger de la Cuenta Corriente (Para que baje la deuda)
+  const descripcionPago =
+    montoRecargoAplicado > 0
+      ? `Pago a cuenta - ${metodo.nombre} (incluye $${montoRecargoAplicado.toLocaleString("es-AR")} de recargo por mora)`
+      : `Pago a cuenta - ${metodo.nombre}`;
+
   const { error: ccError } = await supabase
     .from("cuenta_corriente_movimientos")
     .insert({
@@ -155,7 +189,8 @@ export async function registrarPagoDeudaAction(
       pago_id: pagoRegistrado.id,
       tipo: "CREDITO",
       monto: monto,
-      descripcion: `Pago a cuenta - ${metodo.nombre}`,
+      monto_recargo: montoRecargoAplicado,
+      descripcion: descripcionPago,
       creado_por: user.id,
     });
 
@@ -180,8 +215,6 @@ export async function registrarPagoDeudaAction(
 
   return { error: null, success: true };
 }
-
-
 
 // 4. CREAR CLIENTE NUEVO
 export async function crearClienteAction(

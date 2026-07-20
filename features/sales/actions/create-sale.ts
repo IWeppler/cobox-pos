@@ -220,7 +220,9 @@ export async function registrarVentaAction(
   // venta que después se rechazaba por sumaPagos/monto.
   const { data: configVenta } = await supabase
     .from("configuracion_pos")
-    .select("permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante")
+    .select(
+      "permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante",
+    )
     .single();
   const permitirVentaSinStock = configVenta?.permitir_venta_sin_stock ?? false;
 
@@ -457,6 +459,13 @@ export async function registrarVentaAction(
           fecha_vencimiento_deuda: fechaVencimientoDeuda,
         })
         .eq("id", clienteId);
+
+      // Vencimiento propio de ESTE ticket, independiente del campo
+      // agregado de clientes (que solo refleja el ticket más reciente).
+      await supabase
+        .from("ventas")
+        .update({ fecha_vencimiento: fechaVencimientoDeuda })
+        .eq("id", nuevaVenta.id);
     }
   }
 

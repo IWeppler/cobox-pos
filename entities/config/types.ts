@@ -1,3 +1,5 @@
+export type RecargoMoraTipo = "NINGUNO" | "MONTO_FIJO" | "PORCENTAJE";
+
 export interface ConfiguracionPOS {
   id: string;
   posName: string;
@@ -44,6 +46,8 @@ export interface ConfiguracionPOS {
   cc_limite_default?: number;
   cc_plazo_mora?: number;
   crm_dias_inactivo?: number;
+  recargo_mora_tipo?: RecargoMoraTipo;
+  recargo_mora_valor?: number;
 
   // Configuración de Caja
   modo_caja?: "UNICA" | "POR_USUARIO" | "POR_PUNTO_VENTA";
