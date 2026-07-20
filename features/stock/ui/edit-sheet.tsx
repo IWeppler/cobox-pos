@@ -42,6 +42,14 @@ import { ProductInventorySection } from "./create-product/product-inventory-sect
 import { ProductMediaSection } from "./create-product/product-media-section";
 import { ProductPriceSection } from "./create-product/product-price-section";
 import { ProductVariantsSection } from "./create-product/product-variants-section";
+import { ShareButton } from "@/shared/components/share-button";
+import {
+  armarMensajeProducto,
+  construirUrlProducto,
+  esVisibleEnCatalogo,
+} from "@/shared/utils/compartir-catalogo";
+import { formatearMoneda } from "@/shared/utils/formatters";
+import { getTotalStock } from "../lib/stock-product-utils";
 
 type EditableProducto = Producto & {
   categoria_id?: string | null;
@@ -50,6 +58,8 @@ type EditableProducto = Producto & {
 type ProductEditDetailSheetProps = {
   producto: EditableProducto;
   userRole?: string;
+  nombreComercio?: string;
+  mostrarSinStock?: boolean;
   children?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -58,11 +68,26 @@ type ProductEditDetailSheetProps = {
 
 export function ProductEditDetailSheet({
   producto,
+  nombreComercio = "Tienda",
+  mostrarSinStock = true,
   children,
   open,
   onOpenChange,
   hideTrigger = false,
 }: Readonly<ProductEditDetailSheetProps>) {
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const urlProducto = producto.slug
+    ? construirUrlProducto(baseUrl, producto.slug)
+    : null;
+  const compartirDeshabilitado =
+    !urlProducto ||
+    !esVisibleEnCatalogo(
+      { publicado: producto.publicado, stockTotal: getTotalStock(producto) },
+      { mostrarSinStock },
+    );
+  const motivoCompartirDeshabilitado = !urlProducto
+    ? "Este producto no tiene link público"
+    : "Este producto no está visible en el catálogo";
   const router = useRouter();
   const isSimpleProduct = isSingleVariantProduct(producto);
   // Fuente única de verdad para reconstruir opciones/variantes al cargar:
@@ -368,6 +393,20 @@ export function ProductEditDetailSheet({
                 </p>
               </div>
             </div>
+
+            <ShareButton
+              url={urlProducto ?? ""}
+              title={`${producto.nombre} | ${nombreComercio}`}
+              text={armarMensajeProducto(
+                producto.nombre,
+                formatearMoneda(producto.precio),
+              )}
+              disabled={compartirDeshabilitado}
+              disabledReason={motivoCompartirDeshabilitado}
+              label="Compartir"
+              variant="outline"
+              size="sm"
+            />
           </SheetHeader>
 
           <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4">

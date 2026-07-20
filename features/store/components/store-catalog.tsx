@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { Producto } from "@/entities/productos/types";
 import { Button } from "@/shared/ui/button";
 import { Plus, SearchX, ShoppingBag } from "lucide-react";
@@ -14,6 +14,8 @@ import {
   ITEMS_POR_PAGINA,
   useCatalogFilters,
 } from "../hooks/use-catalog-filters";
+import { buildPropiedadesFiltro } from "@/entities/productos/lib/build-propiedades-filtro";
+import { slugify } from "@/shared/utils/slugify";
 import { ConfiguracionPOS } from "@/entities/config/types";
 
 interface StoreCatalogProps {
@@ -32,6 +34,17 @@ const ordenOptions: OrdenOption[] = [
   { value: "menor_precio", label: "Menor precio" },
   { value: "mayor_precio", label: "Mayor precio" },
 ];
+const ORDEN_VALIDOS = new Set(ordenOptions.map((o) => o.value));
+
+// Nombres de query param que un filtro de propiedad dinámica (Talle, Color,
+// Género, etc.) NUNCA puede pisar — si una tienda tuviera un atributo cuyo
+// slug coincidiera con uno de estos, ese atributo simplemente no se
+// sincroniza a la URL (degrada con gracia, no rompe nada).
+const PARAMS_RESERVADOS = new Set(["q", "categoria", "orden", "productos"]);
+
+// Cap defensivo para ?productos=id1,id2,... — un link con de más no debe
+// poder forzar una consulta arbitrariamente grande.
+const MAX_PRODUCTOS_SELECCIONADOS = 30;
 
 export function StoreCatalog({
   productos,
@@ -65,27 +78,82 @@ function CatalogContent({
   const pathname = usePathname();
   const searchQuery = searchParams.get("q") || "";
 
-  const [tipo, setTipo] = useState(DEFAULT_TIPO);
-  const [orden, setOrden] = useState(DEFAULT_ORDEN);
+  // --- ?productos=id1,id2,... — selección curada, gana sobre el resto ---
+  const idsSeleccionados = useMemo(() => {
+    const raw = searchParams.get("productos");
+    if (!raw) return null;
+    const ids = [
+      ...new Set(
+        raw
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean),
+      ),
+    ].slice(0, MAX_PRODUCTOS_SELECCIONADOS);
+    return ids.length > 0 ? new Set(ids) : null;
+  }, [searchParams]);
+  const modoSeleccion = idsSeleccionados !== null;
+  const productosBase = modoSeleccion
+    ? productos.filter((p) => idsSeleccionados.has(p.id))
+    : productos;
+
+  // --- categoria (?categoria=<slug>) — el estado interno sigue siendo el
+  // id de la categoría (así lo espera useCatalogFilters); solo la URL
+  // habla en slugs, más lindo para compartir. ---
+  const categoriaParam = searchParams.get("categoria");
+  const tipo = useMemo(() => {
+    if (!categoriaParam) return DEFAULT_TIPO;
+    const match = categorias?.find(
+      (cat) => cat.slug?.toLowerCase() === categoriaParam.toLowerCase(),
+    );
+    return match?.id ?? DEFAULT_TIPO;
+  }, [categoriaParam, categorias]);
+
+  // --- orden (?orden=<valor>) ---
+  const ordenParam = searchParams.get("orden");
+  const orden =
+    ordenParam && ORDEN_VALIDOS.has(ordenParam) ? ordenParam : DEFAULT_ORDEN;
+
+  // Mismo cálculo que hace useCatalogFilters puertas adentro — se repite acá
+  // (memoizado, barato) porque hace falta ANTES de armar filtrosVariantes
+  // desde la URL, y ese hook no expone un paso intermedio.
+  const propiedadesGlobales = useMemo(
+    () =>
+      buildPropiedadesFiltro(productosBase, {
+        ocultarSinStock: config?.mostrar_sin_stock === false,
+        incluirStockLegacy: false,
+      }),
+    [productosBase, config],
+  );
+
+  // --- propiedades de variante (?talle=M&color=Rojo&... — un param por
+  // propiedad activa, nombre = slugify de la propiedad) ---
+  const filtrosVariantes = useMemo(() => {
+    if (modoSeleccion) return {};
+    const result: Record<string, string> = {};
+    for (const propName of Object.keys(propiedadesGlobales)) {
+      const paramName = slugify(propName);
+      if (PARAMS_RESERVADOS.has(paramName)) continue;
+      const valor = searchParams.get(paramName);
+      if (valor) result[propName] = valor;
+    }
+    return result;
+  }, [searchParams, propiedadesGlobales, modoSeleccion]);
+
   const [visibleCount, setVisibleCount] = useState(ITEMS_POR_PAGINA);
 
-  const [filtrosVariantes, setFiltrosVariantes] = useState<
-    Record<string, string>
-  >({});
-
   const {
-    propiedadesGlobales,
     categoriasConStock,
     productosFiltrados,
     productosVisibles,
     hayMasProductos,
     hayFiltrosActivos,
   } = useCatalogFilters({
-    productos,
+    productos: productosBase,
     categorias,
     config,
-    searchQuery,
-    tipo,
+    searchQuery: modoSeleccion ? "" : searchQuery,
+    tipo: modoSeleccion ? DEFAULT_TIPO : tipo,
     filtrosVariantes,
     orden,
     visibleCount,
@@ -93,30 +161,45 @@ function CatalogContent({
 
   const resetVisibleCount = () => setVisibleCount(ITEMS_POR_PAGINA);
 
+  const updateParam = (
+    name: string,
+    value: string | null,
+    mode: "push" | "replace",
+  ) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set(name, value);
+    else params.delete(name);
+
+    const url = params.toString() ? `${pathname}?${params}` : pathname;
+    if (mode === "push") router.push(url, { scroll: false });
+    else router.replace(url, { scroll: false });
+  };
+
   const handleTipoChange = (value: string) => {
-    setTipo(value);
     resetVisibleCount();
+    if (value === DEFAULT_TIPO) {
+      updateParam("categoria", null, "push");
+      return;
+    }
+    const cat = categorias?.find((c) => c.id === value);
+    updateParam("categoria", cat?.slug ?? value, "push");
   };
 
   const handleOrdenChange = (value: string) => {
-    setOrden(value);
     resetVisibleCount();
+    updateParam("orden", value === DEFAULT_ORDEN ? null : value, "replace");
   };
 
   const handleFiltroVarianteChange = (propiedad: string, valor: string) => {
-    setFiltrosVariantes((prev) => ({ ...prev, [propiedad]: valor }));
     resetVisibleCount();
+    const paramName = slugify(propiedad);
+    if (PARAMS_RESERVADOS.has(paramName)) return;
+    updateParam(paramName, valor === "todos" ? null : valor, "push");
   };
 
   const limpiarFiltros = () => {
-    setTipo(DEFAULT_TIPO);
-    setFiltrosVariantes({});
-    setOrden(DEFAULT_ORDEN);
     resetVisibleCount();
-
-    if (searchQuery) {
-      router.replace(pathname);
-    }
+    router.replace(pathname);
   };
 
   if (productos.length === 0) {
@@ -135,23 +218,27 @@ function CatalogContent({
 
   return (
     <div className="space-y-6">
-      <CategoryPills
-        tipo={tipo}
-        categoriasConStock={categoriasConStock}
-        onTipoChange={handleTipoChange}
-      />
+      {!modoSeleccion && (
+        <>
+          <CategoryPills
+            tipo={tipo}
+            categoriasConStock={categoriasConStock}
+            onTipoChange={handleTipoChange}
+          />
 
-      <CatalogToolbar
-        propiedadesGlobales={propiedadesGlobales}
-        filtrosVariantes={filtrosVariantes}
-        orden={orden}
-        searchQuery={searchQuery}
-        hayFiltrosActivos={hayFiltrosActivos}
-        ordenOptions={ordenOptions}
-        onFiltroVarianteChange={handleFiltroVarianteChange}
-        onOrdenChange={handleOrdenChange}
-        onLimpiarFiltros={limpiarFiltros}
-      />
+          <CatalogToolbar
+            propiedadesGlobales={propiedadesGlobales}
+            filtrosVariantes={filtrosVariantes}
+            orden={orden}
+            searchQuery={searchQuery}
+            hayFiltrosActivos={hayFiltrosActivos}
+            ordenOptions={ordenOptions}
+            onFiltroVarianteChange={handleFiltroVarianteChange}
+            onOrdenChange={handleOrdenChange}
+            onLimpiarFiltros={limpiarFiltros}
+          />
+        </>
+      )}
 
       {productosFiltrados.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">

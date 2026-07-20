@@ -25,7 +25,13 @@ export default async function StockPage() {
     if (perfil) userRole = perfil.rol;
   }
 
-  const result = await getStockAction();
+  const [result, configRes] = await Promise.all([
+    getStockAction(),
+    supabase
+      .from("configuracion_pos")
+      .select("posName, mostrar_sin_stock")
+      .single(),
+  ]);
 
   if (result.error) {
     return (
@@ -35,10 +41,18 @@ export default async function StockPage() {
     );
   }
 
+  const nombreComercio = configRes.data?.posName || "Tienda Online";
+  const mostrarSinStock = configRes.data?.mostrar_sin_stock ?? true;
+
   return (
     <div className="space-y-6 mx-auto">
       <Suspense fallback={<StockSkeleton />}>
-        <StockView productos={result.data ?? []} userRole={userRole} />
+        <StockView
+          productos={result.data ?? []}
+          userRole={userRole}
+          nombreComercio={nombreComercio}
+          mostrarSinStock={mostrarSinStock}
+        />
       </Suspense>
     </div>
   );

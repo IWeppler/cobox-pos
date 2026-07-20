@@ -15,9 +15,16 @@ import { StockFiltersToolbar } from "./stock-filters-toolbar";
 interface StockViewProps {
   productos: Producto[];
   userRole: string;
+  nombreComercio: string;
+  mostrarSinStock: boolean;
 }
 
-export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
+export function StockView({
+  productos,
+  userRole,
+  nombreComercio,
+  mostrarSinStock,
+}: Readonly<StockViewProps>) {
   const [view, setView] = useState<"table" | "grid">("table");
   const ITEMS_POR_PAGINA = 10;
   const [paginaActual, setPaginaActual] = useState(1);
@@ -101,6 +108,19 @@ export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
     );
   }, [conteosPorCategoria]);
 
+  // Solo hay algo para compartir cuando la categoría activa corresponde a
+  // una fila real de `categorias` (tiene slug) — un grupo armado solo por
+  // el `tipo` legacy no tiene equivalente en el catálogo público.
+  const slugCategoriaActiva = useMemo(() => {
+    if (categoriaActiva === "todos") return null;
+    const producto = productos.find(
+      (p) =>
+        (p.categoria?.nombre || p.tipo || "Sin categoría").toLowerCase() ===
+        categoriaActiva.toLowerCase(),
+    );
+    return producto?.categoria?.slug ?? null;
+  }, [productos, categoriaActiva]);
+
   const limpiarFiltros = () => {
     setSearchQuery("");
     setCategoriaActiva("todos");
@@ -144,14 +164,27 @@ export function StockView({ productos, userRole }: Readonly<StockViewProps>) {
         onFiltroVarianteChange={handleFiltroVarianteChange}
         isAdmin={isAdmin}
         onLimpiarFiltros={limpiarFiltros}
+        slugCategoriaActiva={slugCategoriaActiva}
+        nombreCategoriaActiva={categoriaActiva}
+        nombreComercio={nombreComercio}
       />
 
       {/* 3. VISTAS */}
       <div className="bg-background rounded-xl border border-border overflow-hidden min-h-100">
         {view === "table" ? (
-          <StockTable productos={productosPaginados} userRole={userRole} />
+          <StockTable
+            productos={productosPaginados}
+            userRole={userRole}
+            nombreComercio={nombreComercio}
+            mostrarSinStock={mostrarSinStock}
+          />
         ) : (
-          <StockGrid productos={productosPaginados} userRole={userRole} />
+          <StockGrid
+            productos={productosPaginados}
+            userRole={userRole}
+            nombreComercio={nombreComercio}
+            mostrarSinStock={mostrarSinStock}
+          />
         )}
       </div>
 

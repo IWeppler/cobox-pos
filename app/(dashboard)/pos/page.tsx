@@ -27,7 +27,7 @@ export default async function PosPage() {
       .order("orden", { ascending: true }),
     supabase
       .from("configuracion_pos")
-      .select("permitir_venta_sin_stock")
+      .select("permitir_venta_sin_stock, posName, mostrar_sin_stock")
       .single(),
   ]);
 
@@ -35,6 +35,8 @@ export default async function PosPage() {
   const categoriasDB = categoriasRes.data || [];
   const permitirVentaSinStock =
     configRes.data?.permitir_venta_sin_stock ?? false;
+  const nombreComercio = configRes.data?.posName || "Tienda Online";
+  const mostrarSinStock = configRes.data?.mostrar_sin_stock ?? true;
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 overflow-hidden">
@@ -42,6 +44,8 @@ export default async function PosPage() {
         productos={productos}
         categorias={categoriasDB}
         permitirVentaSinStock={permitirVentaSinStock}
+        nombreComercio={nombreComercio}
+        mostrarSinStock={mostrarSinStock}
       />
       <CartPanelAdmin />
     </div>

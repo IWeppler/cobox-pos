@@ -27,6 +27,15 @@ import {
   Loader2,
   X,
 } from "lucide-react";
+import { ShareButton } from "@/shared/components/share-button";
+import {
+  armarMensajeProducto,
+  armarMensajeSeleccion,
+  construirUrlProducto,
+  construirUrlSeleccion,
+  esVisibleEnCatalogo,
+  MAX_PRODUCTOS_COMPARTIDOS,
+} from "@/shared/utils/compartir-catalogo";
 import { ProductEditDetailSheet } from "./edit-sheet";
 import { EliminarProductoModal } from "./delete-modal";
 import { BajaModal } from "@/features/baja/ui/baja-modal";
@@ -70,6 +79,8 @@ import { toast } from "sonner";
 interface StockTableProps {
   productos: Producto[];
   userRole: string;
+  nombreComercio: string;
+  mostrarSinStock: boolean;
 }
 
 // 2. Solución para las categorías: Separa camelCase/PascalCase (ej: FloresEstacion -> Flores Estacion)
@@ -111,8 +122,14 @@ function calcularRango(valores: number[]) {
   return { min, max, esUniforme: min === max };
 }
 
-export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
+export function StockTable({
+  productos,
+  userRole,
+  nombreComercio,
+  mostrarSinStock,
+}: Readonly<StockTableProps>) {
   const { isAdmin } = useStockCartActions(userRole);
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const [variantesAbiertas, setVariantesAbiertas] = useState<
     Record<string, boolean>
   >({});
@@ -128,6 +145,23 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
     () => Array.from(selectedIds),
     [selectedIds],
   );
+
+  // Solo se comparten los productos seleccionados que realmente van a
+  // aparecer al abrir el link (el catálogo público ya omite ids inválidos
+  // o inexistentes, esto evita el caso "comparto 5 y no se ve ninguno").
+  const idsVisiblesParaCompartir = useMemo(() => {
+    const productosPorId = new Map(productos.map((p) => [p.id, p]));
+    return selectedIdsArray.filter((id) => {
+      const producto = productosPorId.get(id);
+      if (!producto) return false;
+      return esVisibleEnCatalogo(
+        { publicado: producto.publicado, stockTotal: getTotalStock(producto) },
+        { mostrarSinStock },
+      );
+    });
+  }, [productos, selectedIdsArray, mostrarSinStock]);
+  const seleccionSuperaElCap =
+    idsVisiblesParaCompartir.length > MAX_PRODUCTOS_COMPARTIDOS;
 
   // --- LÓGICA DE SELECCIÓN MASIVA ---
   const toggleAll = () => {
@@ -267,6 +301,8 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
       {productoEnEdicion && (
         <ProductEditDetailSheet
           producto={productoEnEdicion}
+          nombreComercio={nombreComercio}
+          mostrarSinStock={mostrarSinStock}
           open
           onOpenChange={(open) => {
             if (!open) setProductoEnEdicion(null);
@@ -290,14 +326,39 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
             >
               <X className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-semibold text-foreground">
-              {selectedIds.size}{" "}
-              {selectedIds.size === 1
-                ? "producto seleccionado"
-                : "productos seleccionados"}
-            </span>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-foreground">
+                {selectedIds.size}{" "}
+                {selectedIds.size === 1
+                  ? "producto seleccionado"
+                  : "productos seleccionados"}
+              </span>
+              {seleccionSuperaElCap && (
+                <span className="text-[11px] text-amber-600">
+                  Se comparten los primeros {MAX_PRODUCTOS_COMPARTIDOS} de{" "}
+                  {idsVisiblesParaCompartir.length}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <ShareButton
+              url={construirUrlSeleccion(baseUrl, idsVisiblesParaCompartir)}
+              title={`Productos de ${nombreComercio}`}
+              text={armarMensajeSeleccion(
+                Math.min(
+                  idsVisiblesParaCompartir.length,
+                  MAX_PRODUCTOS_COMPARTIDOS,
+                ),
+                nombreComercio,
+              )}
+              disabled={idsVisiblesParaCompartir.length === 0}
+              disabledReason="Ninguno de los productos seleccionados está visible en el catálogo"
+              label={`Compartir (${selectedIds.size})`}
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 text-xs bg-background"
+            />
             <div className="flex min-w-0 items-center gap-2">
               <Select
                 value={bulkCategoryId}
@@ -469,6 +530,19 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
               const hasVariantes = variantesVisibles.length > 1;
               const variantesEstanAbiertas = variantesAbiertas[producto.id];
 
+              const urlProducto = producto.slug
+                ? construirUrlProducto(baseUrl, producto.slug)
+                : null;
+              const compartirDeshabilitado =
+                !urlProducto ||
+                !esVisibleEnCatalogo(
+                  { publicado: producto.publicado, stockTotal: totalUnidades },
+                  { mostrarSinStock },
+                );
+              const motivoCompartirDeshabilitado = !urlProducto
+                ? "Este producto no tiene link público"
+                : "Este producto no está visible en el catálogo";
+
               // Cálculos de Recargo (sobre costo, no sobre precio de venta)
               const costo = producto.precio_costo || 0;
               const precio = producto.precio || 0;
@@ -543,7 +617,11 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                           )}
                         </button>
 
-                        <ProductEditDetailSheet producto={producto}>
+                        <ProductEditDetailSheet
+                          producto={producto}
+                          nombreComercio={nombreComercio}
+                          mostrarSinStock={mostrarSinStock}
+                        >
                           <button className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden border border-border/80 cursor-pointer hover:opacity-85 transition-opacity shrink-0 shadow-none">
                             {primeraImagen ? (
                               <Image
@@ -561,7 +639,11 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                         </ProductEditDetailSheet>
 
                         <div className="flex flex-col">
-                          <ProductEditDetailSheet producto={producto}>
+                          <ProductEditDetailSheet
+                            producto={producto}
+                            nombreComercio={nombreComercio}
+                            mostrarSinStock={mostrarSinStock}
+                          >
                             <button className="font-semibold text-foreground text-xs sm:text-sm hover:text-primary transition-colors text-left truncate max-w-[120px] sm:max-w-[240px] cursor-pointer">
                               {producto.nombre}
                             </button>
@@ -648,6 +730,19 @@ export function StockTable({ productos, userRole }: Readonly<StockTableProps>) {
                     {/* ACCIONES (Paddings reducidos en móviles) */}
                     <TableCell className="text-right pl-0 pr-1 sm:pr-6 py-1.5 sm:py-2.5">
                       <div className="flex items-center justify-end gap-0.5 md:gap-1.5">
+                        <ShareButton
+                          url={urlProducto ?? ""}
+                          title={`${producto.nombre} | ${nombreComercio}`}
+                          text={armarMensajeProducto(
+                            producto.nombre,
+                            formatearMoneda(producto.precio),
+                          )}
+                          disabled={compartirDeshabilitado}
+                          disabledReason={motivoCompartirDeshabilitado}
+                          variant="ghost"
+                          size="icon-sm"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0 rounded-md hover:bg-muted"
+                        />
                         {isAdmin && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

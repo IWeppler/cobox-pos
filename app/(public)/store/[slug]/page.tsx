@@ -7,11 +7,55 @@ import { RelatedProducts } from "@/features/store/components/related-products";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getConfiguracionAction } from "@/features/config/actions/config-actions";
+import { formatearMoneda } from "@/shared/utils/formatters";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+}
+
+async function resolverBaseUrl() {
+  const headersList = await headers();
+  const host = headersList.get("host") || "localhost:3000";
+  const protocol = host.includes("localhost") ? "http" : "https";
+  return `${protocol}://${host}`;
+}
+
+export async function generateMetadata({
+  params,
+}: Readonly<PageProps>): Promise<Metadata> {
+  const { slug } = await params;
+
+  const [{ data: producto }, { data: config }] = await Promise.all([
+    getProductoBySlugAction(slug),
+    getConfiguracionAction(),
+  ]);
+
+  if (!producto) return {};
+
+  const nombreComercio = config?.posName || "Tienda Online";
+  const title = `${producto.nombre} | ${nombreComercio}`;
+  const precioFmt = formatearMoneda(producto.precio);
+  const description = producto.descripcion
+    ? `${precioFmt} — ${producto.descripcion}`.slice(0, 160)
+    : `${precioFmt}. Comprá ${producto.nombre} en ${nombreComercio}.`;
+
+  const baseUrl = await resolverBaseUrl();
+  const url = `${baseUrl}/store/${producto.slug}`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      url,
+      images: producto.imagen_url ? [{ url: producto.imagen_url }] : undefined,
+    },
+  };
 }
 
 export default async function ProductoPage({ params }: Readonly<PageProps>) {
@@ -53,10 +97,7 @@ export default async function ProductoPage({ params }: Readonly<PageProps>) {
 
   const NUMERO_WHATSAPP = config?.whatsapp;
 
-  const headersList = await headers();
-  const host = headersList.get("host") || "localhost:3000";
-  const protocol = host.includes("localhost") ? "http" : "https";
-  const baseUrl = `${protocol}://${host}`;
+  const baseUrl = await resolverBaseUrl();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

@@ -10,6 +10,12 @@ import { QuickAddModal } from "@/features/pos/ui/quick-add-modal";
 import Image from "next/image";
 import { StockFiltersToolbar } from "@/features/stock/ui/stock-filters-toolbar";
 import { formatearMoneda } from "@/shared/utils/formatters";
+import { ShareButton } from "@/shared/components/share-button";
+import {
+  armarMensajeProducto,
+  construirUrlProducto,
+  esVisibleEnCatalogo,
+} from "@/shared/utils/compartir-catalogo";
 
 interface PosTerminalProps {
   productos: Producto[];
@@ -19,6 +25,8 @@ interface PosTerminalProps {
     slug?: string | null;
   }>;
   permitirVentaSinStock?: boolean;
+  nombreComercio?: string;
+  mostrarSinStock?: boolean;
 }
 
 interface VarianteDisponible {
@@ -52,7 +60,10 @@ export function PosTerminal({
   productos,
   categorias,
   permitirVentaSinStock = false,
+  nombreComercio = "Tienda",
+  mostrarSinStock = true,
 }: Readonly<PosTerminalProps>) {
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const [searchQuery, setSearchQuery] = useState("");
   const [tipo, setTipo] = useState("todos");
   const [filtrosVariantes, setFiltrosVariantes] = useState<
@@ -246,48 +257,80 @@ export function PosTerminal({
                 const sinStock = stockTotal <= 0;
                 const bloqueado = sinStock && !permitirVentaSinStock;
 
+                const urlProducto = producto.slug
+                  ? construirUrlProducto(baseUrl, producto.slug)
+                  : null;
+                const compartirDeshabilitado =
+                  !urlProducto ||
+                  !esVisibleEnCatalogo(
+                    { publicado: producto.publicado, stockTotal },
+                    { mostrarSinStock },
+                  );
+                const motivoCompartirDeshabilitado = !urlProducto
+                  ? "Este producto no tiene link público"
+                  : "Este producto no está visible en el catálogo";
+
                 return (
-                  <button
-                    key={producto.id}
-                    onClick={() => handleProductClick(producto)}
-                    disabled={bloqueado}
-                    className={`flex flex-col text-left rounded-xl border transition-all overflow-hidden cursor-pointer ${
-                      !bloqueado
-                        ? "border-border hover:border-foreground/50 active:scale-95"
-                        : "border-border/40 opacity-50"
-                    }`}
-                  >
-                    <div className="w-full aspect-4/3 bg-muted relative border-b border-border/40">
-                      {primeraImagen ? (
-                        <Image
-                          src={primeraImagen}
-                          alt={producto.nombre || ""}
-                          fill
-                          className="object-cover"
-                          sizes="200px"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <ShoppingBag className="w-8 h-8 text-muted-foreground/30" />
-                        </div>
+                  // El ícono de compartir vive como hermano del <button> de
+                  // agregar-al-carrito (no anidado — un <button> dentro de
+                  // otro <button> es HTML inválido) para no competir con el
+                  // tap principal de la card.
+                  <div key={producto.id} className="relative h-full">
+                    <button
+                      onClick={() => handleProductClick(producto)}
+                      disabled={bloqueado}
+                      className={`flex flex-col text-left rounded-xl border transition-all overflow-hidden cursor-pointer w-full h-full ${
+                        !bloqueado
+                          ? "border-border hover:border-foreground/50 active:scale-95"
+                          : "border-border/40 opacity-50"
+                      }`}
+                    >
+                      <div className="w-full aspect-4/3 bg-muted relative border-b border-border/40">
+                        {primeraImagen ? (
+                          <Image
+                            src={primeraImagen}
+                            alt={producto.nombre || ""}
+                            fill
+                            className="object-cover"
+                            sizes="200px"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <ShoppingBag className="w-8 h-8 text-muted-foreground/30" />
+                          </div>
+                        )}
+                        {sinStock && (
+                          <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center">
+                            <span className="bg-white px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest text-rose-600 border border-rose-100">
+                              Agotado
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-3 flex flex-col flex-1 justify-between">
+                        <p className="font-medium text-xs sm:text-sm text-muted-foreground leading-tight line-clamp-2 mb-2">
+                          {producto.nombre}
+                        </p>
+                        <p className="font-bold text-sm sm:text-base text-foreground">
+                          {formatearMoneda(producto.precio)}
+                        </p>
+                      </div>
+                    </button>
+
+                    <ShareButton
+                      url={urlProducto ?? ""}
+                      title={`${producto.nombre} | ${nombreComercio}`}
+                      text={armarMensajeProducto(
+                        producto.nombre,
+                        formatearMoneda(producto.precio),
                       )}
-                      {sinStock && (
-                        <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center">
-                          <span className="bg-white px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest text-rose-600 border border-rose-100">
-                            Agotado
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-3 flex flex-col flex-1 justify-between">
-                      <p className="font-medium text-xs sm:text-sm text-muted-foreground leading-tight line-clamp-2 mb-2">
-                        {producto.nombre}
-                      </p>
-                      <p className="font-bold text-sm sm:text-base text-foreground">
-                        {formatearMoneda(producto.precio)}
-                      </p>
-                    </div>
-                  </button>
+                      disabled={compartirDeshabilitado}
+                      disabledReason={motivoCompartirDeshabilitado}
+                      variant="secondary"
+                      size="icon-sm"
+                      className="absolute top-2 right-2 bg-background/90 backdrop-blur-sm shadow-sm hover:bg-background"
+                    />
+                  </div>
                 );
               })}
             </div>

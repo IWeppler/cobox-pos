@@ -692,7 +692,7 @@ export function CrmTab({
                           ? formatearMoneda(c.saldo_actual)
                           : "-"}
                       </td>
-                      <td className="px-5 py-3 text-right font-semibold text-rose-600">
+                      <td className="px-5 py-3 text-right font-semibold text-rose-600 dark:text-rose-500">
                         {c.saldo_vencido > 0
                           ? formatearMoneda(c.saldo_vencido)
                           : "-"}

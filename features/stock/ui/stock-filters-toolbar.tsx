@@ -36,6 +36,11 @@ import { ImportarPedidoModal } from "@/features/purchases/ui/create-purchase-mod
 import { CrearProductoSheet } from "@/features/stock/ui/create-sheet";
 import { UpdatePricesModal } from "./update-prices-modal";
 import { PriceHistoryModal } from "./price-history-modal";
+import { ShareButton } from "@/shared/components/share-button";
+import {
+  armarMensajeCategoria,
+  construirUrlCategoria,
+} from "@/shared/utils/compartir-catalogo";
 
 type CategoriaToolbar =
   | string
@@ -62,6 +67,9 @@ interface StockFiltersToolbarProps {
   onFiltroVarianteChange: (propiedad: string, valor: string) => void;
   isAdmin: boolean;
   onLimpiarFiltros: () => void;
+  slugCategoriaActiva?: string | null;
+  nombreCategoriaActiva?: string;
+  nombreComercio?: string;
 }
 
 export function StockFiltersToolbar({
@@ -81,7 +89,11 @@ export function StockFiltersToolbar({
   onFiltroVarianteChange,
   isAdmin,
   onLimpiarFiltros,
+  slugCategoriaActiva,
+  nombreCategoriaActiva,
+  nombreComercio = "Tienda",
 }: Readonly<StockFiltersToolbarProps>) {
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const propiedadesVariantes = Object.entries(propiedadesGlobales);
   const hayFiltrosVariantesActivos = Object.values(filtrosVariantes).some(
@@ -329,6 +341,18 @@ export function StockFiltersToolbar({
             );
           })}
         </div>
+
+        {slugCategoriaActiva && (
+          <ShareButton
+            url={construirUrlCategoria(baseUrl, slugCategoriaActiva)}
+            title={`${nombreCategoriaActiva} | ${nombreComercio}`}
+            text={armarMensajeCategoria(nombreCategoriaActiva || "")}
+            label="Compartir esta categoría"
+            variant="outline"
+            size="sm"
+            className="h-8 mt-0 text-xs font-bold shrink-0 hidden sm:flex items-center bg-background"
+          />
+        )}
 
         {/* Botón de limpiar filtros si están activos */}
         {hayFiltrosActivos && (
