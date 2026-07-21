@@ -6,13 +6,10 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  CheckCircle2,
-  Clock,
   Search,
   UploadCloud,
   Users,
   Wallet,
-  type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Button } from "@/shared/ui/button";
@@ -28,45 +25,21 @@ import {
 } from "./client-status-filter";
 import { ImportClientsCsvModal } from "./import-clients-csv-modal";
 import { calcularDiasVencido } from "../lib/calcular-dias-vencido";
+import {
+  clasificarEstadoCliente,
+  type EstadoCliente,
+} from "../lib/clasificar-estado-cliente";
 import { RecargoMoraConfig } from "../lib/calcular-saldo-con-recargo";
+import {
+  ClienteEstadoBadge,
+  ESTADO_CLIENTE_CONFIG,
+} from "@/shared/components/cliente-estado-badge";
 
 type SortConfig = {
   key: "nombre" | "deuda" | "ltv" | "vencimiento";
   direction: "asc" | "desc";
 };
 const CLIENTS_PER_PAGE = 10;
-
-// Una deuda solo se considera vencida si tiene fecha_vencimiento_deuda Y esa
-// fecha ya pasó. Sin fecha, o con fecha futura, es "con deuda" a secas.
-function clasificarEstadoCliente(
-  saldoPendiente: number,
-  diasVencido: number | null,
-): Exclude<ClientStatusFilter, "todos"> {
-  if (saldoPendiente <= 0) return "al_dia";
-  if (diasVencido !== null && diasVencido > 0) return "vencido";
-  return "con_deuda";
-}
-
-const ESTADO_CLIENTE_CONFIG: Record<
-  Exclude<ClientStatusFilter, "todos">,
-  { label: string; icon: LucideIcon; className: string }
-> = {
-  al_dia: {
-    label: "Al día",
-    icon: CheckCircle2,
-    className: "text-emerald-700 dark:text-accent-lime",
-  },
-  con_deuda: {
-    label: "Con deuda",
-    icon: Clock,
-    className: "text-accent-orange",
-  },
-  vencido: {
-    label: "Vencido",
-    icon: AlertTriangle,
-    className: "text-rose-600 dark:text-rose-400",
-  },
-};
 
 type ClienteVentaResumen = {
   total?: number | string | null;
@@ -81,7 +54,7 @@ type ClienteMapeado = ClienteConVentas & {
   totalComprado: number;
   fechaVencimientoFormateada: string | null;
   diasVencido: number | null;
-  estado: Exclude<ClientStatusFilter, "todos">;
+  estado: EstadoCliente;
 };
 
 interface ClientsViewProps {
@@ -382,10 +355,10 @@ export function ClientsView({
                   </div>
                 </th>
                 <th
-                  className="px-3 py-3 md:px-5 md:py-4 hidden lg:table-cell"
+                  className="px-3 py-3 md:px-5 md:py-4 hidden lg:table-cell text-right"
                   onClick={() => handleSort("vencimiento")}
                 >
-                  <div className="flex items-right gap-1.5">
+                  <div className="flex items-center justify-end gap-1.5">
                     Fecha de vencimiento {renderSortIcon("vencimiento")}
                   </div>
                 </th>
@@ -404,8 +377,7 @@ export function ClientsView({
               ) : (
                 clientesPaginados.map((cliente) => {
                   const saldo = Number(cliente.saldo_pendiente || 0);
-                  const estadoConfig = ESTADO_CLIENTE_CONFIG[cliente.estado];
-                  const EstadoIcon = estadoConfig.icon;
+                  const estadoLabel = ESTADO_CLIENTE_CONFIG[cliente.estado].label;
 
                   return (
                     <tr
@@ -433,18 +405,15 @@ export function ClientsView({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toast(estadoConfig.label);
+                                toast(estadoLabel);
                               }}
                               className="flex items-center gap-1.5 -m-1 p-1"
                             >
-                              <EstadoIcon
-                                className={`h-4 w-4 md:h-3.5 md:w-3.5 shrink-0 ${estadoConfig.className}`}
+                              <ClienteEstadoBadge
+                                estado={cliente.estado}
+                                iconClassName="h-4 w-4 md:h-3.5 md:w-3.5 shrink-0"
+                                labelClassName="hidden sm:inline"
                               />
-                              <span
-                                className={`hidden sm:inline text-[10px] font-bold uppercase tracking-widest ${estadoConfig.className}`}
-                              >
-                                {estadoConfig.label}
-                              </span>
                             </button>
                           </div>
                           {cliente.estado === "vencido" &&

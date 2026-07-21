@@ -7,8 +7,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
+import type { EstadoCliente } from "../lib/clasificar-estado-cliente";
 
-export type ClientStatusFilter = "todos" | "al_dia" | "con_deuda" | "vencido";
+export type ClientStatusFilter = "todos" | EstadoCliente;
 
 const OPTIONS: {
   value: ClientStatusFilter;
@@ -60,7 +61,7 @@ export function ClientStatusFilterControl({
             key={option.value}
             type="button"
             onClick={() => onChange(option.value)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap ${
+            className={`px-2 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap ${
               value === option.value
                 ? option.activeClassName
                 : `text-muted-foreground ${option.hoverClassName}`

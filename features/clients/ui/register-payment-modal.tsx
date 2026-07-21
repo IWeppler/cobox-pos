@@ -23,15 +23,18 @@ import { toast } from "sonner";
 import { registrarPagoDeudaAction } from "../actions/manage-clients";
 import { Cliente } from "@/entities/clientes/type";
 import { MetodoPago } from "@/entities/payments/types";
+import { cn } from "@/lib/utils";
 
 export function RegisterPaymentModal({
   cliente,
   metodosPago,
   recargoMoraEstimado = 0,
+  className,
 }: {
   cliente: Cliente;
   metodosPago: MetodoPago[];
   recargoMoraEstimado?: number;
+  className?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -58,7 +61,9 @@ export function RegisterPaymentModal({
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button className="bg-primary hover:bg-primary/80 text-white">
+        <Button
+          className={cn("bg-primary hover:bg-primary/80 text-white", className)}
+        >
           <DollarSign className="w-4 h-4 mr-1.5" /> Registrar Cobro
         </Button>
       </DialogTrigger>

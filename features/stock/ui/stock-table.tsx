@@ -450,8 +450,8 @@ export function StockTable({
         <Table className="w-full sm:min-w-200 bg-card">
           <TableHeader>
             <TableRow className="bg-muted/30 border-b border-border/60 hover:bg-muted/30">
-              {/* Columna Checkbox (Oculta en móviles) */}
-              <TableHead className="w-12 pl-4 pr-0 hidden sm:table-cell">
+              {/* Columna Checkbox (visible en todos los breakpoints) */}
+              <TableHead className="w-12 pl-2 md:pl-4 pr-0">
                 <input
                   type="checkbox"
                   checked={
@@ -514,7 +514,7 @@ export function StockTable({
                   Precio {renderSortIcon("precio")}
                 </button>
               </TableHead>
-              <TableHead className="text-right w-16 sm:w-24 pr-2 sm:pr-6 text-muted-foreground text-xs sm:text-sm">
+              <TableHead className="text-right w-16 sm:w-24 pr-2 sm:pr-6 text-muted-foreground text-xs sm:text-sm hidden sm:table-cell">
                 Acciones
               </TableHead>
             </TableRow>
@@ -588,8 +588,8 @@ export function StockTable({
                           : "hover:bg-muted/20"
                     }`}
                   >
-                    {/* Checkbox (Oculto en móviles) */}
-                    <TableCell className="pl-4 pr-0 hidden sm:table-cell">
+                    {/* Checkbox (visible en todos los breakpoints) */}
+                    <TableCell className="pl-2 md:pl-4 pr-0">
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -600,7 +600,7 @@ export function StockTable({
 
                     {/* 1. Celda Unificada: Flecha + Imagen + Producto (Más compacta en móviles) */}
                     <TableCell className="py-1.5 sm:py-2.5 px-0 pl-1 sm:pl-2">
-                      <div className="flex items-center gap-1.5 sm:gap-3">
+                      <div className="flex items-center gap-1 sm:gap-3 min-w-0">
                         <button
                           onClick={() =>
                             hasVariantes && toggleVariantes(producto.id)
@@ -622,7 +622,7 @@ export function StockTable({
                           nombreComercio={nombreComercio}
                           mostrarSinStock={mostrarSinStock}
                         >
-                          <button className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden border border-border/80 cursor-pointer hover:opacity-85 transition-opacity shrink-0 shadow-none">
+                          <button className="w-8 h-8 sm:w-10 sm:h-10 rounded-md md:rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden border border-border/80 cursor-pointer hover:opacity-85 transition-opacity shrink-0 shadow-none">
                             {primeraImagen ? (
                               <Image
                                 src={primeraImagen}
@@ -638,13 +638,13 @@ export function StockTable({
                           </button>
                         </ProductEditDetailSheet>
 
-                        <div className="flex flex-col">
+                        <div className="flex flex-col min-w-0 flex-1">
                           <ProductEditDetailSheet
                             producto={producto}
                             nombreComercio={nombreComercio}
                             mostrarSinStock={mostrarSinStock}
                           >
-                            <button className="font-semibold text-foreground text-xs sm:text-sm hover:text-primary transition-colors text-left truncate max-w-[120px] sm:max-w-[240px] cursor-pointer">
+                            <button className="font-semibold text-foreground text-xs sm:text-sm hover:text-primary transition-colors text-left truncate block w-full max-w-40 sm:max-w-60 cursor-pointer">
                               {producto.nombre}
                             </button>
                           </ProductEditDetailSheet>
@@ -659,7 +659,7 @@ export function StockTable({
                       </div>
                     </TableCell>
 
-                    {/* CATEGORÍA (Formateada) */}
+                    {/* CATEGORÍA */}
                     <TableCell className="py-2.5 hidden sm:table-cell text-muted-foreground text-sm">
                       <span>{formatCategoria(producto.tipo)}</span>
                     </TableCell>
@@ -716,7 +716,7 @@ export function StockTable({
                     )}
 
                     {/* PRECIO (Adaptado) */}
-                    <TableCell className="text-right font-semibold text-xs sm:text-sm px-0 py-1.5 sm:py-2.5">
+                    <TableCell className="text-right font-semibold text-xs sm:text-sm px-1 sm:px-0 py-1.5 sm:py-2.5 whitespace-nowrap tabular-nums">
                       {rangoPrecio && !rangoPrecio.esUniforme ? (
                         <span title="Las variantes tienen precios distintos">
                           {formatearMoneda(rangoPrecio.min)} -{" "}
@@ -727,8 +727,8 @@ export function StockTable({
                       )}
                     </TableCell>
 
-                    {/* ACCIONES (Paddings reducidos en móviles) */}
-                    <TableCell className="text-right pl-0 pr-1 sm:pr-6 py-1.5 sm:py-2.5">
+                    {/* ACCIONES (oculta en mobile: cubierta por selección + barra flotante) */}
+                    <TableCell className="text-right pl-0 pr-1 sm:pr-6 py-1.5 sm:py-2.5 hidden sm:table-cell">
                       <div className="flex items-center justify-end gap-0.5 md:gap-1.5">
                         <ShareButton
                           url={urlProducto ?? ""}

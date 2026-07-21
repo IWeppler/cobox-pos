@@ -10,6 +10,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
+import { ClienteEstadoBadge } from "@/shared/components/cliente-estado-badge";
 import {
   Wallet,
   History,
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 import { getClienteDetalleAction } from "../actions/manage-clients";
 import { calcularDiasVencido } from "../lib/calcular-dias-vencido";
+import { clasificarEstadoCliente } from "../lib/clasificar-estado-cliente";
 import { AdjustClientBalanceModal } from "./adjust-client-balance-modal";
 import { EditClientModal } from "./edit-client-modal";
 import { RegisterPaymentModal } from "./register-payment-modal";
@@ -151,6 +153,7 @@ export function ClientDetailSheet({
 
   const fechaVencimiento = cliente.fecha_vencimiento_deuda ?? null;
   const diasVencido = calcularDiasVencido(fechaVencimiento);
+  const estado = clasificarEstadoCliente(saldo, diasVencido);
   const mostrarAlertaVencimiento =
     diasVencido !== null && diasVencido > 0 && saldo > 0;
   const fechaVencimientoFormateada = fechaVencimiento
@@ -160,6 +163,15 @@ export function ClientDetailSheet({
         year: "numeric",
         timeZone: "UTC",
       }).format(new Date(fechaVencimiento))
+    : null;
+  // Línea fusionada de vencimiento: "Venció el [fecha] · hace N días" si ya
+  // pasó, "Vence el [fecha]" si todavía no — mismo dato que antes mostraban
+  // "Vence: fecha" y "Hace N días" por separado, compitiendo por el mismo
+  // renglón angosto en mobile.
+  const lineaVencimiento = fechaVencimientoFormateada
+    ? mostrarAlertaVencimiento
+      ? `Venció el ${fechaVencimientoFormateada} · hace ${diasVencido} día${diasVencido === 1 ? "" : "s"}`
+      : `Vence el ${fechaVencimientoFormateada}`
     : null;
   const favCategoryLabel =
     stats.favCategory === "-"
@@ -181,21 +193,7 @@ export function ClientDetailSheet({
                   {cliente.nombre}
                 </SheetTitle>
                 <div className="flex items-center gap-2 mt-1">
-                  {saldo > 0 ? (
-                    <Badge
-                      variant="outline"
-                      className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] uppercase font-bold tracking-wider"
-                    >
-                      Con Deuda
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] uppercase font-bold tracking-wider"
-                    >
-                      Al día
-                    </Badge>
-                  )}
+                  <ClienteEstadoBadge estado={estado} labelClassName="inline" />
                   {cliente.telefono && (
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Phone className="w-3 h-3" /> {cliente.telefono}
@@ -278,33 +276,32 @@ export function ClientDetailSheet({
                     value="historial"
                     className="m-0 space-y-6 animate-in fade-in-50"
                   >
-                    <div className="bg-card border border-border rounded-xl p-3 flex flex-col md:flex-row items-center justify-between">
-                      <div>
+                    <div className="bg-card border border-border rounded-xl p-3 flex flex-col md:flex-row md:flex-wrap md:items-start md:justify-between gap-3">
+                      <div className="order-1">
                         <p className="text-xs font-medium text-muted-foreground mb-1">
                           Saldo Actual
                         </p>
                         <p className="text-2xl font-semibold text-foreground">
                           {formatearMoneda(saldo)}
                         </p>
-                        {fechaVencimientoFormateada && (
-                          <div className="flex justify-between items-center gap-2 mt-2">
-                            <p className="text-xs text-muted-foreground">
-                              Vence: {fechaVencimientoFormateada}
-                            </p>
-                            {mostrarAlertaVencimiento && (
-                              <span className="text-rose-700 dark:text-destructive text-[10px] ">
-                                Hace {diasVencido} día
-                                {diasVencido === 1 ? "" : "s"}
-                              </span>
-                            )}
-                          </div>
-                        )}
                       </div>
                       {saldo > 0 && (
                         <RegisterPaymentModal
                           cliente={cliente}
                           metodosPago={metodosPago}
+                          className="w-full md:w-auto order-3 md:order-2"
                         />
+                      )}
+                      {lineaVencimiento && (
+                        <p
+                          className={`text-xs order-2 md:order-3 md:basis-full ${
+                            mostrarAlertaVencimiento
+                              ? "font-medium text-rose-700 dark:text-destructive"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {lineaVencimiento}
+                        </p>
                       )}
                     </div>
 
