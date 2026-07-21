@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -15,8 +15,6 @@ import {
   History,
   Info,
   Loader2,
-  ArrowUpRight,
-  ArrowDownRight,
   Phone,
   TrendingUp,
   Tags,
@@ -30,6 +28,7 @@ import { calcularDiasVencido } from "../lib/calcular-dias-vencido";
 import { AdjustClientBalanceModal } from "./adjust-client-balance-modal";
 import { EditClientModal } from "./edit-client-modal";
 import { RegisterPaymentModal } from "./register-payment-modal";
+import { MovimientoCCCard } from "./movimiento-cc-card";
 import { Cliente, CuentaCorrienteMovimiento } from "@/entities/clientes/type";
 import { MetodoPagoPOS } from "@/shared/components/cart-sidebar/types";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
@@ -67,6 +66,7 @@ interface ClientDetailSheetProps {
   metodosPago: MetodoPagoPOS[];
   entregaMinimaActiva?: boolean;
   recargoMoraConfig: RecargoMoraConfig;
+  isAdmin?: boolean;
   onClose: () => void;
 }
 
@@ -75,6 +75,7 @@ export function ClientDetailSheet({
   metodosPago,
   entregaMinimaActiva = false,
   recargoMoraConfig,
+  isAdmin = false,
   onClose,
 }: Readonly<ClientDetailSheetProps>) {
   const [data, setData] = useState<{
@@ -99,6 +100,19 @@ export function ClientDetailSheet({
       setIsLoading(false);
     };
     fetchDetalles();
+  }, [cliente]);
+
+  // Refetch aparte para cuando una MovimientoCCCard edita/anula un
+  // movimiento (onChanged) — con su propio cuerpo, no comparte el de
+  // arriba: llamar una función externa desde el efecto de montaje dispara
+  // el lint de "setState directo en efecto" aunque el resultado final sea
+  // el mismo.
+  const refetchMovimientos = useCallback(async () => {
+    if (!cliente) return;
+    setIsLoading(true);
+    const result = await getClienteDetalleAction(cliente.id);
+    setData(result);
+    setIsLoading(false);
   }, [cliente]);
 
   const stats = useMemo(() => {
@@ -197,7 +211,7 @@ export function ClientDetailSheet({
               variant="outline"
               size="sm"
               onClick={() => setIsAdjustOpen(true)}
-              className="h-8 text-xs font-semibold shadow-none border-border"
+              className="h-8 text-xs font-medium shadow-none border-border"
             >
               <PlusCircle className="w-3.5 h-3.5 mr-1.5 text-amber-600" />
               Cargar saldo inicial
@@ -206,7 +220,7 @@ export function ClientDetailSheet({
               variant="outline"
               size="sm"
               onClick={() => setIsEditOpen(true)}
-              className="h-8 text-xs font-semibold shadow-none border-border"
+              className="h-8 text-xs font-medium border-border"
             >
               <Edit2 className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
               Editar datos
@@ -278,13 +292,10 @@ export function ClientDetailSheet({
                               Vence: {fechaVencimientoFormateada}
                             </p>
                             {mostrarAlertaVencimiento && (
-                              <Badge
-                                variant="outline"
-                                className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] uppercase font-bold tracking-wider"
-                              >
-                                Vencido hace {diasVencido} día
+                              <span className="text-rose-700 dark:text-destructive text-[10px] ">
+                                Hace {diasVencido} día
                                 {diasVencido === 1 ? "" : "s"}
-                              </Badge>
+                              </span>
                             )}
                           </div>
                         )}
@@ -308,39 +319,12 @@ export function ClientDetailSheet({
                       ) : (
                         <div className="space-y-3">
                           {data.movimientos.map((mov) => (
-                            <div
+                            <MovimientoCCCard
                               key={mov.id}
-                              className="flex items-center justify-between p-3 bg-background border border-border rounded-lg"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className={`p-2 rounded-full ${mov.tipo === "DEBITO" ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}
-                                >
-                                  {mov.tipo === "DEBITO" ? (
-                                    <ArrowUpRight className="w-4 h-4" />
-                                  ) : (
-                                    <ArrowDownRight className="w-4 h-4" />
-                                  )}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-semibold text-foreground">
-                                    {mov.descripcion ||
-                                      (mov.tipo === "DEBITO"
-                                        ? "Cargo por Compra"
-                                        : "Abono a Cuenta")}
-                                  </p>
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                                    {formatearFechaHora(mov.creado_en)}
-                                  </p>
-                                </div>
-                              </div>
-                              <span
-                                className={`font-semibold ${mov.tipo === "DEBITO" ? "text-rose-600" : "text-emerald-600"}`}
-                              >
-                                {mov.tipo === "DEBITO" ? "+" : "-"}
-                                {formatearMoneda(Number(mov.monto))}
-                              </span>
-                            </div>
+                              mov={mov}
+                              isAdmin={isAdmin}
+                              onChanged={refetchMovimientos}
+                            />
                           ))}
                         </div>
                       )}

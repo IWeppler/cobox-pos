@@ -11,6 +11,7 @@ import {
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { DatePickerAR } from "@/shared/components/date-picker-ar";
 import { Loader2, UserPlus } from "lucide-react";
 
 interface CreateClientDialogProps {
@@ -94,11 +95,9 @@ export function CreateClientDialog({
                 >
                   Fecha de vencimiento de deuda (Opcional)
                 </Label>
-                <Input
+                <DatePickerAR
                   id="fecha_vencimiento_deuda"
                   name="fecha_vencimiento_deuda"
-                  type="date"
-                  className="h-11 shadow-none"
                 />
               </div>
             </>

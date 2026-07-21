@@ -26,4 +26,8 @@ export interface CuentaCorrienteMovimiento {
   descripcion?: string | null;
   creado_por?: string | null;
   creado_en: string;
+  fecha_origen?: string | null;
+  anulado?: boolean;
+  anulado_en?: string | null;
+  anulado_por?: string | null;
 }

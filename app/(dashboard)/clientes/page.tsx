@@ -17,6 +17,15 @@ export default async function ClientesPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
 
+  let userRole = "VENDEDOR";
+  const { data: perfil } = await supabase
+    .from("perfiles")
+    .select("rol")
+    .eq("id", user.id)
+    .single();
+  if (perfil) userRole = perfil.rol;
+  const isAdmin = userRole === "ADMIN";
+
   // Traemos los clientes, los métodos de pago y la config de entrega mínima
   const [clientesRes, metodosRes, configRes] = await Promise.all([
     getClientesAction(),
@@ -42,6 +51,7 @@ export default async function ClientesPage() {
         metodosPago={metodosPago}
         entregaMinimaActiva={entregaMinimaActiva}
         recargoMoraConfig={recargoMoraConfig}
+        isAdmin={isAdmin}
       />
     </div>
   );

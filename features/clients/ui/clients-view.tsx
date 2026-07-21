@@ -89,6 +89,7 @@ interface ClientsViewProps {
   metodosPago: MetodoPago[];
   entregaMinimaActiva?: boolean;
   recargoMoraConfig: RecargoMoraConfig;
+  isAdmin?: boolean;
 }
 
 export function ClientsView({
@@ -96,6 +97,7 @@ export function ClientsView({
   metodosPago,
   entregaMinimaActiva = false,
   recargoMoraConfig,
+  isAdmin = false,
 }: Readonly<ClientsViewProps>) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<ClientStatusFilter>("todos");
@@ -383,7 +385,7 @@ export function ClientsView({
                   className="px-3 py-3 md:px-5 md:py-4 hidden lg:table-cell"
                   onClick={() => handleSort("vencimiento")}
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-right gap-1.5">
                     Fecha de vencimiento {renderSortIcon("vencimiento")}
                   </div>
                 </th>
@@ -447,7 +449,7 @@ export function ClientsView({
                           </div>
                           {cliente.estado === "vencido" &&
                             cliente.diasVencido !== null && (
-                              <span className="sm:pl-5 text-[11px] font-medium text-rose-600 dark:text-rose-400">
+                              <span className="text-left text-[11px] text-foreground">
                                 {cliente.diasVencido} día
                                 {cliente.diasVencido === 1 ? "" : "s"}
                               </span>
@@ -486,7 +488,7 @@ export function ClientsView({
                         )}
                       </td>
 
-                      <td className="px-3 py-3 md:px-5 md:py-4 hidden lg:table-cell">
+                      <td className="px-3 py-3 md:px-5 md:py-4 text-right hidden lg:table-cell">
                         <span className="text-xs font-medium text-muted-foreground">
                           {cliente.fechaVencimientoFormateada ?? "—"}
                         </span>
@@ -541,6 +543,7 @@ export function ClientsView({
         metodosPago={metodosPago}
         entregaMinimaActiva={entregaMinimaActiva}
         recargoMoraConfig={recargoMoraConfig}
+        isAdmin={isAdmin}
         onClose={() => setSelectedClient(null)}
       />
       <ImportClientsCsvModal

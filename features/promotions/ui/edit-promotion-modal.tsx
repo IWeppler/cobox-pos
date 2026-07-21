@@ -10,6 +10,7 @@ import {
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { DatePickerAR } from "@/shared/components/date-picker-ar";
 import {
   Select,
   SelectContent,
@@ -227,8 +228,8 @@ export function EditPromotionModal({
                     Mostrar en catálogo público (/store)
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Se muestra como aviso informativo en el carrito. No
-                    aplica en el POS presencial.
+                    Se muestra como aviso informativo en el carrito. No aplica
+                    en el POS presencial.
                   </p>
                 </div>
                 <Switch
@@ -318,8 +319,7 @@ export function EditPromotionModal({
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
               <div className="space-y-2">
                 <Label htmlFor="fecha_inicio">Válido desde (Opcional)</Label>
-                <Input
-                  type="date"
+                <DatePickerAR
                   id="fecha_inicio"
                   name="fecha_inicio"
                   defaultValue={
@@ -329,8 +329,7 @@ export function EditPromotionModal({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fecha_fin">Válido hasta (Opcional)</Label>
-                <Input
-                  type="date"
+                <DatePickerAR
                   id="fecha_fin"
                   name="fecha_fin"
                   defaultValue={

@@ -8,6 +8,7 @@ import {
   calcularRecargoMoraTotal,
   RecargoMoraConfig,
 } from "@/features/clients/lib/calcular-saldo-con-recargo";
+import { calcularFechaVencimiento } from "@/features/clients/lib/calcular-fecha-vencimiento";
 
 interface ClientActionState {
   error: string | null;
@@ -310,16 +311,64 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
   return { error: null, success: true };
 }
 
-// 6. AJUSTE MANUAL DE SALDO / DEUDA INICIAL
+// 6. AJUSTE MANUAL DE SALDO / DEUDA INICIAL (múltiples entradas históricas)
+export interface EntradaSaldoInicial {
+  fecha: string; // "YYYY-MM-DD"
+  monto: number;
+  nota?: string;
+}
+
+function formatearFechaCorta(fechaIso: string): string {
+  const [anio, mes, dia] = fechaIso.split("-");
+  return `${dia}/${mes}/${anio}`;
+}
+
+/** "YYYY-MM-DD" de hoy en hora local — mismo criterio que el resto de la
+ * validación de fechas de deuda (columnas `date`, sin componente horario). */
+function fechaHoyIso(): string {
+  const hoy = new Date();
+  const mes = String(hoy.getMonth() + 1).padStart(2, "0");
+  const dia = String(hoy.getDate()).padStart(2, "0");
+  return `${hoy.getFullYear()}-${mes}-${dia}`;
+}
+
 export async function ajustarSaldoAction(
   clienteId: string,
-  formData: FormData,
+  entradas: EntradaSaldoInicial[],
 ) {
-  const monto = Number(formData.get("monto"));
-  const descripcion = formData.get("descripcion") as string;
+  if (!clienteId || !Array.isArray(entradas) || entradas.length === 0) {
+    return { error: "Cargá al menos una fecha con su monto.", success: false };
+  }
 
-  if (isNaN(monto) || monto <= 0 || !clienteId) {
-    return { error: "Monto inválido.", success: false };
+  // Validación server-side de cada entrada — nunca confiar en los montos ni
+  // las fechas que manda el cliente, mismo criterio que create-sale.ts.
+  const hoyIso = fechaHoyIso();
+  const entradasValidas: { fecha: string; monto: number; nota: string }[] = [];
+
+  for (const entrada of entradas) {
+    const monto = Number(entrada.monto);
+    const fecha = String(entrada.fecha || "");
+
+    if (isNaN(monto) || monto <= 0) {
+      return {
+        error: "Hay un monto inválido en la lista de fechas.",
+        success: false,
+      };
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      return {
+        error: "Hay una fecha inválida en la lista.",
+        success: false,
+      };
+    }
+    if (fecha > hoyIso) {
+      return {
+        error: "No se pueden cargar fechas futuras.",
+        success: false,
+      };
+    }
+
+    entradasValidas.push({ fecha, monto, nota: (entrada.nota || "").trim() });
   }
 
   const cookieStore = await cookies();
@@ -328,31 +377,63 @@ export async function ajustarSaldoAction(
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 1. Insertamos en el Ledger (Aumenta la deuda)
+  const montoTotal = entradasValidas.reduce((acc, e) => acc + e.monto, 0);
+
+  // 1. Un movimiento en el Ledger POR ENTRADA — no uno fusionado — para que
+  // el historial refleje el desglose por fecha que cargó la dueña, cada
+  // uno con su propia nota y su fecha_origen real (creado_en sigue siendo
+  // "cuándo se registró en el sistema", no se falsifica).
+  const movimientos = entradasValidas.map((entrada) => ({
+    cliente_id: clienteId,
+    tipo: "DEBITO" as const,
+    monto: entrada.monto,
+    fecha_origen: entrada.fecha,
+    descripcion: entrada.nota
+      ? `Saldo inicial (deuda del ${formatearFechaCorta(entrada.fecha)}): ${entrada.nota}`
+      : `Saldo inicial (deuda del ${formatearFechaCorta(entrada.fecha)})`,
+    creado_por: user?.id,
+  }));
+
   const { error: ccError } = await supabase
     .from("cuenta_corriente_movimientos")
-    .insert({
-      cliente_id: clienteId,
-      tipo: "DEBITO",
-      monto: monto,
-      descripcion: descripcion || "Ajuste manual / Saldo inicial",
-      creado_por: user?.id,
-    });
+    .insert(movimientos);
 
   if (ccError)
-    return { error: "Error al registrar el movimiento.", success: false };
+    return { error: "Error al registrar los movimientos.", success: false };
 
-  // 2. Actualizamos la caché del cliente
-  const { data: cliente } = await supabase
-    .from("clientes")
-    .select("saldo_pendiente")
-    .eq("id", clienteId)
-    .single();
+  // 2. Saldo y vencimiento del cliente
+  const [{ data: cliente }, { data: configPos }] = await Promise.all([
+    supabase
+      .from("clientes")
+      .select("saldo_pendiente, fecha_vencimiento_deuda")
+      .eq("id", clienteId)
+      .single(),
+    supabase.from("configuracion_pos").select("cc_plazo_mora").single(),
+  ]);
+
   const saldoActual = Number(cliente?.saldo_pendiente || 0);
+  const plazoMora = configPos?.cc_plazo_mora ?? 30;
+
+  // Vencimiento: desde la entrada más antigua + plazo de mora, pero sin
+  // pisar un vencimiento existente que ya sea más próximo (más urgente) —
+  // el cliente puede ya tener una deuda vigente por otra vía.
+  const fechaMasAntigua = entradasValidas.reduce(
+    (min, e) => (e.fecha < min ? e.fecha : min),
+    entradasValidas[0].fecha,
+  );
+  const nuevoVencimiento = calcularFechaVencimiento(fechaMasAntigua, plazoMora);
+  const vencimientoActual = cliente?.fecha_vencimiento_deuda ?? null;
+  const fechaVencimientoFinal =
+    vencimientoActual && vencimientoActual < nuevoVencimiento
+      ? vencimientoActual
+      : nuevoVencimiento;
 
   await supabase
     .from("clientes")
-    .update({ saldo_pendiente: saldoActual + monto })
+    .update({
+      saldo_pendiente: saldoActual + montoTotal,
+      fecha_vencimiento_deuda: fechaVencimientoFinal,
+    })
     .eq("id", clienteId);
 
   revalidatePath("/clientes");
@@ -449,4 +530,239 @@ export async function importarClientesCSVAction(formData: FormData) {
     console.error("Error importando CSV:", error);
     return { error: "Error procesando el archivo CSV.", success: false };
   }
+}
+
+// 8. EDITAR / ANULAR MOVIMIENTO MANUAL DE CUENTA CORRIENTE (saldo inicial /
+// ajuste manual, sea cargado a mano o por CSV — ambos insertan sin
+// venta_id ni pago_id). Movimientos generados por una venta o un cobro NO
+// pasan por acá — ese es el discriminador, y ambas actions lo verifican
+// server-side además de la UI, por si algún día alguien llama esto directo.
+
+async function esUsuarioAdmin(
+  supabase: ReturnType<typeof createClient>,
+): Promise<{ esAdmin: boolean; userId: string | null }> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { esAdmin: false, userId: null };
+
+  const { data: perfil } = await supabase
+    .from("perfiles")
+    .select("rol")
+    .eq("id", user.id)
+    .single();
+
+  return { esAdmin: perfil?.rol === "ADMIN", userId: user.id };
+}
+
+/**
+ * Recalcula clientes.fecha_vencimiento_deuda DESDE CERO, tomando la fecha
+ * más antigua entre todos los movimientos manuales no anulados de ese
+ * cliente + cc_plazo_mora (null si no queda ninguno). A diferencia de
+ * ajustarSaldoAction (que solo compara contra el valor existente y nunca
+ * lo hace menos urgente), acá el recálculo reemplaza el valor sin
+ * comparar — una corrección tiene que poder mover el vencimiento en
+ * cualquier dirección, es la parte que arregla una fecha mal cargada.
+ */
+async function recalcularVencimientoDesdeMovimientosManuales(
+  supabase: ReturnType<typeof createClient>,
+  clienteId: string,
+): Promise<string | null> {
+  const [{ data: movimientos }, { data: configPos }] = await Promise.all([
+    supabase
+      .from("cuenta_corriente_movimientos")
+      .select("fecha_origen, creado_en")
+      .eq("cliente_id", clienteId)
+      .is("venta_id", null)
+      .is("pago_id", null)
+      .eq("anulado", false),
+    supabase.from("configuracion_pos").select("cc_plazo_mora").single(),
+  ]);
+
+  if (!movimientos || movimientos.length === 0) return null;
+
+  const plazoMora = configPos?.cc_plazo_mora ?? 30;
+  const fechaMasAntigua = movimientos.reduce((min: string, mov) => {
+    const fecha = mov.fecha_origen || String(mov.creado_en).slice(0, 10);
+    return !min || fecha < min ? fecha : min;
+  }, "");
+
+  return calcularFechaVencimiento(fechaMasAntigua, plazoMora);
+}
+
+export async function editarMovimientoManualAction(
+  movimientoId: string,
+  datos: { fecha: string; monto: number; nota?: string },
+) {
+  if (!movimientoId) {
+    return { error: "Movimiento inválido.", success: false };
+  }
+
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const { esAdmin } = await esUsuarioAdmin(supabase);
+  if (!esAdmin) {
+    return {
+      error: "Solo un administrador puede editar movimientos.",
+      success: false,
+    };
+  }
+
+  // Validación server-side — misma regla que la carga original, nunca
+  // confiar en lo que manda el cliente.
+  const monto = Number(datos.monto);
+  const fecha = String(datos.fecha || "");
+  if (isNaN(monto) || monto <= 0) {
+    return { error: "El monto tiene que ser mayor a $0.", success: false };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return { error: "Fecha inválida.", success: false };
+  }
+  if (fecha > fechaHoyIso()) {
+    return { error: "No se pueden cargar fechas futuras.", success: false };
+  }
+
+  const { data: movimiento } = await supabase
+    .from("cuenta_corriente_movimientos")
+    .select("id, cliente_id, venta_id, pago_id, tipo, monto, anulado")
+    .eq("id", movimientoId)
+    .single();
+
+  if (!movimiento) {
+    return { error: "Movimiento no encontrado.", success: false };
+  }
+  if (movimiento.venta_id || movimiento.pago_id) {
+    return {
+      error:
+        "Este movimiento viene de una venta o un cobro y no se puede editar acá.",
+      success: false,
+    };
+  }
+  if (movimiento.anulado) {
+    return { error: "Este movimiento está anulado.", success: false };
+  }
+
+  const nota = (datos.nota || "").trim();
+  const descripcion = nota
+    ? `Saldo inicial (deuda del ${formatearFechaCorta(fecha)}): ${nota}`
+    : `Saldo inicial (deuda del ${formatearFechaCorta(fecha)})`;
+
+  const { error: updateError } = await supabase
+    .from("cuenta_corriente_movimientos")
+    .update({ monto, fecha_origen: fecha, descripcion })
+    .eq("id", movimientoId);
+
+  if (updateError) {
+    return { error: "No se pudo actualizar el movimiento.", success: false };
+  }
+
+  // Delta sobre el saldo — nunca se reescribe el total a mano, para no
+  // perder de vista otros movimientos concurrentes.
+  const montoAnterior = Number(movimiento.monto);
+  const signo = movimiento.tipo === "DEBITO" ? 1 : -1;
+  const delta = signo * (monto - montoAnterior);
+
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("saldo_pendiente")
+    .eq("id", movimiento.cliente_id)
+    .single();
+  const saldoActual = Number(cliente?.saldo_pendiente || 0);
+
+  const nuevaFechaVencimiento =
+    await recalcularVencimientoDesdeMovimientosManuales(
+      supabase,
+      movimiento.cliente_id,
+    );
+
+  await supabase
+    .from("clientes")
+    .update({
+      saldo_pendiente: Math.max(0, saldoActual + delta),
+      fecha_vencimiento_deuda: nuevaFechaVencimiento,
+    })
+    .eq("id", movimiento.cliente_id);
+
+  revalidatePath("/clientes");
+  return { error: null, success: true };
+}
+
+export async function anularMovimientoManualAction(movimientoId: string) {
+  if (!movimientoId) {
+    return { error: "Movimiento inválido.", success: false };
+  }
+
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const { esAdmin, userId } = await esUsuarioAdmin(supabase);
+  if (!esAdmin) {
+    return {
+      error: "Solo un administrador puede anular movimientos.",
+      success: false,
+    };
+  }
+
+  const { data: movimiento } = await supabase
+    .from("cuenta_corriente_movimientos")
+    .select("id, cliente_id, venta_id, pago_id, tipo, monto, anulado")
+    .eq("id", movimientoId)
+    .single();
+
+  if (!movimiento) {
+    return { error: "Movimiento no encontrado.", success: false };
+  }
+  if (movimiento.venta_id || movimiento.pago_id) {
+    return {
+      error:
+        "Este movimiento viene de una venta o un cobro y no se puede anular acá.",
+      success: false,
+    };
+  }
+  if (movimiento.anulado) {
+    return { error: "Este movimiento ya está anulado.", success: false };
+  }
+
+  const { error: updateError } = await supabase
+    .from("cuenta_corriente_movimientos")
+    .update({
+      anulado: true,
+      anulado_en: new Date().toISOString(),
+      anulado_por: userId,
+    })
+    .eq("id", movimientoId);
+
+  if (updateError) {
+    return { error: "No se pudo anular el movimiento.", success: false };
+  }
+
+  // Reversa del saldo — un DEBITO anulado resta, un CREDITO anulado suma
+  // (hoy solo existen DEBITO en este flujo, pero se mantiene genérico).
+  const signo = movimiento.tipo === "DEBITO" ? -1 : 1;
+  const delta = signo * Number(movimiento.monto);
+
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("saldo_pendiente")
+    .eq("id", movimiento.cliente_id)
+    .single();
+  const saldoActual = Number(cliente?.saldo_pendiente || 0);
+
+  const nuevaFechaVencimiento =
+    await recalcularVencimientoDesdeMovimientosManuales(
+      supabase,
+      movimiento.cliente_id,
+    );
+
+  await supabase
+    .from("clientes")
+    .update({
+      saldo_pendiente: Math.max(0, saldoActual + delta),
+      fecha_vencimiento_deuda: nuevaFechaVencimiento,
+    })
+    .eq("id", movimiento.cliente_id);
+
+  revalidatePath("/clientes");
+  return { error: null, success: true };
 }

@@ -13,6 +13,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
+import { DatePickerAR } from "@/shared/components/date-picker-ar";
 import { Cliente } from "@/entities/clientes/type";
 import { editClienteAction } from "../actions/manage-clients";
 
@@ -101,12 +102,10 @@ export function EditClientModal({
               >
                 Fecha de vencimiento de deuda (Opcional)
               </Label>
-              <Input
+              <DatePickerAR
                 id="edit-fecha-vencimiento-deuda"
                 name="fecha_vencimiento_deuda"
-                type="date"
-                defaultValue={cliente.fecha_vencimiento_deuda || ""}
-                className="h-10 shadow-none"
+                defaultValue={cliente.fecha_vencimiento_deuda}
               />
             </div>
 
@@ -167,10 +166,7 @@ export function EditClientModal({
               >
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                disabled={isPending}
-              >
+              <Button type="submit" disabled={isPending}>
                 {isPending ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : null}
