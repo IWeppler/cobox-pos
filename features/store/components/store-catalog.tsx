@@ -260,8 +260,12 @@ function CatalogContent({
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12">
-            {productosVisibles.map((producto) => (
-              <ProductCard key={producto.id} producto={producto} />
+            {productosVisibles.map((producto, index) => (
+              <ProductCard
+                key={producto.id}
+                producto={producto}
+                priority={index < 8}
+              />
             ))}
           </div>
 

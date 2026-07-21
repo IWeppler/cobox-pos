@@ -183,6 +183,17 @@ export function PosTerminal({
         imagenes = producto.imagen_url;
       }
 
+      let miniaturas: string[] = [];
+      if (typeof producto.thumbnail_url === "string") {
+        try {
+          miniaturas = JSON.parse(producto.thumbnail_url);
+        } catch {
+          miniaturas = [producto.thumbnail_url];
+        }
+      } else if (Array.isArray(producto.thumbnail_url)) {
+        miniaturas = producto.thumbnail_url;
+      }
+
       addItem({
         productoId: producto.id,
         nombre: producto.nombre || "Sin nombre",
@@ -191,7 +202,7 @@ export function PosTerminal({
         varianteId: variantesParaVender[0].varianteId,
         precio: variantesParaVender[0].precio ?? producto.precio,
         cantidad: 1,
-        imagenUrl: imagenes[0] || null,
+        imagenUrl: miniaturas[0] || imagenes[0] || null,
         stockMaximo: variantesParaVender[0].cantidad,
       });
 
@@ -240,7 +251,7 @@ export function PosTerminal({
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-20 lg:pb-0">
-              {productosOrdenados.map((producto) => {
+              {productosOrdenados.map((producto, index) => {
                 let imagenes: string[] = [];
                 if (typeof producto.imagen_url === "string") {
                   try {
@@ -251,7 +262,18 @@ export function PosTerminal({
                 } else if (Array.isArray(producto.imagen_url)) {
                   imagenes = producto.imagen_url;
                 }
-                const primeraImagen = imagenes[0] || null;
+
+                let miniaturas: string[] = [];
+                if (typeof producto.thumbnail_url === "string") {
+                  try {
+                    miniaturas = JSON.parse(producto.thumbnail_url);
+                  } catch {
+                    miniaturas = [producto.thumbnail_url];
+                  }
+                } else if (Array.isArray(producto.thumbnail_url)) {
+                  miniaturas = producto.thumbnail_url;
+                }
+                const primeraImagen = miniaturas[0] || imagenes[0] || null;
 
                 const stockTotal = getStockTotal(producto);
                 const sinStock = stockTotal <= 0;
@@ -293,6 +315,7 @@ export function PosTerminal({
                             fill
                             className="object-cover"
                             sizes="200px"
+                            priority={index < 8}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">

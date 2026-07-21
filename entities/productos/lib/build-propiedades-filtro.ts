@@ -1,18 +1,38 @@
-import type { Producto } from "@/entities/productos/types";
 import {
   normalizarParaComparar,
   parseRawVariantString,
 } from "./parse-variant-attributes";
 import { compararTalles } from "./comparar-talles";
 
-type ProductoVarianteDb = NonNullable<Producto["producto_variantes"]>[number];
+/**
+ * Forma mínima que necesitan estas funciones — deliberadamente más chica
+ * que `ProductoVariante`/`Producto` completos, así también aceptan
+ * `ProductoIndice` (la versión liviana de /stock, ver
+ * features/stock/actions/get-product.ts) sin castear nada.
+ */
+interface VarianteConAtributos {
+  stock?: number;
+  nombre_display?: string;
+  atributos?: Record<string, string>;
+  producto_variante_valores?: {
+    atributo?: { nombre?: string | null } | null;
+    atributo_valor?: { valor?: string | null } | null;
+  }[];
+}
+
+interface ProductoConVariantes {
+  producto_variantes?: VarianteConAtributos[];
+  /** `variante` solo se lee bajo `incluirStockLegacy` (catálogo público);
+   * queda opcional porque ProductoIndice (uso de /stock) no la trae. */
+  stock?: { variante?: string; cantidad: number }[];
+}
 
 export interface ResolverAtributosOptions {
   incluirFallbackRelacional?: boolean;
 }
 
 export function resolverAtributosVariante(
-  variante: ProductoVarianteDb,
+  variante: VarianteConAtributos,
   options: ResolverAtributosOptions = {},
 ): Record<string, string> {
   if (variante.atributos && Object.keys(variante.atributos).length > 0) {
@@ -43,7 +63,7 @@ export interface BuildPropiedadesFiltroOptions extends ResolverAtributosOptions 
 }
 
 export function buildPropiedadesFiltro(
-  productos: Producto[],
+  productos: ProductoConVariantes[],
   options: BuildPropiedadesFiltroOptions = {},
 ): Record<string, string[]> {
   const {
@@ -78,7 +98,7 @@ export function buildPropiedadesFiltro(
     let tieneAtributosEstructurados = false;
 
     producto.producto_variantes?.forEach((variante) => {
-      if (ocultarSinStock && variante.stock <= 0) return;
+      if (ocultarSinStock && (variante.stock ?? 0) <= 0) return;
 
       const atributos = resolverAtributosVariante(variante, {
         incluirFallbackRelacional,
@@ -92,7 +112,7 @@ export function buildPropiedadesFiltro(
     if (incluirStockLegacy && !tieneAtributosEstructurados) {
       producto.stock?.forEach((s) => {
         if (ocultarSinStock && s.cantidad <= 0) return;
-        const parsed = parseRawVariantString(s.variante);
+        const parsed = parseRawVariantString(s.variante ?? "");
         Object.entries(parsed).forEach(([propiedad, valor]) =>
           addValor(propiedad, valor),
         );

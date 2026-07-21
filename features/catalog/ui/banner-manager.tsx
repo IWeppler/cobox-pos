@@ -51,7 +51,7 @@ export function BannerManager({ config }: Readonly<BannerManagerProps>) {
 
       const { error: uploadError } = await supabase.storage
         .from("productos")
-        .upload(fileName, file);
+        .upload(fileName, file, { cacheControl: "31536000" });
 
       if (uploadError) throw uploadError;
 

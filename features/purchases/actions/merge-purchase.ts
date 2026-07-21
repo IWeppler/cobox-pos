@@ -185,7 +185,7 @@ export async function crearProductoAlVueloAction(
         const mainName = `${baseFileName}.${fileExt}`;
         const { error: uploadMainError } = await supabase.storage
           .from("productos")
-          .upload(mainName, fileMain);
+          .upload(mainName, fileMain, { cacheControl: "31536000" });
 
         if (!uploadMainError) {
           const {
@@ -199,7 +199,7 @@ export async function crearProductoAlVueloAction(
           const thumbName = `thumbs/${baseFileName}-thumb.${fileExt}`;
           const { error: uploadThumbError } = await supabase.storage
             .from("productos")
-            .upload(thumbName, fileThumb);
+            .upload(thumbName, fileThumb, { cacheControl: "31536000" });
 
           if (!uploadThumbError) {
             const {

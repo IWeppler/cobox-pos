@@ -21,6 +21,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { abrirTurnoAction, cerrarTurnoAction } from "../actions/caja-action";
+import { useCajaStatusStore } from "@/shared/store/caja-status-store";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -75,6 +76,9 @@ export function CajaDashboard({
   userId,
 }: Readonly<CajaDashboardProps>) {
   const router = useRouter();
+  const notifyCajaChanged = useCajaStatusStore(
+    (state) => state.notifyCajaChanged,
+  );
   const [isCerrarOpen, setIsCerrarOpen] = useState(false);
   const [turnosCerradosOptimistas, setTurnosCerradosOptimistas] = useState<
     string[]
@@ -102,6 +106,7 @@ export function CajaDashboard({
       const res = await abrirTurnoAction(prevState, formData);
       if (res.success) {
         toast.success("Caja abierta correctamente.");
+        notifyCajaChanged();
         router.refresh();
       } else {
         toast.error(res.error);
@@ -122,6 +127,7 @@ export function CajaDashboard({
             new Set([...currentTurnos, String(formData.get("turno_id") || "")]),
           ),
         );
+        notifyCajaChanged();
         router.refresh();
       } else {
         toast.error(res.error);

@@ -128,7 +128,7 @@ export function AdvisorBanner({ insights }: Readonly<AdvisorBannerProps>) {
             >
               <Icon className="w-4 h-4" />
             </div>
-            <h4 className={`font-bold ${config.titleColor} text-lg`}>
+            <h4 className={`font-semibold ${config.titleColor} text-md`}>
               Recomendaciones inteligentes
             </h4>
             <span

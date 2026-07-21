@@ -5,6 +5,7 @@ import Link from "next/link";
 
 interface ProductCardProps {
   producto: Producto;
+  priority?: boolean;
 }
 
 const getImagenesProducto = (imagenUrl: Producto["imagen_url"]) => {
@@ -19,8 +20,14 @@ const getImagenesProducto = (imagenUrl: Producto["imagen_url"]) => {
   }
 };
 
-export function ProductCard({ producto }: Readonly<ProductCardProps>) {
-  const primeraImagen = getImagenesProducto(producto.imagen_url)[0] || null;
+export function ProductCard({
+  producto,
+  priority = false,
+}: Readonly<ProductCardProps>) {
+  const primeraImagen =
+    getImagenesProducto(producto.thumbnail_url)[0] ||
+    getImagenesProducto(producto.imagen_url)[0] ||
+    null;
   const linkDestino = producto.slug ? `/store/${producto.slug}` : "#";
 
   return (
@@ -37,6 +44,7 @@ export function ProductCard({ producto }: Readonly<ProductCardProps>) {
               fill
               className="object-cover transition-transform duration-500"
               sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
+              priority={priority}
             />
           </div>
         ) : (

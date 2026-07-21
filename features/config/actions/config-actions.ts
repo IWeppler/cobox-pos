@@ -60,7 +60,7 @@ export async function updateConfiguracionAction(
 
     const { error: uploadError } = await supabase.storage
       .from("logos")
-      .upload(fileName, logoFile);
+      .upload(fileName, logoFile, { cacheControl: "31536000" });
 
     if (!uploadError) {
       const {

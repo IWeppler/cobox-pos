@@ -57,6 +57,23 @@ export function ProductDetail({
     return [];
   }, [producto.imagen_url]);
 
+  // Solo para las miniaturas de los carriles — la imagen principal
+  // (gallery mobile y el display grande de desktop) sigue usando
+  // `imagenes` (la versión completa). Cae a `imagenes[i]` cuando el
+  // producto todavía no tiene thumbnail (viejo o no backfilleado).
+  const miniaturas = useMemo(() => {
+    if (Array.isArray(producto.thumbnail_url)) return producto.thumbnail_url;
+    if (typeof producto.thumbnail_url === "string") {
+      try {
+        const parsed = JSON.parse(producto.thumbnail_url);
+        return Array.isArray(parsed) ? parsed : [producto.thumbnail_url];
+      } catch {
+        return [producto.thumbnail_url];
+      }
+    }
+    return [];
+  }, [producto.thumbnail_url]);
+
   // 1. UNIFICAR LECTURA DE VARIANTES (Agregamos la extracción de los 'atributos' JSONB)
   const variantesArray = useMemo(() => {
     const list: Array<{
@@ -320,7 +337,7 @@ export function ProductDetail({
                 }`}
               >
                 <Image
-                  src={img}
+                  src={miniaturas[index] || img}
                   alt={`Miniatura ${index + 1}`}
                   fill
                   className="object-cover"
@@ -353,7 +370,7 @@ export function ProductDetail({
                     }`}
                   >
                     <Image
-                      src={img}
+                      src={miniaturas[index] || img}
                       alt={`Miniatura ${index + 1}`}
                       fill
                       className="object-cover"

@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { CartButton } from "@/shared/ui/cart-button";
 import { useSidebarStore } from "@/shared/store/sidebar-store";
+import { useCajaStatusStore } from "@/shared/store/caja-status-store";
 import { createClient } from "../config/supabase/client";
 import {
   Tooltip,
@@ -71,12 +72,18 @@ const isRunningStandalone = () => {
 interface SidebarProps {
   branding: ConfiguracionPOS;
   userRole: string;
+  userId: string;
 }
 
-export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
+export function Sidebar({
+  branding,
+  userRole,
+  userId,
+}: Readonly<SidebarProps>) {
   const pathname = usePathname();
   const { isCollapsed, isOpenMobile, setIsOpenMobile } = useSidebarStore();
   const [isCajaAbierta, setIsCajaAbierta] = useState<boolean | null>(null);
+  const cajaVersion = useCajaStatusStore((state) => state.version);
 
   const visibleNavItems = useMemo(() => {
     return ALL_NAV_ITEMS.filter((item) => {
@@ -87,25 +94,17 @@ export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
     });
   }, [userRole]);
 
+  // modo_caja llega por props (ya resuelto server-side en el layout, sin
+  // request extra) y userId también — el único fetch real de este efecto es
+  // el de turnos_caja. Antes se pedían auth.getUser() + configuracion_pos EN
+  // CADA TICK; ninguno de los dos cambia con esa frecuencia.
   useEffect(() => {
     let isMounted = true;
+    const modo = branding.modo_caja || "UNICA";
 
     const fetchCajaStatus = async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
 
-      // 1. Buscamos el modo de operación
-      const { data: config } = await supabase
-        .from("configuracion_pos")
-        .select("modo_caja")
-        .single();
-
-      const modo = config?.modo_caja || "UNICA";
-
-      // 2. Buscamos si hay caja abierta según las reglas
       let query = supabase
         .from("turnos_caja")
         .select("id")
@@ -115,7 +114,7 @@ export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
         query = query.eq("modo", "UNICA");
       } else {
         // Modo multicaja: Busca estrictamente la caja del usuario logueado
-        query = query.eq("modo", "POR_USUARIO").eq("vendedor_id", user.id);
+        query = query.eq("modo", "POR_USUARIO").eq("vendedor_id", userId);
       }
 
       const { data } = await query.limit(1);
@@ -127,13 +126,43 @@ export function Sidebar({ branding, userRole }: Readonly<SidebarProps>) {
 
     fetchCajaStatus();
 
-    const interval = setInterval(fetchCajaStatus, 8000);
+    // El polling de 60s queda solo como red de seguridad para cambios
+    // hechos por OTRO usuario (ver useCajaStatusStore para el caso propio)
+    // — y se pausa mientras la pestaña está en background, así 4 personas
+    // con la pestaña abierta todo el turno no generan requests mientras
+    // nadie está mirando la pantalla.
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const startInterval = () => {
+      if (!interval) interval = setInterval(fetchCajaStatus, 60_000);
+    };
+    const stopInterval = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchCajaStatus();
+        startInterval();
+      } else {
+        stopInterval();
+      }
+    };
+
+    if (document.visibilityState === "visible") startInterval();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      stopInterval();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [pathname]);
+    // cajaVersion en las deps: cuando el propio usuario abre/cierra su
+    // turno (ver caja-dashboard.tsx), esto re-corre el efecto entero y
+    // dispara un fetchCajaStatus() inmediato sin esperar el intervalo.
+  }, [pathname, branding.modo_caja, userId, cajaVersion]);
 
   const initial = branding.posName;
 

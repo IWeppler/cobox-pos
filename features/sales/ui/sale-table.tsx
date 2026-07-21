@@ -20,13 +20,15 @@ import {
   TableRow,
 } from "@/shared/ui/table";
 import { Badge } from "@/shared/ui/badge";
-import { Eye, Receipt } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Receipt } from "lucide-react";
 import { AnularVentaModal } from "./cancel-sale-modal";
 import { Button } from "@/shared/ui/button";
 import { TicketSheet } from "./ticket-sheet";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
 import { getMetodoPagoColor } from "@/shared/utils/payment-methods";
 import { SaleTableHeader } from "./sale-table-header";
+
+const ITEMS_POR_PAGINA = 10;
 
 interface VentasTableProps {
   ventas: Venta[];
@@ -42,6 +44,7 @@ export function VentasTable({
 }: Readonly<VentasTableProps>) {
   const [filtroNombre, setFiltroNombre] = useState("");
   const [orden, setOrden] = useState("recientes");
+  const [paginaActual, setPaginaActual] = useState(1);
 
   const [ticketAbierto, setTicketAbierto] = useState<TicketData | null>(null);
   const [branding, setBranding] = useState<ConfiguracionPOS | null>(null);
@@ -170,6 +173,29 @@ export function VentasTable({
     return resultado;
   }, [ventas, filtroNombre, orden]);
 
+  const totalPaginas = Math.ceil(
+    ventasFiltradasYOrdenadas.length / ITEMS_POR_PAGINA,
+  );
+
+  const ventasPagina = useMemo(
+    () =>
+      ventasFiltradasYOrdenadas.slice(
+        (paginaActual - 1) * ITEMS_POR_PAGINA,
+        paginaActual * ITEMS_POR_PAGINA,
+      ),
+    [ventasFiltradasYOrdenadas, paginaActual],
+  );
+
+  const handleSearchChange = (value: string) => {
+    setFiltroNombre(value);
+    setPaginaActual(1);
+  };
+
+  const handleOrderChange = (value: string) => {
+    setOrden(value);
+    setPaginaActual(1);
+  };
+
   const abrirTicket = (venta: Venta) => {
     // Obtenemos el descuento de la cabecera si existe
     const descuento =
@@ -233,9 +259,9 @@ export function VentasTable({
 
       <SaleTableHeader
         searchValue={filtroNombre}
-        onSearchChange={setFiltroNombre}
+        onSearchChange={handleSearchChange}
         orderValue={orden}
-        onOrderChange={setOrden}
+        onOrderChange={handleOrderChange}
         orderOptions={ordenOptions}
       />
 
@@ -269,8 +295,8 @@ export function VentasTable({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ventasFiltradasYOrdenadas.length > 0 ? (
-                    ventasFiltradasYOrdenadas.map((venta) => {
+                  {ventasPagina.length > 0 ? (
+                    ventasPagina.map((venta) => {
                       const items = venta.ventas_items || [];
                       const primerItem = items[0];
 
@@ -418,8 +444,8 @@ export function VentasTable({
 
           {/* VISTA MOBILE (Tarjetas apiladas, ocultas en desktop) */}
           <div className="md:hidden flex flex-col gap-3">
-            {ventasFiltradasYOrdenadas.length > 0 ? (
-              ventasFiltradasYOrdenadas.map((venta) => {
+            {ventasPagina.length > 0 ? (
+              ventasPagina.map((venta) => {
                 const items = venta.ventas_items || [];
                 const primerItem = items[0];
 
@@ -555,6 +581,52 @@ export function VentasTable({
               </div>
             )}
           </div>
+
+          {/* Paginación */}
+          {totalPaginas > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4 border-t border-border mt-4">
+              <span className="text-xs font-medium text-muted-foreground">
+                Mostrando{" "}
+                {Math.min(
+                  ventasFiltradasYOrdenadas.length,
+                  (paginaActual - 1) * ITEMS_POR_PAGINA + 1,
+                )}{" "}
+                a{" "}
+                {Math.min(
+                  ventasFiltradasYOrdenadas.length,
+                  paginaActual * ITEMS_POR_PAGINA,
+                )}{" "}
+                de {ventasFiltradasYOrdenadas.length} tickets
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shadow-none"
+                  onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
+                  disabled={paginaActual === 1}
+                >
+                  <ChevronLeft className="w-4 h-4 sm:mr-1" />{" "}
+                  <span className="hidden sm:inline">Anterior</span>
+                </Button>
+                <div className="text-xs font-bold px-3">
+                  {paginaActual} / {totalPaginas}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shadow-none"
+                  onClick={() =>
+                    setPaginaActual((p) => Math.min(totalPaginas, p + 1))
+                  }
+                  disabled={paginaActual === totalPaginas}
+                >
+                  <span className="hidden sm:inline">Siguiente</span>{" "}
+                  <ChevronRight className="w-4 h-4 sm:ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -19,7 +19,7 @@ export function RelatedProducts({ productos }: Readonly<RelatedProductsProps>) {
       </h3>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-        {productos.map((producto) => {
+        {productos.map((producto, index) => {
           let imagenes: string[] = [];
           if (Array.isArray(producto.imagen_url)) {
             imagenes = producto.imagen_url;
@@ -32,7 +32,21 @@ export function RelatedProducts({ productos }: Readonly<RelatedProductsProps>) {
             }
           }
 
-          const primeraImagen = imagenes[0] || null;
+          let miniaturas: string[] = [];
+          if (Array.isArray(producto.thumbnail_url)) {
+            miniaturas = producto.thumbnail_url;
+          } else if (typeof producto.thumbnail_url === "string") {
+            try {
+              const parsed = JSON.parse(producto.thumbnail_url);
+              miniaturas = Array.isArray(parsed)
+                ? parsed
+                : [producto.thumbnail_url];
+            } catch {
+              miniaturas = [producto.thumbnail_url];
+            }
+          }
+
+          const primeraImagen = miniaturas[0] || imagenes[0] || null;
           const linkDestino = producto.slug ? `/store/${producto.slug}` : "#";
 
           return (
@@ -49,6 +63,7 @@ export function RelatedProducts({ productos }: Readonly<RelatedProductsProps>) {
                     fill
                     className="object-cover transition-transform duration-500 group-hover:scale-105"
                     sizes="(max-width: 768px) 50vw, 25vw"
+                    priority={index < 8}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">

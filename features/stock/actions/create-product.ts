@@ -27,6 +27,7 @@ export async function crearProductoAction(
   );
 
   const archivos = formData.getAll("imagenes") as File[];
+  const thumbnails = formData.getAll("thumbnails") as File[];
 
   if (!nombre || Number.isNaN(precio) || Number.isNaN(precio_costo)) {
     return {
@@ -49,25 +50,58 @@ export async function crearProductoAction(
     if (cat) tipo = cat.nombre;
   }
 
-  // 1. Subir imágenes
+  // 1. Subir imágenes (main + thumbnail, asociadas por índice via baseFileName)
   let imagen_url = null;
+  let thumbnail_url = null;
   const validFiles = archivos.filter((f) => f.size > 0);
   if (validFiles.length > 0) {
-    const urls = [];
-    for (const file of validFiles) {
+    const urls: string[] = [];
+    const urlsThumb: string[] = [];
+
+    for (let i = 0; i < validFiles.length; i++) {
+      const file = validFiles[i];
       const fileExt = file.name.split(".").pop();
-      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const baseFileName = crypto.randomUUID();
+      const fileName = `${baseFileName}.${fileExt}`;
+
       const { error: uploadError } = await supabase.storage
         .from("productos")
-        .upload(fileName, file);
+        .upload(fileName, file, { cacheControl: "31536000" });
       if (!uploadError) {
         const {
           data: { publicUrl },
         } = supabase.storage.from("productos").getPublicUrl(fileName);
         urls.push(publicUrl);
       }
+
+      // El thumbnail viaja en el mismo índice que su main (ver
+      // optimizarImagenProducto en use-create-product-form.ts). Si por
+      // algún motivo el array de thumbnails vino más corto, no bloqueamos
+      // la creación del producto por eso — el main ya se subió arriba.
+      const thumb = thumbnails[i];
+      if (thumb && thumb.size > 0) {
+        const thumbExt = thumb.name.split(".").pop();
+        const thumbName = `thumbs/${baseFileName}-thumb.${thumbExt}`;
+        const { error: uploadThumbError } = await supabase.storage
+          .from("productos")
+          .upload(thumbName, thumb, { cacheControl: "31536000" });
+        if (!uploadThumbError) {
+          const {
+            data: { publicUrl: thumbUrl },
+          } = supabase.storage.from("productos").getPublicUrl(thumbName);
+          urlsThumb.push(thumbUrl);
+        } else {
+          console.error("[CREATE PRODUCT THUMBNAIL ERROR]", uploadThumbError);
+        }
+      } else if (!uploadError) {
+        console.warn(
+          `[CREATE PRODUCT] Sin thumbnail para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
+        );
+      }
     }
+
     if (urls.length > 0) imagen_url = JSON.stringify(urls);
+    if (urlsThumb.length > 0) thumbnail_url = JSON.stringify(urlsThumb);
   }
 
   let slug = slugify(`${nombre}-${tipo}`);
@@ -85,6 +119,7 @@ export async function crearProductoAction(
       precio,
       precio_costo,
       imagen_url,
+      thumbnail_url,
       slug,
       publicado: true,
       atributos_globales: {},

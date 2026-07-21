@@ -33,7 +33,7 @@ export default async function DashboardLayout({
 
   const { data: settings } = await supabase
     .from("configuracion_pos")
-    .select("id, posName, posLogo")
+    .select("id, posName, posLogo, modo_caja")
     .limit(1)
     .single();
 
@@ -44,11 +44,12 @@ export default async function DashboardLayout({
     whatsapp: "",
     direccion: "",
     mensaje_ticket: "",
+    modo_caja: settings?.modo_caja || "UNICA",
   };
 
   return (
     <div className="min-h-screen bg-sidebar flex flex-col md:flex-row">
-      <Sidebar branding={systemBranding} userRole={userRole} />
+      <Sidebar branding={systemBranding} userRole={userRole} userId={user.id} />
 
       {/* Contenedor principal de la derecha */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden md:p-2 md:pl-0 h-screen">

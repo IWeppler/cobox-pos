@@ -1,8 +1,7 @@
 # Cobox POS — Contexto del proyecto
 
 POS + catálogo público para comercios (cliente piloto: Evens Indumentaria,
-Tostado, Santa Fe). Next.js + TypeScript + Supabase (proyecto prod:
-pwrvyfavqkyyprdgyxuk / cobox-pos). Deploy: Vercel, branch main.
+Tostado, Santa Fe). Next.js + TypeScript + Supabase. Deploy: Vercel, branch main.
 EN PRODUCCIÓN REAL: la dueña (Evelyn, admin) y 3 vendedoras (Mara, Brisa,
 Zunilda) lo usan a diario. Cualquier cambio que toque ventas/caja/stock
 es plata real.

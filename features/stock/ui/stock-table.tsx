@@ -81,6 +81,10 @@ interface StockTableProps {
   userRole: string;
   nombreComercio: string;
   mostrarSinStock: boolean;
+  /** Ya viene ordenado por el padre (stock-view.tsx) — el sort corre sobre
+   * todo el catálogo filtrado antes de paginar, no solo sobre esta página. */
+  orden: string;
+  onSort: (columna: string) => void;
 }
 
 // 2. Solución para las categorías: Separa camelCase/PascalCase (ej: FloresEstacion -> Flores Estacion)
@@ -127,6 +131,8 @@ export function StockTable({
   userRole,
   nombreComercio,
   mostrarSinStock,
+  orden,
+  onSort,
 }: Readonly<StockTableProps>) {
   const { isAdmin } = useStockCartActions(userRole);
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
@@ -137,7 +143,6 @@ export function StockTable({
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [isPending, startTransition] = useTransition();
   const categorias = useActiveCategories();
-  const [orden, setOrden] = useState<string>("nombre_asc");
   const [productoEnEdicion, setProductoEnEdicion] = useState<Producto | null>(
     null,
   );
@@ -234,12 +239,14 @@ export function StockTable({
     setVariantesAbiertas((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // --- LÓGICA DE ORDENAMIENTO ---
+  // --- LÓGICA DE ORDENAMIENTO --- (el sort en sí corre en stock-view.tsx,
+  // sobre todo el catálogo filtrado; acá solo se decide qué columna/sentido
+  // pedir y cómo se ve el ícono)
   const handleSort = (columna: string) => {
     if (orden === `${columna}_asc`) {
-      setOrden(`${columna}_desc`);
+      onSort(`${columna}_desc`);
     } else {
-      setOrden(`${columna}_asc`);
+      onSort(`${columna}_asc`);
     }
   };
 
@@ -252,39 +259,6 @@ export function StockTable({
       <ArrowUpDown className="w-3.5 h-3.5 shrink-0 opacity-0 group-hover:opacity-50 transition-opacity" />
     );
   };
-
-  const productosProcesados = useMemo(() => {
-    const filtrados = [...productos];
-
-    filtrados.sort((a, b) => {
-      switch (orden) {
-        case "nombre_asc":
-          return a.nombre.localeCompare(b.nombre);
-        case "nombre_desc":
-          return b.nombre.localeCompare(a.nombre);
-        case "stock_desc":
-          return getTotalStock(b) - getTotalStock(a);
-        case "stock_asc":
-          return getTotalStock(a) - getTotalStock(b);
-        case "costo_desc":
-          return (b.precio_costo || 0) - (a.precio_costo || 0);
-        case "costo_asc":
-          return (a.precio_costo || 0) - (b.precio_costo || 0);
-        case "precio_desc":
-          return b.precio - a.precio;
-        case "precio_asc":
-          return a.precio - b.precio;
-        case "categoria_asc":
-          return (a.tipo || "").localeCompare(b.tipo || "");
-        case "categoria_desc":
-          return (b.tipo || "").localeCompare(a.tipo || "");
-        default:
-          return 0;
-      }
-    });
-
-    return filtrados;
-  }, [productos, orden]);
 
   if (productos.length === 0) {
     return (
@@ -521,8 +495,10 @@ export function StockTable({
           </TableHeader>
 
           <TableBody>
-            {productosProcesados.map((producto) => {
-              const primeraImagen = obtenerPrimeraImagen(producto.imagen_url);
+            {productos.map((producto, index) => {
+              const primeraImagen =
+                obtenerPrimeraImagen(producto.thumbnail_url) ??
+                obtenerPrimeraImagen(producto.imagen_url);
               const totalUnidades = getTotalStock(producto);
               const variantesVisibles = getVariantesVisibles(producto, isAdmin);
 
@@ -630,7 +606,7 @@ export function StockTable({
                                 width={40}
                                 height={40}
                                 className="object-cover w-full h-full"
-                                priority={false}
+                                priority={index < 8}
                               />
                             ) : (
                               <ImageIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-muted-foreground/60" />

@@ -45,6 +45,7 @@ export async function editarProductoAction(
   );
 
   const archivos = formData.getAll("imagenes") as File[];
+  const thumbnails = formData.getAll("thumbnails") as File[];
   const imagenesAEliminarStr = formData.get("imagenesAEliminar") as
     | string
     | null;
@@ -72,24 +73,32 @@ export async function editarProductoAction(
   // ni sabía que estaban. El cliente solo manda qué URLs puntuales quiere
   // borrar (imagenesAEliminar); el resultado final se arma acá.
   let imagen_url: string | undefined = undefined;
+  let thumbnail_url: string | undefined = undefined;
   const validFiles = archivos.filter((f) => f.size > 0);
   if (validFiles.length > 0 || imagenesAEliminar.length > 0) {
     const { data: productoActual } = await supabase
       .from("productos")
-      .select("imagen_url")
+      .select("imagen_url, thumbnail_url")
       .eq("id", id)
       .single();
 
     const imagenesActuales = parseProductImages(productoActual?.imagen_url);
+    const thumbnailsActuales = parseProductImages(
+      productoActual?.thumbnail_url,
+    );
 
     const urls: string[] = [];
-    for (const file of validFiles) {
+    const urlsThumb: string[] = [];
+
+    for (let i = 0; i < validFiles.length; i++) {
+      const file = validFiles[i];
       const fileExt = file.name.split(".").pop();
-      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const baseFileName = crypto.randomUUID();
+      const fileName = `${baseFileName}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("productos")
-        .upload(fileName, file);
+        .upload(fileName, file, { cacheControl: "31536000" });
 
       if (!uploadError) {
         const {
@@ -97,13 +106,50 @@ export async function editarProductoAction(
         } = supabase.storage.from("productos").getPublicUrl(fileName);
         urls.push(publicUrl);
       }
+
+      // El thumbnail viaja en el mismo índice que su main (ver
+      // optimizarImagenProducto en edit-sheet.tsx). Si no vino, no
+      // bloqueamos la subida del main por eso.
+      const thumb = thumbnails[i];
+      if (thumb && thumb.size > 0) {
+        const thumbExt = thumb.name.split(".").pop();
+        const thumbName = `thumbs/${baseFileName}-thumb.${thumbExt}`;
+        const { error: uploadThumbError } = await supabase.storage
+          .from("productos")
+          .upload(thumbName, thumb, { cacheControl: "31536000" });
+        if (!uploadThumbError) {
+          const {
+            data: { publicUrl: thumbUrl },
+          } = supabase.storage.from("productos").getPublicUrl(thumbName);
+          urlsThumb.push(thumbUrl);
+        } else {
+          console.error("[EDIT PRODUCT THUMBNAIL ERROR]", uploadThumbError);
+        }
+      } else if (!uploadError) {
+        console.warn(
+          `[EDIT PRODUCT] Sin thumbnail para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
+        );
+      }
     }
 
-    const imagenesFinal = imagenesActuales
-      .filter((url) => !imagenesAEliminar.includes(url))
-      .concat(urls);
+    // imagenesAEliminar llega como URLs de imagen_url (lo único que ve el
+    // usuario en el sheet) — recorremos por índice para descartar el
+    // thumbnail correspondiente en el mismo lugar del array y no
+    // desalinear las dos listas. Si una imagen vieja no tiene thumbnail
+    // propio (productos creados antes de este cambio, o aún no
+    // backfilleados), usamos su propia imagen_url como placeholder en
+    // thumbnail_url en vez de dejar el índice vacío — se reemplaza solo
+    // cuando corra el backfill.
+    const imagenesFinal: string[] = [];
+    const thumbnailsFinal: string[] = [];
+    imagenesActuales.forEach((url, idx) => {
+      if (imagenesAEliminar.includes(url)) return;
+      imagenesFinal.push(url);
+      thumbnailsFinal.push(thumbnailsActuales[idx] ?? url);
+    });
 
-    imagen_url = JSON.stringify(imagenesFinal);
+    imagen_url = JSON.stringify(imagenesFinal.concat(urls));
+    thumbnail_url = JSON.stringify(thumbnailsFinal.concat(urlsThumb));
   }
 
   // 2. Actualizar Cabecera de Producto
@@ -115,6 +161,7 @@ export async function editarProductoAction(
     descripcion: string;
     publicado: boolean;
     imagen_url?: string;
+    thumbnail_url?: string;
   } = {
     nombre,
     categoria_id: categoria_id || null,
@@ -125,6 +172,7 @@ export async function editarProductoAction(
   };
 
   if (imagen_url !== undefined) updateData.imagen_url = imagen_url;
+  if (thumbnail_url !== undefined) updateData.thumbnail_url = thumbnail_url;
 
   const { error: errorProducto } = await supabase
     .from("productos")

@@ -183,6 +183,17 @@ function QuickAddModalContent({
           imagenes = producto.imagen_url;
         }
 
+        let miniaturas: string[] = [];
+        if (typeof producto.thumbnail_url === "string") {
+          try {
+            miniaturas = JSON.parse(producto.thumbnail_url);
+          } catch {
+            miniaturas = [producto.thumbnail_url];
+          }
+        } else if (Array.isArray(producto.thumbnail_url)) {
+          miniaturas = producto.thumbnail_url;
+        }
+
         addItem({
           productoId: producto.id,
           nombre: producto.nombre || "Sin nombre",
@@ -191,7 +202,7 @@ function QuickAddModalContent({
           varianteId: stockDeVariante.varianteId,
           precio: stockDeVariante.precio ?? producto.precio,
           cantidad: 1,
-          imagenUrl: imagenes[0] || null,
+          imagenUrl: miniaturas[0] || imagenes[0] || null,
           stockMaximo: stockDeVariante.cantidad,
         });
 

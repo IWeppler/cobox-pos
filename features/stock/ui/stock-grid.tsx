@@ -43,8 +43,10 @@ export function StockGrid({
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 m-2">
-      {productos.map((producto) => {
-        const primeraImagen = obtenerPrimeraImagen(producto.imagen_url);
+      {productos.map((producto, index) => {
+        const primeraImagen =
+          obtenerPrimeraImagen(producto.thumbnail_url) ??
+          obtenerPrimeraImagen(producto.imagen_url);
         const urlProducto = producto.slug
           ? construirUrlProducto(baseUrl, producto.slug)
           : null;
@@ -77,6 +79,7 @@ export function StockGrid({
                       fill
                       className="object-cover transition-transform duration-500 group-hover:scale-105"
                       sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
+                      priority={index < 8}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">

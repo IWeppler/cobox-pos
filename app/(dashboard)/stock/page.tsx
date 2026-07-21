@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { StockView } from "@/features/stock/ui/stock-view";
 import { Skeleton } from "@/shared/ui/skeleton";
-import { getStockAction } from "@/features/stock/actions/get-product";
+import { getStockIndexAction } from "@/features/stock/actions/get-product";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 
@@ -26,7 +26,7 @@ export default async function StockPage() {
   }
 
   const [result, configRes] = await Promise.all([
-    getStockAction(),
+    getStockIndexAction(),
     supabase
       .from("configuracion_pos")
       .select("posName, mostrar_sin_stock")
@@ -48,7 +48,7 @@ export default async function StockPage() {
     <div className="space-y-6 mx-auto">
       <Suspense fallback={<StockSkeleton />}>
         <StockView
-          productos={result.data ?? []}
+          productosIndice={result.data ?? []}
           userRole={userRole}
           nombreComercio={nombreComercio}
           mostrarSinStock={mostrarSinStock}
