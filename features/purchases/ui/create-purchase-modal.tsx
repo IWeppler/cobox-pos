@@ -25,6 +25,7 @@ import {
   UploadCloud,
   CheckCircle2,
   PackagePlus,
+  Download,
 } from "lucide-react";
 
 type ExcelCell = string | number | boolean | Date | null | undefined;
@@ -234,7 +235,7 @@ export function ImportarPedidoModal({
             );
           };
 
-          // 🚀 MAGIA SEMÁNTICA: EXTRACCIÓN DE CATEGORÍA Y GÉNERO
+          // EXTRACCIÓN DE CATEGORÍA Y GÉNERO
           let categoriaFinal = "General";
 
           // 1. Extraemos la primera palabra del nombre como Categoría (Ej: "Campera de eco cuero" -> "Campera")
@@ -377,6 +378,31 @@ export function ImportarPedidoModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6 pt-2">
+          <a
+            href="/plantilla-productos.csv"
+            download
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:underline w-fit"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Descargar plantilla
+          </a>
+
+          <div className="bg-muted/30 border border-border p-4 rounded-xl">
+            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">
+              Formato esperado (Columnas)
+            </Label>
+            <code className="text-xs bg-background border border-border px-2 py-1 rounded block mb-1">
+              producto, cantidad, precio-costo, talle, color, genero
+            </code>
+            <p className="text-[10px] text-muted-foreground mt-2">
+              Solo &quot;producto&quot; y &quot;cantidad&quot; son
+              obligatorias. &quot;precio-costo&quot; es
+              opcional (si no hay categoría, se infiere del nombre).
+              Cualquier otra columna (talle, color, género...) se guarda
+              como atributo de la variante.
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label
               htmlFor="proveedor"
@@ -411,7 +437,7 @@ export function ImportarPedidoModal({
                   ? "border-border bg-muted/50 cursor-not-allowed opacity-70"
                   : file
                     ? "border-emerald-500 bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer"
-                    : "border-border bg-muted/20 hover:bg-emerald-50 hover:border-emerald-200 cursor-pointer"
+                    : "border-border bg-muted/20 hover:bg-emerald-300/10 hover:border-emerald-200 cursor-pointer"
               }`}
             >
               <div className="flex flex-col items-center justify-center text-center px-4 pointer-events-none">

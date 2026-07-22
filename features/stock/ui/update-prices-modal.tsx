@@ -139,10 +139,6 @@ export function UpdatePricesModal() {
       ? previewData.filter((item) => item.nombre.toLowerCase().includes(query))
       : previewData;
 
-    // Cambio "principal" a efectos de ordenar por magnitud: si se está
-    // tocando el costo exclusivamente, ordena por ese delta; en cualquier
-    // otro caso (PRECIO o AMBOS) ordena por el delta de precio, que es el
-    // número que más le importa al usuario.
     const cambioPrincipal = (item: PrevisualizacionItem) =>
       campo === "COSTO" ? item.diferencia_costo : item.diferencia_precio;
 

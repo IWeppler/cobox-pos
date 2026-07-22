@@ -56,23 +56,6 @@ export async function getStockAction(): Promise<{
   }
 }
 
-// ============================================================================
-// Paginación server-side de /stock: se reemplaza el fetch único de arriba
-// (598 productos con TODAS las columnas, en cada carga) por dos queries:
-//
-// 1. getStockIndexAction(): catálogo COMPLETO pero con columnas livianas —
-//    alcanza para que stock-view.tsx siga buscando/filtrando/ordenando con
-//    exactamente la misma lógica de hoy (buildPropiedadesFiltro,
-//    resolverAtributosVariante), solo que sobre un array mucho más chico en
-//    bytes. No incluye imagen_url/thumbnail_url/descripcion (lo pesado) ni
-//    reservas/stock_disponible (nada en /stock lo lee — es un concepto de
-//    VENDER, no de inventario).
-//
-// 2. getStockPageDetailAction(ids): el detalle completo (todas las columnas
-//    que necesita la tabla + el sheet de edición), pero solo para los ids
-//    de la página actual — no de los 598.
-// ============================================================================
-
 export async function getStockIndexAction(): Promise<{
   data: ProductoIndice[] | null;
   error: string | null;
@@ -147,9 +130,6 @@ export async function getStockPageDetailAction(ids: string[]): Promise<{
       };
     }
 
-    // `.in()` no garantiza que el orden de vuelta respete el orden de
-    // `ids` — stock-view.tsx ya decidió el orden final (post-sort) antes de
-    // pedir este detalle, así que se reordena acá para no perder ese orden.
     const porId = new Map(
       (data as unknown as Producto[]).map((p) => [p.id, p]),
     );

@@ -132,14 +132,16 @@ export function useCreateProductForm() {
       setIsCompressing(true);
       formData.delete("imagenes");
       formData.delete("thumbnails");
+      formData.delete("grids");
 
       const imagenesOptimizadas = await Promise.all(
         archivos.map((f) => optimizarImagenProducto(f)),
       );
 
-      imagenesOptimizadas.forEach(({ main, thumbnail }) => {
+      imagenesOptimizadas.forEach(({ main, thumbnail, grid }) => {
         formData.append("imagenes", main);
         formData.append("thumbnails", thumbnail);
+        formData.append("grids", grid);
       });
 
       setIsCompressing(false);

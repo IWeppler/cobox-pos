@@ -1,18 +1,3 @@
-// Backfill de thumbnails faltantes + re-optimización de imágenes
-// principales pesadas (>250KB). Corre fuera de Next, con service role
-// (bypassea RLS de productos/storage) — no lo corras desde el browser.
-//
-// Uso:
-//   node --experimental-strip-types scripts/backfill-image-thumbnails.ts
-//     (dry-run por default: descarga y comprime en memoria para el
-//     reporte, pero NO sube nada a Storage ni escribe en la tabla)
-//   node --experimental-strip-types scripts/backfill-image-thumbnails.ts --commit
-//     (corrida real)
-//
-// Requiere:
-//   .env            NEXT_PUBLIC_SUPABASE_URL (ya existe)
-//   .env.local      SUPABASE_SERVICE_ROLE_KEY (gitignoreado — nunca en .env)
-
 import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 import fs from "node:fs";

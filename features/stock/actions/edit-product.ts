@@ -46,6 +46,7 @@ export async function editarProductoAction(
 
   const archivos = formData.getAll("imagenes") as File[];
   const thumbnails = formData.getAll("thumbnails") as File[];
+  const grids = formData.getAll("grids") as File[];
   const imagenesAEliminarStr = formData.get("imagenesAEliminar") as
     | string
     | null;
@@ -74,11 +75,12 @@ export async function editarProductoAction(
   // borrar (imagenesAEliminar); el resultado final se arma acá.
   let imagen_url: string | undefined = undefined;
   let thumbnail_url: string | undefined = undefined;
+  let grid_url: string | undefined = undefined;
   const validFiles = archivos.filter((f) => f.size > 0);
   if (validFiles.length > 0 || imagenesAEliminar.length > 0) {
     const { data: productoActual } = await supabase
       .from("productos")
-      .select("imagen_url, thumbnail_url")
+      .select("imagen_url, thumbnail_url, grid_url")
       .eq("id", id)
       .single();
 
@@ -86,9 +88,11 @@ export async function editarProductoAction(
     const thumbnailsActuales = parseProductImages(
       productoActual?.thumbnail_url,
     );
+    const gridsActuales = parseProductImages(productoActual?.grid_url);
 
     const urls: string[] = [];
     const urlsThumb: string[] = [];
+    const urlsGrid: string[] = [];
 
     for (let i = 0; i < validFiles.length; i++) {
       const file = validFiles[i];
@@ -107,8 +111,8 @@ export async function editarProductoAction(
         urls.push(publicUrl);
       }
 
-      // El thumbnail viaja en el mismo índice que su main (ver
-      // optimizarImagenProducto en edit-sheet.tsx). Si no vino, no
+      // El thumbnail y el grid viajan en el mismo índice que su main (ver
+      // optimizarImagenProducto en edit-sheet.tsx). Si no vinieron, no
       // bloqueamos la subida del main por eso.
       const thumb = thumbnails[i];
       if (thumb && thumb.size > 0) {
@@ -130,26 +134,49 @@ export async function editarProductoAction(
           `[EDIT PRODUCT] Sin thumbnail para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
         );
       }
+
+      const grid = grids[i];
+      if (grid && grid.size > 0) {
+        const gridExt = grid.name.split(".").pop();
+        const gridName = `grids/${baseFileName}-grid.${gridExt}`;
+        const { error: uploadGridError } = await supabase.storage
+          .from("productos")
+          .upload(gridName, grid, { cacheControl: "31536000" });
+        if (!uploadGridError) {
+          const {
+            data: { publicUrl: gridUrl },
+          } = supabase.storage.from("productos").getPublicUrl(gridName);
+          urlsGrid.push(gridUrl);
+        } else {
+          console.error("[EDIT PRODUCT GRID ERROR]", uploadGridError);
+        }
+      } else if (!uploadError) {
+        console.warn(
+          `[EDIT PRODUCT] Sin grid para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
+        );
+      }
     }
 
     // imagenesAEliminar llega como URLs de imagen_url (lo único que ve el
     // usuario en el sheet) — recorremos por índice para descartar el
-    // thumbnail correspondiente en el mismo lugar del array y no
-    // desalinear las dos listas. Si una imagen vieja no tiene thumbnail
+    // thumbnail/grid correspondiente en el mismo lugar del array y no
+    // desalinear las listas. Si una imagen vieja no tiene thumbnail o grid
     // propio (productos creados antes de este cambio, o aún no
-    // backfilleados), usamos su propia imagen_url como placeholder en
-    // thumbnail_url en vez de dejar el índice vacío — se reemplaza solo
-    // cuando corra el backfill.
+    // backfilleados), usamos su propia imagen_url como placeholder en vez
+    // de dejar el índice vacío — se reemplaza solo cuando corra el backfill.
     const imagenesFinal: string[] = [];
     const thumbnailsFinal: string[] = [];
+    const gridsFinal: string[] = [];
     imagenesActuales.forEach((url, idx) => {
       if (imagenesAEliminar.includes(url)) return;
       imagenesFinal.push(url);
       thumbnailsFinal.push(thumbnailsActuales[idx] ?? url);
+      gridsFinal.push(gridsActuales[idx] ?? url);
     });
 
     imagen_url = JSON.stringify(imagenesFinal.concat(urls));
     thumbnail_url = JSON.stringify(thumbnailsFinal.concat(urlsThumb));
+    grid_url = JSON.stringify(gridsFinal.concat(urlsGrid));
   }
 
   // 2. Actualizar Cabecera de Producto
@@ -162,6 +189,7 @@ export async function editarProductoAction(
     publicado: boolean;
     imagen_url?: string;
     thumbnail_url?: string;
+    grid_url?: string;
   } = {
     nombre,
     categoria_id: categoria_id || null,
@@ -173,6 +201,7 @@ export async function editarProductoAction(
 
   if (imagen_url !== undefined) updateData.imagen_url = imagen_url;
   if (thumbnail_url !== undefined) updateData.thumbnail_url = thumbnail_url;
+  if (grid_url !== undefined) updateData.grid_url = grid_url;
 
   const { error: errorProducto } = await supabase
     .from("productos")

@@ -256,15 +256,17 @@ export function ProductEditDetailSheet({
       setIsCompressing(true);
       formData.delete("imagenes");
       formData.delete("thumbnails");
+      formData.delete("grids");
 
       const imagenesOptimizadas = await Promise.all(
         archivos.map((file) => optimizarImagenProducto(file)),
       );
 
-      // Desestructuramos el main y el thumbnail de cada iteración
-      imagenesOptimizadas.forEach(({ main, thumbnail }) => {
+      // Desestructuramos el main, el thumbnail y el grid de cada iteración
+      imagenesOptimizadas.forEach(({ main, thumbnail, grid }) => {
         formData.append("imagenes", main);
         formData.append("thumbnails", thumbnail);
+        formData.append("grids", grid);
       });
 
       setIsCompressing(false);

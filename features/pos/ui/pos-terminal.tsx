@@ -194,6 +194,17 @@ export function PosTerminal({
         miniaturas = producto.thumbnail_url;
       }
 
+      let grids: string[] = [];
+      if (typeof producto.grid_url === "string") {
+        try {
+          grids = JSON.parse(producto.grid_url);
+        } catch {
+          grids = [producto.grid_url];
+        }
+      } else if (Array.isArray(producto.grid_url)) {
+        grids = producto.grid_url;
+      }
+
       addItem({
         productoId: producto.id,
         nombre: producto.nombre || "Sin nombre",
@@ -202,7 +213,7 @@ export function PosTerminal({
         varianteId: variantesParaVender[0].varianteId,
         precio: variantesParaVender[0].precio ?? producto.precio,
         cantidad: 1,
-        imagenUrl: miniaturas[0] || imagenes[0] || null,
+        imagenUrl: grids[0] || miniaturas[0] || imagenes[0] || null,
         stockMaximo: variantesParaVender[0].cantidad,
       });
 
@@ -273,7 +284,19 @@ export function PosTerminal({
                 } else if (Array.isArray(producto.thumbnail_url)) {
                   miniaturas = producto.thumbnail_url;
                 }
-                const primeraImagen = miniaturas[0] || imagenes[0] || null;
+
+                let grids: string[] = [];
+                if (typeof producto.grid_url === "string") {
+                  try {
+                    grids = JSON.parse(producto.grid_url);
+                  } catch {
+                    grids = [producto.grid_url];
+                  }
+                } else if (Array.isArray(producto.grid_url)) {
+                  grids = producto.grid_url;
+                }
+                const primeraImagen =
+                  grids[0] || miniaturas[0] || imagenes[0] || null;
 
                 const stockTotal = getStockTotal(producto);
                 const sinStock = stockTotal <= 0;

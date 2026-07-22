@@ -349,7 +349,7 @@ export function MergeTable({
 
     setIsSubmitting(true);
 
-    // ⚡ 1. Comprimimos generando ambas versiones (main + thumbnail)
+    // ⚡ 1. Comprimimos generando las tres versiones (main + thumbnail + grid)
     const imagenesProcesadas =
       archivosNuevoProducto.length > 0
         ? await Promise.all(
@@ -357,17 +357,19 @@ export function MergeTable({
           )
         : [];
 
-    // Separamos en dos arrays limpios
+    // Separamos en arrays limpios
     const archivosMain = imagenesProcesadas.map((img) => img.main);
     const archivosThumb = imagenesProcesadas.map((img) => img.thumbnail);
+    const archivosGrid = imagenesProcesadas.map((img) => img.grid);
 
-    // ⚡ 2. Enviamos ambos arrays a la Server Action
+    // ⚡ 2. Enviamos los arrays a la Server Action
     const res = await crearProductoAlVueloAction(
       nuevoProductoData.nombre,
       itemActual.precio_costo,
       nuevoProductoData.precio,
       archivosMain,
       archivosThumb,
+      archivosGrid,
       nuevoProductoData.categoria,
     );
     setIsSubmitting(false);

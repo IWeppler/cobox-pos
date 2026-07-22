@@ -48,6 +48,7 @@ export interface Producto {
   precio_costo: number;
   imagen_url: string | null;
   thumbnail_url: string | null;
+  grid_url: string | null;
   creado_en: string;
   publicado: boolean;
   slug: string | null;

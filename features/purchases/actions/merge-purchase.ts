@@ -118,6 +118,7 @@ export async function crearProductoAlVueloAction(
   precio: number,
   archivosMain: File[],
   archivosThumb: File[],
+  archivosGrid: File[],
   categoriaNombre?: string,
 ) {
   try {
@@ -167,15 +168,18 @@ export async function crearProductoAlVueloAction(
       }
     }
 
-    // Subir imágenes Main y Thumbnails
+    // Subir imágenes Main, Thumbnail y Grid
     let imagen_url: string | null = null;
     let thumbnail_url: string | null = null;
+    let grid_url: string | null = null;
     const urlsMain: string[] = [];
     const urlsThumb: string[] = [];
+    const urlsGrid: string[] = [];
 
     for (let i = 0; i < archivosMain.length; i++) {
       const fileMain = archivosMain[i];
       const fileThumb = archivosThumb[i];
+      const fileGrid = archivosGrid[i];
 
       if (fileMain && fileMain.size > 0) {
         const fileExt = fileMain.name.split(".").pop();
@@ -208,11 +212,27 @@ export async function crearProductoAlVueloAction(
             urlsThumb.push(urlThumb);
           }
         }
+
+        // 3. Subir Grid (si existe en el mismo índice)
+        if (fileGrid && fileGrid.size > 0) {
+          const gridName = `grids/${baseFileName}-grid.${fileExt}`;
+          const { error: uploadGridError } = await supabase.storage
+            .from("productos")
+            .upload(gridName, fileGrid, { cacheControl: "31536000" });
+
+          if (!uploadGridError) {
+            const {
+              data: { publicUrl: urlGrid },
+            } = supabase.storage.from("productos").getPublicUrl(gridName);
+            urlsGrid.push(urlGrid);
+          }
+        }
       }
     }
 
     if (urlsMain.length > 0) imagen_url = JSON.stringify(urlsMain);
     if (urlsThumb.length > 0) thumbnail_url = JSON.stringify(urlsThumb);
+    if (urlsGrid.length > 0) grid_url = JSON.stringify(urlsGrid);
 
     const { data: nuevoProducto, error } = await supabase
       .from("productos")
@@ -227,6 +247,7 @@ export async function crearProductoAlVueloAction(
         atributos_globales: {},
         imagen_url,
         thumbnail_url,
+        grid_url,
       })
       .select("*")
       .single();

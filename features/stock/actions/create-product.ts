@@ -28,6 +28,7 @@ export async function crearProductoAction(
 
   const archivos = formData.getAll("imagenes") as File[];
   const thumbnails = formData.getAll("thumbnails") as File[];
+  const grids = formData.getAll("grids") as File[];
 
   if (!nombre || Number.isNaN(precio) || Number.isNaN(precio_costo)) {
     return {
@@ -50,13 +51,15 @@ export async function crearProductoAction(
     if (cat) tipo = cat.nombre;
   }
 
-  // 1. Subir imágenes (main + thumbnail, asociadas por índice via baseFileName)
+  // 1. Subir imágenes (main + thumbnail + grid, asociadas por índice via baseFileName)
   let imagen_url = null;
   let thumbnail_url = null;
+  let grid_url = null;
   const validFiles = archivos.filter((f) => f.size > 0);
   if (validFiles.length > 0) {
     const urls: string[] = [];
     const urlsThumb: string[] = [];
+    const urlsGrid: string[] = [];
 
     for (let i = 0; i < validFiles.length; i++) {
       const file = validFiles[i];
@@ -74,9 +77,9 @@ export async function crearProductoAction(
         urls.push(publicUrl);
       }
 
-      // El thumbnail viaja en el mismo índice que su main (ver
+      // El thumbnail y el grid viajan en el mismo índice que su main (ver
       // optimizarImagenProducto en use-create-product-form.ts). Si por
-      // algún motivo el array de thumbnails vino más corto, no bloqueamos
+      // algún motivo alguno de los arrays vino más corto, no bloqueamos
       // la creación del producto por eso — el main ya se subió arriba.
       const thumb = thumbnails[i];
       if (thumb && thumb.size > 0) {
@@ -98,10 +101,32 @@ export async function crearProductoAction(
           `[CREATE PRODUCT] Sin thumbnail para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
         );
       }
+
+      const grid = grids[i];
+      if (grid && grid.size > 0) {
+        const gridExt = grid.name.split(".").pop();
+        const gridName = `grids/${baseFileName}-grid.${gridExt}`;
+        const { error: uploadGridError } = await supabase.storage
+          .from("productos")
+          .upload(gridName, grid, { cacheControl: "31536000" });
+        if (!uploadGridError) {
+          const {
+            data: { publicUrl: gridUrl },
+          } = supabase.storage.from("productos").getPublicUrl(gridName);
+          urlsGrid.push(gridUrl);
+        } else {
+          console.error("[CREATE PRODUCT GRID ERROR]", uploadGridError);
+        }
+      } else if (!uploadError) {
+        console.warn(
+          `[CREATE PRODUCT] Sin grid para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
+        );
+      }
     }
 
     if (urls.length > 0) imagen_url = JSON.stringify(urls);
     if (urlsThumb.length > 0) thumbnail_url = JSON.stringify(urlsThumb);
+    if (urlsGrid.length > 0) grid_url = JSON.stringify(urlsGrid);
   }
 
   let slug = slugify(`${nombre}-${tipo}`);
@@ -120,6 +145,7 @@ export async function crearProductoAction(
       precio_costo,
       imagen_url,
       thumbnail_url,
+      grid_url,
       slug,
       publicado: true,
       atributos_globales: {},

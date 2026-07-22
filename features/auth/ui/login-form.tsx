@@ -24,9 +24,6 @@ export function LoginForm() {
     }
   }, [state?.success, router]);
 
-  // Tras un login exitoso seguimos "cargando" hasta que el router navegue,
-  // para no mostrar el formulario habilitado de nuevo entre la respuesta
-  // del server y la redirección.
   const isRedirecting = state?.success ?? false;
   const isLoading = isPending || isRedirecting;
 

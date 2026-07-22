@@ -69,7 +69,7 @@ export async function middleware(request: NextRequest) {
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone();
     // Admin va al dashboard, vendedor va al stock
-    url.pathname = rol === "ADMIN" ? "/" : "/stock";
+    url.pathname = rol === "ADMIN" ? "/" : "/pos";
     return NextResponse.redirect(url);
   }
 
@@ -79,10 +79,10 @@ export async function middleware(request: NextRequest) {
     const isConfig = pathname.startsWith("/configuracion");
     const isCompras = pathname.startsWith("/compras");
 
-    // Si intenta entrar a una ruta prohibida, lo devolvemos al inventario
+    // Si intenta entrar a una ruta prohibida, lo devolvemos al pos
     if (isDashboard || isConfig || isCompras) {
       const url = request.nextUrl.clone();
-      url.pathname = "/stock";
+      url.pathname = "/pos";
       return NextResponse.redirect(url);
     }
   }
