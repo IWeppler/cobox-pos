@@ -45,6 +45,41 @@ export async function getProductosAction() {
   return { data: productos, error: null };
 }
 
+// Combina productos + categorías + config para la terminal VENDER en un
+// solo fetch client-side (React Query cachea esto con staleTime de 3 min).
+export async function getPosCatalogDataAction() {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const [productosRes, categoriasRes, configRes] = await Promise.all([
+    getProductosAction(),
+    supabase
+      .from("categorias")
+      .select("*")
+      .eq("activa", true)
+      .order("orden", { ascending: true }),
+    supabase
+      .from("configuracion_pos")
+      .select("permitir_venta_sin_stock, posName, mostrar_sin_stock")
+      .single(),
+  ]);
+
+  if (productosRes.error) {
+    return { data: null, error: productosRes.error };
+  }
+
+  return {
+    data: {
+      productos: productosRes.data ?? [],
+      categorias: categoriasRes.data ?? [],
+      permitirVentaSinStock: configRes.data?.permitir_venta_sin_stock ?? false,
+      nombreComercio: configRes.data?.posName || "Tienda Online",
+      mostrarSinStock: configRes.data?.mostrar_sin_stock ?? true,
+    },
+    error: null,
+  };
+}
+
 // 2. Obtener un producto usando su URL amigable (slug)
 export async function getProductoBySlugAction(slug: string) {
   const cookieStore = await cookies();

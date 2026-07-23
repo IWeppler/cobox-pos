@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, PlusCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -16,6 +17,7 @@ import { Label } from "@/shared/ui/label";
 import { DatePickerAR } from "@/shared/components/date-picker-ar";
 import { Cliente } from "@/entities/clientes/type";
 import { ajustarSaldoAction } from "../actions/manage-clients";
+import { queryKeys } from "@/shared/lib/query-keys";
 import { formatearMoneda } from "@/shared/utils/formatters";
 
 interface AdjustClientBalanceModalProps {
@@ -53,6 +55,7 @@ export function AdjustClientBalanceModal({
   const [isPending, startTransition] = useTransition();
   const [entradas, setEntradas] = useState<FilaEntrada[]>([nuevaFila()]);
   const [errores, setErrores] = useState<Record<string, string>>({});
+  const queryClient = useQueryClient();
 
   const resetForm = () => {
     setEntradas([nuevaFila()]);
@@ -135,6 +138,10 @@ export function AdjustClientBalanceModal({
             ? "Deuda cargada exitosamente."
             : `${entradas.length} entradas de deuda cargadas exitosamente.`,
         );
+        queryClient.invalidateQueries({ queryKey: queryKeys.clientes.listado });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.clientes.detalle(cliente.id),
+        });
         resetForm();
         onClose();
       } else {

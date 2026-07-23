@@ -169,22 +169,23 @@ export function ImportarPedidoModal({
         "PRECIO COSTO",
       ];
 
-      // Ampliamos las columnas de categoría para capturar su "Hombre/Mujer"
-      const knownCategoryCols = [
-        "CATEGORIA",
-        "CATEGORÍA",
-        "RUBRO",
-        "TIPO",
-        "GENERO",
-        "GÉNERO",
-      ];
+      // Categoría y Género son columnas separadas — antes compartían una
+      // sola variable, así que si el Excel traía las dos (como la propia
+      // plantilla: GENERO y CATEGORIA en columnas distintas), la que se
+      // procesaba después pisaba en silencio a la otra y el género se
+      // perdía sin error visible.
+      const knownCategoryCols = ["CATEGORIA", "CATEGORÍA", "RUBRO", "TIPO"];
+      const knownGeneroCols = ["GENERO", "GÉNERO"];
+      const knownSkuCols = ["SKU", "CODIGO", "CÓDIGO", "COD"];
 
       const mappedItems: RawOrderItem[] = jsonData
         .map((row): RawOrderItem | null => {
           let desc = "";
           let cant: ExcelCell = 0;
           let precio: ExcelCell = 0;
-          let rawCategoriaOrGenero = "";
+          let rawCategoria = "";
+          let rawGenero = "";
+          let sku = "";
           const extraAttributes: string[] = [];
 
           Object.keys(row).forEach((key) => {
@@ -204,7 +205,14 @@ export function ImportarPedidoModal({
             } else if (knownPriceCols.includes(upperKey)) {
               precio = cellValue;
             } else if (knownCategoryCols.includes(upperKey)) {
-              rawCategoriaOrGenero = normalizedValue;
+              rawCategoria = normalizedValue;
+            } else if (knownGeneroCols.includes(upperKey)) {
+              rawGenero = normalizedValue;
+            } else if (knownSkuCols.includes(upperKey)) {
+              // Columna propia, NUNCA se mezcla con raw_variante — si no,
+              // el SKU terminaría pisando el nombre visible de la variante
+              // (nombre_display) y colándose como atributo filtrable.
+              sku = normalizedValue;
             } else {
               extraAttributes.push(`${upperKey}: ${normalizedValue}`);
             }
@@ -256,27 +264,45 @@ export function ImportarPedidoModal({
             }
           }
 
-          // 2. Evaluamos si lo que ella puso en la primera columna era en realidad el Género
-          const rawLimpio = rawCategoriaOrGenero.toLowerCase().trim();
-          const isGenero = [
-            "hombre",
-            "mujer",
-            "niño",
-            "niña",
-            "unisex",
-            "bebe",
-            "bebé",
-          ].includes(rawLimpio);
+          // 2. Género: mapeamos los coloquiales "nena"/"nene" (antes caían
+          // derecho como categoría, ver más abajo) a la misma forma
+          // canónica que "niño"/"niña", para que un remito que diga "nena"
+          // y otro que diga "niña" terminen siendo el mismo valor de
+          // género. Si vino una columna Género explícita, se respeta tal
+          // cual venga (canonicalizada si matchea un sinónimo conocido).
+          const GENERO_CANONICO: Record<string, string> = {
+            hombre: "Hombre",
+            mujer: "Mujer",
+            niño: "Niño",
+            nene: "Niño",
+            niña: "Niña",
+            nena: "Niña",
+            unisex: "Unisex",
+            bebe: "Bebé",
+            bebé: "Bebé",
+          };
+          const rawGeneroLimpio = rawGenero.toLowerCase().trim();
+          const rawCategoriaLimpio = rawCategoria.toLowerCase().trim();
 
-          if (isGenero) {
+          // 3. Evaluamos si lo que ella puso en la columna Categoría era en
+          // realidad el Género (proveedores que la usan para eso) — solo
+          // aplica si no vino ya una columna Género separada.
+          const generoDesdeCategoria =
+            !rawGenero && GENERO_CANONICO[rawCategoriaLimpio];
+
+          const generoFinal = rawGenero
+            ? (GENERO_CANONICO[rawGeneroLimpio] ?? rawGenero.trim())
+            : generoDesdeCategoria || null;
+
+          if (generoFinal) {
             // Si es un género, lo mandamos a las variantes (JSONB)
-            extraAttributes.push(`Género: ${rawCategoriaOrGenero.trim()}`);
-          } else if (
-            rawCategoriaOrGenero &&
-            rawCategoriaOrGenero.trim() !== ""
-          ) {
-            // Si no era género y ella escribió una categoría explícita, respetamos lo que ella puso
-            categoriaFinal = rawCategoriaOrGenero.trim();
+            extraAttributes.push(`Género: ${generoFinal}`);
+          }
+
+          if (rawCategoria && !generoDesdeCategoria) {
+            // Categoría explícita que no resultó ser en realidad un
+            // género: respetamos lo que ella puso.
+            categoriaFinal = rawCategoria.trim();
           }
 
           // Armamos la string que luego se convierte en JSONB
@@ -286,7 +312,8 @@ export function ImportarPedidoModal({
           return {
             raw_nombre: desc,
             raw_variante: raw_variante,
-            raw_categoria: categoriaFinal, // <--- El Auto-Split actuando aquí
+            raw_categoria: categoriaFinal,
+            raw_sku: sku || null,
             cantidad: Math.max(0, parseInt(String(cant)) || 0),
             precio_costo: Math.max(0, parseNumber(precio)),
           };
@@ -392,14 +419,15 @@ export function ImportarPedidoModal({
               Formato esperado (Columnas)
             </Label>
             <code className="text-xs bg-background border border-border px-2 py-1 rounded block mb-1">
-              producto, cantidad, precio-costo, talle, color, genero
+              producto, cantidad, precio-costo, talle, color, genero, sku
             </code>
             <p className="text-[10px] text-muted-foreground mt-2">
-              Solo &quot;producto&quot; y &quot;cantidad&quot; son
-              obligatorias. &quot;precio-costo&quot; es
-              opcional (si no hay categoría, se infiere del nombre).
-              Cualquier otra columna (talle, color, género...) se guarda
-              como atributo de la variante.
+              Solo &quot;producto&quot; y &quot;cantidad&quot; son obligatorias.
+              &quot;precio-costo&quot; es opcional (si no hay categoría, se
+              infiere del nombre). &quot;sku&quot;/&quot;codigo&quot; se
+              guarda en la variante. Cualquier otra columna (talle, color,
+              género, incluyendo &quot;nena&quot;/&quot;nene&quot;...) se
+              guarda como atributo de la variante.
             </p>
           </div>
 
@@ -466,7 +494,7 @@ export function ImportarPedidoModal({
                 {!file && (
                   <p className="text-xs text-muted-foreground mt-1">
                     Columnas requeridas: Descripción, Cantidad. (Opcional:
-                    Color, Talle, Género...)
+                    Color, Talle, Género, SKU...)
                   </p>
                 )}
               </div>

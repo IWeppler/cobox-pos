@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -25,6 +26,7 @@ import {
   PlusCircle,
 } from "lucide-react";
 import { getClienteDetalleAction } from "../actions/manage-clients";
+import { queryKeys } from "@/shared/lib/query-keys";
 import { calcularDiasVencido } from "../lib/calcular-dias-vencido";
 import { clasificarEstadoCliente } from "../lib/clasificar-estado-cliente";
 import { AdjustClientBalanceModal } from "./adjust-client-balance-modal";
@@ -80,42 +82,20 @@ export function ClientDetailSheet({
   isAdmin = false,
   onClose,
 }: Readonly<ClientDetailSheetProps>) {
-  const [data, setData] = useState<{
-    movimientos: CuentaCorrienteMovimiento[];
-    ventas: VentaResumen[];
-    reservas: ReservaResumen[];
-  }>({
-    movimientos: [],
-    ventas: [],
-    reservas: [],
-  });
-  const [isLoading, setIsLoading] = useState(false);
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
 
-  useEffect(() => {
-    if (!cliente) return;
-    const fetchDetalles = async () => {
-      setIsLoading(true);
-      const result = await getClienteDetalleAction(cliente.id);
-      setData(result);
-      setIsLoading(false);
-    };
-    fetchDetalles();
-  }, [cliente]);
+  const { data: queryData, isLoading } = useQuery({
+    queryKey: queryKeys.clientes.detalle(cliente?.id ?? ""),
+    queryFn: () => getClienteDetalleAction(cliente!.id),
+    enabled: !!cliente,
+  });
 
-  // Refetch aparte para cuando una MovimientoCCCard edita/anula un
-  // movimiento (onChanged) — con su propio cuerpo, no comparte el de
-  // arriba: llamar una función externa desde el efecto de montaje dispara
-  // el lint de "setState directo en efecto" aunque el resultado final sea
-  // el mismo.
-  const refetchMovimientos = useCallback(async () => {
-    if (!cliente) return;
-    setIsLoading(true);
-    const result = await getClienteDetalleAction(cliente.id);
-    setData(result);
-    setIsLoading(false);
-  }, [cliente]);
+  const data: {
+    movimientos: CuentaCorrienteMovimiento[];
+    ventas: VentaResumen[];
+    reservas: ReservaResumen[];
+  } = queryData ?? { movimientos: [], ventas: [], reservas: [] };
 
   const stats = useMemo(() => {
     const totalComprado = data.ventas.reduce(
@@ -320,7 +300,6 @@ export function ClientDetailSheet({
                               key={mov.id}
                               mov={mov}
                               isAdmin={isAdmin}
-                              onChanged={refetchMovimientos}
                             />
                           ))}
                         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   FileSpreadsheet,
   UploadCloud,
@@ -20,6 +21,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { importarClientesCSVAction } from "../actions/manage-clients";
+import { queryKeys } from "@/shared/lib/query-keys";
 import { decodeCsvBuffer } from "../lib/decode-csv-file";
 
 interface ImportClientsCsvModalProps {
@@ -33,6 +35,7 @@ export function ImportClientsCsvModal({
 }: Readonly<ImportClientsCsvModalProps>) {
   const [isPending, startTransition] = useTransition();
   const [fileName, setFileName] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -68,6 +71,7 @@ export function ImportClientsCsvModal({
         const result = await importarClientesCSVAction(formData);
         if (result.success) {
           toast.success(`Se importaron ${result.count} clientes exitosamente.`);
+          queryClient.invalidateQueries({ queryKey: queryKeys.clientes.listado });
           setFileName(null); // Reseteamos el archivo
           onOpenChange(false);
         } else {

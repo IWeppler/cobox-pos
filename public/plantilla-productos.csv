@@ -1,4 +1,5 @@
-GENERO,PRODUCTO,CANTIDAD,PRECIO,CATEGORIA,TALLE,COLOR
-Mujer,Campera de Jean,10,15000,Camperas,M,Azul
-Hombre,Remera Basica,25,3500,Remeras,L,Negro
-Hombre,Pantalon Cargo,15,8200,Pantalones,42,Verde
+GENERO,PRODUCTO,CANTIDAD,PRECIO,CATEGORIA,TALLE,COLOR,SKU
+Mujer,Campera de Jean,10,15000,Camperas,M,Azul,CJ-001
+Hombre,Remera Basica,25,3500,Remeras,L,Negro,RB-002
+Hombre,Pantalon Cargo,15,8200,Pantalones,42,Verde,PC-003
+Nena,Campera de Jean,8,15000,Camperas,8,Rosa,CJ-004

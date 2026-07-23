@@ -1,11 +1,13 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/shared/ui/button";
 import { CreateClientDialog } from "@/features/clients/ui/create-client-dialog";
 import { UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { crearClienteAction } from "../actions/manage-clients";
+import { queryKeys } from "@/shared/lib/query-keys";
 
 type CreateClientState = {
   error: string | null;
@@ -24,12 +26,14 @@ export function CreateClientModal({
   entregaMinimaActiva = false,
 }: Readonly<CreateClientModalProps> = {}) {
   const [isOpen, setIsOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const [, formAction, isPending] = useActionState(
     async (prevState: CreateClientState, formData: FormData) => {
       const result = await crearClienteAction(prevState, formData);
       if (result.success) {
         toast.success("Cliente registrado con exito.");
+        queryClient.invalidateQueries({ queryKey: queryKeys.clientes.listado });
         setIsOpen(false);
       } else {
         toast.error(result.error || "Ocurrio un error");

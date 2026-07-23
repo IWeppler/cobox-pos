@@ -200,5 +200,6 @@ export function useCreateProductForm() {
     ensureSuggestionsLoaded: variantSelection.ensureSuggestionsLoaded,
     isLoadingSuggestions: variantSelection.isLoadingSuggestions,
     getFilteredSuggestions: variantSelection.getFilteredSuggestions,
+    atributosExistentes: variantSelection.atributosExistentes,
   };
 }

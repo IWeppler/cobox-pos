@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useActionState, startTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { updateConfiguracionAction } from "../actions/config-actions";
 import { ConfiguracionPOS } from "@/entities/config/types";
+import { CATALOG_QUERY_KEYS } from "@/shared/lib/query-keys";
 import { toast } from "sonner";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -23,6 +25,7 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
   const [isCompressing, setIsCompressing] = useState(false);
 
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -38,6 +41,12 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
         toast.success("Configuración actualizada correctamente.");
         setLogoFile(null);
 
+        // posName/posLogo viajan dentro de las 3 queries de catálogo
+        // cacheadas por React Query: sin esto, Evelyn vería su propio
+        // cambio recién a los 3 min de staleTime.
+        CATALOG_QUERY_KEYS.forEach((key) =>
+          queryClient.invalidateQueries({ queryKey: key }),
+        );
         router.refresh();
       } else if (result.error) {
         toast.error(result.error);

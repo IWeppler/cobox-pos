@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -16,6 +17,7 @@ import { Label } from "@/shared/ui/label";
 import { DatePickerAR } from "@/shared/components/date-picker-ar";
 import { CuentaCorrienteMovimiento } from "@/entities/clientes/type";
 import { editarMovimientoManualAction } from "../actions/manage-clients";
+import { queryKeys } from "@/shared/lib/query-keys";
 
 interface EditMovimientoCCModalProps {
   /** Solo se monta mientras el modal está abierto (ver movimiento-cc-card.tsx)
@@ -53,6 +55,7 @@ export function EditMovimientoCCModal({
   const [monto, setMonto] = useState(() => String(mov.monto));
   const [nota, setNota] = useState(() => extraerNota(mov.descripcion));
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -81,6 +84,10 @@ export function EditMovimientoCCModal({
 
       if (result.success) {
         toast.success("Movimiento actualizado.");
+        queryClient.invalidateQueries({ queryKey: queryKeys.clientes.listado });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.clientes.detalle(mov.cliente_id),
+        });
         onSaved();
       } else {
         toast.error(result.error || "No se pudo actualizar el movimiento.");

@@ -5,6 +5,7 @@ import { Sidebar } from "@/shared/components/sidebar";
 import { DashboardNavbar } from "@/shared/components/dashboard-navbar";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { QueryProvider } from "@/shared/components/query-provider";
 
 export default async function DashboardLayout({
   children,
@@ -58,7 +59,9 @@ export default async function DashboardLayout({
           <DashboardNavbar />
 
           <main className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            <TooltipProvider>{children}</TooltipProvider>
+            <TooltipProvider>
+              <QueryProvider>{children}</QueryProvider>
+            </TooltipProvider>
           </main>
         </div>
       </div>

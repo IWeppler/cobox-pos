@@ -38,3 +38,28 @@ export async function getAtributoValorSuggestionsAction(
     productos: Number(row.productos),
   }));
 }
+
+/**
+ * Nombres de propiedad ya usados en el catálogo (Talle, Color, Género...),
+ * leídos de `atributos` — la tabla canónica que normalizarAtributoKeyValor
+ * mantiene en cada guardado (creación/edición/conciliación de remitos). No
+ * escanea producto_variantes.atributos de nuevo: esa tabla YA es la fuente
+ * de verdad deduplicada, con casing consolidado.
+ */
+export async function getAtributosExistentesAction(): Promise<string[]> {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const { data, error } = await supabase
+    .from("atributos")
+    .select("nombre")
+    .eq("activo", true)
+    .order("nombre");
+
+  if (error) {
+    console.error("[ATRIBUTOS EXISTENTES] Error:", error);
+    return [];
+  }
+
+  return (data ?? []).map((row: { nombre: string }) => row.nombre);
+}

@@ -78,7 +78,9 @@ export function ClientsView({
     key: "ltv",
     direction: "desc",
   });
-  const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(
+    null,
+  );
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -121,6 +123,14 @@ export function ClientsView({
       };
     });
   }, [clientes]);
+
+  // Deriva del array vivo por id (en vez de guardar la fila clickeada como
+  // snapshot) para que el sheet abierto refleje el saldo apenas se
+  // refetchea la lista tras una mutación de cuenta corriente.
+  const selectedClient = useMemo(
+    () => clientesMapeados.find((c) => c.id === selectedClientId) ?? null,
+    [clientesMapeados, selectedClientId],
+  );
 
   const clientesFiltrados = useMemo(() => {
     let result = clientesMapeados.filter(
@@ -382,7 +392,7 @@ export function ClientsView({
                   return (
                     <tr
                       key={cliente.id}
-                      onClick={() => setSelectedClient(cliente)}
+                      onClick={() => setSelectedClientId(cliente.id)}
                       className="hover:bg-muted/30 transition-colors group cursor-pointer"
                     >
                       <td className="px-3 py-3 md:px-5 md:py-4">
@@ -513,7 +523,7 @@ export function ClientsView({
         entregaMinimaActiva={entregaMinimaActiva}
         recargoMoraConfig={recargoMoraConfig}
         isAdmin={isAdmin}
-        onClose={() => setSelectedClient(null)}
+        onClose={() => setSelectedClientId(null)}
       />
       <ImportClientsCsvModal
         open={isImportOpen}

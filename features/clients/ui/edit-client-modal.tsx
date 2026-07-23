@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Edit2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -16,6 +17,7 @@ import { Textarea } from "@/shared/ui/textarea";
 import { DatePickerAR } from "@/shared/components/date-picker-ar";
 import { Cliente } from "@/entities/clientes/type";
 import { editClienteAction } from "../actions/manage-clients";
+import { queryKeys } from "@/shared/lib/query-keys";
 
 interface EditClientModalProps {
   cliente: Cliente | null;
@@ -29,6 +31,7 @@ export function EditClientModal({
   entregaMinimaActiva = false,
 }: Readonly<EditClientModalProps>) {
   const [isPending, startTransition] = useTransition();
+  const queryClient = useQueryClient();
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -39,6 +42,10 @@ export function EditClientModal({
       const result = await editClienteAction(cliente.id, formData);
       if (result.success) {
         toast.success("Cliente actualizado correctamente.");
+        queryClient.invalidateQueries({ queryKey: queryKeys.clientes.listado });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.clientes.detalle(cliente.id),
+        });
         onClose();
       } else {
         toast.error(result.error);

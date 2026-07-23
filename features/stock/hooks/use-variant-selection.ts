@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildVariantKey } from "../utils/parse-legacy-variant";
 import {
   findDuplicatePropertyNames,
@@ -15,6 +15,7 @@ import type {
 import { slugify } from "@/shared/utils/slugify";
 import {
   getAtributoValorSuggestionsAction,
+  getAtributosExistentesAction,
   type SugerenciaValorAtributo,
 } from "../actions/get-attribute-suggestions";
 
@@ -118,6 +119,18 @@ export function useVariantSelection({
     Set<string>
   >(new Set());
 
+  // Nombres de propiedad ya usados en el catálogo (p.ej. "Género"), para
+  // ofrecerlos en el dropdown de Propiedad además de Talle/Color. Se pide
+  // una sola vez por sesión de formulario — la lista de atributos no
+  // cambia mientras el usuario está cargando un producto.
+  const [atributosExistentes, setAtributosExistentes] = useState<string[]>(
+    [],
+  );
+
+  useEffect(() => {
+    getAtributosExistentesAction().then(setAtributosExistentes);
+  }, []);
+
   const baseVariants = useMemo(
     () => buildCartesianVariants(opciones),
     [opciones],
@@ -158,42 +171,48 @@ export function useVariantSelection({
     [opciones],
   );
 
-  const reset = (
-    nextOpciones: Opcion[] = [],
-    nextVariantes: VarianteInput[] = [],
-  ) => {
-    const seeded = seedFromExistingVariantes(nextVariantes);
-    setOpciones(nextOpciones);
-    setVariantData(seeded.variantData);
-    setSelectedCombinations(seeded.selectedCombinations);
-    setPivotSelections({});
-    setCustomTypeMode(getCustomTypeModeFromOpciones(nextOpciones));
-    setFocusedOptionId(null);
-  };
+  // Todos los handlers de acá para abajo van en useCallback con deps
+  // mínimas — son props de ProductVariantsSection/VariantSelectionMatrix,
+  // memoizados con React.memo porque escalan con la cantidad de variantes
+  // (hasta cientos de filas). Sin referencias estables acá, el memo no
+  // sirve de nada: React igual las trataría como props nuevas en cada
+  // render del formulario padre.
+  const reset = useCallback(
+    (nextOpciones: Opcion[] = [], nextVariantes: VarianteInput[] = []) => {
+      const seeded = seedFromExistingVariantes(nextVariantes);
+      setOpciones(nextOpciones);
+      setVariantData(seeded.variantData);
+      setSelectedCombinations(seeded.selectedCombinations);
+      setPivotSelections({});
+      setCustomTypeMode(getCustomTypeModeFromOpciones(nextOpciones));
+      setFocusedOptionId(null);
+    },
+    [],
+  );
 
-  const handleAddOption = () => {
+  const handleAddOption = useCallback(() => {
     setOpciones((prev) => [
       ...prev,
       { id: crypto.randomUUID(), nombre: "", valores: [] },
     ]);
-  };
+  }, []);
 
-  const handleRemoveOption = (id: string) => {
+  const handleRemoveOption = useCallback((id: string) => {
     setOpciones((prev) => prev.filter((o) => o.id !== id));
     setCustomTypeMode((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
     });
-  };
+  }, []);
 
-  const handleUpdateOptionName = (id: string, newName: string) => {
+  const handleUpdateOptionName = useCallback((id: string, newName: string) => {
     setOpciones((prev) =>
       prev.map((o) => (o.id === id ? { ...o, nombre: newName } : o)),
     );
-  };
+  }, []);
 
-  const handleAddOptionValue = (id: string, value: string) => {
+  const handleAddOptionValue = useCallback((id: string, value: string) => {
     const val = value.trim();
     setOpciones((prev) =>
       prev.map((o) => {
@@ -203,40 +222,50 @@ export function useVariantSelection({
         return o;
       }),
     );
-  };
+  }, []);
 
-  const handleRemoveOptionValue = (id: string, valueToRemove: string) => {
-    setOpciones((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? { ...o, valores: o.valores.filter((v) => v !== valueToRemove) }
-          : o,
-      ),
-    );
-  };
+  const handleRemoveOptionValue = useCallback(
+    (id: string, valueToRemove: string) => {
+      setOpciones((prev) =>
+        prev.map((o) =>
+          o.id === id
+            ? { ...o, valores: o.valores.filter((v) => v !== valueToRemove) }
+            : o,
+        ),
+      );
+    },
+    [],
+  );
 
-  const handleVarChange = (
-    key: string,
-    field: keyof VariantDataState,
-    value: string,
-  ) => {
-    setVariantData((prev) => ({
-      ...prev,
-      [key]: {
-        ...(prev[key] || { stock: "", precio: "", precio_costo: "", sku: "" }),
-        [field]: value,
-      },
-    }));
-  };
+  const handleVarChange = useCallback(
+    (key: string, field: keyof VariantDataState, value: string) => {
+      setVariantData((prev) => ({
+        ...prev,
+        [key]: {
+          ...(prev[key] || {
+            stock: "",
+            precio: "",
+            precio_costo: "",
+            sku: "",
+          }),
+          [field]: value,
+        },
+      }));
+    },
+    [],
+  );
 
-  const handleToggleCombination = (key: string) => {
-    setSelectedCombinations((prev) => ({
-      ...prev,
-      [key]: !(prev[key] ?? opcionesValidasCount === 1),
-    }));
-  };
+  const handleToggleCombination = useCallback(
+    (key: string) => {
+      setSelectedCombinations((prev) => ({
+        ...prev,
+        [key]: !(prev[key] ?? opcionesValidasCount === 1),
+      }));
+    },
+    [opcionesValidasCount],
+  );
 
-  const handleBulkSetSelection = (keys: string[], value: boolean) => {
+  const handleBulkSetSelection = useCallback((keys: string[], value: boolean) => {
     setSelectedCombinations((prev) => {
       const next = { ...prev };
       keys.forEach((key) => {
@@ -244,60 +273,71 @@ export function useVariantSelection({
       });
       return next;
     });
-  };
+  }, []);
 
-  const handleInvertSelection = (keys: string[]) => {
-    setSelectedCombinations((prev) => {
-      const next = { ...prev };
-      keys.forEach((key) => {
-        next[key] = !(prev[key] ?? opcionesValidasCount === 1);
-      });
-      return next;
-    });
-  };
-
-  const handlePivotChange = (propName: string, value: string) => {
-    setPivotSelections((prev) => ({ ...prev, [propName]: value }));
-  };
-
-  const ensureSuggestionsLoaded = (nombre: string) => {
-    const key = slugify(nombre);
-    if (!key || key in suggestionsCache || loadingSuggestionsFor.has(key)) {
-      return;
-    }
-
-    setLoadingSuggestionsFor((prev) => new Set(prev).add(key));
-
-    getAtributoValorSuggestionsAction(nombre)
-      .then((sugerencias) => {
-        setSuggestionsCache((prev) => ({ ...prev, [key]: sugerencias }));
-      })
-      .finally(() => {
-        setLoadingSuggestionsFor((prev) => {
-          const next = new Set(prev);
-          next.delete(key);
-          return next;
+  const handleInvertSelection = useCallback(
+    (keys: string[]) => {
+      setSelectedCombinations((prev) => {
+        const next = { ...prev };
+        keys.forEach((key) => {
+          next[key] = !(prev[key] ?? opcionesValidasCount === 1);
         });
+        return next;
       });
-  };
+    },
+    [opcionesValidasCount],
+  );
 
-  const isLoadingSuggestions = (nombre: string) =>
-    loadingSuggestionsFor.has(slugify(nombre));
+  const handlePivotChange = useCallback((propName: string, value: string) => {
+    setPivotSelections((prev) => ({ ...prev, [propName]: value }));
+  }, []);
 
-  const getFilteredSuggestions = (
-    nombre: string,
-    query: string,
-    currentValues: string[],
-  ): SugerenciaValorAtributo[] => {
-    const cached = suggestionsCache[slugify(nombre)] ?? [];
-    const queryNormalizado = slugify(query);
-    const currentValuesNormalizados = new Set(currentValues.map(slugify));
+  const ensureSuggestionsLoaded = useCallback(
+    (nombre: string) => {
+      const key = slugify(nombre);
+      if (!key || key in suggestionsCache || loadingSuggestionsFor.has(key)) {
+        return;
+      }
 
-    return cached
-      .filter((s) => !currentValuesNormalizados.has(slugify(s.valor)))
-      .filter((s) => slugify(s.valor).includes(queryNormalizado))
-      .slice(0, 8);
-  };
+      setLoadingSuggestionsFor((prev) => new Set(prev).add(key));
+
+      getAtributoValorSuggestionsAction(nombre)
+        .then((sugerencias) => {
+          setSuggestionsCache((prev) => ({ ...prev, [key]: sugerencias }));
+        })
+        .finally(() => {
+          setLoadingSuggestionsFor((prev) => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
+        });
+    },
+    [suggestionsCache, loadingSuggestionsFor],
+  );
+
+  const isLoadingSuggestions = useCallback(
+    (nombre: string) => loadingSuggestionsFor.has(slugify(nombre)),
+    [loadingSuggestionsFor],
+  );
+
+  const getFilteredSuggestions = useCallback(
+    (
+      nombre: string,
+      query: string,
+      currentValues: string[],
+    ): SugerenciaValorAtributo[] => {
+      const cached = suggestionsCache[slugify(nombre)] ?? [];
+      const queryNormalizado = slugify(query);
+      const currentValuesNormalizados = new Set(currentValues.map(slugify));
+
+      return cached
+        .filter((s) => !currentValuesNormalizados.has(slugify(s.valor)))
+        .filter((s) => slugify(s.valor).includes(queryNormalizado))
+        .slice(0, 8);
+    },
+    [suggestionsCache],
+  );
 
   return {
     opciones,
@@ -326,5 +366,6 @@ export function useVariantSelection({
     ensureSuggestionsLoaded,
     isLoadingSuggestions,
     getFilteredSuggestions,
+    atributosExistentes,
   };
 }

@@ -300,6 +300,7 @@ async function actualizarStock(
   const variante = item.variante_match || item.raw_variante || "Unico";
   const atributosRaw = parseVarianteAtributos(variante);
   const atributos = canonicalizarValores(atributosRaw, atributoCache);
+  const skuRemito = item.raw_sku?.trim() || null;
 
   const { data: varianteExistente, error: varianteSelectError } = await supabase
     .from("producto_variantes")
@@ -319,6 +320,9 @@ async function actualizarStock(
       .update({
         stock: Number(varianteExistente.stock || 0) + item.cantidad,
         atributos,
+        // Solo pisa el SKU si este remito trajo uno — un reingreso de
+        // stock sin columna SKU no debe blanquear el que ya estaba cargado.
+        ...(skuRemito ? { sku: skuRemito } : {}),
       })
       .eq("id", varianteExistente.id);
 
@@ -336,6 +340,7 @@ async function actualizarStock(
         producto_id: item.producto_id,
         nombre_display: variante,
         atributos,
+        sku: skuRemito,
         precio: difierePrecio ? (item.precio_venta_actualizado ?? null) : null,
         costo: difierePrecio ? item.precio_costo : null,
         stock: item.cantidad,

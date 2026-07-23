@@ -1,4 +1,10 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import {
+  memo,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { ImageIcon, Layers, Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -60,9 +66,12 @@ type ProductVariantsSectionProps = {
   onInvertSelection?: (keys: string[]) => void;
   pivotSelections?: Record<string, string>;
   onPivotChange?: (propName: string, value: string) => void;
+  /** Nombres de propiedad ya usados en otros productos del catálogo (p.ej.
+   * "Género"), ofrecidos en el dropdown además de PREDEFINED_VARIANTS. */
+  atributosExistentes?: string[];
 };
 
-export function ProductVariantsSection({
+export const ProductVariantsSection = memo(function ProductVariantsSection({
   showVariants,
   onShowVariantsChange,
   opciones,
@@ -92,8 +101,22 @@ export function ProductVariantsSection({
   onInvertSelection,
   pivotSelections,
   onPivotChange,
+  atributosExistentes = [],
 }: ProductVariantsSectionProps) {
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
+
+  // Preestablecidas primero, después las ya usadas en el catálogo que no
+  // sean ya una preestablecida (case-insensitive, evita duplicar "Talle"
+  // si ya está en atributos con ese casing exacto).
+  const opcionesPropiedad = useMemo(() => {
+    const predefinidasLower = new Set(
+      PREDEFINED_VARIANTS.map((v) => v.toLowerCase()),
+    );
+    const existentesSinDuplicar = atributosExistentes.filter(
+      (nombre) => !predefinidasLower.has(nombre.toLowerCase()),
+    );
+    return [...PREDEFINED_VARIANTS, ...existentesSinDuplicar];
+  }, [atributosExistentes]);
 
   const matrixProps =
     baseVariants &&
@@ -237,7 +260,7 @@ export function ProductVariantsSection({
                         ) : (
                           <Select
                             value={
-                              PREDEFINED_VARIANTS.includes(op.nombre)
+                              opcionesPropiedad.includes(op.nombre)
                                 ? op.nombre
                                 : ""
                             }
@@ -263,7 +286,7 @@ export function ProductVariantsSection({
                               <SelectValue placeholder="Seleccionar..." />
                             </SelectTrigger>
                             <SelectContent>
-                              {PREDEFINED_VARIANTS.map((v) => (
+                              {opcionesPropiedad.map((v) => (
                                 <SelectItem key={v} value={v}>
                                   {v}
                                 </SelectItem>
@@ -545,4 +568,4 @@ export function ProductVariantsSection({
       )}
     </div>
   );
-}
+});

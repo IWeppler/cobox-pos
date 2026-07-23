@@ -284,58 +284,96 @@ export function ProductEditDetailSheet({
     setConfirmModalOpen(true);
     setIsLoadingDiff(true);
 
+    // Re-fetch obligatorio contra la base real al momento de confirmar —
+    // NUNCA contra el estado local del form, que puede haber perdido una
+    // combinación sin que nadie lo note (el caso exacto del incidente que
+    // originó este modal). Columnas acotadas a lo que el diff usa.
     const supabase = createClient();
     const { data: existentes } = await supabase
       .from("producto_variantes")
-      .select("id, nombre_display, atributos, precio, costo, stock")
+      .select("nombre_display, atributos, precio, stock")
       .eq("producto_id", producto.id);
 
+    // .key ya viene calculado por buildCartesianVariants/parseLegacyVariant
+    // — no hace falta recalcularlo acá.
     const formVariantesPorKey = new Map(
-      variantSelection.variantes.map((v) => [buildVariantKey(v.valores), v]),
+      variantSelection.variantes.map((v) => [v.key, v]),
+    );
+    const existentesPorKey = new Map(
+      (existentes ?? []).map((ex) => [
+        buildVariantKey((ex.atributos as Record<string, string>) ?? {}),
+        ex,
+      ]),
     );
 
-    const filas: VarianteDiffRow[] = (existentes ?? [])
-      .map((ex) => {
-        const atributos = (ex.atributos as Record<string, string>) ?? {};
-        const key = buildVariantKey(atributos);
-        const enPayload = formVariantesPorKey.get(key);
-        const stockDespues = enPayload
-          ? enPayload.stock?.trim()
-            ? Number.parseInt(enPayload.stock)
-            : ex.stock
-          : null;
-        const precioDespues = enPayload
-          ? enPayload.precio?.trim()
-            ? Number.parseFloat(enPayload.precio)
-            : null
-          : null;
+    // Pasada 1: lo que hoy existe en base — eliminadas (no está en el
+    // payload) y modificadas (stock o precio distinto).
+    const filasEliminadasYModificadas: VarianteDiffRow[] = [];
+    existentesPorKey.forEach((ex, key) => {
+      const atributos = (ex.atributos as Record<string, string>) ?? {};
+      const atributosLabel =
+        Object.entries(atributos)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(" / ") ||
+        ex.nombre_display ||
+        "Variante";
+      const precioAntes = ex.precio ? Number(ex.precio) : null;
+      const enPayload = formVariantesPorKey.get(key);
 
-        return {
+      if (!enPayload) {
+        filasEliminadasYModificadas.push({
           key,
-          atributosLabel:
-            Object.entries(atributos)
-              .map(([k, v]) => `${k}: ${v}`)
-              .join(" / ") ||
-            ex.nombre_display ||
-            "Variante",
+          atributosLabel,
+          tipo: "eliminada",
+          stockAntes: ex.stock,
+          stockDespues: null,
+          precioAntes,
+          precioDespues: null,
+        });
+        return;
+      }
+
+      const stockDespues = enPayload.stock?.trim()
+        ? Number.parseInt(enPayload.stock)
+        : ex.stock;
+      const precioDespues = enPayload.precio?.trim()
+        ? Number.parseFloat(enPayload.precio)
+        : null;
+
+      // Ocultamos del todo lo que no cambia: solo lo que realmente va a
+      // moverse merece la atención del usuario.
+      if (ex.stock !== stockDespues || precioAntes !== precioDespues) {
+        filasEliminadasYModificadas.push({
+          key,
+          atributosLabel,
+          tipo: "modificada",
           stockAntes: ex.stock,
           stockDespues,
-          precioAntes: ex.precio ? Number(ex.precio) : null,
+          precioAntes,
           precioDespues,
-          seVaAEliminar: !enPayload,
-        };
-      })
-      // Ocultamos del todo lo que no cambia: si la variante sigue existiendo
-      // con el mismo stock y el mismo precio, no ocupa lugar en la tabla —
-      // solo lo que realmente va a moverse merece la atención del usuario.
-      .filter(
-        (fila) =>
-          fila.seVaAEliminar ||
-          fila.stockAntes !== fila.stockDespues ||
-          fila.precioAntes !== fila.precioDespues,
-      );
+        });
+      }
+    });
 
-    filas.sort((a, b) => Number(b.seVaAEliminar) - Number(a.seVaAEliminar));
+    // Pasada 2: lo que trae el payload y no existe en base todavía.
+    const filasNuevas: VarianteDiffRow[] = [];
+    formVariantesPorKey.forEach((v, key) => {
+      if (existentesPorKey.has(key)) return;
+      filasNuevas.push({
+        key,
+        atributosLabel:
+          Object.entries(v.valores)
+            .map(([k, val]) => `${k}: ${val}`)
+            .join(" / ") || "Variante",
+        tipo: "nueva",
+        stockAntes: null,
+        stockDespues: v.stock?.trim() ? Number.parseInt(v.stock) : 0,
+        precioAntes: null,
+        precioDespues: v.precio?.trim() ? Number.parseFloat(v.precio) : null,
+      });
+    });
+
+    const filas = [...filasEliminadasYModificadas, ...filasNuevas];
 
     // Si de verdad no cambia nada, el modal no aporta nada — guardamos
     // directo en vez de mostrar una tabla vacía sin explicación.
@@ -467,7 +505,7 @@ export function ProductEditDetailSheet({
                 showVariants={showVariants}
                 onShowVariantsChange={setShowVariants}
                 opciones={variantSelection.opciones}
-                resetOpciones={() => variantSelection.reset()}
+                resetOpciones={variantSelection.reset}
                 customTypeMode={variantSelection.customTypeMode}
                 setCustomTypeMode={variantSelection.setCustomTypeMode}
                 focusedOptionId={variantSelection.focusedOptionId}
@@ -497,6 +535,7 @@ export function ProductEditDetailSheet({
                 onInvertSelection={variantSelection.handleInvertSelection}
                 pivotSelections={variantSelection.pivotSelections}
                 onPivotChange={variantSelection.handlePivotChange}
+                atributosExistentes={variantSelection.atributosExistentes}
               />
             </form>
           </div>

@@ -94,6 +94,41 @@ export async function getStockIndexAction(): Promise<{
   }
 }
 
+// Combina el índice de stock + config para la pantalla de Stock en un solo
+// fetch client-side (React Query cachea esto con staleTime de 3 min).
+export async function getStockPageDataAction(): Promise<{
+  data: {
+    productosIndice: ProductoIndice[];
+    nombreComercio: string;
+    mostrarSinStock: boolean;
+  } | null;
+  error: string | null;
+}> {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const [result, configRes] = await Promise.all([
+    getStockIndexAction(),
+    supabase
+      .from("configuracion_pos")
+      .select("posName, mostrar_sin_stock")
+      .single(),
+  ]);
+
+  if (result.error) {
+    return { data: null, error: result.error };
+  }
+
+  return {
+    data: {
+      productosIndice: result.data ?? [],
+      nombreComercio: configRes.data?.posName || "Tienda Online",
+      mostrarSinStock: configRes.data?.mostrar_sin_stock ?? true,
+    },
+    error: null,
+  };
+}
+
 export async function getStockPageDetailAction(ids: string[]): Promise<{
   data: Producto[] | null;
   error: string | null;

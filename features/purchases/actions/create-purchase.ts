@@ -10,6 +10,7 @@ export type RawOrderItem = {
   cantidad: number;
   precio_costo: number;
   raw_categoria?: string;
+  raw_sku?: string | null;
 };
 
 export async function procesarPedidoAction(
@@ -165,6 +166,7 @@ export async function procesarPedidoAction(
         raw_nombre: item.raw_nombre?.trim() || "Desconocido",
         raw_variante: item.raw_variante?.trim() || "Unico",
         raw_categoria: item.raw_categoria?.trim() || null,
+        raw_sku: item.raw_sku?.trim() || null,
         cantidad: isNaN(Number(item.cantidad)) ? 0 : Number(item.cantidad),
         precio_costo: isNaN(Number(item.precio_costo))
           ? 0

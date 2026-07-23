@@ -1,4 +1,4 @@
-El backlog completo, por módulo
+Quiero que ordenes y enumeres en un listado de prioridades las features que el proyecto evolucione de la forma mas optimizada, y ademas si ves viable y donde agregar inteligencia artificial y/o automatizaciones. Pero sin quitar los modulos. Por ejemplo dentro del modulo de caja el orden puede ser 1 - 3 - 7, porque dentro del modulo de ventas hay 2 - 4 - 5- 6...
 
 # Caja / Multicaja
 
@@ -30,7 +30,7 @@ El backlog completo, por módulo
 - en creacion/edicion/csv que aparezca la opcion de impuestos basicos como dropdown para agregarle a un producto, por ejemplo IVA 21%
 
 # Catálogo y stock
-
+- actualmente se puede cargar un producto a traves de un sheet de crear nuevo producto, carga de producto masivo a traves de un csv y editar un producto sumar stock a la variante. Pero si voy a implementar los codigos SKU, no deberia dar una opcion con mayor agilidad? ejemplo: escribo codigo, enter y no me desenfoca el input, sigo escribiendo.
 - Historial de movimientos por producto (auditoría)
 - Compartir uno o varios productos por WhatsApp/redes sin salir del POS — necesita diseño, todavía sin resolver cómo
 - Soporte de .xlsx en importación de clientes (hoy solo CSV)
@@ -53,7 +53,7 @@ El backlog completo, por módulo
 
 # 🔮 Fase 5: Expansión y Escalabilidad (Fundación SaaS/multi-tenant)
 
-- [ ] **landing page**
+- [ ] **landing page y Blog + Tutoriales**
 - [ ] **Multi-Tenant:** Refactor a `negocio_id` en todas las tablas para soportar miles de empresas en una sola base de datos (Modelo SaaS auto-gestionable).
 - [ ] **Facturación Electrónica:** Integración con ARCA.
 - [ ] **Impresión de Tickets:** Integración con impresoras térmicas ESC/POS (Bluetooth/USB) directas desde la web.
@@ -64,3 +64,7 @@ El backlog completo, por módulo
       Plan 3 — Empresa / Multi-sucursal: $70.000
 - [ ] **Carga de stock por voz/texto**
       Agente de IA (WhatsApp/app)
+
+- arreglar categorias y sub-categorias
+- que el usuario pueda elegir una industria: quiosco, herboristeria, ferreteria, carniceria, indumentaria, y en base a eso el sistema como que plante un seed, de variantes, tabla de csv, y nose que otras cosas.
+- para eso tengo que armar para vender por peso

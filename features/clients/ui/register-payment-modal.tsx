@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ import {
 import { Loader2, DollarSign, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { registrarPagoDeudaAction } from "../actions/manage-clients";
+import { queryKeys } from "@/shared/lib/query-keys";
 import { Cliente } from "@/entities/clientes/type";
 import { MetodoPago } from "@/entities/payments/types";
 import { cn } from "@/lib/utils";
@@ -38,6 +40,7 @@ export function RegisterPaymentModal({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const queryClient = useQueryClient();
   const saldoBase = Number(cliente.saldo_pendiente || 0);
   const montoSugerido = saldoBase + recargoMoraEstimado;
 
@@ -51,6 +54,10 @@ export function RegisterPaymentModal({
         toast.success(
           "Pago registrado exitosamente. La deuda se ha actualizado.",
         );
+        queryClient.invalidateQueries({ queryKey: queryKeys.clientes.listado });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.clientes.detalle(cliente.id),
+        });
         setIsOpen(false);
       } else {
         toast.error(result.error || "Ocurrió un error.");

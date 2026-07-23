@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/ui/tabs";
@@ -17,7 +18,7 @@ type VariantSelectionMatrixProps = {
 
 const SIN_SEGUNDA_PROPIEDAD = "__sin_segunda_propiedad__";
 
-export function VariantSelectionMatrix({
+export const VariantSelectionMatrix = memo(function VariantSelectionMatrix({
   opciones,
   baseVariants,
   selectedCombinations,
@@ -160,4 +161,4 @@ export function VariantSelectionMatrix({
       </div>
     </div>
   );
-}
+});

@@ -123,6 +123,7 @@ export function CrearProductoSheet() {
                 onInvertSelection={form.handleInvertSelection}
                 pivotSelections={form.pivotSelections}
                 onPivotChange={form.handlePivotChange}
+                atributosExistentes={form.atributosExistentes}
               />
             </form>
           </div>

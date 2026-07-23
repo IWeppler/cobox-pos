@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -30,22 +31,22 @@ import {
 import { CuentaCorrienteMovimiento } from "@/entities/clientes/type";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
 import { anularMovimientoManualAction } from "../actions/manage-clients";
+import { queryKeys } from "@/shared/lib/query-keys";
 import { EditMovimientoCCModal } from "./edit-movimiento-cc-modal";
 
 interface MovimientoCCCardProps {
   mov: CuentaCorrienteMovimiento;
   isAdmin: boolean;
-  onChanged: () => void;
 }
 
 export function MovimientoCCCard({
   mov,
   isAdmin,
-  onChanged,
 }: Readonly<MovimientoCCCardProps>) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAnularConfirmOpen, setIsAnularConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const queryClient = useQueryClient();
 
   // Discriminador real manual-vs-sistema: un movimiento generado por una
   // venta o un cobro siempre trae venta_id o pago_id seteado.
@@ -67,7 +68,10 @@ export function MovimientoCCCard({
       if (result.success) {
         toast.success("Movimiento anulado.");
         setIsAnularConfirmOpen(false);
-        onChanged();
+        queryClient.invalidateQueries({ queryKey: queryKeys.clientes.listado });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.clientes.detalle(mov.cliente_id),
+        });
       } else {
         toast.error(result.error || "No se pudo anular el movimiento.");
       }
@@ -165,10 +169,7 @@ export function MovimientoCCCard({
         <EditMovimientoCCModal
           mov={mov}
           onClose={() => setIsEditOpen(false)}
-          onSaved={() => {
-            setIsEditOpen(false);
-            onChanged();
-          }}
+          onSaved={() => setIsEditOpen(false)}
         />
       )}
 

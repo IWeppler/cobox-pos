@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Producto, ProductoIndice } from "@/entities/productos/types";
 import {
@@ -71,17 +71,11 @@ export function StockView({
     [productosIndice],
   );
 
-  const productosFiltrados = useMemo(() => {
-    return productosIndice.filter((p) => {
+  const matchSearchYVariantes = useCallback(
+    (p: ProductoIndice) => {
       const matchSearch = p.nombre
         ?.toLowerCase()
         .includes(searchDebounced.toLowerCase());
-
-      const catNombre = p.categoria?.nombre || p.tipo || "Sin categoría";
-
-      const matchCat =
-        categoriaActiva === "todos" ||
-        catNombre.toLowerCase() === categoriaActiva.toLowerCase();
 
       const matchVariantes = Object.entries(filtrosVariantes).every(
         ([propiedad, valor]) => {
@@ -100,9 +94,28 @@ export function StockView({
         },
       );
 
-      return matchSearch && matchCat && matchVariantes;
+      return matchSearch && matchVariantes;
+    },
+    [searchDebounced, filtrosVariantes],
+  );
+
+  // Set filtrado por búsqueda + variantes, SIN el filtro de categoría — es
+  // la base tanto de la tabla (con matchCat sumado abajo) como de los
+  // contadores facetados de cada chip (que nunca deben filtrarse por su
+  // propia categoría, si no cada chip terminaría mostrando su propio total).
+  const productosFiltradosSinCategoria = useMemo(
+    () => productosIndice.filter(matchSearchYVariantes),
+    [productosIndice, matchSearchYVariantes],
+  );
+
+  const productosFiltrados = useMemo(() => {
+    if (categoriaActiva === "todos") return productosFiltradosSinCategoria;
+
+    return productosFiltradosSinCategoria.filter((p) => {
+      const catNombre = p.categoria?.nombre || p.tipo || "Sin categoría";
+      return catNombre.toLowerCase() === categoriaActiva.toLowerCase();
     });
-  }, [productosIndice, searchDebounced, categoriaActiva, filtrosVariantes]);
+  }, [productosFiltradosSinCategoria, categoriaActiva]);
 
   // El sort corre acá, sobre TODO el set filtrado, antes de paginar. Antes
   // vivía adentro de stock-table.tsx y solo reordenaba los 10 productos de
@@ -185,20 +198,31 @@ export function StockView({
     categoriaActiva !== "todos" ||
     Object.values(filtrosVariantes).some((valor) => valor !== "todos");
 
+  // Categorías disponibles: siempre el set completo del catálogo (no
+  // depende de los filtros activos) — un chip con 0 resultados bajo el
+  // filtro actual sigue visible, solo con su contador en 0.
+  const categoriasDisponibles = useMemo(() => {
+    const nombres = new Set<string>();
+    productosIndice.forEach((p) => {
+      nombres.add(p.categoria?.nombre || p.tipo || "Sin categoría");
+    });
+    return Array.from(nombres).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  }, [productosIndice]);
+
+  // Facetado estándar: el contador de cada chip refleja búsqueda + filtros
+  // de variante activos, pero NUNCA su propia categoría — de ahí que corra
+  // sobre productosFiltradosSinCategoria en vez del índice completo.
   const conteosPorCategoria = useMemo(() => {
     const conteos: Record<string, number> = {};
-    productosIndice.forEach((p) => {
+    categoriasDisponibles.forEach((cat) => {
+      conteos[cat] = 0;
+    });
+    productosFiltradosSinCategoria.forEach((p) => {
       const cat = p.categoria?.nombre || p.tipo || "Sin categoría";
       conteos[cat] = (conteos[cat] || 0) + 1;
     });
     return conteos;
-  }, [productosIndice]);
-
-  const categoriasDisponibles = useMemo(() => {
-    return Object.keys(conteosPorCategoria).sort((a, b) =>
-      a < b ? -1 : a > b ? 1 : 0,
-    );
-  }, [conteosPorCategoria]);
+  }, [categoriasDisponibles, productosFiltradosSinCategoria]);
 
   const slugCategoriaActiva = useMemo(() => {
     if (categoriaActiva === "todos") return null;

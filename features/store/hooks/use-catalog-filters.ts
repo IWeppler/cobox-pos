@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Producto } from "@/entities/productos/types";
 import { parseRawVariantString } from "@/entities/productos/lib/parse-variant-attributes";
 import {
@@ -61,89 +61,15 @@ export function useCatalogFilters({
     [productos, config],
   );
 
-  const conteosRaw = useMemo(() => {
-    const conteos: Record<string, number> = {};
-    productos.forEach((p) => {
-      const stockViejos = p.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
-      const stockNuevos =
-        p.producto_variantes?.reduce(
-          (acc, v) => acc + (v.stock_disponible ?? v.stock),
-          0,
-        ) || 0;
-      const stockTotal = stockViejos + stockNuevos;
-
-      if (config?.mostrar_sin_stock === false && stockTotal <= 0) return;
-
-      const catKey = (
-        p.categoria_id ||
-        p.tipo ||
-        "sin-categoria"
-      ).toLowerCase();
-      conteos[catKey] = (conteos[catKey] || 0) + 1;
-    });
-    return conteos;
-  }, [productos, config]);
-
-  const categoriasConStock = useMemo<CategoriaConStock[]>(() => {
-    if (!categorias || categorias.length === 0) {
-      return Object.entries(conteosRaw)
-        .map(([k, v]) => {
-          const prodMatch = productos.find(
-            (p) =>
-              p.categoria_id?.toLowerCase() === k ||
-              (p.tipo || "").toLowerCase() === k,
-          );
-
-          let fallbackName = "Categoría";
-          if (prodMatch && prodMatch.tipo) {
-            fallbackName = prodMatch.tipo;
-          } else {
-            fallbackName = k.charAt(0).toUpperCase() + k.slice(1);
-          }
-
-          return { id: k, nombre: fallbackName, count: v };
-        })
-        .sort((a, b) => a.nombre.localeCompare(b.nombre));
-    }
-
-    return categorias
-      .map((cat) => {
-        const count =
-          (conteosRaw[cat.id.toLowerCase()] || 0) +
-          (conteosRaw[(cat.slug || "").toLowerCase()] || 0) +
-          (conteosRaw[(cat.nombre || "").toLowerCase()] || 0);
-        return { id: cat.id, nombre: cat.nombre, count };
-      })
-      .filter((cat) => cat.count > 0);
-  }, [categorias, conteosRaw, productos]);
-
-  const productosFiltrados = useMemo(() => {
-    const resultado = productos.filter((c) => {
-      const stockViejos = c.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
-      const stockNuevos =
-        c.producto_variantes?.reduce(
-          (acc, v) => acc + (v.stock_disponible ?? v.stock),
-          0,
-        ) || 0;
-      const stockTotal = stockViejos + stockNuevos;
-
-      if (config?.mostrar_sin_stock === false && stockTotal <= 0) return false;
-
+  // Búsqueda + filtros de variante, sin el filtro de categoría — se comparte
+  // entre el filtrado de productos y el conteo facetado de cada chip (que
+  // nunca debe filtrarse por su propia categoría).
+  const matchSearchYVariante = useCallback(
+    (c: Producto) => {
       const nombreStr = c.nombre || "";
-      const tipoStr = c.tipo || "";
-      const catIdStr = c.categoria_id || "";
-
       const matchSearch = nombreStr
         .toLowerCase()
         .includes(searchQuery.toLowerCase());
-
-      const catObj = categorias?.find((cat) => cat.id === tipo);
-      const matchTipo =
-        tipo === "todos" ||
-        catIdStr === tipo ||
-        tipoStr.toLowerCase() === tipo.toLowerCase() ||
-        (catObj && catObj.slug?.toLowerCase() === tipoStr.toLowerCase()) ||
-        (catObj && catObj.nombre?.toLowerCase() === tipoStr.toLowerCase());
 
       const matchVariante = Object.entries(filtrosVariantes).every(
         ([propKey, propVal]) => {
@@ -175,7 +101,110 @@ export function useCatalogFilters({
         },
       );
 
-      return matchSearch && matchTipo && matchVariante;
+      return matchSearch && matchVariante;
+    },
+    [searchQuery, filtrosVariantes],
+  );
+
+  // conteosTotales: solo el filtro de stock — decide qué categorías existen
+  // (un chip sin ningún producto no debería existir nunca).
+  // conteosFacetados: además de eso, búsqueda + variantes activos — es el
+  // número que se muestra en cada chip. Facetado estándar: nunca se filtra
+  // por la categoría del propio chip, si no cada uno terminaría mostrando
+  // su propio total sin importar el resto de los filtros.
+  const { conteosTotales, conteosFacetados } = useMemo(() => {
+    const totales: Record<string, number> = {};
+    const facetados: Record<string, number> = {};
+    productos.forEach((p) => {
+      const stockViejos = p.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
+      const stockNuevos =
+        p.producto_variantes?.reduce(
+          (acc, v) => acc + (v.stock_disponible ?? v.stock),
+          0,
+        ) || 0;
+      const stockTotal = stockViejos + stockNuevos;
+
+      if (config?.mostrar_sin_stock === false && stockTotal <= 0) return;
+
+      const catKey = (
+        p.categoria_id ||
+        p.tipo ||
+        "sin-categoria"
+      ).toLowerCase();
+      totales[catKey] = (totales[catKey] || 0) + 1;
+
+      if (matchSearchYVariante(p)) {
+        facetados[catKey] = (facetados[catKey] || 0) + 1;
+      }
+    });
+    return { conteosTotales: totales, conteosFacetados: facetados };
+  }, [productos, config, matchSearchYVariante]);
+
+  const categoriasConStock = useMemo<CategoriaConStock[]>(() => {
+    if (!categorias || categorias.length === 0) {
+      return Object.entries(conteosTotales)
+        .map(([k]) => {
+          const prodMatch = productos.find(
+            (p) =>
+              p.categoria_id?.toLowerCase() === k ||
+              (p.tipo || "").toLowerCase() === k,
+          );
+
+          let fallbackName = "Categoría";
+          if (prodMatch && prodMatch.tipo) {
+            fallbackName = prodMatch.tipo;
+          } else {
+            fallbackName = k.charAt(0).toUpperCase() + k.slice(1);
+          }
+
+          return { id: k, nombre: fallbackName, count: conteosFacetados[k] || 0 };
+        })
+        .sort((a, b) => a.nombre.localeCompare(b.nombre));
+    }
+
+    return categorias
+      .map((cat) => {
+        const idKey = cat.id.toLowerCase();
+        const slugKey = (cat.slug || "").toLowerCase();
+        const nombreKey = (cat.nombre || "").toLowerCase();
+        const total =
+          (conteosTotales[idKey] || 0) +
+          (conteosTotales[slugKey] || 0) +
+          (conteosTotales[nombreKey] || 0);
+        const count =
+          (conteosFacetados[idKey] || 0) +
+          (conteosFacetados[slugKey] || 0) +
+          (conteosFacetados[nombreKey] || 0);
+        return { id: cat.id, nombre: cat.nombre, count, total };
+      })
+      .filter((cat) => cat.total > 0)
+      .map((cat) => ({ id: cat.id, nombre: cat.nombre, count: cat.count }));
+  }, [categorias, conteosTotales, conteosFacetados, productos]);
+
+  const productosFiltrados = useMemo(() => {
+    const resultado = productos.filter((c) => {
+      const stockViejos = c.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
+      const stockNuevos =
+        c.producto_variantes?.reduce(
+          (acc, v) => acc + (v.stock_disponible ?? v.stock),
+          0,
+        ) || 0;
+      const stockTotal = stockViejos + stockNuevos;
+
+      if (config?.mostrar_sin_stock === false && stockTotal <= 0) return false;
+
+      const tipoStr = c.tipo || "";
+      const catIdStr = c.categoria_id || "";
+
+      const catObj = categorias?.find((cat) => cat.id === tipo);
+      const matchTipo =
+        tipo === "todos" ||
+        catIdStr === tipo ||
+        tipoStr.toLowerCase() === tipo.toLowerCase() ||
+        (catObj && catObj.slug?.toLowerCase() === tipoStr.toLowerCase()) ||
+        (catObj && catObj.nombre?.toLowerCase() === tipoStr.toLowerCase());
+
+      return matchTipo && matchSearchYVariante(c);
     });
 
     resultado.sort((a, b) => {
@@ -204,15 +233,7 @@ export function useCatalogFilters({
     });
 
     return resultado;
-  }, [
-    productos,
-    searchQuery,
-    tipo,
-    filtrosVariantes,
-    orden,
-    config,
-    categorias,
-  ]);
+  }, [productos, matchSearchYVariante, tipo, orden, config, categorias]);
 
   const productosVisibles = productosFiltrados.slice(0, visibleCount);
   const hayMasProductos = visibleCount < productosFiltrados.length;

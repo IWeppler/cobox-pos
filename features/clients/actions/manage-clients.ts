@@ -38,6 +38,41 @@ export async function getClientesAction() {
   return { data, error: null };
 }
 
+// Combina clientes + métodos de pago + config de CC/mora para el listado
+// en un solo fetch client-side (React Query cachea esto con staleTime de 3 min).
+export async function getClientesPageDataAction() {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const [clientesRes, metodosRes, configRes] = await Promise.all([
+    getClientesAction(),
+    supabase.from("metodos_pago").select("*").eq("activo", true),
+    supabase
+      .from("configuracion_pos")
+      .select("cc_anticipo_default, recargo_mora_tipo, recargo_mora_valor")
+      .single(),
+  ]);
+
+  if (clientesRes.error) {
+    return { data: null, error: clientesRes.error };
+  }
+
+  const recargoMoraConfig: RecargoMoraConfig = {
+    recargo_mora_tipo: configRes.data?.recargo_mora_tipo ?? "NINGUNO",
+    recargo_mora_valor: configRes.data?.recargo_mora_valor ?? 0,
+  };
+
+  return {
+    data: {
+      clientes: clientesRes.data ?? [],
+      metodosPago: metodosRes.data ?? [],
+      entregaMinimaActiva: (configRes.data?.cc_anticipo_default ?? 0) > 0,
+      recargoMoraConfig,
+    },
+    error: null,
+  };
+}
+
 // 2. OBTENER DETALLE PROFUNDO (Para el Sheet lateral)
 export async function getClienteDetalleAction(clienteId: string) {
   const cookieStore = await cookies();
