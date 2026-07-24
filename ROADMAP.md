@@ -1,4 +1,5 @@
 ideas:
+
 - codigo de barras / sku - que diferencias son?
 - atajos con teclado
 - Tiene que venir preestablecido los metodos de pago: transferencia, efectivo, Mercado Pago
@@ -10,15 +11,13 @@ ideas:
 - conectar mercado pago para que te aparezca el qr y que te avise que se pago. entiendo que no sirve si tenes varias vendedoras en un local.
 - creacion de producto al vuelo desde el pos para que puedan empezar a vender desde el primer dia
 - Datos de la empresa: nombre comercial +/ razon social, cuit. etiquetas de codigo de barra: a4, 50x30, 40x25, modo de facturacion: AFIP Manual (generar cuando se necesite), AFIP Automatico, Ticket Interno (Sin Afip)
-- Alicuota IVA (creacion de productos): 21% general; 10,5% alimentos básicos, carne, panificados, harinas; 0% exento. 
-
-
+- Alicuota IVA (creacion de productos): 21% general; 10,5% alimentos básicos, carne, panificados, harinas; 0% exento.
 
 # TIER 0 — Cerrar lo abierto (esta semana, antes de cualquier feature nueva)
+
 - Caja #9: endurecer RLS de SELECT en turnos_caja — 1 hora, seguridad, pendiente hace rato.
 
 # TIER 1 — Plata correcta y operación diaria (2-4 semanas)
-
 
 ## Catálogo/stock:
 
@@ -39,7 +38,6 @@ ideas:
 
 1.  Chequeo de duplicados en import CSV (re-subir hoy duplica clientes = riesgo de datos real).
 2.  🤖 ver Tier 3 (portal de deuda).
-
 
 # TIER 2 — Decisión de arquitectura SaaS (antes del tercer cliente, no después)
 
@@ -157,116 +155,118 @@ Carnicería — la que sí exige una feature nueva de verdad: venta por peso. Ho
 - que el usuario pueda elegir una industria: quiosco, herboristeria, ferreteria, carniceria, indumentaria, y en base a eso el sistema como que plante un seed, de variantes, tabla de csv, y nose que otras cosas.
 - para eso tengo que armar para vender por peso
 
-
-
-
 # ÉPICA — Jerarquía real de categorías + vocabulario de Género + CSV
- 
+
 ## Objetivo
+
 Convertir la jerarquía de categorías de "fachada rota" a feature real, con el modelo padre=audiencia / subcategoría=tipo de prenda, vocabulario cerrado de Género, navegación mobile de dos niveles, y el parser de CSV alineado (marca + bebé/beba). Todo diseñado para que el resultado sea el primer **seed de industria: Indumentaria** — reusable en el onboarding futuro.
- 
-## Decisiones ya tomadas (no re-discutir en implementación)
+
+## Decisiones:
+
 - Árbol: padres = Ropa Hombre / Ropa Mujer / Ropa Bebé / Ropa Niños. Subcategorías = tipo de prenda (repetibles entre padres: "Remeras" existe bajo Hombre, Niños y Bebé como filas distintas).
 - "Ropa Interior" NO es padre: Boxer → Ropa Hombre; Bombacha, Corpiño, Cola Less/Culotte, Conjuntos → Ropa Mujer.
 - Género = atributo de variante con lista CERRADA: Mujer, Hombre, Nena, Nene, Beba, Bebe, Unisex. Requerido solo en Ropa Bebé y Ropa Niños (vía categoria_atributos). Para Hombre/Mujer queda implícito en el padre — no se exige.
-- Marca = columna opcional a nivel producto (ya decidido antes; no es atributo ni categoría).
+- Marca = columna opcional a nivel producto (no es atributo ni categoría).
 - Búsqueda es transversal (ignora jerarquía); navegación es jerárquica (chips de dos niveles).
 - Talles: meses en Bebé (0-24m), numéricos en Niños — es el criterio que separa esas dos audiencias.
+
 ---
- 
+
 ## FASE 1 — Modelo de datos y fix del bug de base
- 
-**T1.1 — Arreglar el bug del form de categorías que asigna parent_id equivocado.**
+
+# T1.1 — Arreglar el bug del form de categorías que asigna parent_id equivocado.
 Reproducción conocida: crear "Abrigos" con subcategorías Camperas/Buzos/Chalecos → quedaron colgadas de "Boxer" y Abrigos sola. Diagnosticar (probable: índice/id desfasado entre el array de subcategorías y el padre recién creado, o el padre se resuelve antes de tener id). Fix + test del caso exacto.
 ✔ Criterio: crear padre + N subcategorías en una sola pasada las deja correctamente vinculadas; editar el padre de una subcategoría existente funciona.
- 
-**T1.2 — Reactivar la UI de subcategorías en Configuración.**
+
+# T1.2 — Reactivar la UI de subcategorías en Configuración.
 Quitar el "Próximamente" que pusimos como tapa. El manager de categorías muestra árbol de dos niveles (padres expandibles), permite crear/editar/mover subcategorías entre padres, y arrastra el `orden` existente.
 ✔ Criterio: el árbol completo de indumentaria se puede armar desde la UI sin tocar la base.
- 
-**T1.3 — Cablear categoria_atributos (la tabla "de fachada" pasa a funcionar).**
+
+# T1.3 — Cablear categoria_atributos (la tabla "de fachada" pasa a funcionar)
 En el manager de categorías: por categoría, poder marcar qué atributos aplica y cuáles son `requerido` (la tabla ya tiene el modelo exacto: categoria_id + atributo_id + requerido + orden). Seed: Ropa Bebé y Ropa Niños → Género requerido; todas → Talle y Color opcionales.
 ✔ Criterio: consultar categoria_atributos de "Ropa Bebé" devuelve Género como requerido.
- 
-**T1.4 — Form de producto/variantes lee categoria_atributos.**
+
+# T1.4 — Form de producto/variantes lee categoria_atributos.
 Al elegir categoría (o subcategoría — hereda del padre), el form de variantes pre-carga los atributos declarados: los requeridos aparecen ya agregados y no se puede guardar sin valor; los opcionales aparecen sugeridos en el dropdown (encima de la lista de "atributos ya usados" que ya conectamos al RPC de autocomplete).
 ✔ Criterio: crear producto en Ropa Bebé exige Género; crear en Ropa Hombre no lo pide.
- 
-**T1.5 — Vocabulario cerrado de Género.**
+
+# T1.5 — Vocabulario cerrado de Género.
 Los valores válidos del atributo Género son la lista cerrada (Mujer/Hombre/Nena/Nene/Beba/Bebe/Unisex) + mapa de sinónimos canonicalizados (nena→Nena, niño→Nene, beba→Beba, etc. — unificar con el mapa que ya existe en el parser de remitos, UNA sola fuente, no dos mapas). En el form de variantes, Género se elige de dropdown cerrado, no texto libre. Cualquier valor fuera de lista en imports → advertencia con confirmación, nunca creación silenciosa (ni de valor nuevo ni de categoría espuria — el bug de la semana pasada).
 ✔ Criterio: no existe camino por el cual "Beba" y "beba" terminen siendo dos valores distintos, ni por el cual un género desconocido cree una categoría.
- 
+
 ---
- 
+
 ## FASE 2 — Migración de datos existentes (los 2 comercios)
- 
+
 **T2.1 — Mapa de migración de categorías planas → árbol, por comercio.**
 Script/consulta que liste las categorías actuales de cada proyecto (Evens + estilobonito) con su conteo de productos, y una propuesta de mapeo (Boxer → subcategoría de Ropa Hombre, etc.). El mapeo se revisa A MANO con cada clienta (o con Nacho) antes de ejecutar — las categorías reales pueden tener nombres que no anticipamos.
 ✔ Criterio: tabla de mapeo aprobada por comercio antes de tocar datos.
- 
+
 **T2.2 — Ejecutar la migración (por comercio, con el mapeo aprobado).**
 Crear los padres, re-parentar las categorías existentes (UPDATE de parent_id — las categorías conservan su id, así los productos no se tocan), crear las que falten. Vía migración/script auditado, no SQL suelto en Studio.
 ✔ Criterio: cero productos huérfanos; conteos por categoría antes/después idénticos; catálogo público sigue mostrando todo.
- 
+
 **T2.3 — Backfill de Género donde es derivable.**
 Productos en subcategorías de Ropa Bebé/Niños sin atributo Género: derivarlo si la planilla original lo traía (columna Genero de los CSV ya importados) o marcarlos en un reporte para carga manual. No adivinar por nombre de producto.
 ✔ Criterio: reporte de cuántos quedaron sin género para que la clienta los complete.
- 
+
 ---
- 
+
 ## FASE 3 — Navegación de dos niveles (mobile-first)
- 
+
 **T3.1 — Chips de dos niveles en catálogo público.**
 Nivel 1: chips de padres (Ropa Hombre / Mujer / Bebé / Niños). Al elegir uno: breadcrumb ("Ropa Bebé ›") + chips de sus subcategorías. Estado en la URL (extiende el ?categoria= que ya existe — definir ?categoria=<padre-slug>&sub=<sub-slug> o slug jerárquico, consistente con los links compartibles ya construidos).
 ✔ Criterio: en un celular real, llegar de home a "Ropa Bebé > Remeras" toma 2 taps; back del navegador deshace un nivel por vez; los links compartidos de categoría siguen funcionando.
- 
+
 **T3.2 — Mismo patrón en Stock y POS/VENDER.**
 Los chips de categoría de inventario y del POS pasan al mismo modelo de dos niveles. Los contadores facetados (ya implementados) respetan la jerarquía: el chip de un padre suma sus subcategorías.
 ✔ Criterio: filtrar por padre muestra los productos de todas sus subcategorías; filtrar por subcategoría muestra solo esa.
- 
+
 **T3.3 — Búsqueda transversal explícita.**
 El buscador (catálogo, stock, POS) ignora el filtro jerárquico activo… o mejor: buscar "remera" con "Ropa Bebé" seleccionado busca dentro de Bebé, pero muestra un aviso "ver N resultados en todo el catálogo" para escapar del filtro en un tap. Cada resultado transversal muestra su breadcrumb (Ropa Niños › Remeras) para distinguir homónimos.
 ✔ Criterio: buscar "remera" sin filtros trae las de Hombre, Niños y Bebé juntas, distinguibles entre sí.
- 
+
 ---
- 
+
 ## FASE 4 — Parser de CSV/remito alineado
- 
+
 **T4.1 — Columna Marca.**
 Aceptar encabezado Marca/MARCA/Brand como opcional → `productos.marca` (columna ya existente por decisión previa; si aún no se creó, migración chica acá). Celda vacía o columna ausente = no tocar marca existente (mismo criterio que definimos para SKU).
 ✔ Criterio: la planilla real de ropa de bebé (con Marca) importa completa; re-importar sin la columna no borra marcas.
- 
+
 **T4.2 — Género con vocabulario cerrado en el parser.**
 El parser usa el MISMO mapa canónico de T1.5 (import compartido). Acepta Beba/Bebe/beba/bebé/etc. Valor no reconocido → fila marcada en amarillo en la previsualización con "Género no reconocido: 'X' — ¿mapear a…?" y dropdown; nunca sigue de largo.
 ✔ Criterio: las dos planillas reales de esta semana (interior + bebé) importan sin intervención; una con "Adolescente" inventado frena esa fila y pregunta.
- 
+
 **T4.3 — Reporte de mapeo de columnas al importar.**
 Antes de procesar, mostrar "Detecté: SKU, Género, Producto, Marca, precio, talle, color, stock → mapeando así: …" con confirmación. Columnas desconocidas listadas como "ignoradas" visiblemente (no en silencio).
 ✔ Criterio: el cambio de estructura entre planillas de días distintos (como te pasó) se ve ANTES de importar, no después.
- 
+
 **T4.4 — Categoría/subcategoría en el import.**
 Definir cómo el CSV declara la subcategoría destino: columna Categoria acepta "Ropa Bebé > Body" (jerárquico) o solo "Body" (si el nombre de subcategoría es único, resolver; si existe bajo dos padres, la previsualización pide elegir). Actualizar la plantilla descargable con las columnas nuevas y una fila de ejemplo de cada audiencia.
 ✔ Criterio: importar un CSV con "Body" lo cuelga del padre correcto o pregunta si es ambiguo.
- 
+
 ---
- 
+
 ## FASE 5 — Empaquetar como seed "Indumentaria" (cierra el círculo con el roadmap)
- 
+
 **T5.1 — Extraer el árbol + reglas a un seed declarativo.**
 Un archivo (JSON/TS) con: categorías padre+sub, atributos (Talle/Color/Género), reglas de categoria_atributos, y el vocabulario de sinónimos — el mismo contenido que migró Evens, como plantilla. El provisioning de un comercio nuevo de indumentaria lo aplica en un paso.
 ✔ Criterio: el seed aplicado a un proyecto vacío deja el árbol completo listo, idéntico al de Evens post-migración.
- 
+
 **T5.2 — Documentar el formato de seed para futuras industrias.**
 Un README corto: qué campos tiene un seed, cómo se agregaría "Quiosco" o "Carnicería" (sin implementarlos — solo que el formato no sea indumentaria-céntrico por accidente). Nota explícita: carnicería requiere venta-por-peso antes de tener seed útil.
 ✔ Criterio: alguien (vos en 3 meses) puede crear un segundo seed sin ingeniería inversa.
- 
+
 ---
- 
+
 ## Orden y dependencias
+
 F1 completa → F2 (migrar sin el bug de parent_id arreglado sería suicida) → F3 y F4 en paralelo (no se pisan) → F5 al final (empaqueta lo aprendido).
 Regla de siempre: cada fase con migración aplicada a AMBOS proyectos + código deployado + smoke test, verificados juntos.
- 
+
 ## Fuera de alcance de esta épica
+
 - Seeds de otras industrias (solo el formato queda documentado).
 - Venta por peso.
 - Filtro por marca en catálogo (marca se guarda, no se filtra todavía).

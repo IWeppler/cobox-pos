@@ -53,6 +53,7 @@ export interface Producto {
   publicado: boolean;
   slug: string | null;
   descripcion?: string | null;
+  marca?: string | null;
   atributos_globales?: Record<string, string>;
   stock?: ProductoStock[];
   producto_variantes?: ProductoVariante[];

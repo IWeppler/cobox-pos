@@ -140,7 +140,8 @@ export async function listarReservasActivasAction() {
       creado_en,
       producto:productos(id, nombre, precio),
       variante:producto_variantes(id, nombre_display, precio),
-      cliente:clientes(id, nombre, telefono)
+      cliente:clientes(id, nombre, telefono),
+      vendedora:perfiles!creado_por(id, nombre)
       `,
     )
     .eq("estado", "ACTIVA")

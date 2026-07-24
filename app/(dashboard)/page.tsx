@@ -5,24 +5,42 @@ import { EgresoModal } from "@/features/caja/ui/egreso-modal";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { getDashboardMetrics } from "@/features/dashboard/lib/get-dashboard-metrics";
-import { getSupabaseRelation, Venta } from "@/entities/ventas/types";
+import { listarReservasActivasAction } from "@/features/reservations/actions/manage-reservations";
+import {
+  getSupabaseRelation,
+  SupabaseRelation,
+  Venta,
+} from "@/entities/ventas/types";
 import Link from "next/link";
 import {
-  TrendingDown,
   Receipt,
   ShoppingBag,
   Wallet,
   Flame,
   Trophy,
   Package,
+  Bookmark,
   ArrowUpRight,
   ArrowDownRight,
   Plus,
 } from "lucide-react";
-import { formatearMoneda, formatearHora } from "@/shared/utils/formatters";
+import {
+  formatearMoneda,
+  formatearHora,
+  formatearFechaHora,
+} from "@/shared/utils/formatters";
 import { Button } from "@/shared/ui/button";
 
 export const dynamic = "force-dynamic";
+
+type ReservaActivaRow = {
+  id: string;
+  creado_en: string;
+  producto: SupabaseRelation<{ nombre: string }>;
+  variante: SupabaseRelation<{ nombre_display: string }>;
+  cliente: SupabaseRelation<{ nombre: string }>;
+  vendedora: SupabaseRelation<{ nombre: string }>;
+};
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
@@ -34,6 +52,7 @@ export default async function DashboardPage() {
     egresosResponse,
     bajasResponse,
     turnoResponse,
+    reservasResponse,
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
@@ -48,6 +67,7 @@ export default async function DashboardPage() {
       .order("fecha_apertura", { ascending: false })
       .limit(1)
       .single(),
+    listarReservasActivasAction(),
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
@@ -129,18 +149,26 @@ export default async function DashboardPage() {
       Number(turnoAbierto.monto_inicial) + ingresosTurnoEf - egresosTurno;
   }
 
-  const bajasHoy = bajasAprobadas.filter((b) => {
-    const f = new Date(b.creado_en);
-    return (
-      f.getDate() === hoy.getDate() &&
-      f.getMonth() === hoy.getMonth() &&
-      f.getFullYear() === hoy.getFullYear()
-    );
+  const reservasActivasRaw = (reservasResponse.data ||
+    []) as unknown as ReservaActivaRow[];
+  const reservasActivas = reservasActivasRaw.map((r) => {
+    const producto = getSupabaseRelation(r.producto);
+    const variante = getSupabaseRelation(r.variante);
+    const cliente = getSupabaseRelation(r.cliente);
+    const vendedora = getSupabaseRelation(r.vendedora);
+    const horasActiva =
+      (hoy.getTime() - new Date(r.creado_en).getTime()) / (1000 * 3600);
+
+    return {
+      id: r.id,
+      creadoEn: r.creado_en,
+      nombreProducto: producto?.nombre || "Producto eliminado",
+      varianteNombre: variante?.nombre_display || null,
+      clienteNombre: cliente?.nombre || null,
+      vendedoraNombre: vendedora?.nombre || null,
+      vencida: horasActiva >= 24,
+    };
   });
-  const costoBajasHoy = bajasHoy.reduce((acc, b) => {
-    const p = productos.find((prod) => prod.id === b.producto_id);
-    return acc + Number(b.cantidad) * Number(p?.precio_costo || 0);
-  }, 0);
 
   return (
     <>
@@ -358,43 +386,67 @@ export default async function DashboardPage() {
             </Link>
           </div>
 
-          {/* Bajas del día */}
+          {/* Reservas activas */}
           <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
             <div className="flex items-center gap-2">
-              <TrendingDown className="w-3.5 h-3.5 text-muted-foreground" />
+              <Bookmark className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Bajas de hoy
+                Reservas activas
               </span>
             </div>
             <div className="flex-1">
-              {bajasHoy.length > 0 ? (
-                <div className="space-y-1">
-                  <p className="text-lg font-medium text-foreground">
-                    {formatearMoneda(costoBajasHoy)}
+              {reservasActivas.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {reservasActivas.length} producto
+                    {reservasActivas.length === 1 ? "" : "s"} en reservas
+                    activas
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    Pérdida operativa registrada
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {bajasHoy.reduce((acc, b) => acc + b.cantidad, 0)} unidades
-                    afectadas
-                  </p>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {reservasActivas.map((r) => (
+                      <div
+                        key={r.id}
+                        className={`flex items-center justify-between gap-2 text-xs rounded-lg px-2.5 py-1.5 border ${
+                          r.vencida
+                            ? "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900"
+                            : "bg-muted/40 border-border"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p
+                            className="font-medium text-foreground truncate"
+                            title={r.nombreProducto}
+                          >
+                            {r.nombreProducto}
+                            {r.varianteNombre ? ` · ${r.varianteNombre}` : ""}
+                          </p>
+                          <p className="text-muted-foreground truncate">
+                            desde {formatearFechaHora(r.creadoEn)}
+                            {r.vendedoraNombre
+                              ? ` · ${r.vendedoraNombre}`
+                              : ""}
+                            {r.clienteNombre
+                              ? ` · para ${r.clienteNombre}`
+                              : ""}
+                          </p>
+                        </div>
+                        {r.vencida && (
+                          <span className="shrink-0 text-amber-700 dark:text-amber-400 font-medium">
+                            +24h
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div className="h-full flex items-center">
                   <p className="text-xs text-muted-foreground italic">
-                    Sin bajas registradas hoy.
+                    Sin reservas activas.
                   </p>
                 </div>
               )}
             </div>
-            {bajasHoy.length > 0 && (
-              <Link href="/stock/bajas">
-                <button className="w-full text-xs h-8 border border-border rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors">
-                  Ver detalle
-                </button>
-              </Link>
-            )}
           </div>
         </div>
 

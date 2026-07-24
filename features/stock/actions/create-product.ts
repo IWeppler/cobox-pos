@@ -16,6 +16,8 @@ export async function crearProductoAction(
   const nombre = formData.get("nombre") as string;
   const categoria_id = formData.get("categoria_id") as string;
   const descripcion = formData.get("descripcion") as string;
+  const marca = (formData.get("marca") as string | null)?.trim() || null;
+  const sku = (formData.get("sku") as string | null)?.trim() || null;
   const precio = Number.parseFloat(formData.get("precio") as string);
   const precio_costo = Number.parseFloat(
     formData.get("precio_costo") as string,
@@ -141,6 +143,7 @@ export async function crearProductoAction(
       tipo, // Fallback legacy
       categoria_id: categoria_id || null,
       descripcion,
+      marca,
       precio,
       precio_costo,
       imagen_url,
@@ -171,6 +174,7 @@ export async function crearProductoAction(
       precio: null, // Hereda del padre
       costo: null, // Hereda del padre
       stock: stockBase,
+      sku,
     });
 
     // Mantenemos legacy stock table para no romper la app vieja

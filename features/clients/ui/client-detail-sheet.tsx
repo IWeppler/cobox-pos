@@ -9,7 +9,6 @@ import {
   SheetTitle,
 } from "@/shared/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
-import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { ClienteEstadoBadge } from "@/shared/components/cliente-estado-badge";
 import {
@@ -21,7 +20,6 @@ import {
   TrendingUp,
   Tags,
   Star,
-  BookmarkCheck,
   Edit2,
   PlusCircle,
 } from "lucide-react";
@@ -38,18 +36,6 @@ import { MetodoPagoPOS } from "@/shared/components/cart-sidebar/types";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
 import { getSupabaseRelation, SupabaseRelation } from "@/entities/ventas/types";
 import { RecargoMoraConfig } from "../lib/calcular-saldo-con-recargo";
-
-interface ReservaResumen {
-  id: string;
-  nota?: string | null;
-  estado: "ACTIVA" | "CONFIRMADA" | "DEVUELTA";
-  creado_en: string;
-  producto?: SupabaseRelation<{ nombre?: string | null }>;
-  variante?: SupabaseRelation<{
-    nombre_display?: string | null;
-    precio?: number | null;
-  }>;
-}
 
 interface VentaResumen {
   id: string;
@@ -94,8 +80,7 @@ export function ClientDetailSheet({
   const data: {
     movimientos: CuentaCorrienteMovimiento[];
     ventas: VentaResumen[];
-    reservas: ReservaResumen[];
-  } = queryData ?? { movimientos: [], ventas: [], reservas: [] };
+  } = queryData ?? { movimientos: [], ventas: [] };
 
   const stats = useMemo(() => {
     const totalComprado = data.ventas.reduce(
@@ -229,13 +214,6 @@ export function ClientDetailSheet({
                   Ventas
                 </TabsTrigger>
                 <TabsTrigger
-                  value="reservas"
-                  className="text-xs font-bold uppercase tracking-wide sm:tracking-widest"
-                >
-                  <BookmarkCheck className="w-3.5 h-3.5 mr-0.2 hidden sm:block" />{" "}
-                  Reservas
-                </TabsTrigger>
-                <TabsTrigger
                   value="info"
                   className="text-xs font-bold uppercase tracking-wide sm:tracking-widest"
                 >
@@ -352,78 +330,6 @@ export function ClientDetailSheet({
                                   )
                                   .join(", ")}
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  {/* PESTAÑA: RESERVAS */}
-                  <TabsContent
-                    value="reservas"
-                    className="m-0 animate-in fade-in-50"
-                  >
-                    <h3 className="text-sm font-semibold uppercase text-muted-foreground mb-3 border-b border-border/50 pb-2">
-                      Reservas
-                    </h3>
-                    {data.reservas.length === 0 ? (
-                      <p className="text-sm text-muted-foreground italic text-center py-8">
-                        No hay reservas registradas.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {data.reservas.map((reserva) => {
-                          const producto = getSupabaseRelation(
-                            reserva.producto,
-                          );
-                          const variante = getSupabaseRelation(
-                            reserva.variante,
-                          );
-                          const estadoBadge =
-                            reserva.estado === "ACTIVA"
-                              ? {
-                                  label: "Activa",
-                                  className:
-                                    "bg-blue-50 text-blue-700 border-blue-200",
-                                }
-                              : reserva.estado === "CONFIRMADA"
-                                ? {
-                                    label: "Confirmada",
-                                    className:
-                                      "bg-emerald-50 text-emerald-700 border-emerald-200",
-                                  }
-                                : {
-                                    label: "Devuelta",
-                                    className:
-                                      "bg-muted text-muted-foreground border-border",
-                                  };
-
-                          return (
-                            <div
-                              key={reserva.id}
-                              className="flex items-center justify-between p-3 bg-background border border-border rounded-lg gap-3"
-                            >
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-foreground truncate">
-                                  {producto?.nombre || "Producto eliminado"}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">
-                                  {variante?.nombre_display || "-"} ·{" "}
-                                  {formatearFechaHora(reserva.creado_en)}
-                                </p>
-                                {reserva.nota ? (
-                                  <p className="text-xs text-muted-foreground mt-1 italic">
-                                    {reserva.nota}
-                                  </p>
-                                ) : null}
-                              </div>
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] uppercase font-bold tracking-wider shrink-0 ${estadoBadge.className}`}
-                              >
-                                {estadoBadge.label}
-                              </Badge>
                             </div>
                           );
                         })}

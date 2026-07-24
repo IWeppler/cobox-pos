@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowRightLeft,
-  BookmarkCheck,
   Check,
   ClipboardList,
   Filter,
@@ -13,6 +12,7 @@ import {
   List,
   MoreHorizontal,
   PackagePlus,
+  ScanBarcode,
   Search,
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
@@ -211,6 +211,21 @@ export function StockFiltersToolbar({
 
         {/* Controles y Botonera Admin (No se encoge nunca en mobile) */}
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Carga rápida — visible para todos los roles, no solo Admin */}
+          <Link href="/stock/carga-rapida">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-10 w-10 sm:w-auto p-0 sm:px-3 shrink-0 border-border/60 bg-background"
+              title="Carga rápida de mercadería"
+            >
+              <ScanBarcode className="h-4 w-4 sm:mr-2 text-muted-foreground" />
+              <span className="hidden sm:inline font-semibold">
+                Carga rápida
+              </span>
+            </Button>
+          </Link>
+
           {/* Toggle View (Oculto en celular para ahorrar valioso espacio) */}
           {showViewToggle && (
             <div className="hidden sm:flex items-center bg-muted border border-border/80 p-0.5 rounded-lg shrink-0">
@@ -268,12 +283,6 @@ export function StockFiltersToolbar({
                       <span>Ingresar Remito</span>
                     </Button>
                     <DropdownMenuSeparator className="my-1 bg-border/60" />
-                    <Link href="/stock/reservas" className="w-full block">
-                      <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors">
-                        <BookmarkCheck className="w-4 h-4 mr-2 text-primary shrink-0" />
-                        Reservas activas
-                      </button>
-                    </Link>
                     <Link href="/stock/bajas" className="w-full block">
                       <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-amber-50 rounded-md hover:text-amber-800 transition-colors">
                         <ClipboardList className="w-4 h-4 mr-2 text-amber-600 shrink-0" />

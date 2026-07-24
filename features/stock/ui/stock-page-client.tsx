@@ -17,7 +17,7 @@ export function StockPageClient({ userRole }: { userRole: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 mx-auto">
+      <div className="space-y-6 mx-auto px-2 md:px-4">
         <StockSkeleton />
       </div>
     );

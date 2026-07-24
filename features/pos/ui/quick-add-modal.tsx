@@ -14,11 +14,24 @@ import { Layers } from "lucide-react";
 import { parseRawVariantString } from "@/entities/productos/lib/parse-variant-attributes";
 import { resolverAtributosVariante } from "@/entities/productos/lib/build-propiedades-filtro";
 
+interface VarianteSeleccionada {
+  varianteId: string | undefined;
+  variante: string;
+  precio: number | null;
+  costo: number | null;
+  sku: string | null;
+  stockDisponible: number;
+}
+
 interface QuickAddModalProps {
   producto: Producto | null;
   isOpen: boolean;
   onClose: () => void;
   permitirVentaSinStock?: boolean;
+  /** Cuando se pasa, se llama en vez de agregar al carrito de ventas del
+   * POS — permite reutilizar este selector de variante desde otros flujos
+   * (ej. Carga Rápida) sin tocar useCartStore. */
+  onSelectVariante?: (seleccion: VarianteSeleccionada) => void;
 }
 
 export function QuickAddModal({
@@ -26,6 +39,7 @@ export function QuickAddModal({
   isOpen,
   onClose,
   permitirVentaSinStock = false,
+  onSelectVariante,
 }: Readonly<QuickAddModalProps>) {
   if (!producto) return null;
 
@@ -38,6 +52,7 @@ export function QuickAddModal({
           isOpen={isOpen}
           onClose={onClose}
           permitirVentaSinStock={permitirVentaSinStock}
+          onSelectVariante={onSelectVariante}
         />
       ) : null}
     </Dialog>
@@ -49,11 +64,13 @@ function QuickAddModalContent({
   isOpen,
   onClose,
   permitirVentaSinStock,
+  onSelectVariante,
 }: Readonly<{
   producto: Producto;
   isOpen: boolean;
   onClose: () => void;
   permitirVentaSinStock: boolean;
+  onSelectVariante?: (seleccion: VarianteSeleccionada) => void;
 }>) {
   const addItem = useCartStore((state) => state.addItem);
   const setIsOpenCart = useCartStore((state) => state.setIsOpen);
@@ -65,6 +82,8 @@ function QuickAddModalContent({
       varianteId: string | undefined;
       atributos?: Record<string, string>;
       precio: number | null;
+      costo: number | null;
+      sku: string | null;
     }> = [];
     let tieneAtributosEstructurados = false;
     producto.producto_variantes?.forEach((v) => {
@@ -76,6 +95,8 @@ function QuickAddModalContent({
         varianteId: v.id,
         atributos,
         precio: v.precio,
+        costo: v.costo,
+        sku: v.sku ?? null,
       });
     });
 
@@ -91,6 +112,8 @@ function QuickAddModalContent({
           cantidad: s.cantidad,
           varianteId: undefined,
           precio: null,
+          costo: null,
+          sku: null,
         }),
       );
     }
@@ -205,20 +228,31 @@ function QuickAddModalContent({
           grids = producto.grid_url;
         }
 
-        addItem({
-          productoId: producto.id,
-          nombre: producto.nombre || "Sin nombre",
-          tipo: producto.tipo || "",
-          variante: stockDeVariante.variante,
-          varianteId: stockDeVariante.varianteId,
-          precio: stockDeVariante.precio ?? producto.precio,
-          cantidad: 1,
-          imagenUrl: grids[0] || miniaturas[0] || imagenes[0] || null,
-          stockMaximo: stockDeVariante.cantidad,
-        });
+        if (onSelectVariante) {
+          onSelectVariante({
+            varianteId: stockDeVariante.varianteId,
+            variante: stockDeVariante.variante,
+            precio: stockDeVariante.precio ?? producto.precio,
+            costo: stockDeVariante.costo ?? producto.precio_costo,
+            sku: stockDeVariante.sku,
+            stockDisponible: stockDeVariante.cantidad,
+          });
+        } else {
+          addItem({
+            productoId: producto.id,
+            nombre: producto.nombre || "Sin nombre",
+            tipo: producto.tipo || "",
+            variante: stockDeVariante.variante,
+            varianteId: stockDeVariante.varianteId,
+            precio: stockDeVariante.precio ?? producto.precio,
+            cantidad: 1,
+            imagenUrl: grids[0] || miniaturas[0] || imagenes[0] || null,
+            stockMaximo: stockDeVariante.cantidad,
+          });
 
-        // toast.success("Agregado a la cuenta");
-        setIsOpenCart(true);
+          // toast.success("Agregado a la cuenta");
+          setIsOpenCart(true);
+        }
         onClose();
       }
     }
@@ -232,6 +266,7 @@ function QuickAddModalContent({
     addItem,
     setIsOpenCart,
     onClose,
+    onSelectVariante,
   ]);
 
   return (

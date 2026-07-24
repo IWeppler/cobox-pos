@@ -73,6 +73,15 @@ export function ProductCategorySection({
               placeholder="Buscar y seleccionar categoría..."
               value={searchCat}
               onChange={(e) => setSearchCat(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || filteredCats.length !== 1) return;
+                e.preventDefault();
+                const c = filteredCats[0];
+                const selected = categoriaSeleccionada === c.id;
+                onCategoriaSeleccionadaChange(selected ? "" : c.id);
+                setSearchCat("");
+                setShowCategory(false);
+              }}
               autoFocus
             />
           </div>
