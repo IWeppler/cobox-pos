@@ -99,7 +99,7 @@ export function PaymentModal({
                     value={totalFinal.toLocaleString("es-AR")}
                     readOnly
                     disabled
-                    className="pl-8 font-medium h-11 text-lg text-foreground"
+                    className="pl-8 font-mono font-medium h-11 text-lg text-foreground"
                   />
                 </div>
               </div>
@@ -125,7 +125,7 @@ export function PaymentModal({
                           e.key === "Enter" && !isPending && onConfirm()
                         }
                         placeholder="Ej: 5000"
-                        className="pl-8 font-medium h-11"
+                        className="pl-8 font-mono font-medium h-11"
                       />
                     </div>
                   </div>
@@ -133,7 +133,9 @@ export function PaymentModal({
                     <span className="text-sm self-center">
                       Valor a devolver
                     </span>
-                    <span>$ {vuelto.toLocaleString("es-AR")}</span>
+                    <span className="font-mono font-medium">
+                      $ {vuelto.toLocaleString("es-AR")}
+                    </span>
                   </div>
                 </>
               ) : (
@@ -182,19 +184,18 @@ export function PaymentModal({
 
         <div className="space-y-5 animate-in fade-in zoom-in-95">
           <div className="flex justify-between items-center text-sm font-semibold mb-2">
-            <span className="text-foreground">Total de la venta:</span>
-            <span className="text-lg">
+            <span className="text-foreground">TOTAL</span>
+            <span className="text-lg font-mono font-medium">
               ${totalFinal.toLocaleString("es-AR")}
             </span>
           </div>
 
-          {/* 🚀 EL INPUT INTERACTIVO AHORA VIVE AQUÍ */}
           <div className="space-y-2">
             <Label className="text-sm font-medium text-muted-foreground">
               ¿Cuánto deja de anticipo hoy?
             </Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground font-semibold">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground font-mono font-medium">
                 $
               </span>
               <Input
@@ -211,7 +212,7 @@ export function PaymentModal({
                   clienteSeleccionado &&
                   onConfirm(anticipoLocalNum)
                 }
-                className="pl-8 h-12 text-lg font-semibold border-border text-foreground"
+                className="pl-8 h-12 text-lg font-mono font-medium border-border text-foreground"
                 placeholder="0"
               />
             </div>
@@ -222,7 +223,7 @@ export function PaymentModal({
               <p className="text-sm text-muted-foreground font-medium">
                 Saldo a deber
               </p>
-              <p className="text-2xl font-semibold">
+              <p className="text-2xl font-mono font-medium">
                 ${Math.max(0, deudaGenerada).toLocaleString("es-AR")}
               </p>
             </div>

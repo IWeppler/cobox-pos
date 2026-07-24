@@ -8,6 +8,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getConfiguracionAction } from "@/features/config/actions/config-actions";
 import { formatearMoneda } from "@/shared/utils/formatters";
+import { obtenerPrimeraImagen } from "@/features/stock/lib/stock-product-utils";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -44,16 +45,23 @@ export async function generateMetadata({
 
   const baseUrl = await resolverBaseUrl();
   const url = `${baseUrl}/store/${producto.slug}`;
+  // producto.imagen_url viene como JSON.stringify de un array
+  // (`["https://.../foo.webp"]`), no un string plano — pasarlo tal cual a
+  // openGraph.images rompe la URL: Next no la reconoce como absoluta,
+  // cae al fallback de metadataBase (localhost:3000 en prod) y el string
+  // stringificado termina resuelto como path relativo.
+  const imagenOg = obtenerPrimeraImagen(producto.imagen_url);
 
   return {
     title,
     description,
+    metadataBase: new URL(baseUrl),
     openGraph: {
       title,
       description,
       type: "website",
       url,
-      images: producto.imagen_url ? [{ url: producto.imagen_url }] : undefined,
+      images: imagenOg ? [{ url: imagenOg }] : undefined,
     },
   };
 }

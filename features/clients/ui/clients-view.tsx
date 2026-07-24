@@ -78,9 +78,7 @@ export function ClientsView({
     key: "ltv",
     direction: "desc",
   });
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(
-    null,
-  );
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -237,10 +235,10 @@ export function ClientsView({
             <Wallet className="w-4 h-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">
+            <div className="text-2xl font-mono font-medium text-foreground">
               {formatearMoneda(dineroEnCalle)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs font-mono uppercase text-muted-foreground mt-1">
               Capital a cobrar
             </p>
           </CardContent>
@@ -254,11 +252,11 @@ export function ClientsView({
             <AlertTriangle className="w-4 h-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">
+            <div className="text-2xl font-mono font-medium text-foreground">
               {morosos.length}{" "}
-              <span className="text-sm font-normal">clientes</span>
+              <span className="text-sm font-sans font-normal">clientes</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs font-mono uppercase text-muted-foreground mt-1">
               Con saldo pendiente
             </p>
           </CardContent>
@@ -272,10 +270,10 @@ export function ClientsView({
             <Users className="w-4 h-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">
+            <div className="text-2xl font-mono font-medium text-foreground">
               {totalClientes}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="font-mono uppercase text-xs text-muted-foreground mt-1">
               En tu base de datos
             </p>
           </CardContent>
@@ -387,7 +385,8 @@ export function ClientsView({
               ) : (
                 clientesPaginados.map((cliente) => {
                   const saldo = Number(cliente.saldo_pendiente || 0);
-                  const estadoLabel = ESTADO_CLIENTE_CONFIG[cliente.estado].label;
+                  const estadoLabel =
+                    ESTADO_CLIENTE_CONFIG[cliente.estado].label;
 
                   return (
                     <tr
@@ -437,7 +436,7 @@ export function ClientsView({
                       </td>
 
                       <td className="px-3 py-3 md:px-5 md:py-4 hidden sm:table-cell">
-                        <div className="flex flex-col text-xs font-medium text-muted-foreground">
+                        <div className="flex flex-col text-xs md:font-sm font-mono font-medium text-muted-foreground">
                           <span>{cliente.telefono || "-"}</span>
                           {cliente.email ? (
                             <span className="text-[10px] opacity-80">
@@ -449,7 +448,7 @@ export function ClientsView({
 
                       <td className="px-3 py-3 md:px-5 md:py-4 hidden md:table-cell text-right">
                         <div className="flex flex-col">
-                          <span className="font-medium text-muted-foreground">
+                          <span className="font-mono text-muted-foreground">
                             {formatearMoneda(cliente.totalComprado)}
                           </span>
                         </div>
@@ -457,7 +456,7 @@ export function ClientsView({
 
                       <td className="px-2 py-3 md:px-5 md:py-4 text-right">
                         {saldo > 0 ? (
-                          <span className="font-semibold text-foreground px-2 py-0.5 shadow-none text-sm">
+                          <span className="font-mono font-medium text-foreground px-2 py-0.5 shadow-none text-sm">
                             {formatearMoneda(saldo)}
                           </span>
                         ) : (

@@ -27,7 +27,7 @@ export function CartStepItems({
 }: Readonly<CartStepItemsProps>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-2">
         {items.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
             <ShoppingBag className="mb-4 h-12 w-12 opacity-30" />
@@ -41,7 +41,7 @@ export function CartStepItems({
               return (
                 <div
                   key={`${item.productoId}-${item.variante}`}
-                  className="flex gap-3 py-3"
+                  className="flex gap-3"
                 >
                   <div className="h-24 w-18 shrink-0 overflow-hidden border border-border bg-muted/40">
                     {item.imagenUrl ? (
@@ -95,7 +95,7 @@ export function CartStepItems({
                         >
                           <Minus className="h-3.5 w-3.5" />
                         </button>
-                        <span className="w-8 text-center text-xs font-bold text-foreground">
+                        <span className="w-8 text-center font-mono text-xs font-medium text-foreground">
                           {item.cantidad}
                         </span>
                         <button
@@ -114,7 +114,7 @@ export function CartStepItems({
                         </button>
                       </div>
 
-                      <p className="text-sm font-bold text-foreground">
+                      <p className="font-mono text-sm font-medium text-foreground">
                         ${lineSubtotal.toLocaleString("es-AR")}
                       </p>
                     </div>
@@ -129,10 +129,10 @@ export function CartStepItems({
       {items.length > 0 ? (
         <div className="shrink-0 border-t border-border bg-card p-5">
           <div className="mb-4 flex items-center justify-between">
-            <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="font-mono text-xl font-medium uppercase text-foreground">
               Subtotal
             </span>
-            <span className="text-xl font-bold text-foreground">
+            <span className="font-mono text-xl font-medium text-foreground">
               ${totalCarrito.toLocaleString("es-AR")}
             </span>
           </div>

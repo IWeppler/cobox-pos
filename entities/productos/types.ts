@@ -59,20 +59,35 @@ export interface Producto {
 }
 
 /**
- * Forma liviana de un producto para /stock: solo lo que hace falta para
- * buscar, filtrar por categoría/variante, ordenar y calcular agregados
- * (conteos por categoría, opciones del filtro de variantes) sobre el
- * catálogo COMPLETO — sin las columnas pesadas (imagen_url, thumbnail_url,
- * descripcion) que solo hacen falta para la página de 10 que se ve.
- * Ver getStockIndexAction / getStockPageDetailAction en
- * features/stock/actions/get-product.ts.
+ * Forma liviana de un producto para /stock: lo que hace falta para buscar,
+ * filtrar por categoría/variante, ordenar, paginar y RENDERIZAR la fila
+ * (miniatura, link de compartir, estado publicado) 100% client-side sobre
+ * el catálogo COMPLETO, sin re-fetch por tipeo/orden/página. Trae los tres
+ * tiers de imagen (`imagen_url`/`thumbnail_url`/`grid_url`) porque cada
+ * superficie necesita el suyo: la tabla usa el thumbnail (150px, fila
+ * chica), la grilla usa `grid_url` (320px, celda de ~230-400px en
+ * tablet — ver diagnóstico de borrosidad). Sigue sin traer `descripcion`,
+ * `creado_en` ni `sku`/`producto_variante_valores` completos de variante —
+ * esos solo hacen falta para el formulario de edición de UN producto, que
+ * los trae con su propio fetch on-demand al abrir el sheet (ver
+ * getStockDetalleProductoAction).
  */
 export type ProductoIndice = Pick<
   Producto,
-  "id" | "nombre" | "tipo" | "precio" | "precio_costo" | "categoria_id"
+  | "id"
+  | "nombre"
+  | "tipo"
+  | "precio"
+  | "precio_costo"
+  | "categoria_id"
+  | "imagen_url"
+  | "thumbnail_url"
+  | "grid_url"
+  | "slug"
+  | "publicado"
 > & {
-  categoria: CategoriaRelacion | null;
-  producto_variantes: Pick<
+  categoria?: CategoriaRelacion | null;
+  producto_variantes?: Pick<
     ProductoVariante,
     | "id"
     | "nombre_display"
@@ -82,5 +97,5 @@ export type ProductoIndice = Pick<
     | "atributos"
     | "producto_variante_valores"
   >[];
-  stock: Pick<ProductoStock, "cantidad">[];
+  stock?: Pick<ProductoStock, "cantidad">[];
 };

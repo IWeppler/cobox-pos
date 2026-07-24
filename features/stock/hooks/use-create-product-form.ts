@@ -3,11 +3,13 @@
 import { startTransition, useActionState, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
 import { optimizarImagenProducto } from "@/shared/utils/image-optimizer";
 import { crearProductoAction } from "../actions/create-product";
 import { useVariantSelection } from "./use-variant-selection";
+import { queryKeys } from "@/shared/lib/query-keys";
 import type {
   CategoriaOption,
   ProductActionState,
@@ -15,6 +17,7 @@ import type {
 
 export function useCreateProductForm() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [archivos, setArchivos] = useState<File[]>([]);
   const [isCompressing, setIsCompressing] = useState(false);
@@ -88,6 +91,8 @@ export function useCreateProductForm() {
       if (result.success) {
         toast.success("Producto creado con éxito");
         handleOpenChange(false);
+        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
         router.refresh();
       } else if (result.error) {
         toast.error(result.error);

@@ -25,13 +25,16 @@ export function ProductCard({
   priority = false,
 }: Readonly<ProductCardProps>) {
   const primeraImagen =
-    getImagenesProducto(producto.thumbnail_url)[0] ||
+    getImagenesProducto(producto.grid_url)[0] ||
     getImagenesProducto(producto.imagen_url)[0] ||
     null;
   const linkDestino = producto.slug ? `/store/${producto.slug}` : "#";
 
   return (
-    <div key={producto.id} className="group relative flex flex-col transition-all">
+    <div
+      key={producto.id}
+      className="group relative flex flex-col transition-all"
+    >
       <Link
         href={linkDestino}
         className="aspect-[4/5] bg-card relative overflow-hidden flex items-center justify-center w-full shadow-none border border-border/40"
@@ -73,4 +76,3 @@ export function ProductCard({
     </div>
   );
 }
-

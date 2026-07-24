@@ -56,7 +56,10 @@ export default async function DashboardLayout({
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden md:p-2 md:pl-0 h-screen">
         {/* El "Cajón" blanco redondeado que contiene la app */}
         <div className="flex-1 flex flex-col bg-background md:border md:border-border md:rounded-xl md:shadow-sm overflow-hidden relative">
-          <DashboardNavbar />
+          <DashboardNavbar
+            modoCaja={systemBranding.modo_caja || "UNICA"}
+            userId={user.id}
+          />
 
           <main className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <TooltipProvider>

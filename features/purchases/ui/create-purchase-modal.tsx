@@ -169,11 +169,6 @@ export function ImportarPedidoModal({
         "PRECIO COSTO",
       ];
 
-      // Categoría y Género son columnas separadas — antes compartían una
-      // sola variable, así que si el Excel traía las dos (como la propia
-      // plantilla: GENERO y CATEGORIA en columnas distintas), la que se
-      // procesaba después pisaba en silencio a la otra y el género se
-      // perdía sin error visible.
       const knownCategoryCols = ["CATEGORIA", "CATEGORÍA", "RUBRO", "TIPO"];
       const knownGeneroCols = ["GENERO", "GÉNERO"];
       const knownSkuCols = ["SKU", "CODIGO", "CÓDIGO", "COD"];
@@ -265,11 +260,6 @@ export function ImportarPedidoModal({
           }
 
           // 2. Género: mapeamos los coloquiales "nena"/"nene" (antes caían
-          // derecho como categoría, ver más abajo) a la misma forma
-          // canónica que "niño"/"niña", para que un remito que diga "nena"
-          // y otro que diga "niña" terminen siendo el mismo valor de
-          // género. Si vino una columna Género explícita, se respeta tal
-          // cual venga (canonicalizada si matchea un sinónimo conocido).
           const GENERO_CANONICO: Record<string, string> = {
             hombre: "Hombre",
             mujer: "Mujer",

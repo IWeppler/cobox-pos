@@ -36,10 +36,6 @@ const ordenOptions: OrdenOption[] = [
 ];
 const ORDEN_VALIDOS = new Set(ordenOptions.map((o) => o.value));
 
-// Nombres de query param que un filtro de propiedad dinámica (Talle, Color,
-// Género, etc.) NUNCA puede pisar — si una tienda tuviera un atributo cuyo
-// slug coincidiera con uno de estos, ese atributo simplemente no se
-// sincroniza a la URL (degrada con gracia, no rompe nada).
 const PARAMS_RESERVADOS = new Set(["q", "categoria", "orden", "productos"]);
 
 // Cap defensivo para ?productos=id1,id2,... — un link con de más no debe
@@ -114,9 +110,6 @@ function CatalogContent({
   const orden =
     ordenParam && ORDEN_VALIDOS.has(ordenParam) ? ordenParam : DEFAULT_ORDEN;
 
-  // Mismo cálculo que hace useCatalogFilters puertas adentro — se repite acá
-  // (memoizado, barato) porque hace falta ANTES de armar filtrosVariantes
-  // desde la URL, y ese hook no expone un paso intermedio.
   const propiedadesGlobales = useMemo(
     () =>
       buildPropiedadesFiltro(productosBase, {
@@ -126,8 +119,6 @@ function CatalogContent({
     [productosBase, config],
   );
 
-  // --- propiedades de variante (?talle=M&color=Rojo&... — un param por
-  // propiedad activa, nombre = slugify de la propiedad) ---
   const filtrosVariantes = useMemo(() => {
     if (modoSeleccion) return {};
     const result: Record<string, string> = {};

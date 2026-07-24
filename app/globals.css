@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-mono);
 
   --color-accent-blue: var(--accent-blue);
   --color-accent-orange: var(--accent-orange);
@@ -55,7 +55,6 @@
 }
 
 :root {
-  --font-sans: "Google Sans Flex", sans-serif;
   --accent-blue: #2f96fe;
   --accent-orange: #f97d47;
   --accent-lime: #c7ea46;

@@ -9,13 +9,15 @@ import {
 } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Producto } from "@/entities/productos/types";
+import type { Producto, ProductoIndice } from "@/entities/productos/types";
 import { Button } from "@/shared/ui/button";
 import { createClient } from "@/shared/config/supabase/client";
 import { optimizarImagenProducto } from "@/shared/utils/image-optimizer";
 import { parseProductImages } from "../lib/stock-product-utils";
+import { queryKeys } from "@/shared/lib/query-keys";
 import {
   Sheet,
   SheetContent,
@@ -24,6 +26,7 @@ import {
   SheetTrigger,
 } from "@/shared/ui/sheet";
 import { editarProductoAction } from "../actions/edit-product";
+import { getStockDetalleProductoAction } from "../actions/get-product";
 import { useVariantSelection } from "../hooks/use-variant-selection";
 import type { CategoriaOption, ProductActionState } from "../types";
 import {
@@ -51,12 +54,8 @@ import {
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { getTotalStock } from "../lib/stock-product-utils";
 
-type EditableProducto = Producto & {
-  categoria_id?: string | null;
-};
-
 type ProductEditDetailSheetProps = {
-  producto: EditableProducto;
+  producto: ProductoIndice;
   userRole?: string;
   nombreComercio?: string;
   mostrarSinStock?: boolean;
@@ -66,6 +65,11 @@ type ProductEditDetailSheetProps = {
   hideTrigger?: boolean;
 };
 
+// La fila de /stock rinde 100% desde ProductoIndice (búsqueda/orden/página
+// sin red). Este sheet es el único lugar que necesita el detalle completo
+// de un producto puntual (descripción, fecha de alta, SKU por variante,
+// filas de productos_stock) — lo pide con su propio fetch al abrirse, no
+// bloquea la lista ni se dispara por tipeo/filtro/orden.
 export function ProductEditDetailSheet({
   producto,
   nombreComercio = "Tienda",
@@ -88,7 +92,116 @@ export function ProductEditDetailSheet({
   const motivoCompartirDeshabilitado = !urlProducto
     ? "Este producto no tiene link público"
     : "Este producto no está visible en el catálogo";
+
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = open ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
+
+  const {
+    data: detalle,
+    isLoading: isLoadingDetalle,
+    isError: isErrorDetalle,
+  } = useQuery({
+    queryKey: queryKeys.stock.detalle(producto.id),
+    queryFn: async () => {
+      const { data, error } = await getStockDetalleProductoAction(
+        producto.id,
+      );
+      if (error || !data) throw new Error(error || "Producto no encontrado.");
+      return data;
+    },
+    enabled: isOpen,
+    staleTime: 60 * 1000,
+  });
+
+  return (
+    <Sheet open={isOpen} onOpenChange={setOpen}>
+      {!hideTrigger && (
+        <SheetTrigger asChild>
+          {children ?? <Button variant="outline">Editar producto</Button>}
+        </SheetTrigger>
+      )}
+
+      <SheetContent
+        side="right"
+        size="wide"
+        className="w-full sm:w-3xl! p-0 flex flex-col h-dvh bg-card border-l border-border"
+        onInteractOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
+      >
+        <SheetHeader className="px-8 py-5 border-b border-border bg-card shrink-0 flex-row items-center justify-between shadow-none z-10 space-y-0">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setOpen(false)}
+              className="h-8 w-8 -ml-2 text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <SheetTitle className="text-xl font-bold text-foreground m-0">
+                Editar Producto
+              </SheetTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                {detalle?.creado_en
+                  ? `Actualizado por última vez: ${new Date(
+                      detalle.creado_en,
+                    ).toLocaleDateString("es-AR")}`
+                  : " "}
+              </p>
+            </div>
+          </div>
+
+          <ShareButton
+            url={urlProducto ?? ""}
+            title={`${producto.nombre} | ${nombreComercio}`}
+            text={armarMensajeProducto(
+              producto.nombre,
+              formatearMoneda(producto.precio),
+            )}
+            disabled={compartirDeshabilitado}
+            disabledReason={motivoCompartirDeshabilitado}
+            label="Compartir"
+            variant="outline"
+            size="sm"
+          />
+        </SheetHeader>
+
+        {isErrorDetalle ? (
+          <div className="flex-1 flex items-center justify-center text-sm text-destructive p-8 text-center">
+            No se pudo cargar el producto. Cerrá e intentá de nuevo.
+          </div>
+        ) : !detalle || isLoadingDetalle ? (
+          <div className="flex-1 flex items-center justify-center gap-2 text-muted-foreground text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" /> Cargando producto...
+          </div>
+        ) : (
+          <EditProductForm
+            key={detalle.id}
+            producto={detalle}
+            onSaved={() => setOpen(false)}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+type EditableProducto = Producto & {
+  categoria_id?: string | null;
+};
+
+function EditProductForm({
+  producto,
+  onSaved,
+}: Readonly<{
+  producto: EditableProducto;
+  onSaved: () => void;
+}>) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const isSimpleProduct = isSingleVariantProduct(producto);
   // Fuente única de verdad para reconstruir opciones/variantes al cargar:
   // prioriza producto_variantes (nombres de atributo reales) y limpia
@@ -98,7 +211,6 @@ export function ProductEditDetailSheet({
     [producto, isSimpleProduct],
   );
 
-  const [internalOpen, setInternalOpen] = useState(false);
   const [archivos, setArchivos] = useState<File[]>([]);
   // URLs de imagen_url que el usuario tildó para borrar en esta sesión de
   // edición. No tocamos producto.imagen_url localmente: el servidor arma
@@ -115,7 +227,9 @@ export function ProductEditDetailSheet({
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [diffFilas, setDiffFilas] = useState<VarianteDiffRow[]>([]);
-  const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
+  const [pendingFormData, setPendingFormData] = useState<FormData | null>(
+    null,
+  );
   const [categorias, setCategorias] = useState<CategoriaOption[]>([]);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(
     producto.categoria_id || "",
@@ -142,9 +256,6 @@ export function ProductEditDetailSheet({
     initialVariantes: parsedProducto.variantes,
   });
 
-  const isOpen = open ?? internalOpen;
-  const setOpen = onOpenChange ?? setInternalOpen;
-
   useEffect(() => {
     const fetchCats = async () => {
       const supabase = createClient();
@@ -168,24 +279,6 @@ export function ProductEditDetailSheet({
     costoNum > 0 && gananciaNeta > 0
       ? ((gananciaNeta / costoNum) * 100).toFixed(1)
       : "0";
-
-  const resetFormState = () => {
-    setArchivos([]);
-    setImagenesExistentesAQuitar([]);
-    setCategoriaSeleccionada(producto.categoria_id || "");
-    setStatus(producto.publicado ? "active" : "inactive");
-    setShowPrice(true);
-    setShowInventory(true);
-    setShowVariants(!isSimpleProduct);
-    setPrecioCosto(producto.precio_costo?.toString() || "");
-    setPrecioVenta(producto.precio?.toString() || "");
-    variantSelection.reset(parsedProducto.opciones, parsedProducto.variantes);
-  };
-
-  const handleOpenChange = (open: boolean) => {
-    setOpen(open);
-    if (!open) resetFormState();
-  };
 
   const [, formAction, isPending] = useActionState(
     async (
@@ -211,7 +304,12 @@ export function ProductEditDetailSheet({
       const result = await editarProductoAction(prevState, formData);
       if (result.success) {
         toast.success("Producto actualizado");
-        handleOpenChange(false);
+        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.stock.detalle(producto.id),
+        });
+        onSaved();
         router.refresh();
       } else if (result.error) {
         toast.error(result.error);
@@ -398,165 +496,110 @@ export function ProductEditDetailSheet({
 
   return (
     <>
-      <Sheet open={isOpen} onOpenChange={handleOpenChange}>
-        {!hideTrigger && (
-          <SheetTrigger asChild>
-            {children ?? <Button variant="outline">Editar producto</Button>}
-          </SheetTrigger>
-        )}
-
-        <SheetContent
-          side="right"
-          size="wide"
-          className="w-full sm:w-3xl! p-0 flex flex-col h-dvh bg-card border-l border-border"
-          onInteractOutside={(event) => event.preventDefault()}
-          onPointerDownOutside={(event) => event.preventDefault()}
-          onFocusOutside={(event) => event.preventDefault()}
+      <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4">
+        <form
+          onSubmit={handleSubmit}
+          id="edit-product-form"
+          className="max-w-3xl mx-auto space-y-6"
         >
-          <SheetHeader className="px-8 py-5 border-b border-border bg-card shrink-0 flex-row items-center justify-between shadow-none z-10 space-y-0">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleOpenChange(false)}
-                className="h-8 w-8 -ml-2 text-muted-foreground hover:text-foreground"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-              <div>
-                <SheetTitle className="text-xl font-bold text-foreground m-0">
-                  Editar Producto
-                </SheetTitle>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {producto.creado_en
-                    ? `Actualizado por última vez: ${new Date(
-                        producto.creado_en,
-                      ).toLocaleDateString("es-AR")}`
-                    : "Sin fecha de actualización"}
-                </p>
-              </div>
-            </div>
-
-            <ShareButton
-              url={urlProducto ?? ""}
-              title={`${producto.nombre} | ${nombreComercio}`}
-              text={armarMensajeProducto(
-                producto.nombre,
-                formatearMoneda(producto.precio),
-              )}
-              disabled={compartirDeshabilitado}
-              disabledReason={motivoCompartirDeshabilitado}
-              label="Compartir"
-              variant="outline"
-              size="sm"
-            />
-          </SheetHeader>
-
-          <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4">
-            <form
-              onSubmit={handleSubmit}
-              id="edit-product-form"
-              className="max-w-3xl mx-auto space-y-6"
-            >
-              <ProductMediaSection
-                archivos={archivos}
-                onArchivosChange={setArchivos}
-                existingImages={parseProductImages(producto.imagen_url).filter(
-                  (url) => !imagenesExistentesAQuitar.includes(url),
-                )}
-                onRemoveExistingImage={(url) =>
-                  setImagenesExistentesAQuitar((prev) => [...prev, url])
-                }
-                inputId={`imagenes-edit-${producto.id}`}
-              />
-
-              <ProductBasicInfoSection
-                status={status}
-                onStatusChange={setStatus}
-                defaultNombre={producto.nombre}
-                defaultDescripcion={producto.descripcion}
-              />
-
-              <ProductCategorySection
-                categorias={categorias}
-                categoriaSeleccionada={categoriaSeleccionada}
-                onCategoriaSeleccionadaChange={setCategoriaSeleccionada}
-              />
-
-              <ProductPriceSection
-                showPrice={showPrice}
-                onShowPriceChange={setShowPrice}
-                precioCosto={precioCosto}
-                onPrecioCostoChange={setPrecioCosto}
-                precioVenta={precioVenta}
-                onPrecioVentaChange={setPrecioVenta}
-                gananciaNeta={gananciaNeta}
-                recargoPorcentaje={recargoPorcentaje}
-              />
-
-              <ProductInventorySection
-                showVariants={showVariants}
-                showInventory={showInventory}
-                onShowInventoryChange={setShowInventory}
-                defaultStock={producto.stock?.[0]?.cantidad || 0}
-              />
-
-              <ProductVariantsSection
-                showVariants={showVariants}
-                onShowVariantsChange={setShowVariants}
-                opciones={variantSelection.opciones}
-                resetOpciones={variantSelection.reset}
-                customTypeMode={variantSelection.customTypeMode}
-                setCustomTypeMode={variantSelection.setCustomTypeMode}
-                focusedOptionId={variantSelection.focusedOptionId}
-                setFocusedOptionId={variantSelection.setFocusedOptionId}
-                precioVenta={precioVenta}
-                variantes={variantSelection.variantes}
-                duplicatePropertyNames={variantSelection.duplicatePropertyNames}
-                genericPropertyNames={variantSelection.genericPropertyNames}
-                handleAddOption={variantSelection.handleAddOption}
-                handleRemoveOption={variantSelection.handleRemoveOption}
-                handleUpdateOptionName={variantSelection.handleUpdateOptionName}
-                handleAddOptionValue={variantSelection.handleAddOptionValue}
-                handleRemoveOptionValue={
-                  variantSelection.handleRemoveOptionValue
-                }
-                handleVarChange={variantSelection.handleVarChange}
-                ensureSuggestionsLoaded={
-                  variantSelection.ensureSuggestionsLoaded
-                }
-                isLoadingSuggestions={variantSelection.isLoadingSuggestions}
-                getFilteredSuggestions={variantSelection.getFilteredSuggestions}
-                showAdvancedColumns
-                baseVariants={variantSelection.baseVariants}
-                selectedCombinations={variantSelection.selectedCombinations}
-                onToggleCombination={variantSelection.handleToggleCombination}
-                onBulkSetSelection={variantSelection.handleBulkSetSelection}
-                onInvertSelection={variantSelection.handleInvertSelection}
-                pivotSelections={variantSelection.pivotSelections}
-                onPivotChange={variantSelection.handlePivotChange}
-                atributosExistentes={variantSelection.atributosExistentes}
-              />
-            </form>
-          </div>
-
-          <CreateProductFooter
-            isPending={isPending}
-            isCompressing={isCompressing}
-            onCancel={() => handleOpenChange(false)}
-            formId="edit-product-form"
-            cancelLabel="Descartar cambios"
-            idleLabel="Guardar Cambios"
-            blockedReason={
-              variantSelection.duplicatePropertyNames.size > 0
-                ? "Resolvé los nombres de propiedad duplicados antes de guardar."
-                : variantSelection.genericPropertyNames.size > 0
-                  ? "Renombrá las propiedades con nombre genérico (Propiedad/Opción) antes de guardar."
-                  : null
+          <ProductMediaSection
+            archivos={archivos}
+            onArchivosChange={setArchivos}
+            existingImages={parseProductImages(producto.imagen_url).filter(
+              (url) => !imagenesExistentesAQuitar.includes(url),
+            )}
+            onRemoveExistingImage={(url) =>
+              setImagenesExistentesAQuitar((prev) => [...prev, url])
             }
+            inputId={`imagenes-edit-${producto.id}`}
           />
-        </SheetContent>
-      </Sheet>
+
+          <ProductBasicInfoSection
+            status={status}
+            onStatusChange={setStatus}
+            defaultNombre={producto.nombre}
+            defaultDescripcion={producto.descripcion}
+          />
+
+          <ProductCategorySection
+            categorias={categorias}
+            categoriaSeleccionada={categoriaSeleccionada}
+            onCategoriaSeleccionadaChange={setCategoriaSeleccionada}
+          />
+
+          <ProductPriceSection
+            showPrice={showPrice}
+            onShowPriceChange={setShowPrice}
+            precioCosto={precioCosto}
+            onPrecioCostoChange={setPrecioCosto}
+            precioVenta={precioVenta}
+            onPrecioVentaChange={setPrecioVenta}
+            gananciaNeta={gananciaNeta}
+            recargoPorcentaje={recargoPorcentaje}
+          />
+
+          <ProductInventorySection
+            showVariants={showVariants}
+            showInventory={showInventory}
+            onShowInventoryChange={setShowInventory}
+            defaultStock={producto.stock?.[0]?.cantidad || 0}
+          />
+
+          <ProductVariantsSection
+            showVariants={showVariants}
+            onShowVariantsChange={setShowVariants}
+            opciones={variantSelection.opciones}
+            resetOpciones={variantSelection.reset}
+            customTypeMode={variantSelection.customTypeMode}
+            setCustomTypeMode={variantSelection.setCustomTypeMode}
+            focusedOptionId={variantSelection.focusedOptionId}
+            setFocusedOptionId={variantSelection.setFocusedOptionId}
+            precioVenta={precioVenta}
+            variantes={variantSelection.variantes}
+            duplicatePropertyNames={variantSelection.duplicatePropertyNames}
+            genericPropertyNames={variantSelection.genericPropertyNames}
+            handleAddOption={variantSelection.handleAddOption}
+            handleRemoveOption={variantSelection.handleRemoveOption}
+            handleUpdateOptionName={variantSelection.handleUpdateOptionName}
+            handleAddOptionValue={variantSelection.handleAddOptionValue}
+            handleRemoveOptionValue={
+              variantSelection.handleRemoveOptionValue
+            }
+            handleVarChange={variantSelection.handleVarChange}
+            ensureSuggestionsLoaded={
+              variantSelection.ensureSuggestionsLoaded
+            }
+            isLoadingSuggestions={variantSelection.isLoadingSuggestions}
+            getFilteredSuggestions={variantSelection.getFilteredSuggestions}
+            showAdvancedColumns
+            baseVariants={variantSelection.baseVariants}
+            selectedCombinations={variantSelection.selectedCombinations}
+            onToggleCombination={variantSelection.handleToggleCombination}
+            onBulkSetSelection={variantSelection.handleBulkSetSelection}
+            onInvertSelection={variantSelection.handleInvertSelection}
+            pivotSelections={variantSelection.pivotSelections}
+            onPivotChange={variantSelection.handlePivotChange}
+            atributosExistentes={variantSelection.atributosExistentes}
+          />
+        </form>
+      </div>
+
+      <CreateProductFooter
+        isPending={isPending}
+        isCompressing={isCompressing}
+        onCancel={onSaved}
+        formId="edit-product-form"
+        cancelLabel="Descartar cambios"
+        idleLabel="Guardar Cambios"
+        blockedReason={
+          variantSelection.duplicatePropertyNames.size > 0
+            ? "Resolvé los nombres de propiedad duplicados antes de guardar."
+            : variantSelection.genericPropertyNames.size > 0
+              ? "Renombrá las propiedades con nombre genérico (Propiedad/Opción) antes de guardar."
+              : null
+        }
+      />
+
       <ConfirmSaveVariantsModal
         open={confirmModalOpen}
         onOpenChange={(open) => {

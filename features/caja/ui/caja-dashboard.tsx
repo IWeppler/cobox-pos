@@ -382,7 +382,7 @@ export function CajaDashboard({
                         <span className="text-muted-foreground font-medium">
                           Fondo Inicial
                         </span>
-                        <span className="font-semibold text-foreground">
+                        <span className="font-mono font-medium text-foreground">
                           {formatearMoneda(totales.fondoInicial)}
                         </span>
                       </div>
@@ -390,7 +390,7 @@ export function CajaDashboard({
                         <span className="text-muted-foreground font-medium">
                           Cobros
                         </span>
-                        <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                        <span className="font-mono font-medium text-emerald-700 dark:text-emerald-400">
                           +{formatearMoneda(totales.ingresosEfectivo)}
                         </span>
                       </div>
@@ -398,7 +398,7 @@ export function CajaDashboard({
                         <span className="text-muted-foreground font-medium">
                           Gastos
                         </span>
-                        <span className="font-semibold text-rose-600">
+                        <span className="font-mono font-medium text-rose-600">
                           -{formatearMoneda(totales.totalEgresos)}
                         </span>
                       </div>
@@ -409,8 +409,8 @@ export function CajaDashboard({
                         <span
                           className={
                             totales.efectivoEsperado < 0
-                              ? "text-rose-600"
-                              : "text-emerald-700 dark:text-emerald-400"
+                              ? "font-mono font-medium text-rose-600"
+                              : "font-mono font-medium text-emerald-700 dark:text-emerald-400"
                           }
                         >
                           {formatearMoneda(totales.efectivoEsperado)}
@@ -429,8 +429,8 @@ export function CajaDashboard({
                   <form action={cerrarAction} className="px-6 pb-6 space-y-5">
                     <input type="hidden" name="turno_id" value={turno.id} />
                     <div className="space-y-3">
-                      <Label className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-                        Efectivo real en cajon
+                      <Label className="text-sm font-semibold uppercase text-muted-foreground">
+                        Efectivo real en cajón
                       </Label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">
@@ -441,7 +441,7 @@ export function CajaDashboard({
                           type="number"
                           min="0"
                           required
-                          className="pl-9 font-bold h-12 text-lg shadow-none rounded-xl border-border/60 hover:border-foreground/40 focus-visible:border-foreground bg-background"
+                          className="pl-9 font-mono font-medium h-12 text-xl rounded-xl border-border/60 hover:border-foreground/40 focus-visible:border-foreground bg-background"
                           placeholder={totales.efectivoEsperado.toString()}
                         />
                       </div>
@@ -473,7 +473,7 @@ export function CajaDashboard({
                   Efectivo en Cajon
                 </h3>
                 <div
-                  className={`text-3xl font-bold mb-2 ${
+                  className={`text-3xl font-mono font-semibold mb-2 ${
                     totales.efectivoEsperado < 0
                       ? "text-rose-600"
                       : "text-foreground"
@@ -494,7 +494,7 @@ export function CajaDashboard({
               <div className="mt-8 space-y-3">
                 <div className="flex justify-between items-center text-sm font-medium">
                   <span className="text-muted-foreground">Fondo inicial</span>
-                  <span className="font-semibold">
+                  <span className="font-mono font-medium">
                     {formatearMoneda(totales.fondoInicial)}
                   </span>
                 </div>
@@ -502,13 +502,13 @@ export function CajaDashboard({
                   <span className="text-muted-foreground">
                     Cobros en efectivo
                   </span>
-                  <span className="font-semibold text-emerald-600">
+                  <span className="font-mono font-medium text-emerald-600">
                     +{formatearMoneda(totales.ingresosEfectivo)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm font-medium">
                   <span className="text-muted-foreground">Gastos fisicos</span>
-                  <span className="font-semibold text-rose-600">
+                  <span className="font-mono font-medium text-rose-600">
                     -{formatearMoneda(totales.totalEgresos)}
                   </span>
                 </div>
@@ -521,7 +521,7 @@ export function CajaDashboard({
                   <CreditCard className="w-4 h-4 text-accent-blue" />
                   Cobros Digitales
                 </h3>
-                <div className="text-3xl font-bold text-foreground mb-2">
+                <div className="text-3xl font-mono font-semibold text-foreground mb-2">
                   {formatearMoneda(totales.ingresosDigitalesNeto)}
                 </div>
                 <p className="text-sm text-muted-foreground font-medium">
@@ -531,7 +531,7 @@ export function CajaDashboard({
               <div className="mt-8 space-y-2">
                 <div className="flex justify-between items-center text-sm font-medium">
                   <span className="text-muted-foreground">Cobros brutos</span>
-                  <span className="font-semibold">
+                  <span className="font-mono font-medium">
                     {formatearMoneda(totales.ingresosDigitalesBruto)}
                   </span>
                 </div>
@@ -539,7 +539,7 @@ export function CajaDashboard({
                   <span className="text-muted-foreground">
                     Comisiones retenidas
                   </span>
-                  <span className="font-semibold text-rose-600">
+                  <span className="font-mono font-medium text-rose-600">
                     -{formatearMoneda(totales.comisionesRetenidas)}
                   </span>
                 </div>
@@ -549,12 +549,12 @@ export function CajaDashboard({
 
           <div>
             <div className="px-4 mb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <h3 className="text-lg font-semibold text-foreground">
+              <h3 className="text-lg font-bold text-foreground">
                 Movimientos del Turno
               </h3>
               <div className="text-sm font-medium text-muted-foreground">
                 Total Facturado Bruto:{" "}
-                <span className="text-foreground font-bold">
+                <span className="text-foreground font-mono font-medium">
                   {formatearMoneda(totales.totalFacturado)}
                 </span>
               </div>
@@ -623,7 +623,7 @@ export function CajaDashboard({
                             {mov.metodo}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-4 text-right font-mono font-medium">
                           <div
                             className={
                               mov.tipo === "INGRESO"
@@ -635,7 +635,7 @@ export function CajaDashboard({
                             {formatearMoneda(mov.monto)}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-muted-foreground hidden sm:table-cell text-xs">
+                        <td className="px-6 py-4 text-muted-foreground hidden sm:table-cell text-sm">
                           {mov.usuario}
                         </td>
                       </tr>

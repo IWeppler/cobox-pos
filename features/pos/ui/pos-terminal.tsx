@@ -251,7 +251,7 @@ export function PosTerminal({
         />
 
         {/* Grilla de Productos */}
-        <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] p-4 sm:p-6 min-h-0">
+        <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] p-2 min-h-0">
           {productosOrdenados.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
               <ShoppingBag className="w-12 h-12 mb-4 opacity-20" />
@@ -324,7 +324,7 @@ export function PosTerminal({
                     <button
                       onClick={() => handleProductClick(producto)}
                       disabled={bloqueado}
-                      className={`flex flex-col text-left rounded-xl border transition-all overflow-hidden cursor-pointer w-full h-full ${
+                      className={`flex flex-col text-left rounded-md border transition-all overflow-hidden cursor-pointer w-full h-full ${
                         !bloqueado
                           ? "border-border hover:border-foreground/50 active:scale-95"
                           : "border-border/40 opacity-50"
@@ -357,7 +357,7 @@ export function PosTerminal({
                         <p className="font-medium text-xs sm:text-sm text-muted-foreground leading-tight line-clamp-2 mb-2">
                           {producto.nombre}
                         </p>
-                        <p className="font-bold text-sm sm:text-base text-foreground">
+                        <p className="font-mono font-medium text-sm sm:text-base text-foreground">
                           {formatearMoneda(producto.precio)}
                         </p>
                       </div>

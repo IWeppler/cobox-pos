@@ -4,6 +4,7 @@ export const queryKeys = {
   },
   stock: {
     index: ["stock", "index"] as const,
+    detalle: (productoId: string) => ["stock", "detalle", productoId] as const,
   },
   clientes: {
     listado: ["clientes", "listado"] as const,

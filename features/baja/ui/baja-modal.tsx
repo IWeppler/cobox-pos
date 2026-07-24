@@ -2,7 +2,7 @@
 
 import { useState, useActionState, startTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Producto } from "@/entities/productos/types";
+import { ProductoIndice } from "@/entities/productos/types";
 import { createBajaAction } from "../actions/create-baja";
 import {
   Dialog,
@@ -26,7 +26,7 @@ import { MinusCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface BajaModalProps {
-  producto: Producto;
+  producto: ProductoIndice;
   children?: React.ReactNode;
 }
 
@@ -73,7 +73,7 @@ export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
   };
 
   const variantesDisponibles =
-    producto.stock?.filter((s) => s.cantidad > 0) || [];
+    producto.producto_variantes?.filter((v) => v.stock > 0) || [];
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -110,9 +110,9 @@ export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
                   <SelectValue placeholder="Selecciona la variante afectada" />
                 </SelectTrigger>
                 <SelectContent>
-                  {variantesDisponibles.map((s) => (
-                    <SelectItem key={s.id} value={s.variante}>
-                      {s.variante} (Stock actual: {s.cantidad})
+                  {variantesDisponibles.map((v) => (
+                    <SelectItem key={v.id} value={v.nombre_display}>
+                      {v.nombre_display} (Stock actual: {v.stock})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -127,8 +127,8 @@ export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
                 type="number"
                 min="1"
                 max={
-                  variantesDisponibles.find((v) => v.variante === variante)
-                    ?.cantidad || 1
+                  variantesDisponibles.find((v) => v.nombre_display === variante)
+                    ?.stock || 1
                 }
                 placeholder="Ej: 1"
                 required

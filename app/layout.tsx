@@ -4,10 +4,22 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/shared/ui/sonner";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
-import { Inter } from "next/font/google";
+import { DM_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["300", "400", "500"],
+  style: ["normal", "italic"],
+  variable: "--font-mono",
+});
+
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["200", "300", "400", "500", "600", "700", "800"],
+  style: ["normal", "italic"],
+  variable: "--font-sans",
+});
 
 export const viewport: Viewport = {
   themeColor: "#09090b",
@@ -45,7 +57,13 @@ export default async function RootLayout({
   return (
     <html
       lang="es"
-      className={cn("h-full", "antialiased", "font-sans", inter.variable)}
+      className={cn(
+        "h-full",
+        "antialiased",
+        "font-sans",
+        plusJakarta.variable,
+        dmMono.variable,
+      )}
       suppressHydrationWarning
     >
       <head>
@@ -54,10 +72,6 @@ export default async function RootLayout({
           rel="preconnect"
           href="https://fonts.gstatic.com"
           crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap"
-          rel="stylesheet"
         />
       </head>
       <body className="min-h-full flex flex-col font-sans text-foreground">

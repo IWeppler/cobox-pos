@@ -3,8 +3,17 @@
 import { SidebarIcon } from "lucide-react";
 import { useSidebarStore } from "@/shared/store/sidebar-store";
 import { usePathname } from "next/navigation";
+import { CajaStatusButton } from "@/features/caja/ui/caja-status-button";
 
-export function DashboardNavbar() {
+interface DashboardNavbarProps {
+  modoCaja: string;
+  userId: string;
+}
+
+export function DashboardNavbar({
+  modoCaja,
+  userId,
+}: Readonly<DashboardNavbarProps>) {
   const { toggleSidebar } = useSidebarStore();
   const pathname = usePathname();
 
@@ -88,6 +97,7 @@ export function DashboardNavbar() {
         </div>
       </div>
 
+      <CajaStatusButton modoCaja={modoCaja} userId={userId} />
     </header>
   );
 }

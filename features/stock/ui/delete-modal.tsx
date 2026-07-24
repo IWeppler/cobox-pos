@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { eliminarProductoAction } from "../actions/delete-product";
 import { toast } from "sonner";
+import { queryKeys } from "@/shared/lib/query-keys";
 
 import {
   AlertDialog,
@@ -32,6 +34,7 @@ export function EliminarProductoModal({
   children,
 }: Readonly<EliminarProductoModalProps>) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
 
   const [isPending, startTransition] = useTransition();
@@ -43,6 +46,8 @@ export function EliminarProductoModal({
       if (result.success) {
         setIsOpen(false);
         toast.success(`El producto ${nombre} ha sido eliminado`);
+        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
         router.refresh();
       } else if (result.error) {
         toast.error(result.error);

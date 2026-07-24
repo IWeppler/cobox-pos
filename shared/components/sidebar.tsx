@@ -21,9 +21,9 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { CartButton } from "@/shared/ui/cart-button";
+import { CajaStatusButton } from "@/features/caja/ui/caja-status-button";
 import { useSidebarStore } from "@/shared/store/sidebar-store";
 import { useCajaStatusStore } from "@/shared/store/caja-status-store";
-import { createClient } from "../config/supabase/client";
 import {
   Tooltip,
   TooltipContent,
@@ -82,8 +82,11 @@ export function Sidebar({
 }: Readonly<SidebarProps>) {
   const pathname = usePathname();
   const { isCollapsed, isOpenMobile, setIsOpenMobile } = useSidebarStore();
-  const [isCajaAbierta, setIsCajaAbierta] = useState<boolean | null>(null);
+  const isCajaAbierta = useCajaStatusStore((state) => state.isCajaAbierta);
   const cajaVersion = useCajaStatusStore((state) => state.version);
+  const fetchCajaStatusStore = useCajaStatusStore(
+    (state) => state.fetchCajaStatus,
+  );
 
   const visibleNavItems = useMemo(() => {
     return ALL_NAV_ITEMS.filter((item) => {
@@ -103,25 +106,8 @@ export function Sidebar({
     const modo = branding.modo_caja || "UNICA";
 
     const fetchCajaStatus = async () => {
-      const supabase = createClient();
-
-      let query = supabase
-        .from("turnos_caja")
-        .select("id")
-        .eq("estado", "ABIERTO");
-
-      if (modo === "UNICA") {
-        query = query.eq("modo", "UNICA");
-      } else {
-        // Modo multicaja: Busca estrictamente la caja del usuario logueado
-        query = query.eq("modo", "POR_USUARIO").eq("vendedor_id", userId);
-      }
-
-      const { data } = await query.limit(1);
-
-      if (isMounted) {
-        setIsCajaAbierta(data && data.length > 0);
-      }
+      if (!isMounted) return;
+      await fetchCajaStatusStore(modo, userId);
     };
 
     fetchCajaStatus();
@@ -160,9 +146,10 @@ export function Sidebar({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
     // cajaVersion en las deps: cuando el propio usuario abre/cierra su
-    // turno (ver caja-dashboard.tsx), esto re-corre el efecto entero y
-    // dispara un fetchCajaStatus() inmediato sin esperar el intervalo.
-  }, [pathname, branding.modo_caja, userId, cajaVersion]);
+    // turno (ver caja-dashboard.tsx y el nuevo caja-quick-modal.tsx), esto
+    // re-corre el efecto entero y dispara un fetchCajaStatus() inmediato
+    // sin esperar el intervalo.
+  }, [pathname, branding.modo_caja, userId, cajaVersion, fetchCajaStatusStore]);
 
   const initial = branding.posName;
 
@@ -195,7 +182,18 @@ export function Sidebar({
         </Link>
 
         <div className="flex items-center gap-1">
-          <CartButton />
+          <CajaStatusButton
+            modoCaja={branding.modo_caja || "UNICA"}
+            userId={userId}
+            className="mr-1"
+          />
+          {/* En celular (<640px) el carrito de POS vive en la barra fija
+              inferior + Drawer (ver CartPanelAdmin), no acá. Se mantiene
+              visible en el rango 640-767px (tablet portrait, este wrapper
+              es `md:hidden` = <768px) sin tocar ese comportamiento. */}
+          <span className="hidden sm:block">
+            <CartButton />
+          </span>
           <button
             onClick={() => setIsOpenMobile(!isOpenMobile)}
             className="p-2 text-foreground hover:bg-muted hover:text-foreground rounded-md transition-colors cursor-pointer shrink-0"

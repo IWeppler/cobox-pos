@@ -23,6 +23,8 @@ import { CartSidebarHeader } from "../../../shared/components/cart-sidebar/cart-
 import { CartStepCheckout } from "../../../shared/components/cart-sidebar/cart-step-checkout";
 import { CartStepItems } from "../../../shared/components/cart-sidebar/cart-step-items";
 import { Sheet, SheetContent } from "@/shared/ui/sheet";
+import { Drawer, DrawerContent } from "@/shared/ui/drawer";
+import { MobileCartBar } from "../../../shared/components/cart-sidebar/mobile-cart-bar";
 import { PromocionDB } from "../../../shared/components/cart-sidebar/types";
 import {
   generarLinkWhatsApp,
@@ -47,6 +49,7 @@ export function CartPanelAdmin({
     removeItem,
     updateQuantity,
     getTotalPrice,
+    getTotalItems,
     clearCart,
   } = useCartStore(
     useShallow((state) => ({
@@ -56,6 +59,7 @@ export function CartPanelAdmin({
       removeItem: state.removeItem,
       updateQuantity: state.updateQuantity,
       getTotalPrice: state.getTotalPrice,
+      getTotalItems: state.getTotalItems,
       clearCart: state.clearCart,
     })),
   );
@@ -77,6 +81,13 @@ export function CartPanelAdmin({
   const [isCuentaCorriente, setIsCuentaCorriente] = useState(false);
   const [isReserva, setIsReserva] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
+  // Corte propio para celular (<640px, Tailwind `sm`) — distinto del corte
+  // mobile/desktop de arriba (1024px). Tablet (640-1023px) sigue exactamente
+  // igual que hoy: sheet lateral + auto-apertura vía `isOpen` del store.
+  // Celular usa su propia barra fija + Drawer inferior, con apertura
+  // controlada solo por el tap del usuario (nunca por agregar un producto).
+  const [isPhoneLayout, setIsPhoneLayout] = useState(false);
+  const [phoneCartOpen, setPhoneCartOpen] = useState(false);
 
   const [promocionesDB, setPromocionesDB] = useState<PromocionDB[]>([]);
   const [promocionId, setPromocionId] = useState("ninguna");
@@ -109,6 +120,18 @@ export function CartPanelAdmin({
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
     const updateLayout = () => setIsMobileLayout(mediaQuery.matches);
+
+    updateLayout();
+    mediaQuery.addEventListener("change", updateLayout);
+
+    return () => {
+      mediaQuery.removeEventListener("change", updateLayout);
+    };
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 639px)");
+    const updateLayout = () => setIsPhoneLayout(mediaQuery.matches);
 
     updateLayout();
     mediaQuery.addEventListener("change", updateLayout);
@@ -256,6 +279,7 @@ export function CartPanelAdmin({
   const closeSidebar = () => {
     setCheckoutStep("CART");
     setIsOpen(false);
+    setPhoneCartOpen(false);
   };
 
   const clearCartAndResetStep = () => {
@@ -552,7 +576,12 @@ export function CartPanelAdmin({
         {CartContent}
       </div>
 
-      <Sheet open={isMobileLayout && isOpen} onOpenChange={setIsOpen}>
+      {/* Tablet (640-1023px): sin cambios — sheet lateral derecho, se sigue
+          abriendo solo por `isOpen` del store (auto-apertura al agregar). */}
+      <Sheet
+        open={isMobileLayout && !isPhoneLayout && isOpen}
+        onOpenChange={setIsOpen}
+      >
         <SheetContent
           side="right"
           showCloseButton={false}
@@ -561,6 +590,28 @@ export function CartPanelAdmin({
           {CartContent}
         </SheetContent>
       </Sheet>
+
+      {/* Celular (<640px): barra fija inferior con total + contador —
+          agregar un producto solo actualiza esta barra, nunca abre el
+          Drawer. Solo se muestra con el carrito no vacío. */}
+      {isPhoneLayout && items.length > 0 && !phoneCartOpen && (
+        <MobileCartBar
+          totalItems={getTotalItems()}
+          totalPrice={totalCarrito}
+          onOpen={() => setPhoneCartOpen(true)}
+        />
+      )}
+
+      <Drawer
+        direction="bottom"
+        open={isPhoneLayout && phoneCartOpen}
+        onOpenChange={(open) => {
+          if (open) setPhoneCartOpen(true);
+          else closeSidebar();
+        }}
+      >
+        <DrawerContent>{CartContent}</DrawerContent>
+      </Drawer>
 
       <TicketSheet
         ticket={ventaExitosa}

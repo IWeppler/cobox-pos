@@ -122,7 +122,7 @@ export function MovimientoCCCard({
 
         <div className="flex items-center gap-1.5 shrink-0">
           <span
-            className={`font-semibold ${
+            className={`font-mono font-medium ${
               mov.anulado
                 ? "line-through text-muted-foreground"
                 : mov.tipo === "DEBITO"

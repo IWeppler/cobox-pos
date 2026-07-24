@@ -98,27 +98,33 @@ export function CartSidebarFooter({
     <>
       <div className="shrink-0 border-t border-border bg-card p-5 z-10">
         <div className="space-y-2 mb-4">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>Subtotal</span>
-            <span>{formatCurrency(totalCarrito)}</span>
+          <div className="flex items-center justify-between font-mono text-sm text-muted-foreground">
+            <span>SUBTOTAL</span>
+            <span className="font-mono">
+              {formatCurrency(totalCarrito)}
+            </span>
           </div>
           {descuentoDetalle.monto > 0 ? (
-            <div className="flex items-center justify-between text-sm text-emerald-700 dark:text-emerald-400">
-              <span>Promocion: {descuentoDetalle.nombre}</span>
-              <span>-{formatCurrency(descuentoDetalle.monto)}</span>
+            <div className="flex items-center justify-between font-mono text-sm text-emerald-700 dark:text-emerald-400">
+              <span>PROMOCIÓN: {descuentoDetalle.nombre}</span>
+              <span className="font-mono">
+                -{formatCurrency(descuentoDetalle.monto)}
+              </span>
             </div>
           ) : null}
           {recargoCuentaCorriente > 0 ? (
-            <div className="flex items-center justify-between text-sm text-amber-700 dark:text-amber-500">
-              <span>Recargo Cuenta Corriente</span>
-              <span>+{formatCurrency(recargoCuentaCorriente)}</span>
+            <div className="flex items-center justify-between font-mono text-sm text-amber-700 dark:text-amber-500">
+              <span>RECARGO CC</span>
+              <span className="font-mono">
+                +{formatCurrency(recargoCuentaCorriente)}
+              </span>
             </div>
           ) : null}
           <div className="flex items-center justify-between border-t border-border pt-3">
-            <span className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-              Total Final
+            <span className="font-mono text-xl font-semibold uppercase text-foreground">
+              Total
             </span>
-            <span className="text-2xl font-bold text-foreground">
+            <span className="font-mono text-2xl font-medium text-foreground">
               {formatCurrency(totalFinal)}
             </span>
           </div>

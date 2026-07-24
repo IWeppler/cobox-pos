@@ -47,10 +47,10 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Costo */}
               <div className="bg-card p-4 rounded-xl border border-border/50 flex flex-col justify-center">
-                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">
+                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">
                   Valor al Costo
                 </p>
-                <p className="text-2xl font-bold text-foreground">
+                <p className="text-2xl font-semibold text-foreground">
                   {formatearMoneda(metrics.stockValorizadoCosto)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -60,10 +60,10 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
 
               {/* Potencial Venta */}
               <div className="bg-card p-4 rounded-xl border border-border/50 flex flex-col justify-center">
-                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">
+                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">
                   Valor Venta (Potencial)
                 </p>
-                <p className="text-2xl font-bold text-foreground">
+                <p className="text-2xl font-semibold text-foreground">
                   {formatearMoneda(metrics.stockValorizadoPotencial)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -91,13 +91,13 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
         <div className="flex flex-col gap-6 lg:col-span-1">
           <Card className="border-border shadow-none flex-1 flex flex-col justify-center">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-bold text-muted-foreground">
+              <CardTitle className="text-sm font-semibold text-muted-foreground">
                 Stock Físico
               </CardTitle>
               <Tags className="w-4 h-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-foreground">
+              <div className="text-3xl font-semibold text-foreground">
                 {metrics.stockTotalUnidades}{" "}
                 <span className="text-sm font-medium text-muted-foreground">
                   unidades
@@ -111,7 +111,7 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle
-                className={`text-sm font-bold ${metrics.productosCriticos > 0 ? "text-rose-800 dark:text-destructive" : "text-muted-foreground"}`}
+                className={`text-sm font-semibold ${metrics.productosCriticos > 0 ? "text-rose-800 dark:text-destructive" : "text-muted-foreground"}`}
               >
                 Alertas de Stock
               </CardTitle>
@@ -121,12 +121,12 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
             </CardHeader>
             <CardContent>
               <div
-                className={`text-3xl font-bold ${metrics.productosCriticos > 0 ? "text-rose-700 dark:text-destructive" : "text-foreground"}`}
+                className={`text-3xl font-semibold ${metrics.productosCriticos > 0 ? "text-rose-700 dark:text-destructive" : "text-foreground"}`}
               >
                 {metrics.productosCriticos}
               </div>
               <p
-                className={`text-xs mt-1 ${metrics.productosCriticos > 0 ? "text-rose-600 font-medium dark:text-destructive" : "text-muted-foreground"}`}
+                className={`text-xs mt-1 ${metrics.productosCriticos > 0 ? "text-rose-600 font-semibold dark:text-destructive" : "text-muted-foreground"}`}
               >
                 Productos en nivel crítico
               </p>

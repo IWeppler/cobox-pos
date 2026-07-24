@@ -2,7 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { queryKeys } from "@/shared/lib/query-keys";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +53,7 @@ import { useActiveCategories } from "../hooks/use-active-categories";
 
 export function UpdatePricesModal() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const categorias = useActiveCategories();
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -164,6 +167,8 @@ export function UpdatePricesModal() {
     } else {
       toast.success("¡Precios actualizados con éxito!");
       handleOpenChange(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
       router.refresh();
     }
   };

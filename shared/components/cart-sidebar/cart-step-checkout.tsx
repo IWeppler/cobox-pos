@@ -190,7 +190,7 @@ export function CartStepCheckout({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
-      <div className="flex-1 overflow-y-auto p-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div className="flex-1 overflow-y-auto p-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <Button
           type="button"
           variant="ghost"
@@ -261,11 +261,9 @@ export function CartStepCheckout({
             />
           </section>
 
-          {/* METODOS DE PAGO — mismo comportamiento para Venta Regular y
-              Cuenta Corriente; solo Reservado la oculta. */}
           {!isReserva && isPOSMode ? (
             <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
                   Metodos de Pago
                 </h3>

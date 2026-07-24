@@ -268,7 +268,7 @@ function QuickAddModalContent({
                         [propName]: val,
                       }))
                     }
-                    className={`h-12 rounded-xl text-xs font-bold uppercase transition-all border ${
+                    className={`h-12 rounded-xl text-xs font-semibold uppercase transition-all border ${
                       isSelected
                         ? "border-primary bg-primary text-primary-foreground ring-2 ring-primary/20 cursor-pointer scale-[0.98]"
                         : hasStock

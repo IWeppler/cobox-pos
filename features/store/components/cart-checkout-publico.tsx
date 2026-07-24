@@ -46,7 +46,7 @@ export function CartCheckoutPublico({
 }: Readonly<CartCheckoutPublicoProps>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
-      <div className="flex-1 overflow-y-auto p-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div className="flex-1 overflow-y-auto p-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <Button
           type="button"
           variant="ghost"

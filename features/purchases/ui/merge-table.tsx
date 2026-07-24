@@ -2,10 +2,12 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   aprobarOrdenAction,
   crearProductoAlVueloAction,
 } from "../actions/merge-purchase";
+import { queryKeys } from "@/shared/lib/query-keys";
 import { toast } from "sonner";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -176,6 +178,7 @@ export function MergeTable({
   productos,
 }: Readonly<MergeTableProps>) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // En lugar de manejar índices sueltos, manejamos el `raw_nombre` de la agrupación
@@ -381,6 +384,8 @@ export function MergeTable({
 
     const nuevoProd = res.producto as Producto;
     setLocalProductos((prevProductos) => [...prevProductos, nuevoProd]);
+    queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+    queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
 
     // Asignar el nuevo producto a todos los ítems de este grupo
     const precioUnificado = Number(
@@ -425,6 +430,8 @@ export function MergeTable({
 
     if (res.success) {
       toast.success("¡Orden conciliada! Stock actualizado.");
+      queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
       router.push("/stock");
     } else {
       toast.error(res.error || "Ocurrió un error.");

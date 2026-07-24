@@ -2,6 +2,7 @@ import { getProductosAction } from "@/shared/actions/store-actions";
 import { StoreCatalog } from "@/features/store/components/store-catalog";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies, headers } from "next/headers";
+import { obtenerPrimeraImagen } from "@/features/stock/lib/stock-product-utils";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -38,10 +39,14 @@ export async function generateMetadata({
     return {
       title,
       description: `Mirá esta selección de productos de ${nombreComercio}.`,
+      metadataBase: new URL(baseUrl),
       openGraph: {
         title,
         type: "website",
         url: `${baseUrl}/store?productos=${productos}`,
+        // config.posLogo se guarda como string plano (no como array
+        // stringificado), a diferencia de imagen_url de productos — no
+        // necesita obtenerPrimeraImagen acá.
         images: config?.posLogo ? [{ url: config.posLogo }] : undefined,
       },
     };
@@ -65,12 +70,17 @@ export async function generateMetadata({
     .limit(1)
     .maybeSingle();
 
-  const imagen = primerProducto?.imagen_url || config?.posLogo;
+  // primerProducto.imagen_url viene como JSON.stringify de un array —
+  // mismo bug que en [slug]/page.tsx, hay que extraer el string plano
+  // antes de mandarlo a openGraph.images.
+  const imagen =
+    obtenerPrimeraImagen(primerProducto?.imagen_url) || config?.posLogo || null;
   const title = `${cat.nombre} | ${nombreComercio}`;
 
   return {
     title,
     description: `Descubrí ${cat.nombre} en ${nombreComercio}.`,
+    metadataBase: new URL(baseUrl),
     openGraph: {
       title,
       type: "website",

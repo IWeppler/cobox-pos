@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import type { Producto } from "@/entities/productos/types";
+import type { ProductoIndice } from "@/entities/productos/types";
 import { Image as ImageIcon } from "lucide-react";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import {
@@ -18,7 +18,7 @@ import {
 } from "@/shared/utils/compartir-catalogo";
 
 interface StockGridProps {
-  productos: Producto[];
+  productos: ProductoIndice[];
   userRole: string;
   nombreComercio: string;
   mostrarSinStock: boolean;
@@ -44,7 +44,13 @@ export function StockGrid({
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 m-2">
       {productos.map((producto, index) => {
+        // grid_url (320px) es la fuente correcta para esta celda de
+        // ~230-400px CSS en tablet — thumbnail_url (150px) queda corto y
+        // sale borroso al upscalear (ver diagnóstico de borrosidad).
+        // thumbnail_url/imagen_url quedan solo de fallback para productos
+        // viejos sin backfill de grid_url.
         const primeraImagen =
+          obtenerPrimeraImagen(producto.grid_url) ??
           obtenerPrimeraImagen(producto.thumbnail_url) ??
           obtenerPrimeraImagen(producto.imagen_url);
         const urlProducto = producto.slug
@@ -78,7 +84,12 @@ export function StockGrid({
                       alt={producto.nombre}
                       fill
                       className="object-cover transition-transform duration-500 group-hover:scale-105"
-                      sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
+                      // Alineado a los breakpoints reales de la grilla de
+                      // acá abajo (grid-cols-2 / md:grid-cols-3 /
+                      // lg:grid-cols-4) — antes pedía 50vw/33vw con cortes
+                      // en 768/1200px que no coincidían con dónde la grilla
+                      // realmente cambia de columnas (768/1024px).
+                      sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
                       priority={index < 8}
                     />
                   ) : (

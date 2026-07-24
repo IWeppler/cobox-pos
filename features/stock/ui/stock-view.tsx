@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
-import { Producto, ProductoIndice } from "@/entities/productos/types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ProductoIndice } from "@/entities/productos/types";
 import {
   buildPropiedadesFiltro,
   resolverAtributosVariante,
@@ -12,7 +11,6 @@ import { StockGrid } from "./stock-grid";
 import { Button } from "@/shared/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { StockFiltersToolbar } from "./stock-filters-toolbar";
-import { getStockPageDetailAction } from "../actions/get-product";
 import { getTotalStock } from "../lib/stock-product-utils";
 
 interface StockViewProps {
@@ -26,11 +24,6 @@ const ITEMS_POR_PAGINA = 10;
 const SEARCH_DEBOUNCE_MS = 300;
 
 export function StockView({
-  // page.tsx (Server Component) ya se revalida solo en cada alta/edición/
-  // baja de producto (revalidatePath("/stock") desde las actions) — esta
-  // prop llega con datos frescos en cada una de esas revalidaciones, así
-  // que se usa directo, sin copiarla a un estado local que haya que andar
-  // resincronizando.
   productosIndice,
   userRole,
   nombreComercio,
@@ -48,10 +41,9 @@ export function StockView({
 
   const isAdmin = userRole === "ADMIN";
 
-  // La búsqueda dispara un fetch de detalle por cambio — sin debounce,
-  // escribir "vestido" dispararía 7 round-trips. La caja de texto sigue
-  // respondiendo al instante (searchQuery), el filtrado usa la versión
-  // debounced.
+  // Sin fetch de por medio, el debounce es solo para no re-filtrar/
+  // ordenar/paginar en cada tecla — la caja de texto sigue respondiendo al
+  // instante (searchQuery), el filtrado usa la versión debounced.
   useEffect(() => {
     const timer = setTimeout(
       () => setSearchDebounced(searchQuery),
@@ -153,45 +145,19 @@ export function StockView({
 
   const totalPaginas = Math.ceil(productosOrdenados.length / ITEMS_POR_PAGINA);
 
-  const idsPaginaActual = useMemo(
+  // Página visible: un slice puro en memoria sobre el índice ya filtrado/
+  // ordenado — sin fetch de por medio. ProductoIndice ya trae lo que la
+  // tabla/grid necesitan para renderizar (imagen, slug, publicado); el
+  // detalle completo de un producto puntual lo pide su propio sheet de
+  // edición al abrirse (ver edit-sheet.tsx), no la lista.
+  const productosPagina = useMemo(
     () =>
-      productosOrdenados
-        .slice(
-          (paginaActual - 1) * ITEMS_POR_PAGINA,
-          paginaActual * ITEMS_POR_PAGINA,
-        )
-        .map((p) => p.id),
+      productosOrdenados.slice(
+        (paginaActual - 1) * ITEMS_POR_PAGINA,
+        paginaActual * ITEMS_POR_PAGINA,
+      ),
     [productosOrdenados, paginaActual],
   );
-
-  const [productosPagina, setProductosPagina] = useState<Producto[]>([]);
-  const [isLoadingPagina, setIsLoadingPagina] = useState(false);
-  const cicloRef = useRef(0);
-
-  useEffect(() => {
-    const cicloId = ++cicloRef.current;
-
-    const cargarPagina = async () => {
-      setIsLoadingPagina(true);
-      const { data, error } = await getStockPageDetailAction(idsPaginaActual);
-
-      // Se descarta cualquier respuesta que no sea la del último ciclo
-      // disparado, sin importar el orden real de llegada por red — así
-      // escribir/borrar/escribir en el buscador con mala conexión nunca
-      // deja la tabla mostrando resultados de una búsqueda vieja con el
-      // texto nuevo ya en la caja.
-      if (cicloId !== cicloRef.current) return;
-      setIsLoadingPagina(false);
-
-      if (error || !data) {
-        toast.error(error || "No se pudieron cargar los productos.");
-        return;
-      }
-      setProductosPagina(data);
-    };
-
-    cargarPagina();
-  }, [idsPaginaActual]);
 
   const hayFiltrosActivos =
     searchQuery !== "" ||
@@ -287,14 +253,8 @@ export function StockView({
         nombreComercio={nombreComercio}
       />
 
-      {/* 3. VISTAS — se mantiene StockTable/StockGrid montado durante el
-          fetch de la página (nunca se desmonta por un loading state), así
-          la selección de checkboxes sobrevive sin necesidad de moverla a
-          otro componente. Solo se agrega una barra fina de progreso. */}
+      {/* 3. VISTAS */}
       <div className="bg-background rounded-xl border border-border overflow-hidden min-h-100 relative">
-        {isLoadingPagina && (
-          <div className="absolute inset-x-0 top-0 h-0.5 bg-primary/60 animate-pulse z-10" />
-        )}
         {view === "table" ? (
           <StockTable
             productos={productosPagina}

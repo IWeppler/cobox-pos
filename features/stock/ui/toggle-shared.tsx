@@ -2,8 +2,10 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { togglePublicadoAction } from "../actions/toggle-shared";
 import { toast } from "sonner";
+import { queryKeys } from "@/shared/lib/query-keys";
 
 export function TogglePublicado({
   id,
@@ -13,6 +15,7 @@ export function TogglePublicado({
   publicadoInicial: boolean;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
 
   const handleToggle = () => {
@@ -26,6 +29,8 @@ export function TogglePublicado({
             ? "Producto visible en la tienda"
             : "Producto oculto de la tienda",
         );
+        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
         router.refresh();
       } else {
         toast.error(res.error || "No se pudo cambiar el estado");

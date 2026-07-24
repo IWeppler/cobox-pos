@@ -69,6 +69,7 @@ export async function getStockIndexAction(): Promise<{
       .select(
         `
         id, nombre, tipo, precio, precio_costo, categoria_id,
+        imagen_url, thumbnail_url, grid_url, slug, publicado,
         categoria:categorias(id, nombre, slug),
         producto_variantes(
           id, nombre_display, precio, costo, stock, atributos,
@@ -129,12 +130,13 @@ export async function getStockPageDataAction(): Promise<{
   };
 }
 
-export async function getStockPageDetailAction(ids: string[]): Promise<{
-  data: Producto[] | null;
+// Detalle completo de UN producto — lo pide el sheet de edición al abrirse
+// (ver ProductEditDetailSheet), nunca la lista: la tabla/grid de /stock
+// rendeiza directo desde ProductoIndice, sin este fetch de por medio.
+export async function getStockDetalleProductoAction(id: string): Promise<{
+  data: Producto | null;
   error: string | null;
 }> {
-  if (ids.length === 0) return { data: [], error: null };
-
   try {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
@@ -143,7 +145,7 @@ export async function getStockPageDetailAction(ids: string[]): Promise<{
       .from("productos")
       .select(
         `
-        id, nombre, tipo, precio, precio_costo, imagen_url, thumbnail_url, slug, publicado, descripcion, categoria_id, creado_en,
+        id, nombre, tipo, precio, precio_costo, imagen_url, thumbnail_url, grid_url, slug, publicado, descripcion, categoria_id, creado_en,
         categoria:categorias(id, nombre, slug),
         producto_variantes(
           id, sku, nombre_display, precio, costo, stock, atributos,
@@ -155,24 +157,18 @@ export async function getStockPageDetailAction(ids: string[]): Promise<{
         stock:productos_stock(id, variante, cantidad)
         `,
       )
-      .in("id", ids);
+      .eq("id", id)
+      .maybeSingle();
 
     if (error) {
-      console.error("[getStockPageDetailAction] Error:", error);
+      console.error("[getStockDetalleProductoAction] Error:", error);
       return {
         data: null,
-        error: "Error al cargar el detalle de los productos.",
+        error: "Error al cargar el detalle del producto.",
       };
     }
 
-    const porId = new Map(
-      (data as unknown as Producto[]).map((p) => [p.id, p]),
-    );
-    const productos = ids
-      .map((id) => porId.get(id))
-      .filter((p): p is Producto => p !== undefined);
-
-    return { data: productos, error: null };
+    return { data: data as unknown as Producto, error: null };
   } catch (err) {
     console.error(err);
     return { data: null, error: "Ocurrió un error inesperado." };

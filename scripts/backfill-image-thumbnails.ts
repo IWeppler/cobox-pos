@@ -67,8 +67,8 @@ type CompressParams = {
 // Mismos valores que shared/utils/image-optimizer.ts (maxWidthOrHeight,
 // maxSizeMB, initialQuality) traducidos a sharp.
 const MAIN_PARAMS: CompressParams = {
-  maxDim: 600,
-  maxBytes: 100_000,
+  maxDim: 1100,
+  maxBytes: 200_000,
   calidadInicial: 70,
   calidadMinima: 35,
 };

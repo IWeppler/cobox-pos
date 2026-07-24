@@ -439,7 +439,6 @@ export function ProductDetail({
 
         {config?.pedidos_whatsapp !== false ? (
           <>
-            {/* 🚀 RENDER MULTIDIMENSIONAL DE VARIANTES (Se auto-generan botones por cada Atributo) */}
             {!isUnico && (
               <div className="mb-6 space-y-5">
                 {Object.entries(parsedVariants.properties).map(
@@ -579,7 +578,7 @@ export function ProductDetail({
             className={`w-full flex items-center justify-center gap-3 py-4 rounded-none font-bold text-xs uppercase tracking-widest transition-colors cursor-pointer ${
               estaAgotado
                 ? "bg-muted text-muted-foreground cursor-not-allowed border border-border"
-                : "bg-neutral-950 text-white"
+                : "bg-primary text-white"
             }`}
           >
             <ShoppingCart className="w-4 h-4" />

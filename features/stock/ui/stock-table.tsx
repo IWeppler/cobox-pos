@@ -2,7 +2,9 @@
 
 import { Fragment, useState, useMemo, useTransition } from "react";
 import Image from "next/image";
-import { Producto } from "@/entities/productos/types";
+import { useQueryClient } from "@tanstack/react-query";
+import { ProductoIndice } from "@/entities/productos/types";
+import { queryKeys } from "@/shared/lib/query-keys";
 import {
   Table,
   TableBody,
@@ -77,7 +79,7 @@ import {
 import { toast } from "sonner";
 
 interface StockTableProps {
-  productos: Producto[];
+  productos: ProductoIndice[];
   userRole: string;
   nombreComercio: string;
   mostrarSinStock: boolean;
@@ -135,6 +137,7 @@ export function StockTable({
   onSort,
 }: Readonly<StockTableProps>) {
   const { isAdmin } = useStockCartActions(userRole);
+  const queryClient = useQueryClient();
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const [variantesAbiertas, setVariantesAbiertas] = useState<
     Record<string, boolean>
@@ -143,9 +146,8 @@ export function StockTable({
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [isPending, startTransition] = useTransition();
   const categorias = useActiveCategories();
-  const [productoEnEdicion, setProductoEnEdicion] = useState<Producto | null>(
-    null,
-  );
+  const [productoEnEdicion, setProductoEnEdicion] =
+    useState<ProductoIndice | null>(null);
   const selectedIdsArray = useMemo(
     () => Array.from(selectedIds),
     [selectedIds],
@@ -209,6 +211,8 @@ export function StockTable({
               : "productos movidos"
           } de categoria.`,
         );
+        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
         clearSelection();
       } else {
         toast.error(result.error || "No se pudo cambiar la categoria.");
@@ -228,6 +232,8 @@ export function StockTable({
               : "productos eliminados"
           }.`,
         );
+        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
         clearSelection();
       } else {
         toast.error(result.error || "No se pudieron eliminar los productos.");
@@ -644,7 +650,7 @@ export function StockTable({
                     <TableCell className="text-center py-1.5 sm:py-2.5 hidden sm:table-cell">
                       <div className="flex items-center justify-center gap-1.5">
                         <div className={`w-2 h-2 rounded-full ${dotColor}`} />
-                        <span className="font-semibold text-foreground">
+                        <span className="font-mono font-medium text-foreground">
                           {totalUnidades}{" "}
                           <span className="text-[10px] font-medium opacity-70 uppercase tracking-widest">
                             u.
@@ -655,7 +661,7 @@ export function StockTable({
 
                     {/* COSTO */}
                     {isAdmin && (
-                      <TableCell className="text-right font-medium text-muted-foreground hidden md:table-cell py-2.5">
+                      <TableCell className="text-right font-mono text-muted-foreground hidden md:table-cell py-2.5">
                         {rangoCosto && !rangoCosto.esUniforme ? (
                           <span title="Las variantes tienen costos distintos">
                             {formatearMoneda(rangoCosto.min)} -{" "}
@@ -676,7 +682,7 @@ export function StockTable({
                           </span>
                         ) : costo > 0 ? (
                           <div className="flex flex-col items-end">
-                            <span className="text-emerald-700 dark:text-emerald-500 font-medium text-xs">
+                            <span className="font-mono font-medium text-emerald-700 dark:text-emerald-500 text-xs">
                               +{formatearMoneda(gananciaNeta)}
                             </span>
                             <span className="text-xs text-muted-foreground font-medium">
@@ -692,7 +698,7 @@ export function StockTable({
                     )}
 
                     {/* PRECIO (Adaptado) */}
-                    <TableCell className="text-right font-semibold text-xs sm:text-sm px-1 sm:px-0 py-1.5 sm:py-2.5 whitespace-nowrap tabular-nums">
+                    <TableCell className="text-right font-mono font-medium text-xs sm:text-sm px-1 sm:px-0 py-1.5 sm:py-2.5 whitespace-nowrap tabular-nums">
                       {rangoPrecio && !rangoPrecio.esUniforme ? (
                         <span title="Las variantes tienen precios distintos">
                           {formatearMoneda(rangoPrecio.min)} -{" "}

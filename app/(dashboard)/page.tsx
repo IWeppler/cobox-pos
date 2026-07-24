@@ -214,7 +214,7 @@ export default async function DashboardPage() {
               <GrowthBadge value={crecimientoIngresos} />
             </div>
             <div>
-              <p className="text-2xl font-medium text-foreground">
+              <p className="text-2xl font-semibold text-foreground">
                 {formatearMoneda(metricasHoy.ingresos)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -232,7 +232,7 @@ export default async function DashboardPage() {
               <GrowthBadge value={crecimientoUnidades} />
             </div>
             <div>
-              <p className="text-2xl font-medium text-foreground">
+              <p className="text-2xl font-semibold text-foreground">
                 {metricasHoy.unidadesVendidas}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -250,7 +250,7 @@ export default async function DashboardPage() {
               <Receipt className="w-3.5 h-3.5 text-muted-foreground/40" />
             </div>
             <div>
-              <p className="text-2xl font-medium text-foreground">
+              <p className="text-2xl font-semibold text-foreground">
                 {metricasHoy.ordenes}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -267,7 +267,7 @@ export default async function DashboardPage() {
               </span>
             </div>
             <div>
-              <p className="text-2xl font-medium text-foreground">
+              <p className="text-2xl font-semibold text-foreground">
                 {formatearMoneda(metricasHoy.gananciaBrutaVentas)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">

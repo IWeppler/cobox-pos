@@ -38,7 +38,7 @@ export function RentabilidadTab({
             <Package className="w-4 h-4 text-accent-blue" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-medium text-foreground">
+            <div className="text-2xl font-semibold text-foreground">
               -{formatearMoneda(costoMercaderiaVendida)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -55,7 +55,7 @@ export function RentabilidadTab({
             <ArrowDownRight className="w-4 h-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-medium text-foreground">
+            <div className="text-2xl font-semibold text-foreground">
               -{formatearMoneda(metrics.totalEgresos)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -72,7 +72,7 @@ export function RentabilidadTab({
             <CreditCard className="w-4 h-4 text-accent-indigo" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-medium text-foreground">
+            <div className="text-2xl font-semibold text-foreground">
               -{formatearMoneda(metrics.totalComisiones)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -89,7 +89,7 @@ export function RentabilidadTab({
             <Trophy className="w-4 h-4 text-accent-orange" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-medium text-foreground">
+            <div className="text-2xl font-semibold text-foreground">
               {formatearMoneda(metrics.gananciaNeta)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">

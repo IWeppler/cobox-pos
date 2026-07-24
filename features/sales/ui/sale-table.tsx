@@ -322,7 +322,7 @@ export function VentasTable({
                           className="hover:bg-muted/20 cursor-pointer transition-colors border-b border-border/40"
                           onClick={() => abrirTicket(venta)}
                         >
-                          <TableCell className="font-bold text-muted-foreground text-xs pl-4 sm:pl-6">
+                          <TableCell className="font-mono font-medium tracking-wider text-muted-foreground text-xs pl-4 sm:pl-6">
                             #{venta.id.split("-")[0].toUpperCase()}
                           </TableCell>
 
@@ -381,7 +381,7 @@ export function VentasTable({
                           </TableCell>
 
                           <TableCell className="text-right">
-                            <div className="font-medium text-foreground">
+                            <div className="font-mono font-medium text-foreground">
                               {formatearMoneda(venta.total)}
                             </div>
                           </TableCell>

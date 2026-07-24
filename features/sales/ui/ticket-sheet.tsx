@@ -179,7 +179,7 @@ export function TicketSheet({
                       {badgeEstadoLabel}
                     </Badge>
                   </div>
-                  <p className="mt-1 text-3xl font-semibold text-left text-foreground">
+                  <p className="mt-1 text-3xl font-mono font-medium text-left text-foreground">
                     {formatTicketMoney(ticket?.total)}
                   </p>
                 </div>
@@ -187,7 +187,7 @@ export function TicketSheet({
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-muted-foreground/70" />
-                    <h3 className="text-xs font-medium text-foreground uppercase tracking-wider">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">
                       Detalle de Transaccion
                     </h3>
                   </div>
@@ -232,7 +232,7 @@ export function TicketSheet({
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Wallet className="w-4 h-4 text-muted-foreground/70" />
-                    <h3 className="text-xs font-medium text-foreground uppercase tracking-wider">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">
                       Totales
                     </h3>
                   </div>
@@ -275,7 +275,7 @@ export function TicketSheet({
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Package className="w-4 h-4 text-muted-foreground" />
-                    <h3 className="text-xs font-medium text-foreground uppercase tracking-wider">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">
                       Productos ({ticket?.items.length ?? 0})
                     </h3>
                   </div>
@@ -299,15 +299,15 @@ export function TicketSheet({
                               {item.nombre}
                             </p>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              Talle: {item.variante}
+                              {item.variante}
                               {item.cantidad > 1 && (
-                                <span className="ml-2 text-muted-foreground/70">
+                                <span className="font-mono text-muted-foreground/70">
                                   {formatTicketMoney(precioUnidad)} c/u
                                 </span>
                               )}
                             </p>
                           </div>
-                          <p className="text-sm font-semibold text-foreground shrink-0">
+                          <p className="font-mono text-sm font-medium text-foreground shrink-0">
                             {formatTicketMoney(precioUnidad * item.cantidad)}
                           </p>
                         </div>
@@ -315,28 +315,28 @@ export function TicketSheet({
                     })}
 
                     <div className="px-4 py-3 bg-muted/40 space-y-1.5 border-t border-border">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Subtotal</span>
+                      <div className="flex justify-between font-mono text-xs text-muted-foreground">
+                        <span>SUBTOTAL</span>
                         <span>{formatTicketMoney(subtotalCarrito)}</span>
                       </div>
 
                       {(ticket?.descuentoMonto ?? 0) > 0 ? (
-                        <div className="flex justify-between text-xs text-emerald-600 font-bold">
-                          <span>Desc. ({ticket?.promocionNombre})</span>
+                        <div className="flex justify-between font-mono text-xs text-emerald-600 font-bold">
+                          <span>DESC. ({ticket?.promocionNombre})</span>
                           <span>
                             -{formatTicketMoney(ticket?.descuentoMonto)}
                           </span>
                         </div>
                       ) : (
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Descuentos</span>
+                        <div className="flex justify-between font-mono text-xs text-muted-foreground">
+                          <span>DESCUENTOS</span>
                           <span>$0</span>
                         </div>
                       )}
 
                       <div className="my-1" />
-                      <div className="flex justify-between text-sm font-bold text-foreground">
-                        <span>Total</span>
+                      <div className="flex justify-between font-mono text-sm font-semibold text-foreground">
+                        <span>TOTAL</span>
                         <span>{formatTicketMoney(ticket?.total)}</span>
                       </div>
                     </div>
@@ -393,7 +393,7 @@ function DetailRow({
         <span className="text-muted-foreground/60">{icon}</span>
         {label}
       </span>
-      <span className="text-xs font-medium text-foreground text-right truncate max-w-[55%]">
+      <span className="text-xs font-mono font-medium text-foreground text-right truncate max-w-[55%]">
         {value}
       </span>
     </div>

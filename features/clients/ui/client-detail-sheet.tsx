@@ -261,7 +261,7 @@ export function ClientDetailSheet({
                         <p className="text-xs font-medium text-muted-foreground mb-1">
                           Saldo Actual
                         </p>
-                        <p className="text-2xl font-semibold text-foreground">
+                        <p className="text-2xl font-mono font-medium text-foreground">
                           {formatearMoneda(saldo)}
                         </p>
                       </div>
@@ -330,14 +330,14 @@ export function ClientDetailSheet({
                             >
                               <div className="flex justify-between items-start">
                                 <div>
-                                  <p className="font-bold text-sm text-foreground">
+                                  <p className="font-mono font-medium uppercase text-sm text-foreground">
                                     Ticket #{idCorto}
                                   </p>
                                   <p className="text-[10px] text-muted-foreground mt-0.5">
                                     {formatearFechaHora(venta.fecha_venta)}
                                   </p>
                                 </div>
-                                <span className="font-semibold text-emerald-700 dark:text-emerald-500">
+                                <span className="font-mono font-medium text-emerald-700 dark:text-emerald-500">
                                   {formatearMoneda(Number(venta.total))}
                                 </span>
                               </div>

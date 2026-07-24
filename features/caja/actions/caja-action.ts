@@ -85,7 +85,7 @@ export async function cerrarTurnoAction(
 
   const { data: turno, error: turnoError } = await supabase
     .from("turnos_caja")
-    .select("monto_inicial, estado, vendedor_id")
+    .select("monto_inicial, estado, vendedor_id, modo")
     .eq("id", turnoId)
     .single();
 
@@ -96,8 +96,20 @@ export async function cerrarTurnoAction(
     return { error: "Esta caja ya fue cerrada.", success: false };
   }
   if (turno.vendedor_id !== user.id) {
-    const { data: esAdmin } = await supabase.rpc("is_admin");
-    if (!esAdmin) {
+    // POR_USUARIO: cada vendedor tiene su propia caja — cerrar la de otro
+    // requiere el permiso granular (que ya incluye a los admins, ver
+    // definición SQL de tiene_permiso). ÚNICA: la caja es una sola
+    // compartida por todo el local; ahí la regla sigue siendo la de
+    // siempre — solo admin puede cerrar la que abrió otro vendedor, el
+    // permiso granular no la reemplaza.
+    const { data: autorizado } =
+      turno.modo === "POR_USUARIO"
+        ? await supabase.rpc("tiene_permiso", {
+            clave: "caja.cerrar_ajena",
+          })
+        : await supabase.rpc("is_admin");
+
+    if (!autorizado) {
       return {
         error: "No podés cerrar una caja que no es tuya.",
         success: false,
