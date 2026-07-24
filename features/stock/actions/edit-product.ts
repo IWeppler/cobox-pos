@@ -9,6 +9,8 @@ import {
 } from "@/features/stock/lib/normalize-atributo";
 import { parseProductImages } from "@/features/stock/lib/stock-product-utils";
 
+type SupabaseServerClient = ReturnType<typeof createClient>;
+
 type AuditoriaVarianteRow = {
   producto_id: string;
   variante_id_anterior: string | null;
@@ -25,10 +27,37 @@ type AuditoriaVarianteRow = {
   editado_por: string | null;
 };
 
+export type ImagenesResult = {
+  success: boolean;
+  error?: string;
+  // Presente solo si de verdad se recalcularon (hubo archivos nuevos o
+  // borrados) — el cliente lo usa para sincronizar su estado local y no
+  // volver a subir los mismos binarios en un reintento (ver EditProductForm).
+  urls?: {
+    imagen_url?: string;
+    thumbnail_url?: string;
+    grid_url?: string;
+  };
+};
+
+export type VariantesResult = {
+  success: boolean;
+  error?: string;
+};
+
+export type EditarProductoResult = {
+  imagenes: ImagenesResult;
+  variantes: VariantesResult;
+};
+
+// Fotos y variantes son preocupaciones independientes: el guard de
+// variantes (paso 2) nunca debe poder bloquear un cambio de imágenes
+// (paso 1), y viceversa. Cada una corre y responde por su cuenta — no hay
+// un booleano combinado que esconda un éxito parcial.
 export async function editarProductoAction(
-  prevState: { error: string | null; success: boolean },
+  prevState: EditarProductoResult,
   formData: FormData,
-) {
+): Promise<EditarProductoResult> {
   const id = formData.get("id") as string;
   const nombre = formData.get("nombre") as string;
   const categoria_id = formData.get("categoria_id") as string;
@@ -55,9 +84,10 @@ export async function editarProductoAction(
     : [];
 
   if (!id || !nombre || Number.isNaN(precio) || Number.isNaN(precio_costo)) {
+    const error = "Por favor completa todos los campos obligatorios.";
     return {
-      error: "Por favor completa todos los campos obligatorios.",
-      success: false,
+      imagenes: { success: false, error },
+      variantes: { success: false, error },
     };
   }
 
@@ -67,278 +97,74 @@ export async function editarProductoAction(
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 1. Procesar Variantes PRIMERO, antes de cualquier side-effect (Storage
-  // o UPDATE de productos). El guard de "menos variantes que las
-  // existentes" (y cualquier otro error de este bloque) tiene que ser la
-  // ÚNICA consecuencia posible: si bloquea acá, todavía no se subió
-  // ninguna imagen ni se tocó la tabla productos. Antes este bloque corría
-  // último — el guard bloqueaba la escritura de producto_variantes pero
-  // las imágenes (y nombre/precio/categoría/descripción/publicado) ya
-  // habían quedado persistidos como efecto secundario separado.
-  try {
-    if (!tieneVariantes) {
-      const { data: unicoAnterior } = await supabase
-        .from("producto_variantes")
-        .select("id, stock, precio, costo")
-        .eq("producto_id", id)
-        .maybeSingle();
+  // (a) Imágenes + cabecera del producto — corre siempre, sin importar lo
+  // que pase con las variantes.
+  const imagenes = await actualizarImagenesYCabecera(supabase, {
+    id,
+    nombre,
+    categoria_id,
+    descripcion,
+    precio,
+    precio_costo,
+    publicado,
+    archivos,
+    thumbnails,
+    grids,
+    imagenesAEliminar,
+  });
 
-      const { error: delVarError } = await supabase
-        .from("producto_variantes")
-        .delete()
-        .eq("producto_id", id);
-      if (delVarError) throw delVarError;
+  // (b) Variantes, con su guard intacto — corre después, y su resultado
+  // no revierte ni condiciona lo que (a) ya haya guardado.
+  const variantes = await procesarVariantes(supabase, {
+    id,
+    tieneVariantes,
+    stockBase,
+    formData,
+    userId: user?.id ?? null,
+  });
 
-      const { data: unicoNuevo, error: insVarError } = await supabase
-        .from("producto_variantes")
-        .insert({
-          producto_id: id,
-          nombre_display: "Único",
-          stock: stockBase,
-        })
-        .select("id")
-        .single();
-      if (insVarError) throw insVarError;
+  revalidatePath("/stock");
+  revalidatePath("/store");
 
-      // Legacy support
-      const { error: delStockError } = await supabase
-        .from("productos_stock")
-        .delete()
-        .eq("producto_id", id);
-      if (delStockError) throw delStockError;
+  return { imagenes, variantes };
+}
 
-      const { error: insStockError } = await supabase
-        .from("productos_stock")
-        .insert({ producto_id: id, variante: "Único", cantidad: stockBase });
-      if (insStockError) throw insStockError;
+async function actualizarImagenesYCabecera(
+  supabase: SupabaseServerClient,
+  params: {
+    id: string;
+    nombre: string;
+    categoria_id: string;
+    descripcion: string;
+    precio: number;
+    precio_costo: number;
+    publicado: boolean;
+    archivos: File[];
+    thumbnails: File[];
+    grids: File[];
+    imagenesAEliminar: string[];
+  },
+): Promise<ImagenesResult> {
+  const {
+    id,
+    nombre,
+    categoria_id,
+    descripcion,
+    precio,
+    precio_costo,
+    publicado,
+    archivos,
+    thumbnails,
+    grids,
+    imagenesAEliminar,
+  } = params;
 
-      const { error: auditError } = await supabase
-        .from("producto_variantes_auditoria")
-        .insert({
-          producto_id: id,
-          variante_id_anterior: unicoAnterior?.id ?? null,
-          variante_id_nueva: unicoNuevo?.id ?? null,
-          atributos: {},
-          nombre_display: "Único",
-          accion: unicoAnterior ? "ACTUALIZADA" : "CREADA",
-          stock_anterior: unicoAnterior?.stock ?? null,
-          stock_nuevo: stockBase,
-          precio_anterior: unicoAnterior?.precio ?? null,
-          precio_nuevo: null,
-          costo_anterior: unicoAnterior?.costo ?? null,
-          costo_nuevo: null,
-          editado_por: user?.id ?? null,
-        } satisfies AuditoriaVarianteRow);
-      if (auditError) console.error("[EDIT PRODUCT AUDIT ERROR]", auditError);
-    } else {
-      // Es producto con opciones dinámicas
-      const opcionesStr = formData.get("opciones") as string;
-      const variantesStr = formData.get("variantes") as string;
-
-      if (opcionesStr && variantesStr) {
-        const opcionesRaw = JSON.parse(opcionesStr) as {
-          nombre: string;
-          valores: string[];
-        }[];
-        const variantesRaw = JSON.parse(variantesStr) as {
-          valores: Record<string, string>;
-          precio?: string;
-          precio_costo?: string;
-          stock?: string;
-          sku?: string;
-        }[];
-
-        // Descartamos propiedades/valores vacíos antes de tocar la base:
-        // un nombre en blanco generaría una fila de atributo con slug ""
-        // que quedaría reciclándose entre productos distintos.
-        const opciones = opcionesRaw
-          .map((op) => ({
-            nombre: op.nombre?.trim(),
-            valores: (op.valores ?? [])
-              .map((v) => v?.trim())
-              .filter((v): v is string => Boolean(v)),
-          }))
-          .filter(
-            (op): op is { nombre: string; valores: string[] } =>
-              Boolean(op.nombre) && op.valores.length > 0,
-          );
-
-        // Red de seguridad: "Propiedad N"/"Opción N" son los fallbacks que
-        // usa el parser de variantes legacy cuando no puede saber el
-        // nombre real de una propiedad (ver parse-variant-attributes.ts).
-        // Si el formulario de edición los precarga y el vendedor guarda
-        // sin renombrarlos, no deben persistirse como si fueran reales.
-        const nombreGenerico = opciones.find((op) =>
-          /^(propiedad|opci[oó]n)\s*\d*$/i.test(op.nombre),
-        );
-        if (nombreGenerico) {
-          return {
-            error: `La propiedad "${nombreGenerico.nombre}" es un nombre genérico auto-generado. Renombrala (ej. "Color", "Talle", "Material") antes de guardar.`,
-            success: false,
-          };
-        }
-
-        const variantesConAtributos = variantesRaw.filter(
-          (v) =>
-            v.valores &&
-            Object.entries(v.valores).some(
-              ([k, val]) => k.trim() && val?.trim(),
-            ),
-        );
-
-        if (opciones.length === 0 || variantesConAtributos.length === 0) {
-          return {
-            error:
-              "Las variantes no tienen propiedades o valores válidos. Revisa la grilla antes de guardar.",
-            success: false,
-          };
-        }
-
-        // Red de seguridad: el chequeo anterior solo valida que la
-        // combinación tenga atributos (Talle, Color, etc.), lo cual es
-        // SIEMPRE cierto en un cross-join — no filtra nada por sí solo. La
-        // matriz de selección del cliente ya debería mandar solo las
-        // combinaciones marcadas, pero si ese estado llega desincronizado
-        // por cualquier motivo, no persistimos filas sin ningún dato real
-        // cargado (precio, costo, stock o SKU).
-        const variantes = variantesConAtributos.filter((v) => {
-          const stock = Number.parseInt(v.stock || "0");
-          return Boolean(
-            v.precio?.trim() ||
-              v.precio_costo?.trim() ||
-              (Number.isFinite(stock) && stock > 0) ||
-              v.sku?.trim(),
-          );
-        });
-
-        if (variantes.length === 0) {
-          return {
-            error:
-              "Ninguna de las combinaciones tiene precio o stock cargado. Revisá la grilla antes de guardar.",
-            success: false,
-          };
-        }
-
-        // A. Normalizamos cada (propiedad, valor) contra lo que ya existe
-        // en atributos/atributo_valores (case/tilde-insensitive vía slug)
-        // y cacheamos la forma canónica — "COLOR" y "Color" terminan
-        // siendo siempre la misma fila y el mismo string en el JSONB,
-        // en vez de lo que se haya tipeado en esta sesión puntual.
-        const atributoCache = await construirCacheAtributos(
-          supabase,
-          opciones,
-        );
-
-        // B. Armamos el payload con atributos ya canonicalizados y lo
-        // mandamos entero al RPC guardar_variantes_producto, que corre el
-        // chequeo de seguridad + delete + reinsert + relaciones + stock
-        // legacy + auditoría como UNA sola transacción de Postgres: si el
-        // chequeo bloquea, el DELETE nunca se ejecuta; si algo falla a
-        // mitad de camino, Postgres revierte todo — no puede quedar a
-        // medio aplicar como con la secuencia de llamadas sueltas de
-        // antes.
-        const rpcPayload = variantes.map((v) => {
-          const valoresCanonicos = canonicalizarValores(
-            v.valores,
-            atributoCache,
-          );
-
-          const nombreDisplay = opciones
-            .map(
-              (op) =>
-                valoresCanonicos[
-                  atributoCache[op.nombre]?.nombreCanonico ?? op.nombre
-                ],
-            )
-            .filter(Boolean)
-            .join(" / ");
-
-          const relaciones = Object.entries(v.valores).flatMap(
-            ([opNombre, opValor]) => {
-              const entry = atributoCache[opNombre];
-              const valorEntry = entry?.valores[opValor as string];
-              return entry && valorEntry
-                ? [
-                    {
-                      atributo_id: entry.atributoId,
-                      atributo_valor_id: valorEntry.valorId,
-                    },
-                  ]
-                : [];
-            },
-          );
-
-          return {
-            atributos: valoresCanonicos,
-            nombre_display: nombreDisplay,
-            precio: v.precio ? Number.parseFloat(v.precio) : null,
-            costo: v.precio_costo ? Number.parseFloat(v.precio_costo) : null,
-            stock_input: v.stock?.trim() || null,
-            sku: v.sku || null,
-            relaciones,
-          };
-        });
-
-        const { data: rpcResult, error: rpcError } = await supabase.rpc(
-          "guardar_variantes_producto",
-          {
-            p_producto_id: id,
-            p_variantes: rpcPayload,
-            p_editado_por: user?.id ?? null,
-          },
-        );
-        if (rpcError) throw rpcError;
-
-        const resultado = rpcResult as {
-          success: boolean;
-          blocked?: boolean;
-          faltantes?: number;
-        };
-
-        if (!resultado.success) {
-          return {
-            error:
-              `Guardado bloqueado: se detectaron ${resultado.faltantes} variante(s) menos que las que ya existen para este producto. ` +
-              `Esto puede borrar stock real sin que lo hayas pedido. Si de verdad querés eliminar una combinación, ` +
-              `avisá al equipo técnico — por ahora este guardado no la va a tocar.`,
-            success: false,
-          };
-        }
-      }
-    }
-  } catch (error) {
-    console.error("[EDIT PRODUCT ERROR]", error);
-
-    const pgError = error as { code?: string; message?: string };
-
-    if (pgError?.code === "42501") {
-      return {
-        error:
-          "No tenés permisos para guardar estos cambios (política de seguridad RLS).",
-        success: false,
-      };
-    }
-    if (pgError?.code === "23503") {
-      return {
-        error:
-          "Alguno de los datos hace referencia a un registro que ya no existe (violación de clave foránea).",
-        success: false,
-      };
-    }
-
-    return {
-      error: "Hubo un error al guardar las variantes del producto.",
-      success: false,
-    };
-  }
-
-  // 2. Variantes OK — recién acá subimos imágenes nuevas y mergeamos
-  // contra el imagen_url REAL en base. No confiamos en ninguna lista
-  // "existente" que pueda mandar el cliente: si el sheet quedó con datos
-  // viejos en memoria (otra pestaña, sesión larga, etc.), partir de la
-  // base evita pisar imágenes que el cliente ni sabía que estaban. El
-  // cliente solo manda qué URLs puntuales quiere borrar
-  // (imagenesAEliminar); el resultado final se arma acá.
+  // Subir imágenes nuevas y mergear contra el imagen_url REAL en base. No
+  // confiamos en ninguna lista "existente" que pueda mandar el cliente: si
+  // el sheet quedó con datos viejos en memoria (otra pestaña, sesión
+  // larga, etc.), partir de la base evita pisar imágenes que el cliente ni
+  // sabía que estaban. El cliente solo manda qué URLs puntuales quiere
+  // borrar (imagenesAEliminar); el resultado final se arma acá.
   let imagen_url: string | undefined = undefined;
   let thumbnail_url: string | undefined = undefined;
   let grid_url: string | undefined = undefined;
@@ -445,7 +271,6 @@ export async function editarProductoAction(
     grid_url = JSON.stringify(gridsFinal.concat(urlsGrid));
   }
 
-  // 3. Actualizar Cabecera de Producto
   const updateData: {
     nombre: string;
     categoria_id: string | null;
@@ -477,13 +302,284 @@ export async function editarProductoAction(
   if (errorProducto) {
     console.error("[EDIT PRODUCT ERROR]", errorProducto);
     return {
-      error: "Hubo un error al actualizar el producto base.",
       success: false,
+      error: "Hubo un error al actualizar el producto base.",
     };
   }
 
-  revalidatePath("/stock");
-  revalidatePath("/store");
+  return { success: true, urls: { imagen_url, thumbnail_url, grid_url } };
+}
 
-  return { error: null, success: true };
+async function procesarVariantes(
+  supabase: SupabaseServerClient,
+  params: {
+    id: string;
+    tieneVariantes: boolean;
+    stockBase: number;
+    formData: FormData;
+    userId: string | null;
+  },
+): Promise<VariantesResult> {
+  const { id, tieneVariantes, stockBase, formData, userId } = params;
+
+  try {
+    if (!tieneVariantes) {
+      const { data: unicoAnterior } = await supabase
+        .from("producto_variantes")
+        .select("id, stock, precio, costo")
+        .eq("producto_id", id)
+        .maybeSingle();
+
+      const { error: delVarError } = await supabase
+        .from("producto_variantes")
+        .delete()
+        .eq("producto_id", id);
+      if (delVarError) throw delVarError;
+
+      const { data: unicoNuevo, error: insVarError } = await supabase
+        .from("producto_variantes")
+        .insert({
+          producto_id: id,
+          nombre_display: "Único",
+          stock: stockBase,
+        })
+        .select("id")
+        .single();
+      if (insVarError) throw insVarError;
+
+      // Legacy support
+      const { error: delStockError } = await supabase
+        .from("productos_stock")
+        .delete()
+        .eq("producto_id", id);
+      if (delStockError) throw delStockError;
+
+      const { error: insStockError } = await supabase
+        .from("productos_stock")
+        .insert({ producto_id: id, variante: "Único", cantidad: stockBase });
+      if (insStockError) throw insStockError;
+
+      const { error: auditError } = await supabase
+        .from("producto_variantes_auditoria")
+        .insert({
+          producto_id: id,
+          variante_id_anterior: unicoAnterior?.id ?? null,
+          variante_id_nueva: unicoNuevo?.id ?? null,
+          atributos: {},
+          nombre_display: "Único",
+          accion: unicoAnterior ? "ACTUALIZADA" : "CREADA",
+          stock_anterior: unicoAnterior?.stock ?? null,
+          stock_nuevo: stockBase,
+          precio_anterior: unicoAnterior?.precio ?? null,
+          precio_nuevo: null,
+          costo_anterior: unicoAnterior?.costo ?? null,
+          costo_nuevo: null,
+          editado_por: userId,
+        } satisfies AuditoriaVarianteRow);
+      if (auditError) console.error("[EDIT PRODUCT AUDIT ERROR]", auditError);
+
+      return { success: true };
+    }
+
+    // Es producto con opciones dinámicas
+    const opcionesStr = formData.get("opciones") as string;
+    const variantesStr = formData.get("variantes") as string;
+
+    if (!opcionesStr || !variantesStr) {
+      // Nada que procesar del lado de variantes — no es un error.
+      return { success: true };
+    }
+
+    const opcionesRaw = JSON.parse(opcionesStr) as {
+      nombre: string;
+      valores: string[];
+    }[];
+    const variantesRaw = JSON.parse(variantesStr) as {
+      valores: Record<string, string>;
+      precio?: string;
+      precio_costo?: string;
+      stock?: string;
+      sku?: string;
+    }[];
+
+    // Descartamos propiedades/valores vacíos antes de tocar la base: un
+    // nombre en blanco generaría una fila de atributo con slug "" que
+    // quedaría reciclándose entre productos distintos.
+    const opciones = opcionesRaw
+      .map((op) => ({
+        nombre: op.nombre?.trim(),
+        valores: (op.valores ?? [])
+          .map((v) => v?.trim())
+          .filter((v): v is string => Boolean(v)),
+      }))
+      .filter(
+        (op): op is { nombre: string; valores: string[] } =>
+          Boolean(op.nombre) && op.valores.length > 0,
+      );
+
+    // Red de seguridad: "Propiedad N"/"Opción N" son los fallbacks que usa
+    // el parser de variantes legacy cuando no puede saber el nombre real
+    // de una propiedad (ver parse-variant-attributes.ts). Si el
+    // formulario de edición los precarga y el vendedor guarda sin
+    // renombrarlos, no deben persistirse como si fueran reales.
+    const nombreGenerico = opciones.find((op) =>
+      /^(propiedad|opci[oó]n)\s*\d*$/i.test(op.nombre),
+    );
+    if (nombreGenerico) {
+      return {
+        success: false,
+        error: `La propiedad "${nombreGenerico.nombre}" es un nombre genérico auto-generado. Renombrala (ej. "Color", "Talle", "Material") antes de guardar.`,
+      };
+    }
+
+    const variantesConAtributos = variantesRaw.filter(
+      (v) =>
+        v.valores &&
+        Object.entries(v.valores).some(
+          ([k, val]) => k.trim() && val?.trim(),
+        ),
+    );
+
+    if (opciones.length === 0 || variantesConAtributos.length === 0) {
+      return {
+        success: false,
+        error:
+          "Las variantes no tienen propiedades o valores válidos. Revisa la grilla antes de guardar.",
+      };
+    }
+
+    // Red de seguridad: el chequeo anterior solo valida que la combinación
+    // tenga atributos (Talle, Color, etc.), lo cual es SIEMPRE cierto en
+    // un cross-join — no filtra nada por sí solo. La matriz de selección
+    // del cliente ya debería mandar solo las combinaciones marcadas, pero
+    // si ese estado llega desincronizado por cualquier motivo, no
+    // persistimos filas sin NINGÚN dato real cargado. Importante: "stock
+    // en 0" SÍ es un dato real (una variante agotada, ya existente, que
+    // hereda precio/costo del producto padre) — el chequeo mira si el
+    // campo vino provisto, no si el valor es mayor a cero. Antes acá
+    // stock=0 se trataba como "sin datos" y la fila se descartaba del
+    // payload, lo que hacía que el guard de la RPC bloqueara SIEMPRE que
+    // el producto tuviera una variante agotada sin override propio —
+    // aunque el usuario ni hubiera tocado esa combinación.
+    const variantes = variantesConAtributos.filter((v) => {
+      const stockProvisto =
+        v.stock !== undefined && v.stock !== null && v.stock.trim() !== "";
+      return Boolean(
+        v.precio?.trim() || v.precio_costo?.trim() || stockProvisto || v.sku?.trim(),
+      );
+    });
+
+    if (variantes.length === 0) {
+      return {
+        success: false,
+        error:
+          "Ninguna de las combinaciones tiene precio o stock cargado. Revisá la grilla antes de guardar.",
+      };
+    }
+
+    // A. Normalizamos cada (propiedad, valor) contra lo que ya existe en
+    // atributos/atributo_valores (case/tilde-insensitive vía slug) y
+    // cacheamos la forma canónica — "COLOR" y "Color" terminan siendo
+    // siempre la misma fila y el mismo string en el JSONB, en vez de lo
+    // que se haya tipeado en esta sesión puntual.
+    const atributoCache = await construirCacheAtributos(supabase, opciones);
+
+    // B. Armamos el payload con atributos ya canonicalizados y lo mandamos
+    // entero al RPC guardar_variantes_producto, que corre el chequeo de
+    // seguridad + delete + reinsert + relaciones + stock legacy +
+    // auditoría como UNA sola transacción de Postgres: si el chequeo
+    // bloquea, el DELETE nunca se ejecuta; si algo falla a mitad de
+    // camino, Postgres revierte todo — no puede quedar a medio aplicar
+    // como con la secuencia de llamadas sueltas de antes.
+    const rpcPayload = variantes.map((v) => {
+      const valoresCanonicos = canonicalizarValores(v.valores, atributoCache);
+
+      const nombreDisplay = opciones
+        .map(
+          (op) =>
+            valoresCanonicos[
+              atributoCache[op.nombre]?.nombreCanonico ?? op.nombre
+            ],
+        )
+        .filter(Boolean)
+        .join(" / ");
+
+      const relaciones = Object.entries(v.valores).flatMap(
+        ([opNombre, opValor]) => {
+          const entry = atributoCache[opNombre];
+          const valorEntry = entry?.valores[opValor as string];
+          return entry && valorEntry
+            ? [
+                {
+                  atributo_id: entry.atributoId,
+                  atributo_valor_id: valorEntry.valorId,
+                },
+              ]
+            : [];
+        },
+      );
+
+      return {
+        atributos: valoresCanonicos,
+        nombre_display: nombreDisplay,
+        precio: v.precio ? Number.parseFloat(v.precio) : null,
+        costo: v.precio_costo ? Number.parseFloat(v.precio_costo) : null,
+        stock_input: v.stock?.trim() || null,
+        sku: v.sku || null,
+        relaciones,
+      };
+    });
+
+    const { data: rpcResult, error: rpcError } = await supabase.rpc(
+      "guardar_variantes_producto",
+      {
+        p_producto_id: id,
+        p_variantes: rpcPayload,
+        p_editado_por: userId,
+      },
+    );
+    if (rpcError) throw rpcError;
+
+    const resultado = rpcResult as {
+      success: boolean;
+      blocked?: boolean;
+      faltantes?: number;
+    };
+
+    if (!resultado.success) {
+      return {
+        success: false,
+        error:
+          `Guardado bloqueado: se detectaron ${resultado.faltantes} variante(s) menos que las que ya existen para este producto. ` +
+          `Esto puede borrar stock real sin que lo hayas pedido. Si de verdad querés eliminar una combinación, ` +
+          `avisá al equipo técnico — por ahora este guardado no la va a tocar.`,
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("[EDIT PRODUCT ERROR]", error);
+
+    const pgError = error as { code?: string; message?: string };
+
+    if (pgError?.code === "42501") {
+      return {
+        success: false,
+        error:
+          "No tenés permisos para guardar estos cambios (política de seguridad RLS).",
+      };
+    }
+    if (pgError?.code === "23503") {
+      return {
+        success: false,
+        error:
+          "Alguno de los datos hace referencia a un registro que ya no existe (violación de clave foránea).",
+      };
+    }
+
+    return {
+      success: false,
+      error: "Hubo un error al guardar las variantes del producto.",
+    };
+  }
 }

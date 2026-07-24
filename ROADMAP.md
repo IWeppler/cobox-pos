@@ -1,50 +1,45 @@
 ideas:
+- codigo de barras / sku - que diferencias son?
+- atajos con teclado
+- Tiene que venir preestablecido los metodos de pago: transferencia, efectivo, Mercado Pago
+- que opinas de tener una segunda venta en simultaneo?
+- CLIENTES: Razon social/Nombre, CUIT, Condicion IVA:
 - Login con huella: Entrás con tu huella o Face ID en vez de escribir la contraseña cada vez.
 - Multi-sucursal: Hasta 10 sucursales bajo la misma cuenta, con stock y caja independientes.
 - Exportación contable: Resumen de IVA, libro de ventas y compras, caja X y Z: un Excel listo para tu contador.
-- atajos con teclado
-- conectar mercado pago para que te aparezca el qr y que te avise que se pago.
+- conectar mercado pago para que te aparezca el qr y que te avise que se pago. entiendo que no sirve si tenes varias vendedoras en un local.
 - creacion de producto al vuelo desde el pos para que puedan empezar a vender desde el primer dia
-- que opinas de tener una segunda venta en simultaneo?
-- Tiene que venir preestablecido los metodos de pago: transferencia, efectivo, Mercado Pago
-- CLIENTES: Razon social/Nombre, CUIT, Condicion IVA:
 - Datos de la empresa: nombre comercial +/ razon social, cuit. etiquetas de codigo de barra: a4, 50x30, 40x25, modo de facturacion: AFIP Manual (generar cuando se necesite), AFIP Automatico, Ticket Interno (Sin Afip)
 - Alicuota IVA (creacion de productos): 21% general; 10,5% alimentos básicos, carne, panificados, harinas; 0% exento. 
 
-- codigo de barras / sku - que diferencias son?
 
 
 # TIER 0 — Cerrar lo abierto (esta semana, antes de cualquier feature nueva)
-
-- Tanda post-reunión pendiente: bugs de filtros del catálogo, modal de variantes, skeleton+contadores, dropdown de propiedades (prompts ya escritos).
-- Diagnóstico de fotos borrosas (prompt ya escrito, solo-lectura).
 - Caja #9: endurecer RLS de SELECT en turnos_caja — 1 hora, seguridad, pendiente hace rato.
-- Permisos #1 y #3: terminar de cablear tiene_permiso() en stock./clientes./reportes + el filtro de egresos por rol. Es deuda de seguridad, no feature; barato porque la infraestructura ya existe.
-- Auditoría completa de drift del segundo comercio (pospuesta por tokens — pero cada semana que pasa te cobra un error nuevo en producción de una clienta real; no la dejes enfriar más de una semana).
 
 # TIER 1 — Plata correcta y operación diaria (2-4 semanas)
 
+
+## Catálogo/stock:
+
+1.  Modo de carga rápida por SKU (escribo código→enter→sigue enfocado) — misma familia que barcode, diseñalos juntos: es la versión teclado del mismo flujo.
+
+## Ventas:
+
+1.  Lectura de código de barras — ahora que SKU existe en el pipeline (remito→variante), es el momento natural; para indumentaria con caja rápida es el salto de agilidad más grande disponible.
+
 ## Caja:
 
-1.  Devoluciones al turno original (ya diseñado → implementar).
-2.  Retiros de dueño como movimiento separado.
-3.  Tabla admin "cuánto tengo en cada caja/banco/MP" (alto valor para dueñas, y es agregación de datos que ya tenés).
-4.  Marcar esperado-negativo como revisado.
-5.  Compras ≠ gastos.
+1.  Retiros de dueño como movimiento separado.
+2.  Tabla admin "cuánto tengo en cada caja/banco/MP" (alto valor para dueñas, y es agregación de datos que ya tenés).
+3.  Marcar esperado-negativo como revisado.
+4.  Compras ≠ gastos.
 
 ## Clientes:
 
 1.  Chequeo de duplicados en import CSV (re-subir hoy duplica clientes = riesgo de datos real).
 2.  🤖 ver Tier 3 (portal de deuda).
 
-## Ventas:
-
-1.  Lectura de código de barras — ahora que SKU existe en el pipeline (remito→variante), es el momento natural; para indumentaria con caja rápida es el salto de agilidad más grande disponible.
-
-## Catálogo/stock:
-
-1.  Modo de carga rápida por SKU (escribo código→enter→sigue enfocado) — misma familia que barcode, diseñalos juntos: es la versión teclado del mismo flujo.
-2.  Historial de movimientos por producto (auditoría — con los incidentes de stock que ya viviste, esto es defensa, no lujo). DONE
 
 # TIER 2 — Decisión de arquitectura SaaS (antes del tercer cliente, no después)
 

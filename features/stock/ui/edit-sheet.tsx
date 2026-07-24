@@ -25,10 +25,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/shared/ui/sheet";
-import { editarProductoAction } from "../actions/edit-product";
+import {
+  editarProductoAction,
+  type EditarProductoResult,
+} from "../actions/edit-product";
 import { getStockDetalleProductoAction } from "../actions/get-product";
 import { useVariantSelection } from "../hooks/use-variant-selection";
-import type { CategoriaOption, ProductActionState } from "../types";
+import type { CategoriaOption } from "../types";
 import {
   buildVariantKey,
   isSingleVariantProduct,
@@ -212,6 +215,17 @@ function EditProductForm({
   );
 
   const [archivos, setArchivos] = useState<File[]>([]);
+  // Espejo local de imagen_url — arranca desde el producto cargado, pero
+  // se actualiza apenas el servidor confirma un guardado de imágenes
+  // exitoso (ver el success handler de formAction más abajo). Es la
+  // fuente para "imágenes existentes" en vez de producto.imagen_url
+  // directo: si el guard de variantes bloquea y el usuario reintenta
+  // después de corregir, esto evita que el formulario crea que las fotos
+  // ya guardadas siguen pendientes y las vuelva a subir — la causa exacta
+  // de la duplicación del incidente original.
+  const [imagenesActuales, setImagenesActuales] = useState<string[]>(() =>
+    parseProductImages(producto.imagen_url),
+  );
   // URLs de imagen_url que el usuario tildó para borrar en esta sesión de
   // edición. No tocamos producto.imagen_url localmente: el servidor arma
   // el resultado final partiendo del imagen_url real en base (ver
@@ -282,9 +296,9 @@ function EditProductForm({
 
   const [, formAction, isPending] = useActionState(
     async (
-      prevState: ProductActionState,
+      prevState: EditarProductoResult,
       formData: FormData,
-    ): Promise<ProductActionState> => {
+    ): Promise<EditarProductoResult> => {
       formData.append("id", producto.id);
       formData.append("tieneVariantes", showVariants.toString());
       if (imagenesExistentesAQuitar.length > 0) {
@@ -302,22 +316,48 @@ function EditProductForm({
       }
 
       const result = await editarProductoAction(prevState, formData);
-      if (result.success) {
-        toast.success("Producto actualizado");
+
+      if (result.imagenes.success) {
+        // Las fotos ya quedaron guardadas en el servidor — sincronizamos
+        // el estado local ANTES de cualquier posible reintento (ej. si
+        // las variantes se bloquean y el usuario corrige y vuelve a
+        // guardar) para no volver a subir los mismos binarios ni volver a
+        // pedir el borrado de fotos que ya no existen.
+        setArchivos([]);
+        setImagenesExistentesAQuitar([]);
+        if (result.imagenes.urls?.imagen_url !== undefined) {
+          setImagenesActuales(
+            parseProductImages(result.imagenes.urls.imagen_url),
+          );
+        }
         queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
         queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
         queryClient.invalidateQueries({
           queryKey: queryKeys.stock.detalle(producto.id),
         });
-        onSaved();
         router.refresh();
-      } else if (result.error) {
-        toast.error(result.error);
+      }
+
+      if (result.imagenes.success && result.variantes.success) {
+        toast.success("Producto actualizado");
+        onSaved();
+      } else {
+        // Éxito parcial o falla total: cada parte informa por su cuenta,
+        // el sheet se queda abierto para que se pueda corregir y
+        // reintentar sin perder lo que ya se guardó.
+        if (result.imagenes.success) {
+          toast.success("Fotos guardadas.");
+        } else if (result.imagenes.error) {
+          toast.error(`No se pudieron guardar las fotos: ${result.imagenes.error}`);
+        }
+        if (!result.variantes.success && result.variantes.error) {
+          toast.error(result.variantes.error);
+        }
       }
 
       return result;
     },
-    { error: null, success: false },
+    { imagenes: { success: false }, variantes: { success: false } },
   );
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -505,7 +545,7 @@ function EditProductForm({
           <ProductMediaSection
             archivos={archivos}
             onArchivosChange={setArchivos}
-            existingImages={parseProductImages(producto.imagen_url).filter(
+            existingImages={imagenesActuales.filter(
               (url) => !imagenesExistentesAQuitar.includes(url),
             )}
             onRemoveExistingImage={(url) =>
