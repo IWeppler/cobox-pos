@@ -67,156 +67,14 @@ export async function editarProductoAction(
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 1. Subir imágenes nuevas y mergear contra el imagen_url REAL en base.
-  // No confiamos en ninguna lista "existente" que pueda mandar el cliente:
-  // si el sheet quedó con datos viejos en memoria (otra pestaña, sesión
-  // larga, etc.), partir de la base evita pisar imágenes que el cliente
-  // ni sabía que estaban. El cliente solo manda qué URLs puntuales quiere
-  // borrar (imagenesAEliminar); el resultado final se arma acá.
-  let imagen_url: string | undefined = undefined;
-  let thumbnail_url: string | undefined = undefined;
-  let grid_url: string | undefined = undefined;
-  const validFiles = archivos.filter((f) => f.size > 0);
-  if (validFiles.length > 0 || imagenesAEliminar.length > 0) {
-    const { data: productoActual } = await supabase
-      .from("productos")
-      .select("imagen_url, thumbnail_url, grid_url")
-      .eq("id", id)
-      .single();
-
-    const imagenesActuales = parseProductImages(productoActual?.imagen_url);
-    const thumbnailsActuales = parseProductImages(
-      productoActual?.thumbnail_url,
-    );
-    const gridsActuales = parseProductImages(productoActual?.grid_url);
-
-    const urls: string[] = [];
-    const urlsThumb: string[] = [];
-    const urlsGrid: string[] = [];
-
-    for (let i = 0; i < validFiles.length; i++) {
-      const file = validFiles[i];
-      const fileExt = file.name.split(".").pop();
-      const baseFileName = crypto.randomUUID();
-      const fileName = `${baseFileName}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("productos")
-        .upload(fileName, file, { cacheControl: "31536000" });
-
-      if (!uploadError) {
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("productos").getPublicUrl(fileName);
-        urls.push(publicUrl);
-      }
-
-      // El thumbnail y el grid viajan en el mismo índice que su main (ver
-      // optimizarImagenProducto en edit-sheet.tsx). Si no vinieron, no
-      // bloqueamos la subida del main por eso.
-      const thumb = thumbnails[i];
-      if (thumb && thumb.size > 0) {
-        const thumbExt = thumb.name.split(".").pop();
-        const thumbName = `thumbs/${baseFileName}-thumb.${thumbExt}`;
-        const { error: uploadThumbError } = await supabase.storage
-          .from("productos")
-          .upload(thumbName, thumb, { cacheControl: "31536000" });
-        if (!uploadThumbError) {
-          const {
-            data: { publicUrl: thumbUrl },
-          } = supabase.storage.from("productos").getPublicUrl(thumbName);
-          urlsThumb.push(thumbUrl);
-        } else {
-          console.error("[EDIT PRODUCT THUMBNAIL ERROR]", uploadThumbError);
-        }
-      } else if (!uploadError) {
-        console.warn(
-          `[EDIT PRODUCT] Sin thumbnail para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
-        );
-      }
-
-      const grid = grids[i];
-      if (grid && grid.size > 0) {
-        const gridExt = grid.name.split(".").pop();
-        const gridName = `grids/${baseFileName}-grid.${gridExt}`;
-        const { error: uploadGridError } = await supabase.storage
-          .from("productos")
-          .upload(gridName, grid, { cacheControl: "31536000" });
-        if (!uploadGridError) {
-          const {
-            data: { publicUrl: gridUrl },
-          } = supabase.storage.from("productos").getPublicUrl(gridName);
-          urlsGrid.push(gridUrl);
-        } else {
-          console.error("[EDIT PRODUCT GRID ERROR]", uploadGridError);
-        }
-      } else if (!uploadError) {
-        console.warn(
-          `[EDIT PRODUCT] Sin grid para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
-        );
-      }
-    }
-
-    // imagenesAEliminar llega como URLs de imagen_url (lo único que ve el
-    // usuario en el sheet) — recorremos por índice para descartar el
-    // thumbnail/grid correspondiente en el mismo lugar del array y no
-    // desalinear las listas. Si una imagen vieja no tiene thumbnail o grid
-    // propio (productos creados antes de este cambio, o aún no
-    // backfilleados), usamos su propia imagen_url como placeholder en vez
-    // de dejar el índice vacío — se reemplaza solo cuando corra el backfill.
-    const imagenesFinal: string[] = [];
-    const thumbnailsFinal: string[] = [];
-    const gridsFinal: string[] = [];
-    imagenesActuales.forEach((url, idx) => {
-      if (imagenesAEliminar.includes(url)) return;
-      imagenesFinal.push(url);
-      thumbnailsFinal.push(thumbnailsActuales[idx] ?? url);
-      gridsFinal.push(gridsActuales[idx] ?? url);
-    });
-
-    imagen_url = JSON.stringify(imagenesFinal.concat(urls));
-    thumbnail_url = JSON.stringify(thumbnailsFinal.concat(urlsThumb));
-    grid_url = JSON.stringify(gridsFinal.concat(urlsGrid));
-  }
-
-  // 2. Actualizar Cabecera de Producto
-  const updateData: {
-    nombre: string;
-    categoria_id: string | null;
-    precio: number;
-    precio_costo: number;
-    descripcion: string;
-    publicado: boolean;
-    imagen_url?: string;
-    thumbnail_url?: string;
-    grid_url?: string;
-  } = {
-    nombre,
-    categoria_id: categoria_id || null,
-    precio,
-    precio_costo,
-    descripcion,
-    publicado,
-  };
-
-  if (imagen_url !== undefined) updateData.imagen_url = imagen_url;
-  if (thumbnail_url !== undefined) updateData.thumbnail_url = thumbnail_url;
-  if (grid_url !== undefined) updateData.grid_url = grid_url;
-
-  const { error: errorProducto } = await supabase
-    .from("productos")
-    .update(updateData)
-    .eq("id", id);
-
-  if (errorProducto) {
-    console.error("[EDIT PRODUCT ERROR]", errorProducto);
-    return {
-      error: "Hubo un error al actualizar el producto base.",
-      success: false,
-    };
-  }
-
-  // 3. Procesar Variantes Editadas
+  // 1. Procesar Variantes PRIMERO, antes de cualquier side-effect (Storage
+  // o UPDATE de productos). El guard de "menos variantes que las
+  // existentes" (y cualquier otro error de este bloque) tiene que ser la
+  // ÚNICA consecuencia posible: si bloquea acá, todavía no se subió
+  // ninguna imagen ni se tocó la tabla productos. Antes este bloque corría
+  // último — el guard bloqueaba la escritura de producto_variantes pero
+  // las imágenes (y nombre/precio/categoría/descripción/publicado) ya
+  // habían quedado persistidos como efecto secundario separado.
   try {
     if (!tieneVariantes) {
       const { data: unicoAnterior } = await supabase
@@ -470,6 +328,156 @@ export async function editarProductoAction(
 
     return {
       error: "Hubo un error al guardar las variantes del producto.",
+      success: false,
+    };
+  }
+
+  // 2. Variantes OK — recién acá subimos imágenes nuevas y mergeamos
+  // contra el imagen_url REAL en base. No confiamos en ninguna lista
+  // "existente" que pueda mandar el cliente: si el sheet quedó con datos
+  // viejos en memoria (otra pestaña, sesión larga, etc.), partir de la
+  // base evita pisar imágenes que el cliente ni sabía que estaban. El
+  // cliente solo manda qué URLs puntuales quiere borrar
+  // (imagenesAEliminar); el resultado final se arma acá.
+  let imagen_url: string | undefined = undefined;
+  let thumbnail_url: string | undefined = undefined;
+  let grid_url: string | undefined = undefined;
+  const validFiles = archivos.filter((f) => f.size > 0);
+  if (validFiles.length > 0 || imagenesAEliminar.length > 0) {
+    const { data: productoActual } = await supabase
+      .from("productos")
+      .select("imagen_url, thumbnail_url, grid_url")
+      .eq("id", id)
+      .single();
+
+    const imagenesActuales = parseProductImages(productoActual?.imagen_url);
+    const thumbnailsActuales = parseProductImages(
+      productoActual?.thumbnail_url,
+    );
+    const gridsActuales = parseProductImages(productoActual?.grid_url);
+
+    const urls: string[] = [];
+    const urlsThumb: string[] = [];
+    const urlsGrid: string[] = [];
+
+    for (let i = 0; i < validFiles.length; i++) {
+      const file = validFiles[i];
+      const fileExt = file.name.split(".").pop();
+      const baseFileName = crypto.randomUUID();
+      const fileName = `${baseFileName}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("productos")
+        .upload(fileName, file, { cacheControl: "31536000" });
+
+      if (!uploadError) {
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from("productos").getPublicUrl(fileName);
+        urls.push(publicUrl);
+      }
+
+      // El thumbnail y el grid viajan en el mismo índice que su main (ver
+      // optimizarImagenProducto en edit-sheet.tsx). Si no vinieron, no
+      // bloqueamos la subida del main por eso.
+      const thumb = thumbnails[i];
+      if (thumb && thumb.size > 0) {
+        const thumbExt = thumb.name.split(".").pop();
+        const thumbName = `thumbs/${baseFileName}-thumb.${thumbExt}`;
+        const { error: uploadThumbError } = await supabase.storage
+          .from("productos")
+          .upload(thumbName, thumb, { cacheControl: "31536000" });
+        if (!uploadThumbError) {
+          const {
+            data: { publicUrl: thumbUrl },
+          } = supabase.storage.from("productos").getPublicUrl(thumbName);
+          urlsThumb.push(thumbUrl);
+        } else {
+          console.error("[EDIT PRODUCT THUMBNAIL ERROR]", uploadThumbError);
+        }
+      } else if (!uploadError) {
+        console.warn(
+          `[EDIT PRODUCT] Sin thumbnail para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
+        );
+      }
+
+      const grid = grids[i];
+      if (grid && grid.size > 0) {
+        const gridExt = grid.name.split(".").pop();
+        const gridName = `grids/${baseFileName}-grid.${gridExt}`;
+        const { error: uploadGridError } = await supabase.storage
+          .from("productos")
+          .upload(gridName, grid, { cacheControl: "31536000" });
+        if (!uploadGridError) {
+          const {
+            data: { publicUrl: gridUrl },
+          } = supabase.storage.from("productos").getPublicUrl(gridName);
+          urlsGrid.push(gridUrl);
+        } else {
+          console.error("[EDIT PRODUCT GRID ERROR]", uploadGridError);
+        }
+      } else if (!uploadError) {
+        console.warn(
+          `[EDIT PRODUCT] Sin grid para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
+        );
+      }
+    }
+
+    // imagenesAEliminar llega como URLs de imagen_url (lo único que ve el
+    // usuario en el sheet) — recorremos por índice para descartar el
+    // thumbnail/grid correspondiente en el mismo lugar del array y no
+    // desalinear las listas. Si una imagen vieja no tiene thumbnail o grid
+    // propio (productos creados antes de este cambio, o aún no
+    // backfilleados), usamos su propia imagen_url como placeholder en vez
+    // de dejar el índice vacío — se reemplaza solo cuando corra el backfill.
+    const imagenesFinal: string[] = [];
+    const thumbnailsFinal: string[] = [];
+    const gridsFinal: string[] = [];
+    imagenesActuales.forEach((url, idx) => {
+      if (imagenesAEliminar.includes(url)) return;
+      imagenesFinal.push(url);
+      thumbnailsFinal.push(thumbnailsActuales[idx] ?? url);
+      gridsFinal.push(gridsActuales[idx] ?? url);
+    });
+
+    imagen_url = JSON.stringify(imagenesFinal.concat(urls));
+    thumbnail_url = JSON.stringify(thumbnailsFinal.concat(urlsThumb));
+    grid_url = JSON.stringify(gridsFinal.concat(urlsGrid));
+  }
+
+  // 3. Actualizar Cabecera de Producto
+  const updateData: {
+    nombre: string;
+    categoria_id: string | null;
+    precio: number;
+    precio_costo: number;
+    descripcion: string;
+    publicado: boolean;
+    imagen_url?: string;
+    thumbnail_url?: string;
+    grid_url?: string;
+  } = {
+    nombre,
+    categoria_id: categoria_id || null,
+    precio,
+    precio_costo,
+    descripcion,
+    publicado,
+  };
+
+  if (imagen_url !== undefined) updateData.imagen_url = imagen_url;
+  if (thumbnail_url !== undefined) updateData.thumbnail_url = thumbnail_url;
+  if (grid_url !== undefined) updateData.grid_url = grid_url;
+
+  const { error: errorProducto } = await supabase
+    .from("productos")
+    .update(updateData)
+    .eq("id", id);
+
+  if (errorProducto) {
+    console.error("[EDIT PRODUCT ERROR]", errorProducto);
+    return {
+      error: "Hubo un error al actualizar el producto base.",
       success: false,
     };
   }

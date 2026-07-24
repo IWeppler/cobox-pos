@@ -389,7 +389,7 @@ export function ProductDetail({
             </div>
           )}
 
-          <div className="relative aspect-4/5 max-w-75 lg:max-w-90 xl:max-w-105 w-full bg-card flex items-center justify-center group overflow-hidden border border-border/60">
+          <div className="relative aspect-4/5 max-w-90 lg:max-w-140 xl:max-w-180 w-full bg-card flex items-center justify-center group overflow-hidden border border-border/60">
             {imagenes.length > 0 ? (
               <Image
                 src={imagenes[currentImageIndex]}
@@ -397,7 +397,7 @@ export function ProductDetail({
                 fill
                 className="object-cover transition-opacity duration-300"
                 priority
-                sizes="(max-width: 1200px) 40vw, 420px"
+                sizes="(max-width: 1200px) 60vw, 650px"
               />
             ) : (
               <ShoppingBag
