@@ -3,7 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { ItemResuelto } from "@/entities/compras/types";
+import { ItemResuelto, SugerenciaSimilitud } from "@/entities/compras/types";
 import { slugify } from "@/shared/utils/slugify";
 import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-attributes";
 import {
@@ -83,6 +83,7 @@ export async function getOrdenParaMergeAction(ordenId: string) {
       orden: null,
       items: [],
       productos: [],
+      sugerenciasSimilitud: [],
     };
   }
 
@@ -92,6 +93,7 @@ export async function getOrdenParaMergeAction(ordenId: string) {
       orden: null,
       items: [],
       productos: [],
+      sugerenciasSimilitud: [],
     };
   }
 
@@ -101,7 +103,38 @@ export async function getOrdenParaMergeAction(ordenId: string) {
       orden: null,
       items: [],
       productos: [],
+      sugerenciasSimilitud: [],
     };
+  }
+
+  // Candidatos de "posible match" (similitud de texto) para los ítems sin
+  // match exacto — batched en un solo RPC, no uno por fila. No es
+  // bloqueante: si falla (extensión no disponible, timeout), la pantalla
+  // sigue funcionando en modo "sin sugerencias" (todo queda Ambiguo) en vez
+  // de romper toda la conciliación.
+  const rawNombresDesconocidos = Array.from(
+    new Set(
+      (itemsRes.data || [])
+        .filter((item) => item.estado_match === "DESCONOCIDO")
+        .map((item) => item.raw_nombre),
+    ),
+  );
+
+  let sugerenciasSimilitud: SugerenciaSimilitud[] = [];
+  if (rawNombresDesconocidos.length > 0) {
+    const { data: similaresData, error: similaresError } = await supabase.rpc(
+      "sugerir_productos_similares",
+      { p_raw_nombres: rawNombresDesconocidos },
+    );
+
+    if (similaresError) {
+      console.error(
+        "[PURCHASE MERGE] Error obteniendo sugerencias de similitud:",
+        JSON.stringify(similaresError, null, 2),
+      );
+    } else {
+      sugerenciasSimilitud = (similaresData as SugerenciaSimilitud[]) || [];
+    }
   }
 
   return {
@@ -109,6 +142,7 @@ export async function getOrdenParaMergeAction(ordenId: string) {
     orden: ordenRes.data,
     items: itemsRes.data || [],
     productos: productosRes.data || [],
+    sugerenciasSimilitud,
   };
 }
 

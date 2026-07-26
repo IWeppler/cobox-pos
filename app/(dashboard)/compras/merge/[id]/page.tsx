@@ -1,4 +1,4 @@
-import { ItemResuelto } from "@/entities/compras/types";
+import { ItemResuelto, SugerenciaSimilitud } from "@/entities/compras/types";
 import { Producto } from "@/entities/productos/types";
 import { getOrdenParaMergeAction } from "@/features/purchases/actions/merge-purchase";
 import { MergeTable } from "@/features/purchases/ui/merge-table";
@@ -12,7 +12,8 @@ interface PageProps {
 export default async function MergePage({ params }: Readonly<PageProps>) {
   const { id } = await params;
 
-  const { orden, items, productos, error } = await getOrdenParaMergeAction(id);
+  const { orden, items, productos, sugerenciasSimilitud, error } =
+    await getOrdenParaMergeAction(id);
 
   if (error || !orden) {
     return (
@@ -24,7 +25,7 @@ export default async function MergePage({ params }: Readonly<PageProps>) {
 
   if (orden.estado === "APROBADA") {
     return (
-      <div className="p-8 text-center bg-emerald-50 text-emerald-700 rounded-xl font-bold">
+      <div className="p-8 text-center bg-emerald-50 dark:bg-emerald-700/20 text-emerald-700 dark:text-emerald-200 rounded-xl font-bold m-2 md:m-4">
         Esta orden de compra ya fue procesada e impactada en el stock.
       </div>
     );
@@ -36,6 +37,7 @@ export default async function MergePage({ params }: Readonly<PageProps>) {
         orden={orden}
         itemsOriginales={items as ItemResuelto[]}
         productos={productos as Producto[]}
+        sugerenciasSimilitud={sugerenciasSimilitud as SugerenciaSimilitud[]}
       />
     </div>
   );

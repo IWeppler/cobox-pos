@@ -7,6 +7,13 @@ export interface OrdenCompra {
   creado_en: string;
 }
 
+export interface SugerenciaSimilitud {
+  raw_nombre: string;
+  producto_id: string;
+  producto_nombre: string;
+  score: number;
+}
+
 export interface ItemResuelto {
   id?: string;
   orden_id?: string;

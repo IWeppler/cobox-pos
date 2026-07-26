@@ -7,7 +7,14 @@ import {
   aprobarOrdenAction,
   crearProductoAlVueloAction,
 } from "../actions/merge-purchase";
+import {
+  getMergeDraft,
+  saveMergeDraft,
+  deleteMergeDraft,
+} from "../lib/merge-draft-db";
 import { queryKeys } from "@/shared/lib/query-keys";
+import { withTimeout, TimeoutError } from "@/shared/utils/with-timeout";
+import { runWithConcurrencyLimit } from "@/shared/utils/concurrency";
 import { toast } from "sonner";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -50,24 +57,41 @@ import {
   Search,
   ChevronDown,
   Layers,
+  RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { ItemResuelto, OrdenCompra } from "@/entities/compras/types";
+import {
+  ItemResuelto,
+  OrdenCompra,
+  SugerenciaSimilitud,
+} from "@/entities/compras/types";
 import { Producto } from "@/entities/productos/types";
 import { createClient } from "@/shared/config/supabase/client";
 import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-attributes";
 import { ProductMediaSection } from "@/features/stock/ui/create-product/product-media-section";
 import { optimizarImagenProducto } from "@/shared/utils/image-optimizer";
+import {
+  clasificarDesconocido,
+  construirMapaSimilares,
+  BucketDesconocido,
+} from "../lib/match-classification";
 
 interface MergeTableProps {
   orden: OrdenCompra;
   itemsOriginales: ItemResuelto[];
   productos: Producto[];
+  sugerenciasSimilitud: SugerenciaSimilitud[];
 }
 
 type ItemResueltoConCategoria = ItemResuelto & {
   raw_categoria?: string | null;
 };
+
+// Timeout de UI para las acciones de red disparadas desde esta pantalla:
+// si no responden a tiempo, se tratan como error y el botón se destraba
+// en vez de quedar "cargando" para siempre.
+const ACTION_TIMEOUT_MS = 25_000;
 
 // --- Combobox de Búsqueda Personalizado ---
 function SearchableSelect({
@@ -176,10 +200,41 @@ export function MergeTable({
   orden,
   itemsOriginales,
   productos,
+  sugerenciasSimilitud,
 }: Readonly<MergeTableProps>) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Estado de red por acción — separados para que un "crear producto"
+  // colgado no bloquee el botón de aprobar (y viceversa).
+  const [crearLoading, setCrearLoading] = useState(false);
+  const [crearError, setCrearError] = useState<string | null>(null);
+  const [aprobarLoading, setAprobarLoading] = useState(false);
+  const [aprobarError, setAprobarError] = useState<string | null>(null);
+
+  // Loading/error por fila para las acciones de 1-click y masivas — separado
+  // de crearLoading/crearError, que siguen siendo solo del modal manual.
+  const [loadingPorGrupo, setLoadingPorGrupo] = useState<Record<string, boolean>>({});
+  const [errorPorGrupo, setErrorPorGrupo] = useState<Record<string, string | null>>({});
+
+  // Categoría elegida a mano por el usuario (override), por raw_nombre —
+  // independiente del modal. Si no hay override, se usa la sugerencia
+  // automática de sugerirCategoria calculada en clasificacionPorGrupo.
+  const [categoriaPorGrupo, setCategoriaPorGrupo] = useState<Record<string, string>>({});
+
+  // Selección múltiple de filas Ambiguas, para "Asignar categoría a selección".
+  const [gruposSeleccionados, setGruposSeleccionados] = useState<Set<string>>(
+    new Set(),
+  );
+  const [categoriaParaSeleccion, setCategoriaParaSeleccion] = useState("");
+  const [bulkCrearLoading, setBulkCrearLoading] = useState(false);
+
+  // Borrador local (IndexedDB) de esta conciliación
+  const [draftState, setDraftState] = useState<
+    "checking" | "prompt" | "ready"
+  >("checking");
+  const [pendingDraft, setPendingDraft] =
+    useState<Awaited<ReturnType<typeof getMergeDraft>>>(null);
 
   // En lugar de manejar índices sueltos, manejamos el `raw_nombre` de la agrupación
   const [groupToRemoveName, setGroupToRemoveName] = useState<string | null>(
@@ -202,6 +257,11 @@ export function MergeTable({
     })),
   );
 
+  // Snapshot del estado prístino (sin tocar), para no ofrecer "restaurar
+  // borrador" ni pisar un borrador real cuando el usuario todavía no hizo
+  // ningún cambio en esta sesión.
+  const pristineItemsSnapshotRef = useRef<string>(JSON.stringify(items));
+
   // Agrupación Computada Dinámicamente para Renderizar
   const groupedItems = useMemo(() => {
     const map = new Map<string, ItemResueltoConCategoria[]>();
@@ -211,6 +271,34 @@ export function MergeTable({
     });
     return Array.from(map.entries());
   }, [items]);
+
+  // Candidatos de "posible match" (similitud de texto), 1 por raw_nombre.
+  const similaresMap = useMemo(
+    () => construirMapaSimilares(sugerenciasSimilitud),
+    [sugerenciasSimilitud],
+  );
+
+  // Clasificación de las 3 filas "no reconocido" (posible match / nuevo
+  // sugerido / ambiguo), calculada 1 vez por raw_nombre DESCONOCIDO.
+  const clasificacionPorGrupo = useMemo(() => {
+    const mapa = new Map<string, BucketDesconocido>();
+    for (const [rawNombre, group] of groupedItems) {
+      if (group[0].estado_match === "DESCONOCIDO") {
+        mapa.set(rawNombre, clasificarDesconocido(rawNombre, similaresMap));
+      }
+    }
+    return mapa;
+  }, [groupedItems, similaresMap]);
+
+  // Cuántos grupos están en el bucket "nuevo sugerido" — usado para
+  // habilitar/mostrar el botón de creación masiva.
+  const gruposNuevoSugerido = useMemo(
+    () =>
+      groupedItems
+        .filter(([rawNombre]) => clasificacionPorGrupo.get(rawNombre)?.tipo === "NUEVO_SUGERIDO")
+        .map(([rawNombre]) => rawNombre),
+    [groupedItems, clasificacionPorGrupo],
+  );
 
   // Grupo activo del modal "Crear Producto Múltiple" y si tiene costos
   // dispersos entre sus filas (para advertir que el precio unificado no
@@ -254,6 +342,80 @@ export function MergeTable({
     };
     fetchCats();
   }, []);
+
+  // Busca un borrador guardado de ESTA orden al entrar a la pantalla.
+  useEffect(() => {
+    let cancelled = false;
+    getMergeDraft(orden.id)
+      .then((draft) => {
+        if (cancelled) return;
+        if (draft && draft.items.length > 0) {
+          setPendingDraft(draft);
+          setDraftState("prompt");
+        } else {
+          setDraftState("ready");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDraftState("ready");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orden.id]);
+
+  // Autoguardado del borrador local — solo una vez que se resolvió si
+  // había (y qué hacer con) un borrador previo, y solo si hay cambios
+  // reales sobre el estado prístino.
+  useEffect(() => {
+    if (draftState !== "ready") return;
+
+    const productosCreados = localProductos.filter(
+      (p) => !productos.some((orig) => orig.id === p.id),
+    );
+    const serializedItems = JSON.stringify(items);
+    if (
+      serializedItems === pristineItemsSnapshotRef.current &&
+      productosCreados.length === 0
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      saveMergeDraft({
+        ordenId: orden.id,
+        items,
+        productosCreados,
+        actualizadoEn: Date.now(),
+      }).catch(() => {});
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [items, localProductos, productos, draftState, orden.id]);
+
+  const handleRestaurarDraft = () => {
+    if (pendingDraft) {
+      setItems(pendingDraft.items);
+      if (pendingDraft.productosCreados.length > 0) {
+        setLocalProductos((prev) => {
+          const existentes = new Set(prev.map((p) => p.id));
+          const nuevos = pendingDraft.productosCreados.filter(
+            (p) => !existentes.has(p.id),
+          );
+          return [...prev, ...nuevos];
+        });
+      }
+      toast.info("Continuando donde quedaste.");
+    }
+    setPendingDraft(null);
+    setDraftState("ready");
+  };
+
+  const handleDescartarDraft = () => {
+    deleteMergeDraft(orden.id).catch(() => {});
+    setPendingDraft(null);
+    setDraftState("ready");
+  };
 
   function productoReal(
     id: string | null,
@@ -342,76 +504,230 @@ export function MergeTable({
     );
   };
 
-  // --- Crear al Vuelo Grupal ---
+  // --- Crear al Vuelo (compartido por el modal manual, el 1-click y el masivo) ---
+  // Nunca throwea — siempre resuelve a un resultado, así los callers (loop
+  // masivo incluido) no necesitan try/catch propio.
+  async function crearYAsignarProducto(params: {
+    rawNombre: string;
+    nombreProducto: string;
+    categoria: string;
+    precio: number;
+    archivosMain?: File[];
+    archivosThumb?: File[];
+    archivosGrid?: File[];
+  }): Promise<
+    { ok: true; producto: Producto } | { ok: false; error: string }
+  > {
+    const itemActual = items.find((i) => i.raw_nombre === params.rawNombre);
+    if (!itemActual) {
+      return { ok: false, error: "No se encontró el ítem en la conciliación." };
+    }
+
+    try {
+      const res = await withTimeout(
+        crearProductoAlVueloAction(
+          params.nombreProducto,
+          itemActual.precio_costo,
+          params.precio,
+          params.archivosMain || [],
+          params.archivosThumb || [],
+          params.archivosGrid || [],
+          params.categoria,
+        ),
+        ACTION_TIMEOUT_MS,
+      );
+
+      if (res.error || !res.producto) {
+        return { ok: false, error: res.error || "Ocurrió un error al crear." };
+      }
+
+      const nuevoProd = res.producto as Producto;
+      setLocalProductos((prevProductos) => [...prevProductos, nuevoProd]);
+      queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+
+      const precioUnificado = Number(params.precio || nuevoProd.precio || 0);
+      setItems((prevItems) =>
+        prevItems.map((item) => {
+          if (item.raw_nombre !== params.rawNombre) return item;
+
+          return {
+            ...item,
+            producto_id: nuevoProd.id,
+            precio_venta_actualizado: precioUnificado,
+            estado_match:
+              item.estado_match === "DESCONOCIDO"
+                ? "NUEVO_ALIAS"
+                : item.estado_match,
+          };
+        }),
+      );
+
+      return { ok: true, producto: nuevoProd };
+    } catch (err) {
+      const message =
+        err instanceof TimeoutError
+          ? "La creación tardó demasiado y se canceló. Probá de nuevo."
+          : err instanceof Error
+            ? err.message
+            : "Ocurrió un error inesperado al crear el producto.";
+      return { ok: false, error: message };
+    }
+  }
+
   const handleCrearAlVuelo = async () => {
     if (!groupToCreateName) return;
 
-    // Buscamos un item representativo del grupo para sacar el costo
-    const itemActual = items.find((i) => i.raw_nombre === groupToCreateName);
+    setCrearLoading(true);
+    setCrearError(null);
+
+    try {
+      // Comprimimos generando las tres versiones (main + thumbnail + grid)
+      const imagenesProcesadas =
+        archivosNuevoProducto.length > 0
+          ? await Promise.all(
+              archivosNuevoProducto.map((f) => optimizarImagenProducto(f)),
+            )
+          : [];
+
+      const archivosMain = imagenesProcesadas.map((img) => img.main);
+      const archivosThumb = imagenesProcesadas.map((img) => img.thumbnail);
+      const archivosGrid = imagenesProcesadas.map((img) => img.grid);
+
+      const resultado = await crearYAsignarProducto({
+        rawNombre: groupToCreateName,
+        nombreProducto: nuevoProductoData.nombre,
+        categoria: nuevoProductoData.categoria,
+        precio: nuevoProductoData.precio,
+        archivosMain,
+        archivosThumb,
+        archivosGrid,
+      });
+
+      if (!resultado.ok) {
+        setCrearError(resultado.error);
+        return;
+      }
+
+      toast.success(
+        `Producto "${resultado.producto.nombre}" creado y asignado a ${items.filter((i) => i.raw_nombre === groupToCreateName).length} variantes.`,
+      );
+      setGroupToCreateName(null);
+      setArchivosNuevoProducto([]);
+    } finally {
+      setCrearLoading(false);
+    }
+  };
+
+  // --- 1-click: bucket (b) Nuevo Sugerido ---
+  const handleCrearSugerido = async (
+    rawNombre: string,
+    categoriaSugerida: string,
+  ) => {
+    const itemActual = items.find((i) => i.raw_nombre === rawNombre);
     if (!itemActual) return;
 
-    setIsSubmitting(true);
+    const categoria = categoriaPorGrupo[rawNombre] ?? categoriaSugerida;
+    const precio = Math.ceil(itemActual.precio_costo * 1.5);
 
-    // ⚡ 1. Comprimimos generando las tres versiones (main + thumbnail + grid)
-    const imagenesProcesadas =
-      archivosNuevoProducto.length > 0
-        ? await Promise.all(
-            archivosNuevoProducto.map((f) => optimizarImagenProducto(f)),
-          )
-        : [];
+    setLoadingPorGrupo((prev) => ({ ...prev, [rawNombre]: true }));
+    setErrorPorGrupo((prev) => ({ ...prev, [rawNombre]: null }));
 
-    // Separamos en arrays limpios
-    const archivosMain = imagenesProcesadas.map((img) => img.main);
-    const archivosThumb = imagenesProcesadas.map((img) => img.thumbnail);
-    const archivosGrid = imagenesProcesadas.map((img) => img.grid);
+    const resultado = await crearYAsignarProducto({
+      rawNombre,
+      nombreProducto: rawNombre,
+      categoria,
+      precio,
+    });
 
-    // ⚡ 2. Enviamos los arrays a la Server Action
-    const res = await crearProductoAlVueloAction(
-      nuevoProductoData.nombre,
-      itemActual.precio_costo,
-      nuevoProductoData.precio,
-      archivosMain,
-      archivosThumb,
-      archivosGrid,
-      nuevoProductoData.categoria,
-    );
-    setIsSubmitting(false);
+    setLoadingPorGrupo((prev) => ({ ...prev, [rawNombre]: false }));
 
-    if (res.error || !res.producto) {
-      toast.error(res.error || "Ocurrió un error al crear.");
+    if (!resultado.ok) {
+      setErrorPorGrupo((prev) => ({ ...prev, [rawNombre]: resultado.error }));
       return;
     }
 
-    const nuevoProd = res.producto as Producto;
-    setLocalProductos((prevProductos) => [...prevProductos, nuevoProd]);
-    queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-    queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+    toast.success(`"${resultado.producto.nombre}" creado en "${categoria}".`);
+  };
 
-    // Asignar el nuevo producto a todos los ítems de este grupo
-    const precioUnificado = Number(
-      nuevoProductoData.precio || nuevoProd.precio || 0,
-    );
-    setItems((prevItems) =>
-      prevItems.map((item) => {
-        if (item.raw_nombre !== groupToCreateName) return item;
+  // --- T3: acciones masivas ---
 
-        return {
-          ...item,
-          producto_id: nuevoProd.id,
-          precio_venta_actualizado: precioUnificado,
-          estado_match:
-            item.estado_match === "DESCONOCIDO"
-              ? "NUEVO_ALIAS"
-              : item.estado_match,
-        };
-      }),
-    );
+  const toggleGrupoSeleccionado = (rawNombre: string) => {
+    setGruposSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(rawNombre)) next.delete(rawNombre);
+      else next.add(rawNombre);
+      return next;
+    });
+  };
+
+  const handleAsignarCategoriaASeleccion = () => {
+    if (!categoriaParaSeleccion || gruposSeleccionados.size === 0) return;
+
+    setCategoriaPorGrupo((prev) => {
+      const next = { ...prev };
+      for (const rawNombre of gruposSeleccionados) {
+        next[rawNombre] = categoriaParaSeleccion;
+      }
+      return next;
+    });
 
     toast.success(
-      `Producto "${nuevoProd.nombre}" creado y asignado a ${items.filter((i) => i.raw_nombre === groupToCreateName).length} variantes.`,
+      `Categoría "${categoriaParaSeleccion}" asignada a ${gruposSeleccionados.size} agrupaciones. Ahora podés usar "Crear" en cada una.`,
     );
-    setGroupToCreateName(null);
-    setArchivosNuevoProducto([]);
+    setGruposSeleccionados(new Set());
+    setCategoriaParaSeleccion("");
+  };
+
+  const handleCrearTodosSugeridos = async () => {
+    if (gruposNuevoSugerido.length === 0 || bulkCrearLoading) return;
+
+    setBulkCrearLoading(true);
+    setLoadingPorGrupo((prev) => {
+      const next = { ...prev };
+      for (const rawNombre of gruposNuevoSugerido) next[rawNombre] = true;
+      return next;
+    });
+
+    const tareas = gruposNuevoSugerido.map((rawNombre) => async () => {
+      const bucket = clasificacionPorGrupo.get(rawNombre);
+      const categoriaSugerida =
+        bucket?.tipo === "NUEVO_SUGERIDO"
+          ? bucket.categoriaSugerida.categoriaNombre
+          : "";
+      const categoria = categoriaPorGrupo[rawNombre] ?? categoriaSugerida;
+      const itemActual = items.find((i) => i.raw_nombre === rawNombre);
+      const precio = Math.ceil((itemActual?.precio_costo || 0) * 1.5);
+
+      const resultado = await crearYAsignarProducto({
+        rawNombre,
+        nombreProducto: rawNombre,
+        categoria,
+        precio,
+      });
+
+      setLoadingPorGrupo((prev) => ({ ...prev, [rawNombre]: false }));
+      setErrorPorGrupo((prev) => ({
+        ...prev,
+        [rawNombre]: resultado.ok ? null : resultado.error,
+      }));
+
+      return resultado.ok;
+    });
+
+    const resultados = await runWithConcurrencyLimit(tareas, 3);
+    setBulkCrearLoading(false);
+
+    const exitosos = resultados.filter(Boolean).length;
+    const fallidos = resultados.length - exitosos;
+
+    if (fallidos === 0) {
+      toast.success(`Se crearon ${exitosos} productos sugeridos.`);
+    } else {
+      toast.warning(
+        `Creados ${exitosos}/${resultados.length}. ${fallidos} fallaron — reintentalos individualmente (quedaron marcados en rojo).`,
+      );
+    }
   };
 
   const handleAprobar = async () => {
@@ -423,19 +739,37 @@ export function MergeTable({
       return;
     }
 
-    setIsSubmitting(true);
+    setAprobarLoading(true);
+    setAprobarError(null);
     toast.info("Impactando stock y precios...");
 
-    const res = await aprobarOrdenAction(orden.id, orden.proveedor, items);
+    try {
+      const res = await withTimeout(
+        aprobarOrdenAction(orden.id, orden.proveedor, items),
+        ACTION_TIMEOUT_MS,
+      );
 
-    if (res.success) {
-      toast.success("¡Orden conciliada! Stock actualizado.");
-      queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-      queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
-      router.push("/stock");
-    } else {
-      toast.error(res.error || "Ocurrió un error.");
-      setIsSubmitting(false);
+      if (res.success) {
+        toast.success("¡Orden conciliada! Stock actualizado.");
+        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+        // Guardado real confirmado contra el server: el borrador local ya
+        // no tiene sentido, no debe quedar un borrador fantasma.
+        await deleteMergeDraft(orden.id).catch(() => {});
+        router.push("/stock");
+      } else {
+        setAprobarError(res.error || "Ocurrió un error.");
+      }
+    } catch (err) {
+      setAprobarError(
+        err instanceof TimeoutError
+          ? "La operación tardó demasiado y se canceló. Tu progreso sigue guardado localmente, podés reintentar."
+          : err instanceof Error
+            ? err.message
+            : "Ocurrió un error inesperado al impactar los datos.",
+      );
+    } finally {
+      setAprobarLoading(false);
     }
   };
 
@@ -458,18 +792,29 @@ export function MergeTable({
             {Number(orden.total_presupuestado).toLocaleString("es-AR")}
           </p>
         </div>
-        <Button
-          size="lg"
-          className="h-10 bg-primary hover:bg-primary/90 text-white w-full sm:w-auto cursor-pointer"
-          onClick={handleAprobar}
-          disabled={isSubmitting || items.length === 0}
-        >
-          <Save className="w-5 h-5 mr-2" />
-          {isSubmitting ? "Procesando..." : "Confirmar e Impactar Stock"}
-        </Button>
+        <div className="flex flex-col items-stretch sm:items-end gap-2 w-full sm:w-auto">
+          <Button
+            size="lg"
+            className="h-10 bg-primary hover:bg-primary/90 text-white w-full sm:w-auto cursor-pointer"
+            onClick={handleAprobar}
+            disabled={aprobarLoading || crearLoading || items.length === 0}
+          >
+            <Save className="w-5 h-5 mr-2" />
+            {aprobarLoading
+              ? "Procesando..."
+              : aprobarError
+                ? "Reintentar"
+                : "Confirmar e Impactar Stock"}
+          </Button>
+          {aprobarError && (
+            <p className="text-xs text-rose-600 font-medium max-w-sm text-right">
+              {aprobarError}
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* Acciones Rápidas (Recargo Global) */}
+      {/* Acciones Rápidas (Recargo Global + Masivas) */}
       <div className="flex flex-col sm:flex-row items-center gap-4 bg-background p-4 rounded-xl border border-border">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <Percent className="w-4 h-4 text-muted-foreground" />
@@ -494,7 +839,62 @@ export function MergeTable({
             Aplicar
           </Button>
         </div>
+
+        {gruposNuevoSugerido.length > 0 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="bg-violet-100 text-violet-700 hover:bg-violet-200 w-full sm:w-auto"
+            onClick={handleCrearTodosSugeridos}
+            disabled={bulkCrearLoading}
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            {bulkCrearLoading
+              ? "Creando..."
+              : `Crear todos los sugeridos (${gruposNuevoSugerido.length})`}
+          </Button>
+        )}
       </div>
+
+      {/* Barra de selección múltiple (solo Ambiguo) */}
+      {gruposSeleccionados.size > 0 && (
+        <div className="flex flex-col sm:flex-row items-center gap-3 bg-rose-50 border border-rose-200 p-3 rounded-xl">
+          <span className="text-sm font-semibold text-rose-800 whitespace-nowrap">
+            {gruposSeleccionados.size} agrupaciones seleccionadas
+          </span>
+          <Select
+            value={categoriaParaSeleccion}
+            onValueChange={setCategoriaParaSeleccion}
+          >
+            <SelectTrigger className="w-full sm:w-64 h-8 bg-background">
+              <SelectValue placeholder="Elegir categoría para todas..." />
+            </SelectTrigger>
+            <SelectContent className="max-h-50">
+              {categoriasDB.map((cat) => (
+                <SelectItem key={cat.id} value={cat.nombre}>
+                  {cat.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            className="bg-rose-600 hover:bg-rose-700 text-white w-full sm:w-auto"
+            disabled={!categoriaParaSeleccion}
+            onClick={handleAsignarCategoriaASeleccion}
+          >
+            Asignar categoría a selección
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground w-full sm:w-auto"
+            onClick={() => setGruposSeleccionados(new Set())}
+          >
+            Cancelar selección
+          </Button>
+        </div>
+      )}
 
       {/* Leyenda Visual */}
       <div className="flex flex-wrap gap-4 px-2">
@@ -512,9 +912,21 @@ export function MergeTable({
         </Badge>
         <Badge
           variant="outline"
+          className="bg-sky-50 text-sky-700 border-sky-200 px-3 py-1"
+        >
+          <Search className="w-4 h-4 mr-2" /> Posible Match Existente
+        </Badge>
+        <Badge
+          variant="outline"
+          className="bg-violet-50 text-violet-700 border-violet-200 px-3 py-1"
+        >
+          <Sparkles className="w-4 h-4 mr-2" /> Nuevo (Categoría Sugerida)
+        </Badge>
+        <Badge
+          variant="outline"
           className="bg-rose-50 text-rose-700 border-rose-200 px-3 py-1"
         >
-          <HelpCircle className="w-4 h-4 mr-2" /> Desconocido / Para Revisar
+          <HelpCircle className="w-4 h-4 mr-2" /> Ambiguo / Sin Sugerencia
         </Badge>
       </div>
 
@@ -551,6 +963,15 @@ export function MergeTable({
                   firstItem.estado_match === "NUEVO_ALIAS";
                 const isInflacion = firstItem.estado_match === "MODIFICADO";
                 const isDesconocido = firstItem.estado_match === "DESCONOCIDO";
+                const bucket = isDesconocido
+                  ? clasificacionPorGrupo.get(rawNombre)
+                  : undefined;
+                const posibleMatch =
+                  bucket?.tipo === "POSIBLE_MATCH" ? bucket : null;
+                const nuevoSugerido =
+                  bucket?.tipo === "NUEVO_SUGERIDO" ? bucket : null;
+                const isAmbiguo =
+                  isDesconocido && !posibleMatch && !nuevoSugerido;
                 const totalGroupStock = group.reduce(
                   (sum, i) => sum + i.cantidad,
                   0,
@@ -559,7 +980,11 @@ export function MergeTable({
                 let rowClassName = "hover:bg-muted/30";
                 if (isInflacion)
                   rowClassName = "bg-amber-50/30 hover:bg-amber-50/50";
-                else if (isDesconocido)
+                else if (posibleMatch)
+                  rowClassName = "bg-sky-50/30 hover:bg-sky-50/50";
+                else if (nuevoSugerido)
+                  rowClassName = "bg-violet-50/20 hover:bg-violet-50/40";
+                else if (isAmbiguo)
                   rowClassName = "bg-rose-50/10 hover:bg-rose-50/20";
 
                 return (
@@ -569,13 +994,28 @@ export function MergeTable({
                   >
                     {/* STATUS */}
                     <td className="px-6 py-4 text-center align-top pt-5">
+                      {isAmbiguo && (
+                        <input
+                          type="checkbox"
+                          className="mb-1.5 w-4 h-4 accent-rose-600 cursor-pointer"
+                          checked={gruposSeleccionados.has(rawNombre)}
+                          onChange={() => toggleGrupoSeleccionado(rawNombre)}
+                          title="Seleccionar para asignar categoría en lote"
+                        />
+                      )}
                       {isPerfecto && (
                         <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
                       )}
                       {isInflacion && (
                         <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto" />
                       )}
-                      {isDesconocido && (
+                      {posibleMatch && (
+                        <Search className="w-6 h-6 text-sky-500 mx-auto" />
+                      )}
+                      {nuevoSugerido && (
+                        <Sparkles className="w-6 h-6 text-violet-500 mx-auto" />
+                      )}
+                      {isAmbiguo && (
                         <HelpCircle className="w-6 h-6 text-rose-500 mx-auto" />
                       )}
                     </td>
@@ -639,55 +1079,168 @@ export function MergeTable({
 
                     {/* VINCULACIÓN EN SISTEMA */}
                     <td className="px-6 py-4 align-top pt-5">
-                      {isDesconocido ? (
-                        <div className="flex flex-col gap-2 relative">
-                          <SearchableSelect
-                            productos={localProductos}
-                            value={firstItem.producto_id || null}
-                            onSelect={(value) =>
-                              handleAssignProduct(rawNombre, value)
-                            }
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-xs border-dashed text-foreground hover:border-primary w-full justify-start"
-                            onClick={() => {
-                              setGroupToCreateName(rawNombre);
+                      {(() => {
+                        const abrirModalManual = () => {
+                          setGroupToCreateName(rawNombre);
+                          setCrearError(null);
 
-                              // Si ya hay un precio calculado para esta fila (recargo global
-                              // aplicado o edición manual), lo usamos como sugerencia.
-                              // Si no, caemos al fallback por defecto de costo + 50%.
-                              const recargoYaAplicado =
-                                (firstItem.precio_venta_actualizado || 0) > 0;
-                              const precioSugerido = recargoYaAplicado
-                                ? (firstItem.precio_venta_actualizado as number)
-                                : Math.ceil(firstItem.precio_costo * 1.5);
+                          // Si ya hay un precio calculado para esta fila (recargo global
+                          // aplicado o edición manual), lo usamos como sugerencia.
+                          // Si no, caemos al fallback por defecto de costo + 50%.
+                          const recargoYaAplicado =
+                            (firstItem.precio_venta_actualizado || 0) > 0;
+                          const precioSugerido = recargoYaAplicado
+                            ? (firstItem.precio_venta_actualizado as number)
+                            : Math.ceil(firstItem.precio_costo * 1.5);
 
-                              const origenPrecio = recargoYaAplicado
-                                ? `Costo $${firstItem.precio_costo.toLocaleString("es-AR")} + ${(
-                                    ((precioSugerido - firstItem.precio_costo) /
-                                      firstItem.precio_costo) *
-                                    100
-                                  ).toFixed(
-                                    1,
-                                  )}% recargo = $${precioSugerido.toLocaleString("es-AR")}`
-                                : "Precio sugerido por defecto (sin recargo aplicado todavía)";
+                          const origenPrecio = recargoYaAplicado
+                            ? `Costo $${firstItem.precio_costo.toLocaleString("es-AR")} + ${(
+                                ((precioSugerido - firstItem.precio_costo) /
+                                  firstItem.precio_costo) *
+                                100
+                              ).toFixed(
+                                1,
+                              )}% recargo = $${precioSugerido.toLocaleString("es-AR")}`
+                            : "Precio sugerido por defecto (sin recargo aplicado todavía)";
 
-                              setNuevoProductoData({
-                                nombre: rawNombre,
-                                precio: precioSugerido,
-                                categoria: firstItem.raw_categoria || "",
-                                origenPrecio,
-                              });
-                              setArchivosNuevoProducto([]);
-                            }}
-                          >
-                            <PlusCircle className="w-4 h-4 mr-2" />
-                            Crear Producto Nuevo
-                          </Button>
-                        </div>
-                      ) : (
+                          setNuevoProductoData({
+                            nombre: rawNombre,
+                            precio: precioSugerido,
+                            categoria:
+                              categoriaPorGrupo[rawNombre] ??
+                              nuevoSugerido?.categoriaSugerida.categoriaNombre ??
+                              firstItem.raw_categoria ??
+                              "",
+                            origenPrecio,
+                          });
+                          setArchivosNuevoProducto([]);
+                        };
+
+                        const fallbackManual = (
+                          <>
+                            <SearchableSelect
+                              productos={localProductos}
+                              value={firstItem.producto_id || null}
+                              onSelect={(value) =>
+                                handleAssignProduct(rawNombre, value)
+                              }
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs border-dashed text-foreground hover:border-primary w-full justify-start"
+                              onClick={abrirModalManual}
+                            >
+                              <PlusCircle className="w-4 h-4 mr-2" />
+                              Crear Producto Nuevo
+                            </Button>
+                          </>
+                        );
+
+                        if (posibleMatch) {
+                          return (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-start justify-between gap-2 p-2 bg-sky-50/60 border border-sky-200 rounded-md">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-sky-700 flex items-center gap-1.5 truncate">
+                                    <Search className="w-3.5 h-3.5 shrink-0" />
+                                    {posibleMatch.candidato.nombre}
+                                  </p>
+                                  <p className="text-[11px] text-sky-700/70 mt-0.5">
+                                    ~{Math.round(posibleMatch.candidato.score * 100)}%
+                                    similar — ¿es este producto?
+                                  </p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  className="h-8 text-xs bg-sky-600 hover:bg-sky-700 text-white shrink-0"
+                                  onClick={() =>
+                                    handleAssignProduct(
+                                      rawNombre,
+                                      posibleMatch.candidato.productoId,
+                                    )
+                                  }
+                                >
+                                  Confirmar asociación
+                                </Button>
+                              </div>
+                              <details className="text-xs">
+                                <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                                  No es este producto — buscar otro
+                                </summary>
+                                <div className="mt-2 flex flex-col gap-2">
+                                  {fallbackManual}
+                                </div>
+                              </details>
+                            </div>
+                          );
+                        }
+
+                        if (nuevoSugerido) {
+                          const categoriaEfectiva =
+                            categoriaPorGrupo[rawNombre] ??
+                            nuevoSugerido.categoriaSugerida.categoriaNombre;
+                          return (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-start justify-between gap-2 p-2 bg-violet-50/60 border border-violet-200 rounded-md">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-violet-700 flex items-center gap-1.5 truncate">
+                                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                    {categoriaEfectiva}
+                                  </p>
+                                  <p className="text-[11px] text-violet-700/70 mt-0.5">
+                                    Sugerido por &quot;
+                                    {nuevoSugerido.categoriaSugerida.matchedKeyword}&quot;
+                                  </p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  className="h-8 text-xs bg-violet-600 hover:bg-violet-700 text-white shrink-0"
+                                  disabled={loadingPorGrupo[rawNombre]}
+                                  onClick={() =>
+                                    handleCrearSugerido(rawNombre, categoriaEfectiva)
+                                  }
+                                >
+                                  {loadingPorGrupo[rawNombre] ? (
+                                    "Creando..."
+                                  ) : errorPorGrupo[rawNombre] ? (
+                                    <>
+                                      <RefreshCw className="w-3.5 h-3.5 mr-1.5" />{" "}
+                                      Reintentar
+                                    </>
+                                  ) : (
+                                    "Crear"
+                                  )}
+                                </Button>
+                              </div>
+                              {errorPorGrupo[rawNombre] && (
+                                <p className="text-[11px] text-rose-600 font-medium">
+                                  {errorPorGrupo[rawNombre]}
+                                </p>
+                              )}
+                              <details className="text-xs">
+                                <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                                  No es esta categoría — elegir a mano
+                                </summary>
+                                <div className="mt-2 flex flex-col gap-2">
+                                  {fallbackManual}
+                                </div>
+                              </details>
+                            </div>
+                          );
+                        }
+
+                        if (isDesconocido) {
+                          return (
+                            <div className="flex flex-col gap-2 relative">
+                              {fallbackManual}
+                            </div>
+                          );
+                        }
+
+                        return null;
+                      })()}
+                      {!isDesconocido && (
                         <div className="flex items-start justify-between gap-2 p-2 bg-background border border-border/60 rounded-md">
                           <div>
                             <p className="font-semibold text-primary flex items-center gap-1.5">
@@ -787,6 +1340,7 @@ export function MergeTable({
           if (!open) {
             setGroupToCreateName(null);
             setArchivosNuevoProducto([]);
+            setCrearError(null);
           }
         }}
       >
@@ -875,23 +1429,41 @@ export function MergeTable({
               )}
             </div>
 
+            {crearError && (
+              <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-md p-2.5">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-rose-900 font-medium leading-tight">
+                  {crearError}
+                </p>
+              </div>
+            )}
+
             <div className="pt-2 flex justify-end gap-2">
               <Button
                 variant="outline"
                 onClick={() => {
                   setGroupToCreateName(null);
                   setArchivosNuevoProducto([]);
+                  setCrearError(null);
                 }}
-                disabled={isSubmitting}
+                disabled={crearLoading}
               >
                 Cancelar
               </Button>
               <Button
                 onClick={handleCrearAlVuelo}
-                disabled={isSubmitting}
+                disabled={crearLoading}
                 className="bg-primary"
               >
-                {isSubmitting ? "Creando..." : "Guardar y Asignar Todo"}
+                {crearLoading ? (
+                  "Creando..."
+                ) : crearError ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" /> Reintentar
+                  </>
+                ) : (
+                  "Guardar y Asignar Todo"
+                )}
               </Button>
             </div>
           </div>
@@ -922,6 +1494,27 @@ export function MergeTable({
               className="bg-rose-600 hover:bg-rose-700 text-white"
             >
               Descartar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Recuperación de Borrador Local */}
+      <AlertDialog open={draftState === "prompt"}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Progreso sin confirmar encontrado</AlertDialogTitle>
+            <AlertDialogDescription>
+              Encontramos un progreso sin confirmar de esta conciliación.
+              ¿Querés continuar donde quedaste?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleDescartarDraft}>
+              Empezar de cero
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleRestaurarDraft}>
+              Continuar donde quedé
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
