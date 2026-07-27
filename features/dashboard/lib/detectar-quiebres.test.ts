@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { detectarQuiebresRotacion } from "./detectar-quiebres";
+import {
+  detectarQuiebresRotacion,
+  detectarStockCriticoRotacion,
+} from "./detectar-quiebres";
 import type { Venta } from "@/entities/ventas/types";
-import type { Producto } from "@/entities/productos/types";
+import type { Producto, ProductoStock } from "@/entities/productos/types";
 
 const AHORA = new Date(2026, 6, 22, 12, 0, 0);
 
@@ -23,7 +26,12 @@ function venta(fecha: string, items: { producto_id: string; cantidad: number }[]
   } as Venta;
 }
 
-function producto(id: string, nombre: string, stockTotal: number): Producto {
+function producto(
+  id: string,
+  nombre: string,
+  stockTotal: number,
+  stockRows?: ProductoStock[],
+): Producto {
   return {
     id,
     nombre,
@@ -36,7 +44,9 @@ function producto(id: string, nombre: string, stockTotal: number): Producto {
     creado_en: "",
     publicado: true,
     slug: null,
-    stock: stockTotal > 0 ? [{ id: "s1", variante: "u", cantidad: stockTotal }] : [],
+    stock:
+      stockRows ??
+      (stockTotal > 0 ? [{ id: "s1", variante: "u", cantidad: stockTotal }] : []),
   } as Producto;
 }
 
@@ -84,5 +94,51 @@ describe("detectarQuiebresRotacion", () => {
     const productos = [producto("p1", "A", 0)];
     const r = detectarQuiebresRotacion(ventas, productos, 14, AHORA);
     expect(r[0].unidadesVendidas).toBe(5);
+  });
+});
+
+describe("detectarStockCriticoRotacion", () => {
+  it("detecta variante con stock bajo de un producto con ventas recientes", () => {
+    const ventas = [venta("2026-07-20T10:00:00", [{ producto_id: "p1", cantidad: 5 }])];
+    const productos = [producto("p1", "Remera", 2)];
+    const r = detectarStockCriticoRotacion(ventas, productos, 14, AHORA);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toEqual({
+      productoId: "p1",
+      nombre: "Remera",
+      variante: "u",
+      cantidad: 2,
+      unidadesVendidas: 5,
+    });
+  });
+
+  it("ignora productos sin ventas recientes aunque tengan stock bajo (la regla vieja: no más 'todo el catálogo')", () => {
+    const productos = [producto("p1", "Remera", 2)];
+    expect(detectarStockCriticoRotacion([], productos, 14, AHORA)).toEqual([]);
+  });
+
+  it("ignora variantes con stock 0 (eso es quiebre, no stock crítico)", () => {
+    const ventas = [venta("2026-07-20T10:00:00", [{ producto_id: "p1", cantidad: 5 }])];
+    const productos = [producto("p1", "Remera", 0)];
+    expect(detectarStockCriticoRotacion(ventas, productos, 14, AHORA)).toEqual([]);
+  });
+
+  it("ignora variantes con stock por encima del umbral crítico", () => {
+    const ventas = [venta("2026-07-20T10:00:00", [{ producto_id: "p1", cantidad: 5 }])];
+    const productos = [producto("p1", "Remera", 50)];
+    expect(detectarStockCriticoRotacion(ventas, productos, 14, AHORA)).toEqual([]);
+  });
+
+  it("evalúa cada variante de un producto multi-variante por separado", () => {
+    const ventas = [venta("2026-07-20T10:00:00", [{ producto_id: "p1", cantidad: 5 }])];
+    const productos = [
+      producto("p1", "Remera", 0, [
+        { id: "s1", variante: "S", cantidad: 2 },
+        { id: "s2", variante: "M", cantidad: 20 },
+      ]),
+    ];
+    const r = detectarStockCriticoRotacion(ventas, productos, 14, AHORA);
+    expect(r).toHaveLength(1);
+    expect(r[0].variante).toBe("S");
   });
 });

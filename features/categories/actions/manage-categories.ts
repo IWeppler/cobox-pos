@@ -48,8 +48,18 @@ export async function bulkSaveCategoriasAction(
           .from("categorias")
           .upsert(roots, { onConflict: "id" });
 
-        if (rootError)
+        if (rootError) {
+          console.error("[bulkSaveCategoriasAction] rootError:", rootError);
+          if (
+            rootError.code === "23505" &&
+            rootError.message.includes("categorias_slug_root_key")
+          ) {
+            return {
+              error: "Ya existe una categoría principal con ese nombre.",
+            };
+          }
           return { error: "Error al guardar las categorías principales." };
+        }
       }
 
       // PASADA 2: Insertamos/Actualizamos las subcategorías

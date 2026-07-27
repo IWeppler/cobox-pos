@@ -24,7 +24,7 @@ export function KpiMiniCard({
         </span>
         {rightSlot}
       </div>
-      <p className="font-mono text-lg sm:text-xl font-semibold text-foreground truncate">
+      <p className="font-sans tabular-nums text-lg sm:text-2xl font-semibold text-foreground truncate">
         {value}
       </p>
       <p className="text-[11px] text-muted-foreground truncate">{sublabel}</p>

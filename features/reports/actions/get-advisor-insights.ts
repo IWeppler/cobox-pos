@@ -48,6 +48,19 @@ export interface AdvisorMetrics {
    * simplemente no se disparan (guardadas con `metrics.x &&`). */
   deudaVencida?: { monto: number; clientes: number };
   remitosPendientes?: { cantidad: number; diasMasAntiguo: number; idMasAntiguo: string };
+  categoriaEnRiesgo?: {
+    categoria: string;
+    unidadesVendidas: number;
+    diasCobertura: number;
+  };
+  finDeTemporada?: {
+    frase: string;
+    valorizado: number;
+  };
+  proximaTemporada?: {
+    frase: string;
+    stockUnidades: number;
+  };
 }
 
 export function getAdvisorInsights(metrics: AdvisorMetrics): Insight[] {
@@ -125,15 +138,37 @@ export function getAdvisorInsights(metrics: AdvisorMetrics): Insight[] {
     });
   }
 
-  // 4. Stock Crítico
+  // 4. Stock Crítico — solo productos/variantes que ADEMÁS tuvieron ventas
+  // recientes (ver detectar-quiebres.ts): contar todo el catálogo con
+  // stock ≤3 disparaba con ~90% de los productos en indumentaria.
   if (metrics.productosCriticos > 0) {
     insights.push({
       id: "stock_critical",
       type: "danger",
       priority: 85,
       title: "Riesgo de Quiebre",
-      message: `Tienes ${metrics.productosCriticos} productos/variantes con nivel de stock crítico (≤ 3 unidades). Podrías estar perdiendo ventas por falta de mercadería.`,
+      message: `Tienes ${metrics.productosCriticos} productos/variantes que están rotando y con stock crítico (≤ 3 unidades). Podrías estar perdiendo ventas por falta de mercadería.`,
       actionLabel: "Reponer Stock",
+      href: "/stock",
+    });
+  }
+
+  // 4c. Riesgo por categoría: alta rotación reciente + stock total
+  // agotándose (ver detectar-riesgo-categoria.ts). Complementa la regla
+  // anterior, que mira producto por producto — esta mira la categoría
+  // completa aunque ningún producto individual esté todavía en ≤3.
+  if (metrics.categoriaEnRiesgo) {
+    const diasRestantes = Math.max(
+      1,
+      Math.round(metrics.categoriaEnRiesgo.diasCobertura),
+    );
+    insights.push({
+      id: "categoria_riesgo_stock",
+      type: "warning",
+      priority: 80,
+      title: "Categoría en Riesgo de Stock",
+      message: `Estás vendiendo mucho en ${metrics.categoriaEnRiesgo.categoria} y te estás quedando con poco stock (quedan ~${diasRestantes} día${diasRestantes === 1 ? "" : "s"} al ritmo actual) — reponé antes de perder ventas.`,
+      actionLabel: "Ver stock",
       href: "/stock",
     });
   }
@@ -221,9 +256,40 @@ export function getAdvisorInsights(metrics: AdvisorMetrics): Insight[] {
     });
   }
 
+  // 7c. Fin de temporada (invierno/verano) con stock remanente sin
+  // rotación — ver detectar-estacionalidad.ts. Calendario hardcodeado
+  // (Argentina), sin forecasting: son rangos de fecha conocidos.
+  if (metrics.finDeTemporada) {
+    insights.push({
+      id: "fin_de_temporada",
+      type: "warning",
+      priority: 68,
+      title: "Fin de Temporada",
+      message: `${metrics.finDeTemporada.frase} y tenés ${formatter.format(metrics.finDeTemporada.valorizado)} en esa categoría con poca rotación — considerá una liquidación.`,
+      actionLabel: "Ver stock",
+      href: "/stock",
+    });
+  }
+
   /* =========================================================================
      3. OPORTUNIDADES COMERCIALES - Prioridad 30 a 49
      ========================================================================= */
+
+  // 7d. Se acerca una temporada (incluidas las fiestas) y el stock de sus
+  // categorías típicas está bajo — oportunidad de reponer a tiempo, no un
+  // problema todavía (por eso vive en la sección de oportunidades y no en
+  // advertencias).
+  if (metrics.proximaTemporada) {
+    insights.push({
+      id: "proxima_temporada",
+      type: "info",
+      priority: 42,
+      title: "Reposición de Temporada",
+      message: `${metrics.proximaTemporada.frase} y tu stock de esa categoría está bajo — es buen momento para reponer.`,
+      actionLabel: "Ver stock",
+      href: "/stock",
+    });
+  }
 
   // 8. Oportunidad de Upselling (Si el ticket es bajo en un negocio con muchas ventas)
   if (

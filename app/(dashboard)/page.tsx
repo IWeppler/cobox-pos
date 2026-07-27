@@ -14,7 +14,16 @@ import {
   type PeriodoPanel,
 } from "@/features/dashboard/lib/periodo-ranges";
 import { construirSerieDiaria } from "@/features/dashboard/lib/build-chart-series";
-import { detectarQuiebresRotacion } from "@/features/dashboard/lib/detectar-quiebres";
+import {
+  detectarQuiebresRotacion,
+  VENTANA_ROTACION_DIAS,
+} from "@/features/dashboard/lib/detectar-quiebres";
+import { detectarCategoriasEnRiesgo } from "@/features/dashboard/lib/detectar-riesgo-categoria";
+import {
+  detectarFinDeTemporada,
+  detectarProximaTemporada,
+} from "@/features/dashboard/lib/detectar-estacionalidad";
+import { resolverCategoriaDisplayLabel } from "@/shared/utils/category-tree";
 import { PanelPeriodoSelector } from "@/features/dashboard/ui/panel-periodo-selector";
 import { IngresosAreaChart } from "@/features/dashboard/ui/ingresos-area-chart";
 import { KpiMiniCard } from "@/features/dashboard/ui/kpi-mini-card";
@@ -60,11 +69,6 @@ const ETIQUETA_RANKING: Record<PeriodoPanel, string> = {
   mes: "este mes",
 };
 
-// Ventana de "rotación reciente" para detectar quiebres — independiente
-// del selector de período (siempre mira los últimos 14 días, sea cual sea
-// el rango elegido arriba).
-const VENTANA_QUIEBRES_DIAS = 14;
-
 type ReservaActivaRow = {
   id: string;
   creado_en: string;
@@ -92,6 +96,7 @@ export default async function DashboardPage({
     reservasResponse,
     deudaVencida,
     remitosPendientes,
+    categoriasResponse,
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
@@ -102,6 +107,7 @@ export default async function DashboardPage({
     listarReservasActivasAction(),
     getDeudaVencidaAction(),
     getRemitosPendientesAction(),
+    supabase.from("categorias").select("id, nombre, slug, parent_id"),
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
@@ -175,12 +181,34 @@ export default async function DashboardPage({
   const quiebres = detectarQuiebresRotacion(
     ventasOperativas,
     productos,
-    VENTANA_QUIEBRES_DIAS,
+    VENTANA_ROTACION_DIAS,
     hoy,
   );
 
+  const categoriasFlat = categoriasResponse.data || [];
+  const categoriasEnRiesgo = detectarCategoriasEnRiesgo(
+    ventasOperativas,
+    productos,
+    VENTANA_ROTACION_DIAS,
+    hoy,
+  );
+  const categoriaEnRiesgo = categoriasEnRiesgo[0];
+  const categoriaEnRiesgoLabel = categoriaEnRiesgo
+    ? resolverCategoriaDisplayLabel(categoriasFlat, categoriaEnRiesgo.categoriaId)
+    : "";
+
+  const finDeTemporada = detectarFinDeTemporada(
+    ventasOperativas,
+    productos,
+    categoriasFlat,
+    metricasActuales.stockValorizadoCosto,
+    VENTANA_ROTACION_DIAS,
+    hoy,
+  );
+  const proximaTemporada = detectarProximaTemporada(productos, categoriasFlat, hoy);
+
   // Advisor: mismo motor de siempre (getAdvisorInsights, sin tocar su
-  // lógica de orden/corte), extendido con las 2 reglas nuevas — se activan
+  // lógica de orden/corte), extendido con las reglas nuevas — se activan
   // solo si el fetch correspondiente trajo datos.
   const insights = getAdvisorInsights({
     ...metricasActuales,
@@ -189,6 +217,16 @@ export default async function DashboardPage({
       remitosPendientes && remitosPendientes.cantidad > 0
         ? remitosPendientes
         : undefined,
+    categoriaEnRiesgo:
+      categoriaEnRiesgo && categoriaEnRiesgoLabel
+        ? {
+            categoria: categoriaEnRiesgoLabel,
+            unidadesVendidas: categoriaEnRiesgo.unidadesVendidas,
+            diasCobertura: categoriaEnRiesgo.diasCobertura,
+          }
+        : undefined,
+    finDeTemporada: finDeTemporada ?? undefined,
+    proximaTemporada: proximaTemporada ?? undefined,
   });
 
   const ventasDeHoy = ventasOperativas.filter((v) => {

@@ -6,6 +6,10 @@ import {
   VentaProducto,
   getSupabaseRelation,
 } from "@/entities/ventas/types";
+import {
+  detectarStockCriticoRotacion,
+  VENTANA_ROTACION_DIAS,
+} from "./detectar-quiebres";
 
 export type PeriodoDashboard =
   | "hoy"
@@ -374,8 +378,6 @@ export function getDashboardMetrics(
   let stockTotalUnidades = 0;
   let stockValorizadoCosto = 0;
   let stockValorizadoPotencial = 0;
-  let productosCriticos = 0;
-  const stockCriticoDetallado: StockCriticoItem[] = [];
   const productosSinMovimiento: ProductoSinMovimiento[] = [];
 
   const ultimaVentaMap = new Map<string, Date>();
@@ -411,15 +413,6 @@ export function getDashboardMetrics(
       stockValorizadoCosto += cantidadStock * costo;
       stockValorizadoPotencial += cantidadStock * precio;
       stockTotalProducto += cantidadStock;
-
-      if (cantidadStock > 0 && cantidadStock <= 3) {
-        productosCriticos++;
-        stockCriticoDetallado.push({
-          nombre: pro.nombre,
-          variante: s.variante,
-          cantidad: cantidadStock,
-        });
-      }
     });
 
     if (stockTotalProducto > 0) {
@@ -432,6 +425,21 @@ export function getDashboardMetrics(
       productosSinMovimiento.push({ ...pro, diasSinVender });
     }
   });
+
+  // Stock crítico "de verdad": solo variantes con stock bajo de productos
+  // que ADEMÁS tuvieron ventas en la ventana de rotación reciente — ver
+  // detectar-quiebres.ts para el porqué (la regla vieja de "stock ≤3 en
+  // todo el catálogo" disparaba con ~90% de los productos en indumentaria).
+  const stockCriticoRotacion = detectarStockCriticoRotacion(
+    ventasOperativas,
+    productos,
+    VENTANA_ROTACION_DIAS,
+    now,
+  );
+  const productosCriticos = stockCriticoRotacion.length;
+  const stockCriticoDetallado: StockCriticoItem[] = stockCriticoRotacion.map(
+    (c) => ({ nombre: c.nombre, variante: c.variante, cantidad: c.cantidad }),
+  );
 
   const stockGananciaPotencial =
     stockValorizadoPotencial - stockValorizadoCosto;
