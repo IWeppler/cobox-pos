@@ -218,15 +218,19 @@ export function MergeTable({
   const [errorPorGrupo, setErrorPorGrupo] = useState<Record<string, string | null>>({});
 
   // Categoría elegida a mano por el usuario (override), por raw_nombre —
-  // independiente del modal. Si no hay override, se usa la sugerencia
-  // automática de sugerirCategoria calculada en clasificacionPorGrupo.
-  const [categoriaPorGrupo, setCategoriaPorGrupo] = useState<Record<string, string>>({});
+  // guarda categoria_id (uuid), NUNCA el nombre: el árbol permite nombres
+  // repetidos bajo padres distintos ("Remeras" en Ropa Mujer y en Ropa
+  // Niña), así que un id es la única identidad no ambigua acá.
+  // Independiente del modal. Si no hay override, se usa la sugerencia
+  // automática de sugerirCategoria calculada en clasificacionPorGrupo
+  // (resuelta a id contra categoriasDB antes de guardarse).
+  const [categoriaIdPorGrupo, setCategoriaIdPorGrupo] = useState<Record<string, string>>({});
 
   // Selección múltiple de filas Ambiguas, para "Asignar categoría a selección".
   const [gruposSeleccionados, setGruposSeleccionados] = useState<Set<string>>(
     new Set(),
   );
-  const [categoriaParaSeleccion, setCategoriaParaSeleccion] = useState("");
+  const [categoriaIdParaSeleccion, setCategoriaIdParaSeleccion] = useState("");
   const [bulkCrearLoading, setBulkCrearLoading] = useState(false);
 
   // Borrador local (IndexedDB) de esta conciliación
@@ -320,7 +324,8 @@ export function MergeTable({
   const [nuevoProductoData, setNuevoProductoData] = useState({
     nombre: "",
     precio: 0,
-    categoria: "",
+    categoriaId: "",
+    marca: "",
     origenPrecio: "",
   });
   const [archivosNuevoProducto, setArchivosNuevoProducto] = useState<File[]>(
@@ -342,6 +347,17 @@ export function MergeTable({
     };
     fetchCats();
   }, []);
+
+  // sugerirCategoria (category-suggestions.ts) es un diccionario portable
+  // entre tenants — devuelve NOMBRES a propósito, nunca ids hardcodeados.
+  // Estos dos helpers son el único punto donde ese nombre se resuelve
+  // contra el árbol real antes de guardarse en cualquier estado.
+  const idPorNombreCategoria = (nombre: string): string | undefined =>
+    categoriasDB.find(
+      (cat) => cat.nombre.trim().toLowerCase() === nombre.trim().toLowerCase(),
+    )?.id;
+  const nombrePorIdCategoria = (id: string): string | undefined =>
+    categoriasDB.find((cat) => cat.id === id)?.nombre;
 
   // Busca un borrador guardado de ESTA orden al entrar a la pantalla.
   useEffect(() => {
@@ -510,8 +526,9 @@ export function MergeTable({
   async function crearYAsignarProducto(params: {
     rawNombre: string;
     nombreProducto: string;
-    categoria: string;
+    categoriaId?: string;
     precio: number;
+    marca?: string;
     archivosMain?: File[];
     archivosThumb?: File[];
     archivosGrid?: File[];
@@ -532,7 +549,8 @@ export function MergeTable({
           params.archivosMain || [],
           params.archivosThumb || [],
           params.archivosGrid || [],
-          params.categoria,
+          params.categoriaId,
+          params.marca,
         ),
         ACTION_TIMEOUT_MS,
       );
@@ -597,8 +615,9 @@ export function MergeTable({
       const resultado = await crearYAsignarProducto({
         rawNombre: groupToCreateName,
         nombreProducto: nuevoProductoData.nombre,
-        categoria: nuevoProductoData.categoria,
+        categoriaId: nuevoProductoData.categoriaId,
         precio: nuevoProductoData.precio,
+        marca: nuevoProductoData.marca,
         archivosMain,
         archivosThumb,
         archivosGrid,
@@ -622,12 +641,13 @@ export function MergeTable({
   // --- 1-click: bucket (b) Nuevo Sugerido ---
   const handleCrearSugerido = async (
     rawNombre: string,
-    categoriaSugerida: string,
+    categoriaIdSugerida: string | undefined,
+    categoriaNombreParaToast: string,
   ) => {
     const itemActual = items.find((i) => i.raw_nombre === rawNombre);
     if (!itemActual) return;
 
-    const categoria = categoriaPorGrupo[rawNombre] ?? categoriaSugerida;
+    const categoriaId = categoriaIdPorGrupo[rawNombre] ?? categoriaIdSugerida;
     const precio = Math.ceil(itemActual.precio_costo * 1.5);
 
     setLoadingPorGrupo((prev) => ({ ...prev, [rawNombre]: true }));
@@ -636,8 +656,9 @@ export function MergeTable({
     const resultado = await crearYAsignarProducto({
       rawNombre,
       nombreProducto: rawNombre,
-      categoria,
+      categoriaId,
       precio,
+      marca: itemActual.raw_marca || undefined,
     });
 
     setLoadingPorGrupo((prev) => ({ ...prev, [rawNombre]: false }));
@@ -647,7 +668,9 @@ export function MergeTable({
       return;
     }
 
-    toast.success(`"${resultado.producto.nombre}" creado en "${categoria}".`);
+    toast.success(
+      `"${resultado.producto.nombre}" creado en "${categoriaNombreParaToast}".`,
+    );
   };
 
   // --- T3: acciones masivas ---
@@ -662,21 +685,23 @@ export function MergeTable({
   };
 
   const handleAsignarCategoriaASeleccion = () => {
-    if (!categoriaParaSeleccion || gruposSeleccionados.size === 0) return;
+    if (!categoriaIdParaSeleccion || gruposSeleccionados.size === 0) return;
 
-    setCategoriaPorGrupo((prev) => {
+    setCategoriaIdPorGrupo((prev) => {
       const next = { ...prev };
       for (const rawNombre of gruposSeleccionados) {
-        next[rawNombre] = categoriaParaSeleccion;
+        next[rawNombre] = categoriaIdParaSeleccion;
       }
       return next;
     });
 
+    const nombreElegido =
+      nombrePorIdCategoria(categoriaIdParaSeleccion) ?? "";
     toast.success(
-      `Categoría "${categoriaParaSeleccion}" asignada a ${gruposSeleccionados.size} agrupaciones. Ahora podés usar "Crear" en cada una.`,
+      `Categoría "${nombreElegido}" asignada a ${gruposSeleccionados.size} agrupaciones. Ahora podés usar "Crear" en cada una.`,
     );
     setGruposSeleccionados(new Set());
-    setCategoriaParaSeleccion("");
+    setCategoriaIdParaSeleccion("");
   };
 
   const handleCrearTodosSugeridos = async () => {
@@ -691,19 +716,20 @@ export function MergeTable({
 
     const tareas = gruposNuevoSugerido.map((rawNombre) => async () => {
       const bucket = clasificacionPorGrupo.get(rawNombre);
-      const categoriaSugerida =
+      const categoriaIdSugerida =
         bucket?.tipo === "NUEVO_SUGERIDO"
-          ? bucket.categoriaSugerida.categoriaNombre
-          : "";
-      const categoria = categoriaPorGrupo[rawNombre] ?? categoriaSugerida;
+          ? idPorNombreCategoria(bucket.categoriaSugerida.categoriaNombre)
+          : undefined;
+      const categoriaId = categoriaIdPorGrupo[rawNombre] ?? categoriaIdSugerida;
       const itemActual = items.find((i) => i.raw_nombre === rawNombre);
       const precio = Math.ceil((itemActual?.precio_costo || 0) * 1.5);
 
       const resultado = await crearYAsignarProducto({
         rawNombre,
         nombreProducto: rawNombre,
-        categoria,
+        categoriaId,
         precio,
+        marca: itemActual?.raw_marca || undefined,
       });
 
       setLoadingPorGrupo((prev) => ({ ...prev, [rawNombre]: false }));
@@ -863,15 +889,15 @@ export function MergeTable({
             {gruposSeleccionados.size} agrupaciones seleccionadas
           </span>
           <Select
-            value={categoriaParaSeleccion}
-            onValueChange={setCategoriaParaSeleccion}
+            value={categoriaIdParaSeleccion}
+            onValueChange={setCategoriaIdParaSeleccion}
           >
             <SelectTrigger className="w-full sm:w-64 h-8 bg-background">
               <SelectValue placeholder="Elegir categoría para todas..." />
             </SelectTrigger>
             <SelectContent className="max-h-50">
               {categoriasDB.map((cat) => (
-                <SelectItem key={cat.id} value={cat.nombre}>
+                <SelectItem key={cat.id} value={cat.id}>
                   {cat.nombre}
                 </SelectItem>
               ))}
@@ -880,7 +906,7 @@ export function MergeTable({
           <Button
             size="sm"
             className="bg-rose-600 hover:bg-rose-700 text-white w-full sm:w-auto"
-            disabled={!categoriaParaSeleccion}
+            disabled={!categoriaIdParaSeleccion}
             onClick={handleAsignarCategoriaASeleccion}
           >
             Asignar categoría a selección
@@ -1103,14 +1129,21 @@ export function MergeTable({
                               )}% recargo = $${precioSugerido.toLocaleString("es-AR")}`
                             : "Precio sugerido por defecto (sin recargo aplicado todavía)";
 
+                          const categoriaIdSugerida = nuevoSugerido
+                            ? idPorNombreCategoria(
+                                nuevoSugerido.categoriaSugerida.categoriaNombre,
+                              )
+                            : undefined;
+
                           setNuevoProductoData({
                             nombre: rawNombre,
                             precio: precioSugerido,
-                            categoria:
-                              categoriaPorGrupo[rawNombre] ??
-                              nuevoSugerido?.categoriaSugerida.categoriaNombre ??
-                              firstItem.raw_categoria ??
+                            categoriaId:
+                              categoriaIdPorGrupo[rawNombre] ??
+                              categoriaIdSugerida ??
+                              firstItem.raw_categoria_id ??
                               "",
+                            marca: firstItem.raw_marca ?? "",
                             origenPrecio,
                           });
                           setArchivosNuevoProducto([]);
@@ -1177,16 +1210,23 @@ export function MergeTable({
                         }
 
                         if (nuevoSugerido) {
-                          const categoriaEfectiva =
-                            categoriaPorGrupo[rawNombre] ??
-                            nuevoSugerido.categoriaSugerida.categoriaNombre;
+                          const categoriaIdOverride = categoriaIdPorGrupo[rawNombre];
+                          const categoriaNombreEfectiva = categoriaIdOverride
+                            ? (nombrePorIdCategoria(categoriaIdOverride) ??
+                              nuevoSugerido.categoriaSugerida.categoriaNombre)
+                            : nuevoSugerido.categoriaSugerida.categoriaNombre;
+                          const categoriaIdEfectiva =
+                            categoriaIdOverride ??
+                            idPorNombreCategoria(
+                              nuevoSugerido.categoriaSugerida.categoriaNombre,
+                            );
                           return (
                             <div className="flex flex-col gap-2">
                               <div className="flex items-start justify-between gap-2 p-2 bg-violet-50/60 border border-violet-200 rounded-md">
                                 <div className="min-w-0">
                                   <p className="font-semibold text-violet-700 flex items-center gap-1.5 truncate">
                                     <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                                    {categoriaEfectiva}
+                                    {categoriaNombreEfectiva}
                                   </p>
                                   <p className="text-[11px] text-violet-700/70 mt-0.5">
                                     Sugerido por &quot;
@@ -1198,7 +1238,11 @@ export function MergeTable({
                                   className="h-8 text-xs bg-violet-600 hover:bg-violet-700 text-white shrink-0"
                                   disabled={loadingPorGrupo[rawNombre]}
                                   onClick={() =>
-                                    handleCrearSugerido(rawNombre, categoriaEfectiva)
+                                    handleCrearSugerido(
+                                      rawNombre,
+                                      categoriaIdEfectiva,
+                                      categoriaNombreEfectiva,
+                                    )
                                   }
                                 >
                                   {loadingPorGrupo[rawNombre] ? (
@@ -1377,9 +1421,9 @@ export function MergeTable({
             <div className="space-y-2">
               <Label>Categoría</Label>
               <Select
-                value={nuevoProductoData.categoria}
+                value={nuevoProductoData.categoriaId}
                 onValueChange={(val) =>
-                  setNuevoProductoData({ ...nuevoProductoData, categoria: val })
+                  setNuevoProductoData({ ...nuevoProductoData, categoriaId: val })
                 }
               >
                 <SelectTrigger className="w-full">
@@ -1387,12 +1431,26 @@ export function MergeTable({
                 </SelectTrigger>
                 <SelectContent className="max-h-50">
                   {categoriasDB.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.nombre}>
+                    <SelectItem key={cat.id} value={cat.id}>
                       {cat.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Marca</Label>
+              <Input
+                value={nuevoProductoData.marca}
+                onChange={(e) =>
+                  setNuevoProductoData({
+                    ...nuevoProductoData,
+                    marca: e.target.value,
+                  })
+                }
+                placeholder="Ej: Ossira"
+              />
             </div>
 
             <div className="space-y-2">

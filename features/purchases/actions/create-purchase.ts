@@ -3,15 +3,32 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import {
+  resolverCategoriaImport,
+  mapGeneroRopaBebe,
+  type CategoriaReal,
+} from "../lib/resolve-import-categoria";
 
 export type RawOrderItem = {
   raw_nombre: string;
   raw_variante: string;
   cantidad: number;
   precio_costo: number;
-  raw_categoria?: string;
+  raw_categoria?: string | null;
+  raw_genero?: string | null;
   raw_sku?: string | null;
+  raw_marca?: string | null;
 };
+
+/** Agrega el género (vocabulario cerrado Ropa Bebé) al string de atributos
+ * "libres" que ya viene armado (talle, color, etc.) — mismo formato
+ * "Nombre: Valor / Nombre: Valor" que parsea parseVarianteAtributos en
+ * merge-purchase.ts. */
+function conGeneroAgregado(rawVariante: string, generoValor: string): string {
+  const base = rawVariante && rawVariante !== "Unico" ? rawVariante : "";
+  const segmento = `Género: ${generoValor}`;
+  return base ? `${base} / ${segmento}` : segmento;
+}
 
 export async function procesarPedidoAction(
   proveedor: string,
@@ -94,13 +111,27 @@ export async function procesarPedidoAction(
     const [
       { data: productos, error: prodError },
       { data: diccionario, error: dicError },
+      { data: categoriasReales, error: catError },
     ] = await Promise.all([
       supabase.from("productos").select("id, nombre, precio_costo"),
       supabase
         .from("diccionario_alias")
         .select("raw_nombre, producto_id")
         .eq("proveedor", proveedor),
+      supabase.from("categorias").select("id, nombre, slug, parent_id"),
     ]);
+
+    if (catError) {
+      console.error(
+        ">>> [SERVER ACTION] WARN: Error al buscar categorías:",
+        catError,
+      );
+      await supabase.from("ordenes_compra").delete().eq("id", orden.id);
+      return {
+        success: false,
+        error: "Error buscando categorías existentes: " + catError.message,
+      };
+    }
 
     if (prodError) {
       console.error(
@@ -129,9 +160,33 @@ export async function procesarPedidoAction(
     console.log(
       `>>> [SERVER ACTION] 7. Mapeando ${items.length} items para insertar...`,
     );
+    const categoriasParaResolver: CategoriaReal[] = categoriasReales || [];
     const itemsProcesados = items.map((item) => {
       let estado_match = "DESCONOCIDO";
       let producto_id = null;
+
+      // Resolución de categoría contra el árbol REAL — nunca "primera
+      // palabra pluralizada" ni auto-creación acá. Si no resuelve con
+      // confianza, queda sin categoría para elegir a mano en la
+      // conciliación (ver resolverCategoriaImport).
+      const resolucion = resolverCategoriaImport(
+        item.raw_nombre,
+        item.raw_categoria ?? null,
+        item.raw_genero ?? null,
+        categoriasParaResolver,
+      );
+
+      const rawCategoriaResuelta = resolucion?.categoriaNombre ?? null;
+      const rawCategoriaIdResuelta = resolucion?.categoriaId ?? null;
+      // El género solo sobrevive como atributo de variante si la fila
+      // resolvió a una subcategoría de Ropa Bebé — para el resto fue
+      // solo señal de desambiguación y se descarta acá.
+      const rawVarianteConGenero = resolucion?.esRopaBebe
+        ? conGeneroAgregado(
+            item.raw_variante?.trim() || "Unico",
+            mapGeneroRopaBebe(item.raw_genero ?? null),
+          )
+        : item.raw_variante?.trim() || "Unico";
 
       const nombreLimpioExcel = item.raw_nombre?.trim().toLowerCase() || "";
       const aliasMatch = diccionario?.find(
@@ -164,16 +219,18 @@ export async function procesarPedidoAction(
       return {
         orden_id: orden.id,
         raw_nombre: item.raw_nombre?.trim() || "Desconocido",
-        raw_variante: item.raw_variante?.trim() || "Unico",
-        raw_categoria: item.raw_categoria?.trim() || null,
+        raw_variante: rawVarianteConGenero,
+        raw_categoria: rawCategoriaResuelta,
+        raw_categoria_id: rawCategoriaIdResuelta,
         raw_sku: item.raw_sku?.trim() || null,
+        raw_marca: item.raw_marca?.trim() || null,
         cantidad: isNaN(Number(item.cantidad)) ? 0 : Number(item.cantidad),
         precio_costo: isNaN(Number(item.precio_costo))
           ? 0
           : Number(item.precio_costo),
         estado_match,
         producto_id,
-        variante_match: producto_id ? item.raw_variante?.trim() : null,
+        variante_match: producto_id ? rawVarianteConGenero : null,
       };
     });
 

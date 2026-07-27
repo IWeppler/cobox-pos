@@ -153,7 +153,8 @@ export async function crearProductoAlVueloAction(
   archivosMain: File[],
   archivosThumb: File[],
   archivosGrid: File[],
-  categoriaNombre?: string,
+  categoriaId?: string,
+  marca?: string,
 ) {
   try {
     const cookieStore = await cookies();
@@ -164,15 +165,21 @@ export async function crearProductoAlVueloAction(
     if (!user) return { error: "No autorizado." };
 
     const slug = `${slugify(nombre)}-${Math.random().toString(36).substring(2, 6)}`;
-    let categoria_id = null;
-    const categoriaLimpia = categoriaNombre?.trim();
+    let categoria_id: string | null = null;
+    let categoriaTipoLabel = "General";
 
-    // Si viene la categoría del Excel, la buscamos o la creamos
-    if (categoriaLimpia) {
+    // Se recibe el id directo (viene de un <Select> poblado desde
+    // `categorias`, o del árbol resuelto en el import) — NUNCA se busca
+    // por nombre acá. El árbol permite nombres repetidos bajo padres
+    // distintos ("Remeras" en Ropa Mujer y en Ropa Niña), así que una
+    // búsqueda por texto sería ambigua por diseño; un lookup por id de PK
+    // no puede serlo. El SELECT solo valida que el id siga existiendo
+    // (defensivo contra estado de cliente desactualizado), no busca nada.
+    if (categoriaId) {
       const { data: catExistente, error: categoriaSelectError } = await supabase
         .from("categorias")
-        .select("id")
-        .ilike("nombre", categoriaLimpia)
+        .select("id, nombre")
+        .eq("id", categoriaId)
         .maybeSingle();
 
       if (categoriaSelectError) {
@@ -180,26 +187,15 @@ export async function crearProductoAlVueloAction(
         return { error: "Error buscando la categoría del producto." };
       }
 
-      if (catExistente) {
-        categoria_id = catExistente.id;
-      } else {
-        const { data: nuevaCat, error: categoriaInsertError } = await supabase
-          .from("categorias")
-          .insert({
-            nombre: categoriaLimpia,
-            slug: slugify(categoriaLimpia),
-            activa: true,
-          })
-          .select("id")
-          .single();
-
-        if (categoriaInsertError) {
-          console.error("Error creando categoria:", categoriaInsertError);
-          return { error: "Error creando la categoría del producto." };
-        }
-
-        if (nuevaCat) categoria_id = nuevaCat.id;
+      if (!catExistente) {
+        return {
+          error:
+            "La categoría seleccionada ya no existe. Elegí una categoría real antes de crear el producto.",
+        };
       }
+
+      categoria_id = catExistente.id;
+      categoriaTipoLabel = catExistente.nombre;
     }
 
     // Subir imágenes Main, Thumbnail y Grid
@@ -275,8 +271,9 @@ export async function crearProductoAlVueloAction(
         precio_costo: costo || 0,
         precio: precio || 0,
         slug,
-        tipo: categoriaLimpia || "General",
+        tipo: categoriaTipoLabel,
         categoria_id: categoria_id,
+        marca: marca?.trim() || null,
         publicado: true,
         atributos_globales: {},
         imagen_url,

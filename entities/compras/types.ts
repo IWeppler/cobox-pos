@@ -21,7 +21,9 @@ export interface ItemResuelto {
   raw_nombre: string;
   raw_variante: string;
   raw_categoria?: string | null;
+  raw_categoria_id?: string | null;
   raw_sku?: string | null;
+  raw_marca?: string | null;
   variante_match: string;
   cantidad: number;
   precio_costo: number;

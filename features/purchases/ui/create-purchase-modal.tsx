@@ -172,6 +172,7 @@ export function ImportarPedidoModal({
       const knownCategoryCols = ["CATEGORIA", "CATEGORÍA", "RUBRO", "TIPO"];
       const knownGeneroCols = ["GENERO", "GÉNERO"];
       const knownSkuCols = ["SKU", "CODIGO", "CÓDIGO", "COD"];
+      const knownMarcaCols = ["MARCA"];
 
       const mappedItems: RawOrderItem[] = jsonData
         .map((row): RawOrderItem | null => {
@@ -181,6 +182,7 @@ export function ImportarPedidoModal({
           let rawCategoria = "";
           let rawGenero = "";
           let sku = "";
+          let marca = "";
           const extraAttributes: string[] = [];
 
           Object.keys(row).forEach((key) => {
@@ -208,6 +210,10 @@ export function ImportarPedidoModal({
               // el SKU terminaría pisando el nombre visible de la variante
               // (nombre_display) y colándose como atributo filtrable.
               sku = normalizedValue;
+            } else if (knownMarcaCols.includes(upperKey)) {
+              // Columna propia también — alimenta productos.marca al crear
+              // el producto en la conciliación, no un atributo de variante.
+              marca = normalizedValue;
             } else {
               extraAttributes.push(`${upperKey}: ${normalizedValue}`);
             }
@@ -238,28 +244,13 @@ export function ImportarPedidoModal({
             );
           };
 
-          // EXTRACCIÓN DE CATEGORÍA Y GÉNERO
-          let categoriaFinal = "General";
-
-          // 1. Extraemos la primera palabra del nombre como Categoría (Ej: "Campera de eco cuero" -> "Campera")
-          const primeraPalabra = desc.split(" ")[0];
-          if (primeraPalabra) {
-            // Capitalizamos la primera letra para que quede lindo
-            categoriaFinal =
-              primeraPalabra.charAt(0).toUpperCase() +
-              primeraPalabra.slice(1).toLowerCase();
-
-            // Pluralizamos automáticamente los casos más comunes de indumentaria para que los pills queden mejor ("Camperas" en vez de "Campera")
-            if (
-              categoriaFinal.endsWith("a") ||
-              categoriaFinal.endsWith("o") ||
-              categoriaFinal.endsWith("e")
-            ) {
-              categoriaFinal += "s";
-            }
-          }
-
-          // 2. Género: mapeamos los coloquiales "nena"/"nene" (antes caían
+          // SEÑALES CRUDAS DE CATEGORÍA Y GÉNERO — la resolución real
+          // (matchear contra el árbol de categorías, decidir si el género
+          // sobrevive como atributo) pasa a vivir en el servidor
+          // (resolverCategoriaImport, con acceso a la tabla `categorias`).
+          // Acá SOLO separamos y canonicalizamos texto: nunca más
+          // "primera palabra pluralizada" como categoría, ni asumir que
+          // toda fila lleva género.
           const GENERO_CANONICO: Record<string, string> = {
             hombre: "Hombre",
             mujer: "Mujer",
@@ -274,9 +265,9 @@ export function ImportarPedidoModal({
           const rawGeneroLimpio = rawGenero.toLowerCase().trim();
           const rawCategoriaLimpio = rawCategoria.toLowerCase().trim();
 
-          // 3. Evaluamos si lo que ella puso en la columna Categoría era en
-          // realidad el Género (proveedores que la usan para eso) — solo
-          // aplica si no vino ya una columna Género separada.
+          // Proveedores que usan la columna "Categoría" para poner en
+          // realidad el género (sin columna Género separada) — se
+          // reinterpreta como señal de género, no como categoría.
           const generoDesdeCategoria =
             !rawGenero && GENERO_CANONICO[rawCategoriaLimpio];
 
@@ -284,18 +275,12 @@ export function ImportarPedidoModal({
             ? (GENERO_CANONICO[rawGeneroLimpio] ?? rawGenero.trim())
             : generoDesdeCategoria || null;
 
-          if (generoFinal) {
-            // Si es un género, lo mandamos a las variantes (JSONB)
-            extraAttributes.push(`Género: ${generoFinal}`);
-          }
+          const categoriaFinal =
+            rawCategoria && !generoDesdeCategoria ? rawCategoria.trim() : null;
 
-          if (rawCategoria && !generoDesdeCategoria) {
-            // Categoría explícita que no resultó ser en realidad un
-            // género: respetamos lo que ella puso.
-            categoriaFinal = rawCategoria.trim();
-          }
-
-          // Armamos la string que luego se convierte en JSONB
+          // Armamos la string de atributos "libres" (talle, color, etc.) —
+          // el género YA NO viaja acá: el servidor decide si sobrevive
+          // como atributo (solo Ropa Bebé) o se descarta.
           const raw_variante =
             extraAttributes.length > 0 ? extraAttributes.join(" / ") : "Unico";
 
@@ -303,7 +288,9 @@ export function ImportarPedidoModal({
             raw_nombre: desc,
             raw_variante: raw_variante,
             raw_categoria: categoriaFinal,
+            raw_genero: generoFinal,
             raw_sku: sku || null,
+            raw_marca: marca || null,
             cantidad: Math.max(0, parseInt(String(cant)) || 0),
             precio_costo: Math.max(0, parseNumber(precio)),
           };
@@ -409,15 +396,20 @@ export function ImportarPedidoModal({
               Formato esperado (Columnas)
             </Label>
             <code className="text-xs bg-background border border-border px-2 py-1 rounded block mb-1">
-              producto, cantidad, precio-costo, talle, color, genero, sku
+              producto, cantidad, precio-costo, categoria, talle, color,
+              genero, marca, sku
             </code>
             <p className="text-[10px] text-muted-foreground mt-2">
-              Solo &quot;producto&quot; y &quot;cantidad&quot; son obligatorias.
-              &quot;precio-costo&quot; es opcional (si no hay categoría, se
-              infiere del nombre). &quot;sku&quot;/&quot;codigo&quot; se
-              guarda en la variante. Cualquier otra columna (talle, color,
-              género, incluyendo &quot;nena&quot;/&quot;nene&quot;...) se
-              guarda como atributo de la variante.
+              Solo &quot;producto&quot; y &quot;cantidad&quot; son
+              obligatorias. &quot;categoria&quot; se intenta matchear contra
+              tus categorías reales (padre y subcategoría) — si no hay match
+              seguro, la fila queda para elegir a mano en la conciliación,
+              nunca se inventa una categoría nueva. &quot;genero&quot; solo
+              se guarda como atributo si la fila termina en una subcategoría
+              de Ropa Bebé; para el resto solo ayuda a desambiguar la
+              categoría. &quot;marca&quot; y &quot;sku&quot;/&quot;codigo&quot;
+              se guardan en sus propios campos. Cualquier otra columna
+              (talle, color...) se guarda como atributo de la variante.
             </p>
           </div>
 
