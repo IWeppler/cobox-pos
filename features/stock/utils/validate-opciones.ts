@@ -1,4 +1,5 @@
 import type { Opcion } from "../types";
+import { slugify } from "@/shared/utils/slugify";
 
 /**
  * Devuelve los nombres de propiedad (normalizados: trim + lowercase) que
@@ -45,4 +46,40 @@ export function findGenericPropertyNames(opciones: Opcion[]): Set<string> {
   }
 
   return genericos;
+}
+
+/**
+ * Devuelve los nombres (slugificados) de `atributosRequeridosNombres` que
+ * todavía NO tienen ningún valor cargado en `opciones` — ya sea porque la
+ * propiedad ni está en la grilla, o está pero con `valores: []`.
+ * `buildCartesianVariants` excluye del cruce cualquier opción con 0
+ * valores, así que el chequeo correcto no es "hay variantes sin este
+ * atributo" (nunca se generan) sino "la opción requerida tiene algún
+ * valor cargado". Normaliza con `slugify` (no `.toLowerCase()`, como las
+ * otras dos funciones de este archivo) para matchear exactamente cómo
+ * useVariantSelection arma `atributosRequeridosNombres`.
+ */
+export function findMissingRequiredAttributeValues(
+  opciones: Opcion[],
+  atributosRequeridosNombres: Set<string>,
+): Set<string> {
+  if (atributosRequeridosNombres.size === 0) return new Set();
+
+  const tieneValoresPorNombre = new Map<string, boolean>();
+  for (const opcion of opciones) {
+    const key = slugify(opcion.nombre);
+    if (!key) continue;
+    const tieneValores = opcion.valores.length > 0;
+    tieneValoresPorNombre.set(
+      key,
+      (tieneValoresPorNombre.get(key) ?? false) || tieneValores,
+    );
+  }
+
+  const faltantes = new Set<string>();
+  for (const requerido of atributosRequeridosNombres) {
+    if (!tieneValoresPorNombre.get(requerido)) faltantes.add(requerido);
+  }
+
+  return faltantes;
 }

@@ -8,6 +8,7 @@ import {
   canonicalizarValores,
   construirCacheAtributos,
 } from "@/features/stock/lib/normalize-atributo";
+import { obtenerAtributosRequeridosFaltantes } from "@/features/stock/lib/validate-required-atributos";
 
 export async function crearProductoAction(
   prevState: { error: string | null; success: boolean },
@@ -255,6 +256,22 @@ export async function crearProductoAction(
       return {
         error:
           "Las variantes no tienen propiedades o valores válidos. Revisa la grilla antes de guardar.",
+        success: false,
+      };
+    }
+
+    // Espejo server-side de useVariantSelection: si la categoría exige
+    // atributos (categoria_atributos) que no tienen valor cargado acá, no
+    // confiamos en que el cliente ya lo haya validado.
+    const atributosFaltantes = await obtenerAtributosRequeridosFaltantes(
+      supabase,
+      categoria_id,
+      opciones,
+    );
+    if (atributosFaltantes.length > 0) {
+      await supabase.from("productos").delete().eq("id", nuevoProducto.id);
+      return {
+        error: `Esta categoría exige el/los atributo(s) "${atributosFaltantes.join('", "')}" — completalos antes de guardar.`,
         success: false,
       };
     }

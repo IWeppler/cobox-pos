@@ -32,7 +32,7 @@ export function useCreateProductForm() {
   const [precioCosto, setPrecioCosto] = useState("");
   const [precioVenta, setPrecioVenta] = useState("");
 
-  const variantSelection = useVariantSelection();
+  const variantSelection = useVariantSelection({ categoriaId: categoriaSeleccionada });
 
   useEffect(() => {
     const fetchCats = async () => {
@@ -133,6 +133,13 @@ export function useCreateProductForm() {
       return;
     }
 
+    if (showVariants && variantSelection.missingRequiredAttributes.size > 0) {
+      toast.error(
+        "Esta categoría exige valores para uno o más atributos requeridos — completalos antes de guardar.",
+      );
+      return;
+    }
+
     if (archivos.length > 0) {
       setIsCompressing(true);
       formData.delete("imagenes");
@@ -206,5 +213,7 @@ export function useCreateProductForm() {
     isLoadingSuggestions: variantSelection.isLoadingSuggestions,
     getFilteredSuggestions: variantSelection.getFilteredSuggestions,
     atributosExistentes: variantSelection.atributosExistentes,
+    atributosRequeridosNombres: variantSelection.atributosRequeridosNombres,
+    missingRequiredAttributes: variantSelection.missingRequiredAttributes,
   };
 }

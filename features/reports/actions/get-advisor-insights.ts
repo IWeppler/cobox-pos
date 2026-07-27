@@ -23,7 +23,7 @@ export interface AdvisorMetrics {
   stockValorizadoCosto: number;
   stockTotalUnidades: number;
   productosCriticos: number;
-  productosSinMovimiento: any[];
+  productosSinMovimiento: unknown[];
   topProductos: { nombre: string; unidades: number; ganancia: number }[];
   topProductosRentables: {
     nombre: string;
@@ -42,6 +42,12 @@ export interface AdvisorMetrics {
     unidades: number;
     tickets: number;
   }[];
+  /** Opcionales: hoy solo los completa el dashboard principal (que ya trae
+   * estos fetches para su columna de Atención Requerida) — /reportes sigue
+   * llamando a getAdvisorInsights sin ellos y las reglas de abajo
+   * simplemente no se disparan (guardadas con `metrics.x &&`). */
+  deudaVencida?: { monto: number; clientes: number };
+  remitosPendientes?: { cantidad: number; diasMasAntiguo: number; idMasAntiguo: string };
 }
 
 export function getAdvisorInsights(metrics: AdvisorMetrics): Insight[] {
@@ -132,6 +138,29 @@ export function getAdvisorInsights(metrics: AdvisorMetrics): Insight[] {
     });
   }
 
+  // 4b. Deuda Vencida Cobrable (reusa clientes.saldo_pendiente +
+  // fecha_vencimiento_deuda, el mismo caché que ya mantiene manage-clients.ts
+  // vía calcularDiasVencido — ver get-deuda-vencida.ts).
+  // Umbral: grave si la deuda vencida supera el 50% de los ingresos del
+  // período (compromete la próxima reposición) o supera $50k en términos
+  // absolutos aunque el período haya facturado mucho; si no, advertencia.
+  if (metrics.deudaVencida && metrics.deudaVencida.monto > 0) {
+    const proporcionDeuda =
+      metrics.ingresos > 0
+        ? (metrics.deudaVencida.monto / metrics.ingresos) * 100
+        : 100;
+    const esGrave = proporcionDeuda > 50 || metrics.deudaVencida.monto > 50000;
+    insights.push({
+      id: "deuda_vencida",
+      type: esGrave ? "danger" : "warning",
+      priority: esGrave ? 92 : 72,
+      title: "Deuda Vencida",
+      message: `Tenés ${formatter.format(metrics.deudaVencida.monto)} en deuda vencida de ${metrics.deudaVencida.clientes} cliente${metrics.deudaVencida.clientes === 1 ? "" : "s"}. Es plata tuya que ya deberías haber cobrado.`,
+      actionLabel: "Ver clientes",
+      href: "/clientes",
+    });
+  }
+
   /* =========================================================================
      2. ADVERTENCIAS OPERATIVAS - Prioridad 50 a 79
      ========================================================================= */
@@ -174,6 +203,21 @@ export function getAdvisorInsights(metrics: AdvisorMetrics): Insight[] {
       priority: 65,
       title: "Inventario Estancado",
       message: `Tienes ${metrics.productosSinMovimiento.length} productos con stock que no registran ventas. Considera armar un combo o descuento temporal para liquidarlos.`,
+    });
+  }
+
+  // 7b. Remitos Pendientes de Conciliar (prioridad media: no es plata
+  // perdida como la deuda o las bajas, pero mientras no se concilien el
+  // costo/stock de esos productos puede estar desactualizado).
+  if (metrics.remitosPendientes && metrics.remitosPendientes.cantidad > 0) {
+    insights.push({
+      id: "remitos_pendientes",
+      type: "warning",
+      priority: 58,
+      title: "Remitos sin Conciliar",
+      message: `Tenés ${metrics.remitosPendientes.cantidad} remito${metrics.remitosPendientes.cantidad === 1 ? "" : "s"} sin conciliar — el más antiguo hace ${metrics.remitosPendientes.diasMasAntiguo} día${metrics.remitosPendientes.diasMasAntiguo === 1 ? "" : "s"}. El costo y stock real de esos productos puede no estar actualizado hasta que los revises.`,
+      actionLabel: "Conciliar",
+      href: `/compras/merge/${metrics.remitosPendientes.idMasAntiguo}`,
     });
   }
 

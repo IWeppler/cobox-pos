@@ -8,6 +8,11 @@ export interface TurnoCajaResumen {
   fecha_apertura: string;
   vendedor_id: string | null;
   vendedor_nombre: string | null;
+  /** Efectivo esperado AHORA (monto_inicial + ventas en efectivo - egresos
+   * desde la apertura) — se recalcula en cada fetchCajaStatus, igual
+   * criterio que cerrarTurnoAction (misma RPC de egresos, evita
+   * subestimar en modo_caja=UNICA por RLS de egresos_select_propio). */
+  montoActual: number;
 }
 
 interface CajaStatusState {
@@ -53,18 +58,42 @@ export const useCajaStatusStore = create<CajaStatusState>((set) => ({
 
     const { data } = await query.limit(1).maybeSingle();
 
+    if (!data) {
+      set({ isCajaAbierta: false, turno: null });
+      return;
+    }
+
+    // Mismo cálculo que cerrarTurnoAction (caja-action.ts): RPC
+    // SECURITY DEFINER para egresos (en modo UNICA la policy
+    // egresos_select_propio_o_admin solo deja ver los propios — un SUM
+    // directo con esta sesión subestimaría el total).
+    const [ventaPagosRes, egresosSumRes] = await Promise.all([
+      supabase
+        .from("venta_pagos")
+        .select("monto_bruto")
+        .eq("turno_caja_id", data.id)
+        .eq("metodo_tipo", "EFECTIVO")
+        .neq("estado_pago_operacion", "ANULADO"),
+      supabase.rpc("calcular_egresos_turno", { p_turno_id: data.id }),
+    ]);
+
+    const ingresosEfectivo = (ventaPagosRes.data || []).reduce(
+      (acc, p) => acc + Number(p.monto_bruto),
+      0,
+    );
+    const totalEgresos = Number(egresosSumRes.data ?? 0);
+    const montoInicial = Number(data.monto_inicial);
+
     set({
-      isCajaAbierta: !!data,
-      turno: data
-        ? {
-            id: data.id,
-            monto_inicial: Number(data.monto_inicial),
-            fecha_apertura: data.fecha_apertura,
-            vendedor_id: data.vendedor_id,
-            vendedor_nombre:
-              getSupabaseRelation(data.perfiles)?.nombre ?? null,
-          }
-        : null,
+      isCajaAbierta: true,
+      turno: {
+        id: data.id,
+        monto_inicial: montoInicial,
+        fecha_apertura: data.fecha_apertura,
+        vendedor_id: data.vendedor_id,
+        vendedor_nombre: getSupabaseRelation(data.perfiles)?.nombre ?? null,
+        montoActual: montoInicial + ingresosEfectivo - totalEgresos,
+      },
     });
   },
 }));

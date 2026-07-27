@@ -5,6 +5,7 @@ import { buildVariantKey } from "../utils/parse-legacy-variant";
 import {
   findDuplicatePropertyNames,
   findGenericPropertyNames,
+  findMissingRequiredAttributeValues,
 } from "../utils/validate-opciones";
 import type {
   BaseVariant,
@@ -16,7 +17,9 @@ import { slugify } from "@/shared/utils/slugify";
 import {
   getAtributoValorSuggestionsAction,
   getAtributosExistentesAction,
+  getAtributosRequeridosPorCategoriaAction,
   type SugerenciaValorAtributo,
+  type AtributoRequeridoCategoria,
 } from "../actions/get-attribute-suggestions";
 
 function buildCartesianVariants(opciones: Opcion[]): BaseVariant[] {
@@ -80,6 +83,10 @@ function seedFromExistingVariantes(variantes: VarianteInput[]) {
 type UseVariantSelectionArgs = {
   initialOpciones?: Opcion[];
   initialVariantes?: VarianteInput[];
+  // Categoría elegida en el form de producto — cuando cambia, se
+  // consultan sus atributos requeridos (categoria_atributos) y se
+  // auto-agregan como opciones bloqueadas.
+  categoriaId?: string | null;
 };
 
 /**
@@ -91,6 +98,7 @@ type UseVariantSelectionArgs = {
 export function useVariantSelection({
   initialOpciones = [],
   initialVariantes = [],
+  categoriaId = null,
 }: UseVariantSelectionArgs = {}) {
   const [opciones, setOpciones] = useState<Opcion[]>(initialOpciones);
   const [variantData, setVariantData] = useState<
@@ -130,6 +138,64 @@ export function useVariantSelection({
   useEffect(() => {
     getAtributosExistentesAction().then(setAtributosExistentes);
   }, []);
+
+  // Atributos que categoria_atributos marca como requeridos para la
+  // categoría elegida — se auto-agregan como opción bloqueada (no se
+  // puede eliminar/renombrar mientras siga requerida) apenas se conoce la
+  // categoría o cambia. Todo el setState va dentro del .then() del fetch,
+  // nunca sincrónico en el cuerpo del efecto.
+  const [atributosRequeridos, setAtributosRequeridos] = useState<
+    AtributoRequeridoCategoria[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getAtributosRequeridosPorCategoriaAction(categoriaId ?? "").then(
+      (requeridos) => {
+        if (cancelled) return;
+
+        setAtributosRequeridos(requeridos);
+
+        const nombresRequeridos = requeridos
+          .filter((r) => r.requerido)
+          .map((r) => r.nombre);
+        if (nombresRequeridos.length === 0) return;
+
+        setOpciones((prev) => {
+          const presentes = new Set(prev.map((o) => slugify(o.nombre)));
+          const faltantes = nombresRequeridos.filter(
+            (nombre) => !presentes.has(slugify(nombre)),
+          );
+          if (faltantes.length === 0) return prev;
+
+          return [
+            ...prev,
+            ...faltantes.map((nombre) => ({
+              id: crypto.randomUUID(),
+              nombre,
+              valores: [],
+              bloqueado: true,
+            })),
+          ];
+        });
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [categoriaId]);
+
+  const atributosRequeridosNombres = useMemo(
+    () =>
+      new Set(
+        atributosRequeridos
+          .filter((r) => r.requerido)
+          .map((r) => slugify(r.nombre)),
+      ),
+    [atributosRequeridos],
+  );
 
   const baseVariants = useMemo(
     () => buildCartesianVariants(opciones),
@@ -171,6 +237,11 @@ export function useVariantSelection({
     [opciones],
   );
 
+  const missingRequiredAttributes = useMemo(
+    () => findMissingRequiredAttributeValues(opciones, atributosRequeridosNombres),
+    [opciones, atributosRequeridosNombres],
+  );
+
   // Todos los handlers de acá para abajo van en useCallback con deps
   // mínimas — son props de ProductVariantsSection/VariantSelectionMatrix,
   // memoizados con React.memo porque escalan con la cantidad de variantes
@@ -198,7 +269,7 @@ export function useVariantSelection({
   }, []);
 
   const handleRemoveOption = useCallback((id: string) => {
-    setOpciones((prev) => prev.filter((o) => o.id !== id));
+    setOpciones((prev) => prev.filter((o) => o.id !== id || !o.bloqueado));
     setCustomTypeMode((prev) => {
       const next = { ...prev };
       delete next[id];
@@ -208,7 +279,9 @@ export function useVariantSelection({
 
   const handleUpdateOptionName = useCallback((id: string, newName: string) => {
     setOpciones((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, nombre: newName } : o)),
+      prev.map((o) =>
+        o.id === id && !o.bloqueado ? { ...o, nombre: newName } : o,
+      ),
     );
   }, []);
 
@@ -367,5 +440,8 @@ export function useVariantSelection({
     isLoadingSuggestions,
     getFilteredSuggestions,
     atributosExistentes,
+    atributosRequeridos,
+    atributosRequeridosNombres,
+    missingRequiredAttributes,
   };
 }

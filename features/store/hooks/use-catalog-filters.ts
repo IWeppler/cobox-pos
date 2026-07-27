@@ -5,6 +5,13 @@ import {
   buildPropiedadesFiltro,
   resolverAtributosVariante,
 } from "@/entities/productos/lib/build-propiedades-filtro";
+import {
+  construirArbolCategorias,
+  aplanarArbolCategorias,
+  type ArbolCategorias,
+  type PadreConHijos,
+  type CategoriaConCount,
+} from "@/shared/utils/category-tree";
 
 export const DEFAULT_TIPO = "todos";
 export const DEFAULT_ORDEN = "mas_vendidos";
@@ -20,6 +27,7 @@ interface CategoriaCatalogo {
   id: string;
   nombre: string;
   slug?: string | null;
+  parent_id?: string | null;
 }
 
 interface CatalogConfig {
@@ -35,6 +43,11 @@ interface UseCatalogFiltersProps {
   filtrosVariantes: Record<string, string | string[]>;
   orden: string;
   visibleCount: number;
+}
+
+export interface CategoriaResuelta {
+  padre: PadreConHijos | null;
+  hijo: CategoriaConCount | null;
 }
 
 export function useCatalogFilters({
@@ -106,6 +119,51 @@ export function useCatalogFilters({
     [searchQuery, filtrosVariantes],
   );
 
+  // Filtro de stock (visibilidad), compartido entre conteos y filtrado —
+  // antes vivía copiado 2 veces, ahora 3 (se suma matchesFueraDeCategoria).
+  const pasaFiltroStock = useCallback(
+    (p: Producto) => {
+      const stockViejos = p.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
+      const stockNuevos =
+        p.producto_variantes?.reduce(
+          (acc, v) => acc + (v.stock_disponible ?? v.stock),
+          0,
+        ) || 0;
+      const stockTotal = stockViejos + stockNuevos;
+      return !(config?.mostrar_sin_stock === false && stockTotal <= 0);
+    },
+    [config],
+  );
+
+  // Lookup id/slug/nombre (lowercased) -> id real de categoría. Permite
+  // creditar tanto productos con categoria_id real (ya arreglado en
+  // getProductosAction) como los legacy que solo traen `tipo` (texto
+  // libre) matcheando el nombre/slug de una categoría real.
+  const categoriaIdPorClave = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const cat of categorias) {
+      map.set(cat.id.toLowerCase(), cat.id);
+      if (cat.slug) map.set(cat.slug.toLowerCase(), cat.id);
+      if (cat.nombre) map.set(cat.nombre.toLowerCase(), cat.id);
+    }
+    return map;
+  }, [categorias]);
+
+  const resolverCategoriaIdDeProducto = useCallback(
+    (p: Producto): string => {
+      const porId = p.categoria_id
+        ? categoriaIdPorClave.get(p.categoria_id.toLowerCase())
+        : undefined;
+      if (porId) return porId;
+      const porTipo = p.tipo
+        ? categoriaIdPorClave.get(p.tipo.toLowerCase())
+        : undefined;
+      if (porTipo) return porTipo;
+      return (p.categoria_id || p.tipo || "sin-categoria").toLowerCase();
+    },
+    [categoriaIdPorClave],
+  );
+
   // conteosTotales: solo el filtro de stock — decide qué categorías existen
   // (un chip sin ningún producto no debería existir nunca).
   // conteosFacetados: además de eso, búsqueda + variantes activos — es el
@@ -116,21 +174,9 @@ export function useCatalogFilters({
     const totales: Record<string, number> = {};
     const facetados: Record<string, number> = {};
     productos.forEach((p) => {
-      const stockViejos = p.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
-      const stockNuevos =
-        p.producto_variantes?.reduce(
-          (acc, v) => acc + (v.stock_disponible ?? v.stock),
-          0,
-        ) || 0;
-      const stockTotal = stockViejos + stockNuevos;
+      if (!pasaFiltroStock(p)) return;
 
-      if (config?.mostrar_sin_stock === false && stockTotal <= 0) return;
-
-      const catKey = (
-        p.categoria_id ||
-        p.tipo ||
-        "sin-categoria"
-      ).toLowerCase();
+      const catKey = resolverCategoriaIdDeProducto(p);
       totales[catKey] = (totales[catKey] || 0) + 1;
 
       if (matchSearchYVariante(p)) {
@@ -138,7 +184,40 @@ export function useCatalogFilters({
       }
     });
     return { conteosTotales: totales, conteosFacetados: facetados };
-  }, [productos, config, matchSearchYVariante]);
+  }, [productos, pasaFiltroStock, resolverCategoriaIdDeProducto, matchSearchYVariante]);
+
+  const arbolCategorias: ArbolCategorias = useMemo(
+    () =>
+      construirArbolCategorias(
+        categorias.map((c) => ({
+          id: c.id,
+          nombre: c.nombre,
+          slug: c.slug || "",
+          parent_id: c.parent_id ?? null,
+        })),
+        conteosTotales,
+        conteosFacetados,
+      ),
+    [categorias, conteosTotales, conteosFacetados],
+  );
+
+  // ids de padre -> ids de sus hijos, para expandir el filtro cuando la
+  // categoría activa es un padre ("Todo Ropa Mujer" = Ropa Mujer + todas
+  // sus subs).
+  const hijosIdsPorPadreId = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const padre of arbolCategorias.padres) {
+      map.set(padre.id, new Set(padre.hijos.map((h) => h.id)));
+    }
+    return map;
+  }, [arbolCategorias]);
+
+  const idsAMatchear = useMemo(() => {
+    if (tipo === DEFAULT_TIPO) return null; // null = sin filtro de categoría
+    const hijosDelPadre = hijosIdsPorPadreId.get(tipo);
+    if (hijosDelPadre) return new Set([tipo, ...hijosDelPadre]);
+    return new Set([tipo]);
+  }, [tipo, hijosIdsPorPadreId]);
 
   const categoriasConStock = useMemo<CategoriaConStock[]>(() => {
     if (!categorias || categorias.length === 0) {
@@ -162,47 +241,52 @@ export function useCatalogFilters({
         .sort((a, b) => a.nombre.localeCompare(b.nombre));
     }
 
-    return categorias
-      .map((cat) => {
-        const idKey = cat.id.toLowerCase();
-        const slugKey = (cat.slug || "").toLowerCase();
-        const nombreKey = (cat.nombre || "").toLowerCase();
-        const total =
-          (conteosTotales[idKey] || 0) +
-          (conteosTotales[slugKey] || 0) +
-          (conteosTotales[nombreKey] || 0);
-        const count =
-          (conteosFacetados[idKey] || 0) +
-          (conteosFacetados[slugKey] || 0) +
-          (conteosFacetados[nombreKey] || 0);
-        return { id: cat.id, nombre: cat.nombre, count, total };
-      })
-      .filter((cat) => cat.total > 0)
-      .map((cat) => ({ id: cat.id, nombre: cat.nombre, count: cat.count }));
-  }, [categorias, conteosTotales, conteosFacetados, productos]);
+    return aplanarArbolCategorias(arbolCategorias).map((c) => ({
+      id: c.id,
+      nombre: c.nombre,
+      count: c.count,
+    }));
+  }, [categorias, conteosTotales, conteosFacetados, productos, arbolCategorias]);
+
+  /**
+   * Resuelve un slug o id de URL a `{ padre, hijo }` contra el árbol de 2
+   * niveles — es el corazón de la compatibilidad con links viejos: un
+   * link compartido antes de que una categoría se re-parentara (ej.
+   * `?categoria=boxer` de cuando Boxer todavía era raíz) sigue resolviendo
+   * a los mismos productos, ahora identificado como hijo de Ropa Hombre.
+   * Si el slug no matchea nada en el árbol de 2 niveles (categoría plana,
+   * o inexistente), devuelve `{ padre: null, hijo: null }` — el caller
+   * cae al comportamiento de categoría plana ya existente.
+   */
+  const resolverCategoria = useCallback(
+    (slugOrId: string): CategoriaResuelta => {
+      if (!slugOrId || slugOrId === DEFAULT_TIPO) {
+        return { padre: null, hijo: null };
+      }
+
+      const key = slugOrId.toLowerCase();
+      const matchesKey = (c: { id: string; slug: string }) =>
+        c.id.toLowerCase() === key || c.slug.toLowerCase() === key;
+
+      const padreDirecto = arbolCategorias.padres.find((p) => matchesKey(p));
+      if (padreDirecto) return { padre: padreDirecto, hijo: null };
+
+      for (const padre of arbolCategorias.padres) {
+        const hijo = padre.hijos.find((h) => matchesKey(h));
+        if (hijo) return { padre, hijo };
+      }
+
+      return { padre: null, hijo: null };
+    },
+    [arbolCategorias],
+  );
 
   const productosFiltrados = useMemo(() => {
     const resultado = productos.filter((c) => {
-      const stockViejos = c.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
-      const stockNuevos =
-        c.producto_variantes?.reduce(
-          (acc, v) => acc + (v.stock_disponible ?? v.stock),
-          0,
-        ) || 0;
-      const stockTotal = stockViejos + stockNuevos;
+      if (!pasaFiltroStock(c)) return false;
 
-      if (config?.mostrar_sin_stock === false && stockTotal <= 0) return false;
-
-      const tipoStr = c.tipo || "";
-      const catIdStr = c.categoria_id || "";
-
-      const catObj = categorias?.find((cat) => cat.id === tipo);
       const matchTipo =
-        tipo === "todos" ||
-        catIdStr === tipo ||
-        tipoStr.toLowerCase() === tipo.toLowerCase() ||
-        (catObj && catObj.slug?.toLowerCase() === tipoStr.toLowerCase()) ||
-        (catObj && catObj.nombre?.toLowerCase() === tipoStr.toLowerCase());
+        idsAMatchear === null || idsAMatchear.has(resolverCategoriaIdDeProducto(c));
 
       return matchTipo && matchSearchYVariante(c);
     });
@@ -233,7 +317,18 @@ export function useCatalogFilters({
     });
 
     return resultado;
-  }, [productos, matchSearchYVariante, tipo, orden, config, categorias]);
+  }, [productos, pasaFiltroStock, idsAMatchear, resolverCategoriaIdDeProducto, matchSearchYVariante, orden]);
+
+  // Búsqueda transversal: cuántos productos matchean búsqueda+variante
+  // (con el mismo filtro de stock) por FUERA de la categoría/subcategoría
+  // activa — para el escape "ver N resultados en todo el catálogo".
+  const matchesFueraDeCategoria = useMemo(() => {
+    if (tipo === DEFAULT_TIPO) return 0;
+    const totalSinCategoria = productos.filter(
+      (p) => pasaFiltroStock(p) && matchSearchYVariante(p),
+    ).length;
+    return Math.max(0, totalSinCategoria - productosFiltrados.length);
+  }, [tipo, productos, pasaFiltroStock, matchSearchYVariante, productosFiltrados]);
 
   const productosVisibles = productosFiltrados.slice(0, visibleCount);
   const hayMasProductos = visibleCount < productosFiltrados.length;
@@ -249,9 +344,12 @@ export function useCatalogFilters({
   return {
     propiedadesGlobales,
     categoriasConStock,
+    arbolCategorias,
+    resolverCategoria,
     productosFiltrados,
     productosVisibles,
     hayMasProductos,
     hayFiltrosActivos,
+    matchesFueraDeCategoria,
   };
 }

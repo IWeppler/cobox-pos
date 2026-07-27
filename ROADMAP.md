@@ -1,6 +1,12 @@
 ideas:
+- Creo que el dashboard inicial podria y deberia mejorar en cuanto a utilidad, nose si hacerlo como mas bien un resumen del modulo de reportes o algo como analitico/operativo, que lleven al dueño de un negocio a tomar decisiones o darle numeros, ideas o tips para que pueda crecer o que no se vaya a la quiebra. Ademas visualmente es de muy bajo impacto  
+- en el dashboard inicial tengo 3 tablas que son por dia. Las tenemos que hacer por semana.
+- actualmente hay todo un modulo de caja para detalles, y ahora agregue en el navbar un boton para abrir y cerrar caja. Creo que ya lo quitaria del dashboard.
+- alertas de stock: por lo menos en los 3 negocios que estoy trabajando, 2 de indumentaria y ahora 1 de electrodomesticos, la mayoria de los productos tienen > 3. Entonces creo que al final no es tan util... o de ultimo junto a reservas activas que tampoco se usa tanto, podriamos poner las 2 ocupando lo que hoy ocupa 1 card.
+- Con esto de enfocarnos en darlo informacion util, curada y procesada nose si agregaria una lista de tareas, tips, ideas, consejos. ya sea de stock, ventas, empleados, marketing o contabilidad.
+- agregaria un chart, mas que nada por un tema visual
 
-- codigo de barras / sku - que diferencias son?
+- deberia agregar codigo de barras ademas de SKU
 - atajos con teclado
 - Tiene que venir preestablecido los metodos de pago: transferencia, efectivo, Mercado Pago
 - que opinas de tener una segunda venta en simultaneo?
@@ -165,8 +171,8 @@ Convertir la jerarquía de categorías de "fachada rota" a feature real, con el 
 
 - Árbol: padres = Ropa Hombre / Ropa Mujer / Ropa Bebé / Ropa Niños. Subcategorías = tipo de prenda (repetibles entre padres: "Remeras" existe bajo Hombre, Niños y Bebé como filas distintas).
 - "Ropa Interior" NO es padre: Boxer → Ropa Hombre; Bombacha, Corpiño, Cola Less/Culotte, Conjuntos → Ropa Mujer.
-- Género = atributo de variante con lista CERRADA: Mujer, Hombre, Nena, Nene, Beba, Bebe, Unisex. Requerido solo en Ropa Bebé y Ropa Niños (vía categoria_atributos). Para Hombre/Mujer queda implícito en el padre — no se exige.
-- Marca = columna opcional a nivel producto (no es atributo ni categoría).
+- Género (revisado 2026-07-26): DEJA de ser atributo combinable de variante para Mujer/Hombre/Niña/Niño — la categoría padre ya lo implica, no hace falta declararlo dos veces. Única excepción: **Bebé** mantiene Género como atributo de variante, lista cerrada Beba/Bebe/Unisex — mucha ropa de bebé es genuinamente unisex y forzar un padre separado obligaría a duplicar el producto o elegir arbitrariamente. Requerido = true solo en Ropa Bebé (o en sus subcategorías, si llegan a crearse — ver T1.3). Para Mujer/Hombre/Niña/Niño y sus subs, Género no se declara en categoria_atributos (no requerido, no ofrecido por default).
+- Marca = columna opcional a nivel producto (no es atributo ni categoría). Dejar de usarla como atributo de variante ocurre DENTRO de la división de productos multi-marca ("Pasada 2": productos tipo "Remera m. larga" con 5 marcas mezcladas se separan en productos por marca) — no aislado. No limpiar Marca de un producto como atributo sin haber dividido antes lo que dependía de ella para distinguir variantes: se pierde información real.
 - Búsqueda es transversal (ignora jerarquía); navegación es jerárquica (chips de dos niveles).
 - Talles: meses en Bebé (0-24m), numéricos en Niños — es el criterio que separa esas dos audiencias.
 
@@ -183,8 +189,9 @@ Quitar el "Próximamente" que pusimos como tapa. El manager de categorías muest
 ✔ Criterio: el árbol completo de indumentaria se puede armar desde la UI sin tocar la base.
 
 # T1.3 — Cablear categoria_atributos (la tabla "de fachada" pasa a funcionar)
-En el manager de categorías: por categoría, poder marcar qué atributos aplica y cuáles son `requerido` (la tabla ya tiene el modelo exacto: categoria_id + atributo_id + requerido + orden). Seed: Ropa Bebé y Ropa Niños → Género requerido; todas → Talle y Color opcionales.
-✔ Criterio: consultar categoria_atributos de "Ropa Bebé" devuelve Género como requerido.
+En el manager de categorías: por categoría, poder marcar qué atributos aplica y cuáles son `requerido` (la tabla ya tiene el modelo exacto: categoria_id + atributo_id + requerido + orden). Seed: Ropa Bebé (o sus subs, si existen) → Género requerido; Ropa Mujer/Hombre/Niña/Niño y sus subs → Género NO se declara (no requerido, no ofrecido por default); todas → Talle y Color opcionales.
+✔ Criterio: consultar categoria_atributos de "Ropa Bebé" devuelve Género como requerido; consultarla para Ropa Mujer/Hombre/Niña/Niño no devuelve fila de Género.
+Aplicado 2026-07-26 en estilobonito (fila categoria_atributos insertada a mano, sin subcategorías de Ropa Bebé todavía → requerido va en el padre). Evens PENDIENTE — no tocar sin hablar antes con la dueña.
 
 # T1.4 — Form de producto/variantes lee categoria_atributos.
 Al elegir categoría (o subcategoría — hereda del padre), el form de variantes pre-carga los atributos declarados: los requeridos aparecen ya agregados y no se puede guardar sin valor; los opcionales aparecen sugeridos en el dropdown (encima de la lista de "atributos ya usados" que ya conectamos al RPC de autocomplete).
@@ -207,7 +214,7 @@ Crear los padres, re-parentar las categorías existentes (UPDATE de parent_id �
 ✔ Criterio: cero productos huérfanos; conteos por categoría antes/después idénticos; catálogo público sigue mostrando todo.
 
 **T2.3 — Backfill de Género donde es derivable.**
-Productos en subcategorías de Ropa Bebé/Niños sin atributo Género: derivarlo si la planilla original lo traía (columna Genero de los CSV ya importados) o marcarlos en un reporte para carga manual. No adivinar por nombre de producto.
+Productos en subcategorías de Ropa Bebé sin atributo Género: derivarlo si la planilla original lo traía (columna Genero de los CSV ya importados) o marcarlos en un reporte para carga manual. No adivinar por nombre de producto. (Ropa Niña/Niño ya no cargan Género — ver decisión revisada 2026-07-26.)
 ✔ Criterio: reporte de cuántos quedaron sin género para que la clienta los complete.
 
 ---

@@ -12,12 +12,21 @@ import { Button } from "@/shared/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { StockFiltersToolbar } from "./stock-filters-toolbar";
 import { getTotalStock } from "../lib/stock-product-utils";
+import { createClient } from "@/shared/config/supabase/client";
+import { construirArbolCategorias } from "@/shared/utils/category-tree";
 
 interface StockViewProps {
   productosIndice: ProductoIndice[];
   userRole: string;
   nombreComercio: string;
   mostrarSinStock: boolean;
+}
+
+interface CategoriaDB {
+  id: string;
+  nombre: string;
+  slug: string;
+  parent_id: string | null;
 }
 
 const ITEMS_POR_PAGINA = 10;
@@ -38,8 +47,23 @@ export function StockView({
     Record<string, string>
   >({});
   const [orden, setOrden] = useState("nombre_asc");
+  const [categoriasDB, setCategoriasDB] = useState<CategoriaDB[]>([]);
 
   const isAdmin = userRole === "ADMIN";
+
+  // Fetch liviano de categorías reales (con parent_id) — separado del
+  // índice de productos, que ya trae categoria:{id,nombre,slug} por
+  // producto pero no la relación padre/hijo en sí.
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("categorias")
+      .select("id, nombre, slug, parent_id")
+      .eq("activa", true)
+      .then(({ data }) => {
+        if (data) setCategoriasDB(data as CategoriaDB[]);
+      });
+  }, []);
 
   // Sin fetch de por medio, el debounce es solo para no re-filtrar/
   // ordenar/paginar en cada tecla — la caja de texto sigue respondiendo al
@@ -91,6 +115,44 @@ export function StockView({
     [searchDebounced, filtrosVariantes],
   );
 
+  // Lookup id/slug/nombre (lowercased) -> id real de categoría — mismo
+  // criterio que use-catalog-filters.ts, para que tanto productos con
+  // categoria_id real como los legacy que solo traen `tipo` (texto libre)
+  // se crediten a la misma categoría real cuando corresponda.
+  const categoriaIdPorClave = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const cat of categoriasDB) {
+      map.set(cat.id.toLowerCase(), cat.id);
+      if (cat.slug) map.set(cat.slug.toLowerCase(), cat.id);
+      if (cat.nombre) map.set(cat.nombre.toLowerCase(), cat.id);
+    }
+    return map;
+  }, [categoriasDB]);
+
+  const resolverCategoriaIdDeProducto = useCallback(
+    (p: ProductoIndice): string => {
+      const porRelacionId = p.categoria?.id
+        ? categoriaIdPorClave.get(p.categoria.id.toLowerCase())
+        : undefined;
+      if (porRelacionId) return porRelacionId;
+      const porNombre = p.categoria?.nombre
+        ? categoriaIdPorClave.get(p.categoria.nombre.toLowerCase())
+        : undefined;
+      if (porNombre) return porNombre;
+      const porTipo = p.tipo
+        ? categoriaIdPorClave.get(p.tipo.toLowerCase())
+        : undefined;
+      if (porTipo) return porTipo;
+      return (
+        p.categoria?.id ||
+        p.categoria?.nombre ||
+        p.tipo ||
+        "sin-categoria"
+      ).toLowerCase();
+    },
+    [categoriaIdPorClave],
+  );
+
   // Set filtrado por búsqueda + variantes, SIN el filtro de categoría — es
   // la base tanto de la tabla (con matchCat sumado abajo) como de los
   // contadores facetados de cada chip (que nunca deben filtrarse por su
@@ -100,14 +162,64 @@ export function StockView({
     [productosIndice, matchSearchYVariantes],
   );
 
-  const productosFiltrados = useMemo(() => {
-    if (categoriaActiva === "todos") return productosFiltradosSinCategoria;
-
-    return productosFiltradosSinCategoria.filter((p) => {
-      const catNombre = p.categoria?.nombre || p.tipo || "Sin categoría";
-      return catNombre.toLowerCase() === categoriaActiva.toLowerCase();
+  // Árbol de categorías: existencia = TODO el índice sin filtrar (un chip
+  // no debería aparecer/desaparecer con la búsqueda, solo su número);
+  // mostrado = con búsqueda+variante aplicados (facetado).
+  const conteosExistencia = useMemo(() => {
+    const conteos: Record<string, number> = {};
+    productosIndice.forEach((p) => {
+      const id = resolverCategoriaIdDeProducto(p);
+      conteos[id] = (conteos[id] || 0) + 1;
     });
-  }, [productosFiltradosSinCategoria, categoriaActiva]);
+    return conteos;
+  }, [productosIndice, resolverCategoriaIdDeProducto]);
+
+  const conteosMostrados = useMemo(() => {
+    const conteos: Record<string, number> = {};
+    productosFiltradosSinCategoria.forEach((p) => {
+      const id = resolverCategoriaIdDeProducto(p);
+      conteos[id] = (conteos[id] || 0) + 1;
+    });
+    return conteos;
+  }, [productosFiltradosSinCategoria, resolverCategoriaIdDeProducto]);
+
+  const arbolCategorias = useMemo(
+    () =>
+      construirArbolCategorias(categoriasDB, conteosExistencia, conteosMostrados),
+    [categoriasDB, conteosExistencia, conteosMostrados],
+  );
+
+  const hijosIdsPorPadreId = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const padre of arbolCategorias.padres) {
+      map.set(padre.id, new Set(padre.hijos.map((h) => h.id)));
+    }
+    return map;
+  }, [arbolCategorias]);
+
+  const idsAMatchear = useMemo(() => {
+    if (categoriaActiva === "todos") return null;
+    const hijos = hijosIdsPorPadreId.get(categoriaActiva);
+    if (hijos) return new Set([categoriaActiva, ...hijos]);
+    return new Set([categoriaActiva]);
+  }, [categoriaActiva, hijosIdsPorPadreId]);
+
+  const productosFiltrados = useMemo(() => {
+    if (idsAMatchear === null) return productosFiltradosSinCategoria;
+    return productosFiltradosSinCategoria.filter((p) =>
+      idsAMatchear.has(resolverCategoriaIdDeProducto(p)),
+    );
+  }, [productosFiltradosSinCategoria, idsAMatchear, resolverCategoriaIdDeProducto]);
+
+  // Búsqueda transversal: cuántos resultados matchean búsqueda+variante
+  // por fuera de la categoría/subcategoría activa.
+  const resultadosFueraDeCategoria = useMemo(() => {
+    if (categoriaActiva === "todos") return 0;
+    return Math.max(
+      0,
+      productosFiltradosSinCategoria.length - productosFiltrados.length,
+    );
+  }, [categoriaActiva, productosFiltradosSinCategoria, productosFiltrados]);
 
   // El sort corre acá, sobre TODO el set filtrado, antes de paginar. Antes
   // vivía adentro de stock-table.tsx y solo reordenaba los 10 productos de
@@ -164,41 +276,36 @@ export function StockView({
     categoriaActiva !== "todos" ||
     Object.values(filtrosVariantes).some((valor) => valor !== "todos");
 
-  // Categorías disponibles: siempre el set completo del catálogo (no
-  // depende de los filtros activos) — un chip con 0 resultados bajo el
-  // filtro actual sigue visible, solo con su contador en 0.
-  const categoriasDisponibles = useMemo(() => {
-    const nombres = new Set<string>();
-    productosIndice.forEach((p) => {
-      nombres.add(p.categoria?.nombre || p.tipo || "Sin categoría");
-    });
-    return Array.from(nombres).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  }, [productosIndice]);
+  // Padres primero (con hijos embebidos), después las categorías sueltas
+  // — mismo orden/patrón que CategoryPills en el catálogo público y que
+  // pos-terminal.tsx.
+  const categoriasDisponibles = useMemo(
+    () => [
+      ...arbolCategorias.padres.map((padre) => ({
+        nombre: padre.nombre,
+        value: padre.id,
+        count: padre.count,
+        hijos: padre.hijos.map((h) => ({
+          nombre: h.nombre,
+          value: h.id,
+          count: h.count,
+        })),
+      })),
+      ...arbolCategorias.sinPadre.map((cat) => ({
+        nombre: cat.nombre,
+        value: cat.id,
+        count: cat.count,
+      })),
+    ],
+    [arbolCategorias],
+  );
 
-  // Facetado estándar: el contador de cada chip refleja búsqueda + filtros
-  // de variante activos, pero NUNCA su propia categoría — de ahí que corra
-  // sobre productosFiltradosSinCategoria en vez del índice completo.
-  const conteosPorCategoria = useMemo(() => {
-    const conteos: Record<string, number> = {};
-    categoriasDisponibles.forEach((cat) => {
-      conteos[cat] = 0;
-    });
-    productosFiltradosSinCategoria.forEach((p) => {
-      const cat = p.categoria?.nombre || p.tipo || "Sin categoría";
-      conteos[cat] = (conteos[cat] || 0) + 1;
-    });
-    return conteos;
-  }, [categoriasDisponibles, productosFiltradosSinCategoria]);
-
-  const slugCategoriaActiva = useMemo(() => {
-    if (categoriaActiva === "todos") return null;
-    const producto = productosIndice.find(
-      (p) =>
-        (p.categoria?.nombre || p.tipo || "Sin categoría").toLowerCase() ===
-        categoriaActiva.toLowerCase(),
-    );
-    return producto?.categoria?.slug ?? null;
-  }, [productosIndice, categoriaActiva]);
+  const categoriaActivaObj = useMemo(
+    () => categoriasDB.find((c) => c.id === categoriaActiva) ?? null,
+    [categoriasDB, categoriaActiva],
+  );
+  const slugCategoriaActiva = categoriaActivaObj?.slug ?? null;
+  const nombreCategoriaActiva = categoriaActivaObj?.nombre ?? categoriaActiva;
 
   const limpiarFiltros = () => {
     setSearchQuery("");
@@ -240,8 +347,8 @@ export function StockView({
         categoriaActiva={categoriaActiva}
         onCategoriaChange={handleCategoriaChange}
         categoriasDisponibles={categoriasDisponibles}
-        conteosPorCategoria={conteosPorCategoria}
         totalProductos={productosIndice.length}
+        resultadosFueraDeCategoria={resultadosFueraDeCategoria}
         hayFiltrosActivos={hayFiltrosActivos}
         propiedadesGlobales={propiedadesGlobales}
         filtrosVariantes={filtrosVariantes}
@@ -249,7 +356,7 @@ export function StockView({
         isAdmin={isAdmin}
         onLimpiarFiltros={limpiarFiltros}
         slugCategoriaActiva={slugCategoriaActiva}
-        nombreCategoriaActiva={categoriaActiva}
+        nombreCategoriaActiva={nombreCategoriaActiva}
         nombreComercio={nombreComercio}
       />
 
@@ -263,6 +370,7 @@ export function StockView({
             mostrarSinStock={mostrarSinStock}
             orden={orden}
             onSort={handleSort}
+            categoriasArbol={categoriasDB}
           />
         ) : (
           <StockGrid
@@ -270,6 +378,7 @@ export function StockView({
             userRole={userRole}
             nombreComercio={nombreComercio}
             mostrarSinStock={mostrarSinStock}
+            categorias={categoriasDB}
           />
         )}
       </div>

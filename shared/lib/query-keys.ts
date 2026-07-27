@@ -10,6 +10,10 @@ export const queryKeys = {
     listado: ["clientes", "listado"] as const,
     detalle: (clienteId: string) => ["clientes", "detalle", clienteId] as const,
   },
+  categorias: {
+    atributos: (categoriaId: string) =>
+      ["categorias", "atributos", categoriaId] as const,
+  },
 };
 
 /**

@@ -58,7 +58,11 @@ import {
   bulkDeleteProductsAction,
   bulkUpdateCategoryAction,
 } from "../actions/delete-product";
-import { useActiveCategories } from "../hooks/use-active-categories";
+import {
+  construirArbolCategorias,
+  resolverCategoriaDisplayLabel,
+  type CategoriaBase,
+} from "@/shared/utils/category-tree";
 import {
   Select,
   SelectContent,
@@ -87,14 +91,13 @@ interface StockTableProps {
    * todo el catálogo filtrado antes de paginar, no solo sobre esta página. */
   orden: string;
   onSort: (columna: string) => void;
+  /** Categorías reales (con parent_id) para armar el label combinado
+   * "Padre › Hijo" de cada producto — mismo fetch que ya usa stock-view.tsx
+   * para los chips, no uno nuevo. Distinto de `categorias`
+   * (useActiveCategories, más abajo) que solo trae raíces para el dropdown
+   * de "mover a categoría". */
+  categoriasArbol: CategoriaBase[];
 }
-
-// 2. Solución para las categorías: Separa camelCase/PascalCase (ej: FloresEstacion -> Flores Estacion)
-const formatCategoria = (str: string) => {
-  if (!str) return "";
-  const conEspacios = str.replace(/([a-z])([A-Z])/g, "$1 $2");
-  return conEspacios.charAt(0).toUpperCase() + conEspacios.slice(1);
-};
 
 const obtenerPrimeraImagen = (imagenUrl: unknown): string | null => {
   return getPrimeraImagen(imagenUrl);
@@ -135,6 +138,7 @@ export function StockTable({
   mostrarSinStock,
   orden,
   onSort,
+  categoriasArbol,
 }: Readonly<StockTableProps>) {
   const { isAdmin } = useStockCartActions(userRole);
   const queryClient = useQueryClient();
@@ -143,11 +147,43 @@ export function StockTable({
     Record<string, boolean>
   >({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // bulkPadreId maneja el primer select (padre o categoría suelta);
+  // bulkCategoryId es el destino FINAL que se manda al server — igual al
+  // padre elegido si no tiene hijos, o a la subcategoría/"todo el padre"
+  // elegida en el segundo select cuando sí los tiene.
+  const [bulkPadreId, setBulkPadreId] = useState("");
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [isPending, startTransition] = useTransition();
-  const categorias = useActiveCategories();
   const [productoEnEdicion, setProductoEnEdicion] =
     useState<ProductoIndice | null>(null);
+
+  // Reusa la MISMA lógica de armado de árbol que el toolbar de chips
+  // (construirArbolCategorias) — acá los counts no importan para decidir
+  // destino de "mover" (una categoría vacía hoy sigue siendo un destino
+  // válido), por eso se le pasa un mapa de "existencia" siempre en 1: nunca
+  // filtra un padre/hijo por falta de stock actual.
+  const arbolMover = useMemo(() => {
+    const existenciaSiempreUno = Object.fromEntries(
+      categoriasArbol.map((c) => [c.id, 1]),
+    );
+    return construirArbolCategorias(categoriasArbol, existenciaSiempreUno);
+  }, [categoriasArbol]);
+
+  const padreSeleccionadoParaMover = useMemo(
+    () => arbolMover.padres.find((p) => p.id === bulkPadreId) ?? null,
+    [arbolMover, bulkPadreId],
+  );
+
+  const handleBulkPadreChange = (val: string) => {
+    setBulkPadreId(val);
+    const esPadreConHijos = arbolMover.padres.some(
+      (p) => p.id === val && p.hijos.length > 0,
+    );
+    // Padre sin hijos (o categoría suelta): el destino final ya se conoce
+    // con este solo click. Padre con hijos: esperamos la elección del
+    // segundo select antes de habilitar "Mover".
+    setBulkCategoryId(esPadreConHijos ? "" : val);
+  };
   const selectedIdsArray = useMemo(
     () => Array.from(selectedIds),
     [selectedIds],
@@ -189,6 +225,7 @@ export function StockTable({
   const clearSelection = () => {
     setSelectedIds(new Set());
     setBulkCategoryId("");
+    setBulkPadreId("");
   };
 
   const handleBulkMove = () => {
@@ -341,8 +378,8 @@ export function StockTable({
             />
             <div className="flex min-w-0 items-center gap-2">
               <Select
-                value={bulkCategoryId}
-                onValueChange={setBulkCategoryId}
+                value={bulkPadreId}
+                onValueChange={handleBulkPadreChange}
                 disabled={isPending}
               >
                 <SelectTrigger
@@ -352,13 +389,45 @@ export function StockTable({
                   <SelectValue placeholder="Categoria destino" />
                 </SelectTrigger>
                 <SelectContent align="end">
-                  {categorias.map((categoria) => (
+                  {arbolMover.padres.map((padre) => (
+                    <SelectItem key={padre.id} value={padre.id}>
+                      {padre.nombre}
+                    </SelectItem>
+                  ))}
+                  {arbolMover.sinPadre.map((categoria) => (
                     <SelectItem key={categoria.id} value={categoria.id}>
                       {categoria.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+
+              {padreSeleccionadoParaMover &&
+                padreSeleccionadoParaMover.hijos.length > 0 && (
+                  <Select
+                    value={bulkCategoryId}
+                    onValueChange={setBulkCategoryId}
+                    disabled={isPending}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className="h-8 w-full min-w-0 bg-background sm:w-52"
+                    >
+                      <SelectValue placeholder="Subcategoría" />
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      {padreSeleccionadoParaMover.hijos.map((hijo) => (
+                        <SelectItem key={hijo.id} value={hijo.id}>
+                          {hijo.nombre}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={padreSeleccionadoParaMover.id}>
+                        Todo {padreSeleccionadoParaMover.nombre}, sin
+                        subcategoría específica
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
 
               <Button
                 type="button"
@@ -506,6 +575,10 @@ export function StockTable({
                 obtenerPrimeraImagen(producto.thumbnail_url) ??
                 obtenerPrimeraImagen(producto.imagen_url);
               const totalUnidades = getTotalStock(producto);
+              const categoriaLabel = resolverCategoriaDisplayLabel(
+                categoriasArbol,
+                producto.categoria_id,
+              );
               const variantesVisibles = getVariantesVisibles(producto, isAdmin);
 
               const isSelected = selectedIds.has(producto.id);
@@ -631,6 +704,11 @@ export function StockTable({
                             </button>
                           </ProductEditDetailSheet>
                           <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
+                            {producto.marca && (
+                              <span className="text-[9px] sm:text-[10px] uppercase font-medium tracking-wider bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50 truncate max-w-24">
+                                {producto.marca}
+                              </span>
+                            )}
                             {hasVariantes && (
                               <span className="text-[9px] sm:text-[10px] uppercase font-medium tracking-wider bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50">
                                 {variantesVisibles.length} var.
@@ -641,9 +719,14 @@ export function StockTable({
                       </div>
                     </TableCell>
 
-                    {/* CATEGORÍA */}
-                    <TableCell className="py-2.5 hidden sm:table-cell text-muted-foreground text-sm">
-                      <span>{formatCategoria(producto.tipo)}</span>
+                    {/* CATEGORÍA (combinada "Padre › Hijo", o solo el nombre si aún no tiene padre) */}
+                    <TableCell className="py-2.5 hidden sm:table-cell text-muted-foreground text-sm max-w-40">
+                      <span
+                        className="block truncate"
+                        title={categoriaLabel || undefined}
+                      >
+                        {categoriaLabel}
+                      </span>
                     </TableCell>
 
                     {/* STOCK (Oculto en móviles) */}

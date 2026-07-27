@@ -81,6 +81,7 @@ export type ProductoIndice = Pick<
   | "precio"
   | "precio_costo"
   | "categoria_id"
+  | "marca"
   | "imagen_url"
   | "thumbnail_url"
   | "grid_url"

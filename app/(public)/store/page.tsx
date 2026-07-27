@@ -8,7 +8,7 @@ import type { Metadata } from "next";
 export const dynamic = "force-dynamic";
 
 interface StorePageProps {
-  searchParams: Promise<{ categoria?: string; productos?: string }>;
+  searchParams: Promise<{ categoria?: string; sub?: string; productos?: string }>;
 }
 
 async function resolverBaseUrl() {
@@ -21,7 +21,7 @@ async function resolverBaseUrl() {
 export async function generateMetadata({
   searchParams,
 }: Readonly<StorePageProps>): Promise<Metadata> {
-  const { categoria, productos } = await searchParams;
+  const { categoria, sub, productos } = await searchParams;
   if (!categoria && !productos) return {};
 
   const cookieStore = await cookies();
@@ -52,19 +52,31 @@ export async function generateMetadata({
     };
   }
 
+  // Preferimos `sub` si vino — es la categoría más específica (un link a
+  // "Ropa Hombre > Boxer" debe mostrar "Boxer" en el preview, no el padre).
   const { data: cat } = await supabase
     .from("categorias")
     .select("id, nombre")
-    .eq("slug", categoria)
+    .eq("slug", sub || categoria)
     .eq("activa", true)
     .maybeSingle();
 
   if (!cat) return {};
 
+  // Un padre no tiene productos con categoria_id propio (viven en sus
+  // hijos) — sumamos los ids de sus hijos para no perder la imagen de
+  // preview en un link a "Todo <Padre>" sin sub elegido.
+  const { data: hijos } = await supabase
+    .from("categorias")
+    .select("id")
+    .eq("parent_id", cat.id);
+
+  const idsParaImagen = [cat.id, ...(hijos || []).map((h) => h.id)];
+
   const { data: primerProducto } = await supabase
     .from("productos")
     .select("imagen_url")
-    .eq("categoria_id", cat.id)
+    .in("categoria_id", idsParaImagen)
     .eq("publicado", true)
     .not("imagen_url", "is", null)
     .limit(1)
@@ -84,7 +96,7 @@ export async function generateMetadata({
     openGraph: {
       title,
       type: "website",
-      url: `${baseUrl}/store?categoria=${categoria}`,
+      url: `${baseUrl}/store?categoria=${categoria}${sub ? `&sub=${sub}` : ""}`,
       images: imagen ? [{ url: imagen }] : undefined,
     },
   };

@@ -1,41 +1,117 @@
+import { useMemo } from "react";
+import { FolderOpen, ArrowLeft } from "lucide-react";
 import { Button } from "@/shared/ui/button";
-import { CategoriaConStock } from "../hooks/use-catalog-filters";
+import type { ArbolCategorias } from "@/shared/utils/category-tree";
 
 interface CategoryPillsProps {
-  tipo: string;
-  categoriasConStock: CategoriaConStock[];
-  onTipoChange: (tipo: string) => void;
+  tipoActivo: string;
+  arbolCategorias: ArbolCategorias;
+  onSelectTodos: () => void;
+  onSelectCategoria: (id: string) => void;
 }
 
+const pillBase =
+  "rounded-full h-12 md:h-9 px-5 text-xs font-semibold shrink-0 shadow-none border-border/60 transition-colors";
+const pillInactivo =
+  "bg-background text-muted-foreground hover:bg-muted hover:text-foreground";
+const pillActivo = "bg-foreground text-background border-transparent hover:bg-foreground/90";
+
+/**
+ * Chips de categoría, tolerantes a árbol MIXTO: si `arbolCategorias.padres`
+ * está vacío (Evens hoy, 100% plano), esto degrada exactamente a la fila
+ * plana de siempre — cero cambio visual. Si hay padres con hijos, agrega
+ * un segundo nivel de navegación sin esconder las categorías sueltas que
+ * todavía no tienen padre asignado (Pasada 2 pendiente).
+ */
 export function CategoryPills({
-  tipo,
-  categoriasConStock,
-  onTipoChange,
+  tipoActivo,
+  arbolCategorias,
+  onSelectTodos,
+  onSelectCategoria,
 }: Readonly<CategoryPillsProps>) {
+  // El padre "en vista" para el nivel 2 es el que matchea directo (se
+  // seleccionó el padre o "Todo <Padre>") o el que contiene al hijo activo
+  // (se seleccionó una subcategoría puntual).
+  const padreEnVista = useMemo(() => {
+    const directo = arbolCategorias.padres.find((p) => p.id === tipoActivo);
+    if (directo) return directo;
+    return (
+      arbolCategorias.padres.find((p) =>
+        p.hijos.some((h) => h.id === tipoActivo),
+      ) ?? null
+    );
+  }, [arbolCategorias, tipoActivo]);
+
+  if (padreEnVista) {
+    return (
+      <div className="flex gap-2 overflow-x-auto bg-background py-1 scrollbar-hide w-full top-16 z-20">
+        <Button
+          variant="outline"
+          className={`${pillBase} sticky left-0 z-10 bg-background gap-1.5 ${pillInactivo}`}
+          onClick={onSelectTodos}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          {padreEnVista.nombre}
+        </Button>
+
+        {padreEnVista.hijos.map((hijo) => (
+          <Button
+            key={hijo.id}
+            variant={tipoActivo === hijo.id ? "default" : "outline"}
+            className={`${pillBase} ${tipoActivo === hijo.id ? pillActivo : pillInactivo}`}
+            onClick={() => onSelectCategoria(hijo.id)}
+          >
+            {hijo.nombre}{" "}
+            <span className="ml-1.5 opacity-60 font-normal">
+              ({hijo.count})
+            </span>
+          </Button>
+        ))}
+
+        <Button
+          variant={tipoActivo === padreEnVista.id ? "default" : "outline"}
+          className={`${pillBase} ${tipoActivo === padreEnVista.id ? pillActivo : pillInactivo}`}
+          onClick={() => onSelectCategoria(padreEnVista.id)}
+        >
+          Todo {padreEnVista.nombre}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex gap-2 overflow-x-auto bg-background py-1 scrollbar-hide w-full top-16 z-20">
       <Button
-        variant={tipo === "todos" ? "default" : "outline"}
-        className={`rounded-full h-12 md:h-9 px-5 text-xs font-semibold shrink-0 shadow-none border-border/60 transition-colors ${
-          tipo === "todos"
+        variant={tipoActivo === "todos" ? "default" : "outline"}
+        className={`${pillBase} ${
+          tipoActivo === "todos"
             ? "bg-neutral-900 text-white border-transparent hover:bg-neutral-800"
-            : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+            : pillInactivo
         }`}
-        onClick={() => onTipoChange("todos")}
+        onClick={onSelectTodos}
       >
         Ver todo
       </Button>
 
-      {categoriasConStock.map((cat) => (
+      {arbolCategorias.padres.map((padre) => (
+        <Button
+          key={padre.id}
+          variant="outline"
+          className={`${pillBase} gap-1.5 font-bold border-primary/30 text-foreground hover:bg-primary/10`}
+          onClick={() => onSelectCategoria(padre.id)}
+        >
+          <FolderOpen className="w-3.5 h-3.5 text-primary" />
+          {padre.nombre}{" "}
+          <span className="ml-1 opacity-60 font-normal">({padre.count})</span>
+        </Button>
+      ))}
+
+      {arbolCategorias.sinPadre.map((cat) => (
         <Button
           key={cat.id}
-          variant={tipo === cat.id ? "default" : "outline"}
-          className={`rounded-full h-12 md:h-9 px-5 text-xs font-semibold shrink-0 shadow-none border-border/60 transition-colors ${
-            tipo === cat.id
-              ? "bg-foreground text-background border-transparent hover:bg-foreground/90"
-              : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-          }`}
-          onClick={() => onTipoChange(cat.id)}
+          variant={tipoActivo === cat.id ? "default" : "outline"}
+          className={`${pillBase} ${tipoActivo === cat.id ? pillActivo : pillInactivo}`}
+          onClick={() => onSelectCategoria(cat.id)}
         >
           {cat.nombre}{" "}
           <span className="ml-1.5 opacity-60 font-normal">({cat.count})</span>

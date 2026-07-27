@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Producto } from "@/entities/productos/types";
 import { Button } from "@/shared/ui/button";
 import { Plus, SearchX, ShoppingBag } from "lucide-react";
@@ -16,16 +16,20 @@ import {
 } from "../hooks/use-catalog-filters";
 import { buildPropiedadesFiltro } from "@/entities/productos/lib/build-propiedades-filtro";
 import { slugify } from "@/shared/utils/slugify";
+import { resolverCategoriaPorSlug } from "@/shared/utils/category-tree";
 import { ConfiguracionPOS } from "@/entities/config/types";
+
+interface CategoriaProp {
+  id: string;
+  nombre: string;
+  slug?: string | null;
+  parent_id?: string | null;
+}
 
 interface StoreCatalogProps {
   productos: Producto[];
   config?: ConfiguracionPOS | null;
-  categorias?: {
-    id: string;
-    nombre: string;
-    slug?: string | null;
-  }[];
+  categorias?: CategoriaProp[];
 }
 
 const ordenOptions: OrdenOption[] = [
@@ -36,7 +40,7 @@ const ordenOptions: OrdenOption[] = [
 ];
 const ORDEN_VALIDOS = new Set(ordenOptions.map((o) => o.value));
 
-const PARAMS_RESERVADOS = new Set(["q", "categoria", "orden", "productos"]);
+const PARAMS_RESERVADOS = new Set(["q", "categoria", "sub", "orden", "productos"]);
 
 // Cap defensivo para ?productos=id1,id2,... — un link con de más no debe
 // poder forzar una consulta arbitrariamente grande.
@@ -93,17 +97,51 @@ function CatalogContent({
     ? productos.filter((p) => idsSeleccionados.has(p.id))
     : productos;
 
-  // --- categoria (?categoria=<slug>) — el estado interno sigue siendo el
-  // id de la categoría (así lo espera useCatalogFilters); solo la URL
-  // habla en slugs, más lindo para compartir. ---
+  const categoriasBase = useMemo(
+    () =>
+      (categorias || []).map((c) => ({
+        id: c.id,
+        nombre: c.nombre,
+        slug: c.slug || "",
+        parent_id: c.parent_id ?? null,
+      })),
+    [categorias],
+  );
+
+  // --- categoria (?categoria=<slug>) + sub (?sub=<slug>) ---
+  // La identidad (padre/hijo) se resuelve contra la lista PLANA de
+  // categorías, sin importar stock — así un link viejo a lo que hoy es
+  // una subcategoría (ej. ?categoria=boxer, compartido antes de que Boxer
+  // se re-parentara bajo Ropa Hombre) sigue resolviendo a los mismos
+  // productos aunque la URL canónica hoy sea otra.
   const categoriaParam = searchParams.get("categoria");
-  const tipo = useMemo(() => {
-    if (!categoriaParam) return DEFAULT_TIPO;
-    const match = categorias?.find(
-      (cat) => cat.slug?.toLowerCase() === categoriaParam.toLowerCase(),
+  const subParam = searchParams.get("sub");
+
+  const resolucion = useMemo(() => {
+    if (!categoriaParam) return null;
+    return resolverCategoriaPorSlug(categoriasBase, categoriaParam);
+  }, [categoriaParam, categoriasBase]);
+
+  // Si vino &sub= explícito, tiene que matchear una subcategoría REAL del
+  // mismo padre resuelto arriba — si no matchea nada, se ignora (se
+  // degrada a "Todo <Padre>" en vez de romper el filtro).
+  const subResuelto = useMemo(() => {
+    if (!subParam || !resolucion) return null;
+    const key = subParam.toLowerCase();
+    const match = categoriasBase.find(
+      (c) =>
+        c.parent_id === resolucion.padreId &&
+        (c.id.toLowerCase() === key || c.slug.toLowerCase() === key),
     );
-    return match?.id ?? DEFAULT_TIPO;
-  }, [categoriaParam, categorias]);
+    return match?.id ?? null;
+  }, [subParam, resolucion, categoriasBase]);
+
+  const tipo = useMemo(() => {
+    if (!resolucion) return DEFAULT_TIPO;
+    if (subResuelto) return subResuelto;
+    if (resolucion.hijoId) return resolucion.hijoId;
+    return resolucion.padreId;
+  }, [resolucion, subResuelto]);
 
   // --- orden (?orden=<valor>) ---
   const ordenParam = searchParams.get("orden");
@@ -134,11 +172,12 @@ function CatalogContent({
   const [visibleCount, setVisibleCount] = useState(ITEMS_POR_PAGINA);
 
   const {
-    categoriasConStock,
+    arbolCategorias,
     productosFiltrados,
     productosVisibles,
     hayMasProductos,
     hayFiltrosActivos,
+    matchesFueraDeCategoria,
   } = useCatalogFilters({
     productos: productosBase,
     categorias,
@@ -152,40 +191,74 @@ function CatalogContent({
 
   const resetVisibleCount = () => setVisibleCount(ITEMS_POR_PAGINA);
 
-  const updateParam = (
-    name: string,
-    value: string | null,
+  const updateParams = (
+    entries: Record<string, string | null>,
     mode: "push" | "replace",
   ) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (value) params.set(name, value);
-    else params.delete(name);
+    for (const [name, value] of Object.entries(entries)) {
+      if (value) params.set(name, value);
+      else params.delete(name);
+    }
 
     const url = params.toString() ? `${pathname}?${params}` : pathname;
     if (mode === "push") router.push(url, { scroll: false });
     else router.replace(url, { scroll: false });
   };
 
-  const handleTipoChange = (value: string) => {
+  // Canonicaliza links viejos: si `categoria` resolvió directo a lo que
+  // hoy es una subcategoría (sin &sub= explícito todavía), reescribe la
+  // URL a la forma padre+sub sin agregar entrada al historial — mismos
+  // productos filtrados de siempre, el link viejo sigue funcionando.
+  useEffect(() => {
+    if (!resolucion?.hijoId || subResuelto) return;
+    const padre = categoriasBase.find((c) => c.id === resolucion.padreId);
+    const hijo = categoriasBase.find((c) => c.id === resolucion.hijoId);
+    if (!padre?.slug || !hijo?.slug) return;
+    updateParams({ categoria: padre.slug, sub: hijo.slug }, "replace");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolucion, subResuelto, categoriasBase]);
+
+  const handleSelectTodos = () => {
     resetVisibleCount();
-    if (value === DEFAULT_TIPO) {
-      updateParam("categoria", null, "push");
+    updateParams({ categoria: null, sub: null }, "push");
+  };
+
+  // Un solo id de entrada: puede ser un padre (entra a nivel 2 / "Todo
+  // <Padre>"), un hijo (nivel 2 con ese hijo activo), o una categoría
+  // suelta (comportamiento plano de siempre).
+  const handleSelectCategoria = (id: string) => {
+    resetVisibleCount();
+
+    const padre = arbolCategorias.padres.find((p) => p.id === id);
+    if (padre) {
+      updateParams({ categoria: padre.slug, sub: null }, "push");
       return;
     }
-    const cat = categorias?.find((c) => c.id === value);
-    updateParam("categoria", cat?.slug ?? value, "push");
+
+    const padreDeHijo = arbolCategorias.padres.find((p) =>
+      p.hijos.some((h) => h.id === id),
+    );
+    if (padreDeHijo) {
+      const hijo = padreDeHijo.hijos.find((h) => h.id === id)!;
+      updateParams({ categoria: padreDeHijo.slug, sub: hijo.slug }, "push");
+      return;
+    }
+
+    const cat = categoriasBase.find((c) => c.id === id);
+    updateParams({ categoria: cat?.slug ?? id, sub: null }, "push");
   };
 
   const handleOrdenChange = (value: string) => {
     resetVisibleCount();
-    updateParam("orden", value === DEFAULT_ORDEN ? null : value, "replace");
+    updateParams({ orden: value === DEFAULT_ORDEN ? null : value }, "replace");
   };
 
   const handleFiltroVarianteChange = (propiedad: string, valor: string) => {
     resetVisibleCount();
     const paramName = slugify(propiedad);
     if (PARAMS_RESERVADOS.has(paramName)) return;
-    updateParam(paramName, valor === "todos" ? null : valor, "push");
+    updateParams({ [paramName]: valor === "todos" ? null : valor }, "push");
   };
 
   const limpiarFiltros = () => {
@@ -212,9 +285,10 @@ function CatalogContent({
       {!modoSeleccion && (
         <>
           <CategoryPills
-            tipo={tipo}
-            categoriasConStock={categoriasConStock}
-            onTipoChange={handleTipoChange}
+            tipoActivo={tipo}
+            arbolCategorias={arbolCategorias}
+            onSelectTodos={handleSelectTodos}
+            onSelectCategoria={handleSelectCategoria}
           />
 
           <CatalogToolbar
@@ -228,6 +302,18 @@ function CatalogContent({
             onOrdenChange={handleOrdenChange}
             onLimpiarFiltros={limpiarFiltros}
           />
+
+          {tipo !== DEFAULT_TIPO && matchesFueraDeCategoria > 0 && (
+            <button
+              type="button"
+              onClick={handleSelectTodos}
+              className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
+            >
+              Ver {matchesFueraDeCategoria} resultado
+              {matchesFueraDeCategoria === 1 ? "" : "s"} más en todo el
+              catálogo
+            </button>
+          )}
         </>
       )}
 

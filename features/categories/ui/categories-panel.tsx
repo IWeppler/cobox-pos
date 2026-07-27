@@ -1,21 +1,39 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/shared/ui/alert-dialog";
 import { toast } from "sonner";
 import {
-  GripVertical,
   Eye,
   EyeOff,
   Trash2,
   FolderTree,
   Loader2,
-  Indent,
-  Outdent,
+  ChevronDown,
+  ChevronRight,
   CornerDownRight,
+  Settings2,
 } from "lucide-react";
 import { bulkSaveCategoriasAction } from "../actions/manage-categories";
+import { CategoryAttributesModal } from "./category-attributes-modal";
 
 export interface Categoria {
   id: string;
@@ -27,12 +45,7 @@ export interface Categoria {
   parent_id?: string | null;
 }
 
-// 2. Extendemos para manejar el estado local temporal
-type LocalCategory = Categoria & {
-  isNew?: boolean;
-  tempId?: string;
-  isDeleted?: boolean;
-};
+type LocalCategory = Categoria & { isNew?: boolean };
 
 const generateId = () => {
   if (typeof crypto !== "undefined" && crypto.randomUUID)
@@ -50,127 +63,112 @@ export function CategoriesPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Estado local para manejar la UI de forma optimista
-  const [cats, setCats] = useState<LocalCategory[]>(() => [
-    ...categorias,
-    {
-      id: "",
-      nombre: "",
-      activa: true,
-      isNew: true,
-      tempId: "new-initial",
-      orden: categorias.length,
-    },
-  ]);
+  // Estado local plano — cada fila (padre o subcategoría) tiene siempre un
+  // id real desde que existe (ver A1: nunca "" ni diferido), y su
+  // `parent_id` se asigna de forma EXPLÍCITA (selector "Padre"), nunca
+  // inferido por posición en el array.
+  const [cats, setCats] = useState<LocalCategory[]>(() =>
+    categorias.map((c) => ({ ...c })),
+  );
 
-  const tempIdCounterRef = useRef(0);
+  // Qué padres están expandidos en el árbol — UI local, no se persiste.
+  // Arrancan todos expandidos.
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(categorias.filter((c) => !c.parent_id).map((c) => c.id)),
+  );
 
-  const createTempId = () => {
-    tempIdCounterRef.current += 1;
-    return `new-${tempIdCounterRef.current}`;
+  const [newRootName, setNewRootName] = useState("");
+  const [newSubNameByParent, setNewSubNameByParent] = useState<
+    Record<string, string>
+  >({});
+  const [rootPendingDelete, setRootPendingDelete] =
+    useState<LocalCategory | null>(null);
+  const [categoriaParaAtributos, setCategoriaParaAtributos] =
+    useState<LocalCategory | null>(null);
+
+  const roots = cats
+    .filter((c) => !c.parent_id)
+    .sort((a, b) => a.orden - b.orden);
+  const childrenOf = (parentId: string) =>
+    cats
+      .filter((c) => c.parent_id === parentId)
+      .sort((a, b) => a.orden - b.orden);
+
+  const updateCat = (id: string, patch: Partial<LocalCategory>) => {
+    setCats((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+    setHasChanges(true);
   };
 
-  const handleNameChange = (index: number, newName: string) => {
-    const newCats = [...cats];
-    newCats[index].nombre = newName;
+  const toggleExpanded = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
-    if (index === newCats.length - 1 && newName.trim() !== "") {
-      newCats.push({
+  const handleAddRoot = () => {
+    const nombre = newRootName.trim();
+    if (!nombre) return;
+    const id = generateId();
+    setCats((prev) => [
+      ...prev,
+      { id, nombre, activa: true, isNew: true, parent_id: null, orden: prev.length },
+    ]);
+    setExpanded((prev) => new Set(prev).add(id));
+    setNewRootName("");
+    setHasChanges(true);
+  };
+
+  const handleAddSub = (parentId: string) => {
+    const nombre = (newSubNameByParent[parentId] || "").trim();
+    if (!nombre) return;
+    setCats((prev) => [
+      ...prev,
+      {
         id: generateId(),
-        nombre: "",
+        nombre,
         activa: true,
         isNew: true,
-        orden: newCats.length,
-        parent_id: newCats[index].parent_id,
-      });
-    }
-
-    setCats(newCats);
+        parent_id: parentId,
+        orden: prev.length,
+      },
+    ]);
+    setNewSubNameByParent((prev) => ({ ...prev, [parentId]: "" }));
     setHasChanges(true);
   };
 
-  const handleIndent = (index: number) => {
-    if (index === 0) return; // La primera no puede ser subcategoría
-
-    const newCats = [...cats];
-    const prev = newCats[index - 1];
-
-    // Su padre será el ítem anterior (o el padre del ítem anterior si este ya era subcategoría)
-    const newParentId = prev.parent_id ? prev.parent_id : prev.id;
-    newCats[index].parent_id = newParentId;
-
-    setCats(newCats);
-    setHasChanges(true);
+  const requestDelete = (cat: LocalCategory) => {
+    const tieneHijos = !cat.parent_id && childrenOf(cat.id).length > 0;
+    if (tieneHijos) {
+      setRootPendingDelete(cat);
+      return;
+    }
+    confirmDelete(cat.id);
   };
 
-  const handleOutdent = (index: number) => {
-    const newCats = [...cats];
-    newCats[index].parent_id = null; // Vuelve a ser categoría principal
-    setCats(newCats);
-    setHasChanges(true);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (index + 1 < inputRefs.current.length) {
-        inputRefs.current[index + 1]?.focus();
-      }
+  const confirmDelete = (id: string) => {
+    setCats((prev) => prev.filter((c) => c.id !== id && c.parent_id !== id));
+    // Solo hace falta mandar a borrar server-side lo que ya existía antes
+    // de esta sesión de edición — lo creado y borrado en la misma pasada
+    // simplemente nunca se manda.
+    const idsAPersistirBorrado = [
+      id,
+      ...childrenOf(id).map((c) => c.id),
+    ].filter((catId) => categorias.some((c) => c.id === catId));
+    if (idsAPersistirBorrado.length > 0) {
+      setDeletedIds((prev) => [...prev, ...idsAPersistirBorrado]);
     }
-
-    if (e.key === "Tab") {
-      const isSub = !!cats[index].parent_id;
-      if (e.shiftKey && isSub) {
-        e.preventDefault();
-        handleOutdent(index);
-      } else if (!e.shiftKey && !isSub && index > 0) {
-        e.preventDefault();
-        handleIndent(index);
-      }
-    }
-  };
-
-  const toggleVisibility = (index: number) => {
-    const newCats = [...cats];
-    newCats[index].activa = !newCats[index].activa;
-    setCats(newCats);
-    setHasChanges(true);
-  };
-
-  const handleDelete = (index: number) => {
-    const catToRemove = cats[index];
-    if (!catToRemove.isNew && catToRemove.id) {
-      setDeletedIds([...deletedIds, catToRemove.id]);
-    }
-    const newCats = cats.filter((_, i) => i !== index);
-
-    // Siempre debe quedar al menos una fila vacía al final
-    if (
-      newCats.length === 0 ||
-      newCats[newCats.length - 1].nombre.trim() !== ""
-    ) {
-      newCats.push({
-        id: "",
-        nombre: "",
-        activa: true,
-        isNew: true,
-        tempId: createTempId(),
-        orden: newCats.length,
-      });
-    }
-
-    setCats(newCats);
+    setRootPendingDelete(null);
     setHasChanges(true);
   };
 
   const handleSave = async () => {
     setIsSaving(true);
 
-    // Filtramos para enviar solo las que tienen nombre y no están marcadas para eliminar
     const toUpsert = cats.filter((c) => c.nombre.trim() !== "");
-
     const res = await bulkSaveCategoriasAction(toUpsert, deletedIds);
 
     setIsSaving(false);
@@ -184,6 +182,45 @@ export function CategoriesPanel({
     }
   };
 
+  const renderRowActions = (cat: LocalCategory) => (
+    <div className="flex items-center gap-1 shrink-0">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={() => setCategoriaParaAtributos(cat)}
+        className="h-9 w-9 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10"
+        title="Atributos de esta categoría"
+      >
+        <Settings2 className="w-4 h-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={() => updateCat(cat.id, { activa: !cat.activa })}
+        className={`h-9 w-9 rounded-md transition-colors ${!cat.activa ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+        title={cat.activa ? "Ocultar en tienda" : "Mostrar en tienda"}
+      >
+        {cat.activa ? (
+          <Eye className="w-4 h-4" />
+        ) : (
+          <EyeOff className="w-4 h-4" />
+        )}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={() => requestDelete(cat)}
+        className="h-9 w-9 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+        title="Eliminar"
+      >
+        <Trash2 className="w-4 h-4" />
+      </Button>
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-in fade-in-50 duration-300">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-border pb-4">
@@ -193,8 +230,8 @@ export function CategoriesPanel({
             <h2 className="text-2xl font-bold text-foreground">Categorías</h2>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Para organizar tus productos, creá categorías que aparecerán en el
-            menú de tu tienda y POS.
+            Para organizar tus productos, creá categorías y subcategorías que
+            aparecerán en el menú de tu tienda y POS.
           </p>
         </div>
 
@@ -212,116 +249,170 @@ export function CategoriesPanel({
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="flex flex-col divide-y divide-border/60">
-          {cats.map((cat, idx) => {
-            const isLastEmptyRow = idx === cats.length - 1 && cat.nombre === "";
-            const isSubcategoria = !!cat.parent_id;
+          {roots.length === 0 && (
+            <p className="p-6 text-sm text-muted-foreground text-center">
+              Todavía no hay categorías — creá la primera abajo.
+            </p>
+          )}
+
+          {roots.map((root) => {
+            const kids = childrenOf(root.id);
+            const isExpanded = expanded.has(root.id);
 
             return (
-              <div
-                key={cat.id}
-                className={`flex items-center gap-3 p-3 transition-colors ${isLastEmptyRow ? "bg-muted/10" : "hover:bg-muted/30"}`}
-              >
-                {/* Drag Handle  */}
-                <div
-                  className={`flex items-center ${isSubcategoria ? "ml-8" : ""}`}
-                >
-                  <div className="cursor-grab text-muted-foreground/30 hover:text-muted-foreground px-1">
-                    <GripVertical className="w-5 h-5" />
-                  </div>
-                  {isSubcategoria && (
-                    <CornerDownRight className="w-4 h-4 text-muted-foreground/50 mr-2" />
-                  )}
-                </div>
-
-                {/* Input Dinámico */}
-                <div className="flex-1 relative">
-                  <Input
-                    ref={(el) => {
-                      inputRefs.current[idx] = el;
-                    }}
-                    value={cat.nombre}
-                    onChange={(e) => handleNameChange(idx, e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(e, idx)}
-                    placeholder={
-                      isLastEmptyRow && isSubcategoria
-                        ? "+ Agregar subcategoría..."
-                        : isLastEmptyRow
-                          ? "+ Agregar categoría..."
-                          : "Nombre de la categoría"
-                    }
-                    className={`h-11 shadow-none font-medium transition-all ${
-                      isLastEmptyRow
-                        ? "border-dashed border-border bg-transparent hover:border-primary/50 focus:border-solid focus:bg-background"
-                        : "border-border/50 bg-background focus:ring-2 focus:ring-[#0051ff]/20 focus:border-[#0051ff]"
-                    } ${!cat.activa ? "text-muted-foreground line-through decoration-muted-foreground/50" : "text-foreground"}`}
-                  />
-                </div>
-
-                {/* Acciones de Fila */}
-                {!isLastEmptyRow && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    {/* Botones de Indentar/Desindentar (Soporte visual además del teclado) */}
-                    {!isSubcategoria &&
-                      idx > 0 &&
-                      !cats[idx - 1].nombre.trim().length === false && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleIndent(idx)}
-                          className="h-9 w-9 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 hidden sm:flex"
-                          title="Convertir en subcategoría (Tab)"
-                        >
-                          <Indent className="w-4 h-4" />
-                        </Button>
-                      )}
-                    {isSubcategoria && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleOutdent(idx)}
-                        className="h-9 w-9 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 hidden sm:flex"
-                        title="Convertir en categoría principal (Shift + Tab)"
-                      >
-                        <Outdent className="w-4 h-4" />
-                      </Button>
+              <div key={root.id}>
+                <div className="flex items-center gap-2 p-3 hover:bg-muted/30 transition-colors">
+                  <button
+                    type="button"
+                    onClick={() => toggleExpanded(root.id)}
+                    className="text-muted-foreground hover:text-foreground shrink-0"
+                    title={isExpanded ? "Colapsar" : "Expandir"}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
                     )}
+                  </button>
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => toggleVisibility(idx)}
-                      className={`h-9 w-9 rounded-md transition-colors ${!cat.activa ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
-                      title={
-                        cat.activa ? "Ocultar en tienda" : "Mostrar en tienda"
-                      }
-                    >
-                      {cat.activa ? (
-                        <Eye className="w-4 h-4" />
-                      ) : (
-                        <EyeOff className="w-4 h-4" />
-                      )}
-                    </Button>
+                  <Input
+                    value={root.nombre}
+                    onChange={(e) =>
+                      updateCat(root.id, { nombre: e.target.value })
+                    }
+                    className={`h-10 flex-1 shadow-none font-semibold border-border/50 bg-background focus:ring-2 focus:ring-[#0051ff]/20 focus:border-[#0051ff] ${!root.activa ? "text-muted-foreground line-through decoration-muted-foreground/50" : "text-foreground"}`}
+                  />
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(idx)}
-                      className="h-9 w-9 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                  {kids.length > 0 && (
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {kids.length} sub{kids.length === 1 ? "" : "s"}
+                    </span>
+                  )}
+
+                  {renderRowActions(root)}
+                </div>
+
+                {isExpanded && (
+                  <div className="pl-9 pb-2 bg-muted/10">
+                    {kids.map((sub) => (
+                      <div
+                        key={sub.id}
+                        className="flex items-center gap-2 py-2 pr-3"
+                      >
+                        <CornerDownRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+                        <Input
+                          value={sub.nombre}
+                          onChange={(e) =>
+                            updateCat(sub.id, { nombre: e.target.value })
+                          }
+                          className={`h-9 flex-1 shadow-none border-border/50 bg-background focus:ring-2 focus:ring-[#0051ff]/20 focus:border-[#0051ff] ${!sub.activa ? "text-muted-foreground line-through decoration-muted-foreground/50" : "text-foreground"}`}
+                        />
+                        <Select
+                          value={sub.parent_id ?? undefined}
+                          onValueChange={(value) =>
+                            updateCat(sub.id, { parent_id: value })
+                          }
+                        >
+                          <SelectTrigger className="h-9 w-44 shrink-0 text-xs">
+                            <SelectValue placeholder="Mover a..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roots.map((r) => (
+                              <SelectItem key={r.id} value={r.id}>
+                                {r.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {renderRowActions(sub)}
+                      </div>
+                    ))}
+
+                    <div className="flex items-center gap-2 py-2 pr-3">
+                      <CornerDownRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
+                      <Input
+                        placeholder="+ Agregar subcategoría..."
+                        value={newSubNameByParent[root.id] || ""}
+                        onChange={(e) =>
+                          setNewSubNameByParent((prev) => ({
+                            ...prev,
+                            [root.id]: e.target.value,
+                          }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddSub(root.id);
+                          }
+                        }}
+                        className="h-9 flex-1 shadow-none border-dashed border-border bg-transparent hover:border-primary/50 focus:border-solid focus:bg-background"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
             );
           })}
+
+          <div className="flex items-center gap-2 p-3 bg-muted/10">
+            <FolderTree className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+            <Input
+              placeholder="+ Agregar categoría principal..."
+              value={newRootName}
+              onChange={(e) => setNewRootName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddRoot();
+                }
+              }}
+              className="h-10 flex-1 shadow-none font-medium border-dashed border-border bg-transparent hover:border-primary/50 focus:border-solid focus:bg-background"
+            />
+          </div>
         </div>
       </div>
+
+      <AlertDialog
+        open={rootPendingDelete !== null}
+        onOpenChange={(open) => !open && setRootPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar categoría con subcategorías?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground">
+                {rootPendingDelete?.nombre}
+              </strong>{" "}
+              tiene{" "}
+              {rootPendingDelete ? childrenOf(rootPendingDelete.id).length : 0}{" "}
+              subcategoría(s). Eliminarla también elimina todas sus
+              subcategorías.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRootPendingDelete(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                rootPendingDelete && confirmDelete(rootPendingDelete.id)
+              }
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              Eliminar todo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {categoriaParaAtributos && (
+        <CategoryAttributesModal
+          open={categoriaParaAtributos !== null}
+          onOpenChange={(open) => !open && setCategoriaParaAtributos(null)}
+          categoriaId={categoriaParaAtributos.id}
+          categoriaNombre={categoriaParaAtributos.nombre}
+        />
+      )}
     </div>
   );
 }

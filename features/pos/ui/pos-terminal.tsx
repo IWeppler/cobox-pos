@@ -23,6 +23,7 @@ interface PosTerminalProps {
     id: string;
     nombre: string;
     slug?: string | null;
+    parent_id?: string | null;
   }>;
   permitirVentaSinStock?: boolean;
   nombreComercio?: string;
@@ -77,25 +78,43 @@ export function PosTerminal({
   const addItem = useCartStore((state) => state.addItem);
   const setIsOpenCart = useCartStore((state) => state.setIsOpen);
 
-  const { categoriasConStock, productosFiltrados, propiedadesGlobales } =
-    useCatalogFilters({
-      productos,
-      categorias,
-      searchQuery,
-      tipo,
-      filtrosVariantes,
-      orden: "mas_vendidos",
-      visibleCount: 1000,
-    });
+  const {
+    arbolCategorias,
+    productosFiltrados,
+    propiedadesGlobales,
+    matchesFueraDeCategoria,
+  } = useCatalogFilters({
+    productos,
+    categorias,
+    searchQuery,
+    tipo,
+    filtrosVariantes,
+    orden: "mas_vendidos",
+    visibleCount: 1000,
+  });
 
+  // Padres primero (con sus hijos embebidos, para que el toolbar los
+  // reconozca y ofrezca navegación de 2 niveles), después las categorías
+  // sueltas — mismo orden que CategoryPills en el catálogo público.
   const categoriasDisponibles = useMemo(
-    () =>
-      categoriasConStock.map((categoria) => ({
-        nombre: categoria.nombre,
-        value: categoria.id,
-        count: categoria.count,
+    () => [
+      ...arbolCategorias.padres.map((padre) => ({
+        nombre: padre.nombre,
+        value: padre.id,
+        count: padre.count,
+        hijos: padre.hijos.map((h) => ({
+          nombre: h.nombre,
+          value: h.id,
+          count: h.count,
+        })),
       })),
-    [categoriasConStock],
+      ...arbolCategorias.sinPadre.map((cat) => ({
+        nombre: cat.nombre,
+        value: cat.id,
+        count: cat.count,
+      })),
+    ],
+    [arbolCategorias],
   );
 
   const productosOrdenados = useMemo(
@@ -240,8 +259,8 @@ export function PosTerminal({
           categoriaActiva={tipo}
           onCategoriaChange={setTipo}
           categoriasDisponibles={categoriasDisponibles}
-          conteosPorCategoria={{}}
           totalProductos={productos.length}
+          resultadosFueraDeCategoria={matchesFueraDeCategoria}
           hayFiltrosActivos={hayFiltrosActivos}
           propiedadesGlobales={propiedadesGlobales}
           filtrosVariantes={filtrosVariantes}

@@ -24,6 +24,9 @@ export type VarianteDiffRow = {
   stockDespues: number | null;
   precioAntes: number | null;
   precioDespues: number | null;
+  // Solo se usa para tipo "eliminada" — es lo que se manda al RPC como
+  // "confirmadas para eliminar" cuando el usuario tilda el checkbox acá.
+  atributos?: Record<string, string>;
 };
 
 type ConfirmSaveVariantsModalProps = {

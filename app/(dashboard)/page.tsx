@@ -5,6 +5,26 @@ import { EgresoModal } from "@/features/caja/ui/egreso-modal";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { getDashboardMetrics } from "@/features/dashboard/lib/get-dashboard-metrics";
+import {
+  resolverRangoActual,
+  resolverRangoAnterior,
+  resolverRangoRanking,
+  formatearFechaISO,
+  calcularCrecimiento,
+  type PeriodoPanel,
+} from "@/features/dashboard/lib/periodo-ranges";
+import { construirSerieDiaria } from "@/features/dashboard/lib/build-chart-series";
+import { detectarQuiebresRotacion } from "@/features/dashboard/lib/detectar-quiebres";
+import { PanelPeriodoSelector } from "@/features/dashboard/ui/panel-periodo-selector";
+import { IngresosAreaChart } from "@/features/dashboard/ui/ingresos-area-chart";
+import { KpiMiniCard } from "@/features/dashboard/ui/kpi-mini-card";
+import { GrowthBadge } from "@/features/dashboard/ui/growth-badge";
+import { AdvisorMiniList } from "@/features/dashboard/ui/advisor-mini-list";
+import { AtencionRequeridaCard } from "@/features/dashboard/ui/atencion-requerida-card";
+import { RendimientoCard } from "@/features/dashboard/ui/rendimiento-card";
+import { getAdvisorInsights } from "@/features/reports/actions/get-advisor-insights";
+import { getDeudaVencidaAction } from "@/features/clients/actions/get-deuda-vencida";
+import { getRemitosPendientesAction } from "@/features/purchases/actions/get-remitos-pendientes";
 import { listarReservasActivasAction } from "@/features/reservations/actions/manage-reservations";
 import {
   getSupabaseRelation,
@@ -12,26 +32,38 @@ import {
   Venta,
 } from "@/entities/ventas/types";
 import Link from "next/link";
-import {
-  Receipt,
-  ShoppingBag,
-  Wallet,
-  Flame,
-  Trophy,
-  Package,
-  Bookmark,
-  ArrowUpRight,
-  ArrowDownRight,
-  Plus,
-} from "lucide-react";
-import {
-  formatearMoneda,
-  formatearHora,
-  formatearFechaHora,
-} from "@/shared/utils/formatters";
-import { Button } from "@/shared/ui/button";
+import { Receipt, Plus } from "lucide-react";
+import { formatearMoneda } from "@/shared/utils/formatters";
 
 export const dynamic = "force-dynamic";
+
+const PERIODOS_VALIDOS: PeriodoPanel[] = ["hoy", "semana", "mes"];
+
+function parsearPeriodo(valor: string | undefined): PeriodoPanel {
+  return PERIODOS_VALIDOS.includes(valor as PeriodoPanel)
+    ? (valor as PeriodoPanel)
+    : "semana";
+}
+
+const ETIQUETA_PERIODO: Record<PeriodoPanel, string> = {
+  hoy: "hoy",
+  semana: "esta semana",
+  mes: "este mes",
+};
+
+// Los rankings nunca son diarios (una ventana de un solo día es mala
+// muestra para "qué rota más") — con Hoy o Semana usan ventana semanal, con
+// Mes usan ventana de mes. Ver resolverRangoRanking.
+const ETIQUETA_RANKING: Record<PeriodoPanel, string> = {
+  hoy: "esta semana",
+  semana: "esta semana",
+  mes: "este mes",
+};
+
+// Ventana de "rotación reciente" para detectar quiebres — independiente
+// del selector de período (siempre mira los últimos 14 días, sea cual sea
+// el rango elegido arriba).
+const VENTANA_QUIEBRES_DIAS = 14;
 
 type ReservaActivaRow = {
   id: string;
@@ -42,17 +74,24 @@ type ReservaActivaRow = {
   vendedora: SupabaseRelation<{ nombre: string }>;
 };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: Readonly<{
+  searchParams: Promise<{ periodo?: string }>;
+}>) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
+  const { periodo: periodoParam } = await searchParams;
+  const periodo = parsearPeriodo(periodoParam);
 
   const [
     ventasResponse,
     productosResponse,
     egresosResponse,
     bajasResponse,
-    turnoResponse,
     reservasResponse,
+    deudaVencida,
+    remitosPendientes,
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
@@ -60,14 +99,9 @@ export default async function DashboardPage() {
     supabase
       .from("bajas")
       .select("id, producto_id, cantidad, creado_en, estado"),
-    supabase
-      .from("turnos_caja")
-      .select("*")
-      .eq("estado", "ABIERTO")
-      .order("fecha_apertura", { ascending: false })
-      .limit(1)
-      .single(),
     listarReservasActivasAction(),
+    getDeudaVencidaAction(),
+    getRemitosPendientesAction(),
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
@@ -78,43 +112,84 @@ export default async function DashboardPage() {
   const productos = productosResponse.data || [];
   const egresos = egresosResponse.data || [];
   const bajas = bajasResponse.data || [];
-  const turnoAbierto = turnoResponse.data || null;
 
   const bajasAprobadas = bajas.filter((b) => b.estado === "APROBADA");
   const cantidadBajasPendientes = bajas.filter(
     (b) => b.estado === "PENDIENTE",
   ).length;
 
-  const metricasHoy = getDashboardMetrics(
+  const hoy = new Date();
+
+  // Zona analítica (KPIs + chart + rankings): TODO lo de acá para abajo
+  // depende de `periodo`. La zona de excepciones (Atención Requerida,
+  // Cobox Insights) es fija y vive fuera de este bloque.
+  const rangoActual = resolverRangoActual(periodo, hoy);
+  const rangoAnterior = resolverRangoAnterior(periodo, hoy);
+  const rangoRanking = resolverRangoRanking(periodo, hoy);
+
+  const metricasActuales = getDashboardMetrics(
     ventasOperativas,
     productos,
     egresos,
     bajasAprobadas,
-    "hoy",
+    "personalizado",
+    formatearFechaISO(rangoActual.inicio),
+    formatearFechaISO(rangoActual.fin),
+  );
+  const metricasAnteriores = getDashboardMetrics(
+    ventasOperativas,
+    productos,
+    egresos,
+    bajasAprobadas,
+    "personalizado",
+    formatearFechaISO(rangoAnterior.inicio),
+    formatearFechaISO(rangoAnterior.fin),
+  );
+  // Rankings: SIEMPRE ventana semanal como mínimo (nunca diaria) — ventana
+  // de mes si el selector está en "Mes".
+  const metricasRanking = getDashboardMetrics(
+    ventasOperativas,
+    productos,
+    egresos,
+    bajasAprobadas,
+    "personalizado",
+    formatearFechaISO(rangoRanking.inicio),
+    formatearFechaISO(rangoRanking.fin),
   );
 
-  const hoy = new Date();
-  const { inicio: inicioAyer, fin: finAyer } = getPreviousDayRange(hoy);
+  const crecimientoIngresos = calcularCrecimiento(
+    metricasActuales.ingresos,
+    metricasAnteriores.ingresos,
+  );
+  const crecimientoUnidades = calcularCrecimiento(
+    metricasActuales.unidadesVendidas,
+    metricasAnteriores.unidadesVendidas,
+  );
+  const crecimientoGanancia = calcularCrecimiento(
+    metricasActuales.gananciaBrutaVentas,
+    metricasAnteriores.gananciaBrutaVentas,
+  );
 
-  const ventasAyer = ventasOperativas.filter((v) => {
-    const fechaVenta = new Date(v.fecha_venta);
-    return fechaVenta >= inicioAyer && fechaVenta <= finAyer;
+  const serieChart = construirSerieDiaria(ventasOperativas, 30, hoy);
+
+  const quiebres = detectarQuiebresRotacion(
+    ventasOperativas,
+    productos,
+    VENTANA_QUIEBRES_DIAS,
+    hoy,
+  );
+
+  // Advisor: mismo motor de siempre (getAdvisorInsights, sin tocar su
+  // lógica de orden/corte), extendido con las 2 reglas nuevas — se activan
+  // solo si el fetch correspondiente trajo datos.
+  const insights = getAdvisorInsights({
+    ...metricasActuales,
+    deudaVencida: deudaVencida ?? undefined,
+    remitosPendientes:
+      remitosPendientes && remitosPendientes.cantidad > 0
+        ? remitosPendientes
+        : undefined,
   });
-
-  const ingresosAyer = ventasAyer.reduce((acc, v) => acc + Number(v.total), 0);
-  const unidadesAyer = ventasAyer.reduce(
-    (acc, v) => acc + Number(v.cantidad),
-    0,
-  );
-
-  const crecimientoIngresos = calcularCrecimientoDiario(
-    metricasHoy.ingresos,
-    ingresosAyer,
-  );
-  const crecimientoUnidades = calcularCrecimientoDiario(
-    metricasHoy.unidadesVendidas,
-    unidadesAyer,
-  );
 
   const ventasDeHoy = ventasOperativas.filter((v) => {
     const f = new Date(v.fecha_venta);
@@ -125,29 +200,6 @@ export default async function DashboardPage() {
     );
   });
   const ultimasVentas = ventasDeHoy.slice(0, 4);
-
-  let efectivoEsperado = 0;
-  let egresosTurno = 0;
-  if (turnoAbierto) {
-    const ventasTurnoEfectivo = ventasOperativas.filter(
-      (v) =>
-        new Date(v.fecha_venta) >= new Date(turnoAbierto.fecha_apertura) &&
-        v.metodo_pago === "EFECTIVO",
-    );
-    const egresosTurnoEfectivo = egresos.filter(
-      (e) => new Date(e.fecha) >= new Date(turnoAbierto.fecha_apertura),
-    );
-    const ingresosTurnoEf = ventasTurnoEfectivo.reduce(
-      (acc, v) => acc + Number(v.total),
-      0,
-    );
-    egresosTurno = egresosTurnoEfectivo.reduce(
-      (acc, e) => acc + Number(e.monto),
-      0,
-    );
-    efectivoEsperado =
-      Number(turnoAbierto.monto_inicial) + ingresosTurnoEf - egresosTurno;
-  }
 
   const reservasActivasRaw = (reservasResponse.data ||
     []) as unknown as ReservaActivaRow[];
@@ -200,8 +252,8 @@ export default async function DashboardPage() {
         }}
       />
 
-      <div className="space-y-6 px-2 py-2">
-        {/* HEADER */}
+      <div className="flex flex-col gap-3 px-2 py-2">
+        {/* HEADER UNIFICADO — título + acciones + selector de período, una sola barra */}
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border">
           <div>
             <h1 className="text-sm font-medium text-foreground">
@@ -216,7 +268,7 @@ export default async function DashboardPage() {
               }).format(hoy)}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-4 md:gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href={"/pos"}
               className="h-10 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 sm:w-auto bg-primary text-white py-2 [a]:hover:bg-primary/80 cursor-pointer inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
@@ -226,408 +278,66 @@ export default async function DashboardPage() {
             <div className="hidden md:flex">
               <CrearProductoSheet />
             </div>
-
             <EgresoModal />
+            <PanelPeriodoSelector periodo={periodo} />
           </div>
         </div>
 
-        {/* KPI CARDS */}
-        <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible sm:pb-0">
-          {/* Ingresos brutos */}
-          <div className="bg-card border border-border rounded-xl p-4 flex min-w-[82vw] flex-col gap-3 snap-start sm:min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Ingresos brutos
-              </span>
-              <GrowthBadge value={crecimientoIngresos} />
-            </div>
-            <div>
-              <p className="text-2xl font-semibold text-foreground">
-                {formatearMoneda(metricasHoy.ingresos)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Ganancia est.: {formatearMoneda(metricasHoy.gananciaNeta)}
-              </p>
-            </div>
+        {/* FILA 1 — 40% KPIs / 60% chart, ambas dependen del selector de período */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch">
+          <div className="lg:col-span-2 grid grid-cols-2 gap-3">
+            <KpiMiniCard
+              label="Ingresos"
+              value={formatearMoneda(metricasActuales.ingresos)}
+              sublabel={ETIQUETA_PERIODO[periodo]}
+              rightSlot={<GrowthBadge value={crecimientoIngresos} />}
+            />
+            <KpiMiniCard
+              label="Unidades"
+              value={String(metricasActuales.unidadesVendidas)}
+              sublabel="vendidas"
+              rightSlot={<GrowthBadge value={crecimientoUnidades} />}
+            />
+            <KpiMiniCard
+              label="Ticket promedio"
+              value={formatearMoneda(metricasActuales.ticketPromedio)}
+              sublabel={`${metricasActuales.ordenes} tickets`}
+              rightSlot={
+                <Receipt className="w-3.5 h-3.5 text-muted-foreground/40" />
+              }
+            />
+            <KpiMiniCard
+              label="Ganancia"
+              value={formatearMoneda(metricasActuales.gananciaBrutaVentas)}
+              sublabel={`Margen ${metricasActuales.margenPorcentaje.toFixed(1)}%`}
+              rightSlot={<GrowthBadge value={crecimientoGanancia} />}
+            />
           </div>
 
-          {/* Unidades vendidas */}
-          <div className="bg-card border border-border rounded-xl p-4 flex min-w-[82vw] flex-col gap-3 snap-start sm:min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Unidades vendidas
-              </span>
-              <GrowthBadge value={crecimientoUnidades} />
-            </div>
-            <div>
-              <p className="text-2xl font-semibold text-foreground">
-                {metricasHoy.unidadesVendidas}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Artículos entregados hoy
-              </p>
-            </div>
-          </div>
-
-          {/* Tickets emitidos */}
-          <div className="bg-card border border-border rounded-xl p-4 flex min-w-[82vw] flex-col gap-3 snap-start sm:min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Tickets emitidos
-              </span>
-              <Receipt className="w-3.5 h-3.5 text-muted-foreground/40" />
-            </div>
-            <div>
-              <p className="text-2xl font-semibold text-foreground">
-                {metricasHoy.ordenes}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Ticket promedio: {formatearMoneda(metricasHoy.ticketPromedio)}
-              </p>
-            </div>
-          </div>
-
-          {/* Ganancia estimada */}
-          <div className="bg-card border border-border rounded-xl p-4 flex min-w-[82vw] flex-col gap-3 snap-start sm:min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Ganancia estimada
-              </span>
-            </div>
-            <div>
-              <p className="text-2xl font-semibold text-foreground">
-                {formatearMoneda(metricasHoy.gananciaBrutaVentas)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Margen: {metricasHoy.margenPorcentaje.toFixed(1)}%
-              </p>
-            </div>
+          <div className="lg:col-span-3">
+            <IngresosAreaChart serie={serieChart} />
           </div>
         </div>
 
-        {/* BLOQUES OPERATIVOS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Caja actual */}
-          <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <Wallet className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Caja actual
-              </span>
-            </div>
-            {turnoAbierto ? (
-              <>
-                <div className="flex flex-col gap-1">
-                  <p className="text-xs text-muted-foreground">
-                    Abierta desde {formatearHora(turnoAbierto.fecha_apertura)}
-                  </p>
-                  <p className="text-lg font-medium text-foreground">
-                    {formatearMoneda(efectivoEsperado)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Egresos del turno:{" "}
-                    <span className="text-destructive font-medium">
-                      {formatearMoneda(egresosTurno)}
-                    </span>
-                  </p>
-                </div>
-                <Link href="/caja">
-                  <Button variant="outline" className="w-full">
-                    Ver caja
-                  </Button>
-                </Link>
-              </>
-            ) : (
-              <>
-                <div className="flex-1 flex items-center justify-center py-4">
-                  <p className="text-xs text-muted-foreground">
-                    La caja está cerrada
-                  </p>
-                </div>
-                <Link href="/caja">
-                  <Button variant="outline" className="w-full">
-                    Abrir turno
-                  </Button>
-                </Link>
-              </>
-            )}
-          </div>
+        {/* FILA 2 — 3 columnas iguales, cada una con tabs internas */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:h-[300px]">
+          <AdvisorMiniList insights={insights} />
 
-          {/* Alertas de stock */}
-          <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <Package className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Alertas de stock
-              </span>
-            </div>
-            <div className="flex-1 space-y-2">
-              {metricasHoy.productosCriticos > 0 ? (
-                <div className="flex items-center gap-2 text-xs bg-muted/40 border border-border rounded-lg px-3 py-2 text-foreground">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                  {metricasHoy.productosCriticos} productos con stock bajo (≤ 3)
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground italic pt-1">
-                  Inventario saludable.
-                </p>
-              )}
-              {cantidadBajasPendientes > 0 && (
-                <div className="flex items-center gap-2 text-xs bg-muted/40 border border-border rounded-lg px-3 py-2 text-foreground">
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground shrink-0" />
-                  {cantidadBajasPendientes} mermas pendientes de revisión
-                </div>
-              )}
-            </div>
-            <Link href="/stock">
-              <Button variant="outline" className="w-full">
-                Ir al inventario
-              </Button>
-            </Link>
-          </div>
+          <AtencionRequeridaCard
+            quiebres={quiebres}
+            stockCritico={metricasActuales.stockCriticoDetallado}
+            cantidadBajasPendientes={cantidadBajasPendientes}
+            reservasActivas={reservasActivas}
+          />
 
-          {/* Reservas activas */}
-          <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <Bookmark className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Reservas activas
-              </span>
-            </div>
-            <div className="flex-1">
-              {reservasActivas.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-foreground">
-                    {reservasActivas.length} producto
-                    {reservasActivas.length === 1 ? "" : "s"} en reservas
-                    activas
-                  </p>
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                    {reservasActivas.map((r) => (
-                      <div
-                        key={r.id}
-                        className={`flex items-center justify-between gap-2 text-xs rounded-lg px-2.5 py-1.5 border ${
-                          r.vencida
-                            ? "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900"
-                            : "bg-muted/40 border-border"
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <p
-                            className="font-medium text-foreground truncate"
-                            title={r.nombreProducto}
-                          >
-                            {r.nombreProducto}
-                            {r.varianteNombre ? ` · ${r.varianteNombre}` : ""}
-                          </p>
-                          <p className="text-muted-foreground truncate">
-                            desde {formatearFechaHora(r.creadoEn)}
-                            {r.vendedoraNombre
-                              ? ` · ${r.vendedoraNombre}`
-                              : ""}
-                            {r.clienteNombre
-                              ? ` · para ${r.clienteNombre}`
-                              : ""}
-                          </p>
-                        </div>
-                        {r.vencida && (
-                          <span className="shrink-0 text-amber-700 dark:text-amber-400 font-medium">
-                            +24h
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="h-full flex items-center">
-                  <p className="text-xs text-muted-foreground italic">
-                    Sin reservas activas.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* RANKINGS Y FEED */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          {/* Mayor rotación */}
-          <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-              <Flame className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Mayor rotación hoy
-              </span>
-            </div>
-            {metricasHoy.topProductos.length > 0 ? (
-              <div className="divide-y divide-border">
-                {metricasHoy.topProductos.slice(0, 4).map((producto, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between px-4 py-3"
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <span className="text-xs text-muted-foreground/50 w-4 shrink-0">
-                        {idx + 1}
-                      </span>
-                      <p
-                        className="text-sm font-medium text-foreground truncate"
-                        title={producto.nombre}
-                      >
-                        {producto.nombre}
-                      </p>
-                    </div>
-                    <span className="text-xs text-muted-foreground ml-3 shrink-0 bg-muted/50 border border-border rounded px-2 py-0.5">
-                      {producto.unidades} u.
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-8 text-center text-xs text-muted-foreground italic">
-                Sin ventas registradas.
-              </div>
-            )}
-          </div>
-
-          {/* Mayor rentabilidad */}
-          <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-              <Trophy className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Mayor rentabilidad hoy
-              </span>
-            </div>
-            {metricasHoy.topProductosRentables.length > 0 ? (
-              <div className="divide-y divide-border">
-                {metricasHoy.topProductosRentables
-                  .slice(0, 4)
-                  .map((producto, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between px-4 py-3"
-                    >
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <span className="text-xs text-muted-foreground/50 w-4 shrink-0">
-                          {idx + 1}
-                        </span>
-                        <p
-                          className="text-sm font-medium text-foreground truncate"
-                          title={producto.nombre}
-                        >
-                          {producto.nombre}
-                        </p>
-                      </div>
-                      <span className="text-xs font-medium text-foreground ml-3 shrink-0">
-                        +{formatearMoneda(producto.ganancia)}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            ) : (
-              <div className="p-8 text-center text-xs text-muted-foreground italic">
-                Sin ventas registradas.
-              </div>
-            )}
-          </div>
-
-          {/* Últimas ventas */}
-          <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Últimas ventas
-                </span>
-              </div>
-              <Link
-                href="/ventas"
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Ver todas →
-              </Link>
-            </div>
-            {ultimasVentas.length > 0 ? (
-              <div className="divide-y divide-border">
-                {ultimasVentas.map((venta) => (
-                  <div
-                    key={venta.id}
-                    className="flex items-center justify-between px-4 py-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-foreground leading-tight line-clamp-1">
-                        {getSupabaseRelation(venta.ventas_items?.[0]?.producto)
-                          ?.nombre || "Producto eliminado"}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {formatearHora(venta.fecha_venta)} · {venta.cantidad} u.
-                      </p>
-                    </div>
-                    <p className="text-sm font-medium text-foreground ml-4 shrink-0">
-                      {formatearMoneda(venta.total)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-8 text-center text-xs text-muted-foreground italic">
-                Sin ventas recientes.
-              </div>
-            )}
-          </div>
+          <RendimientoCard
+            topProductos={metricasRanking.topProductos}
+            topProductosRentables={metricasRanking.topProductosRentables}
+            etiquetaRanking={ETIQUETA_RANKING[periodo]}
+            ultimasVentas={ultimasVentas}
+          />
         </div>
       </div>
     </>
-  );
-}
-
-function getPreviousDayRange(date: Date) {
-  const inicio = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate() - 1,
-    0,
-    0,
-    0,
-    0,
-  );
-  const fin = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate() - 1,
-    23,
-    59,
-    59,
-    999,
-  );
-
-  return { inicio, fin };
-}
-
-function calcularCrecimientoDiario(valorHoy: number, valorAyer: number) {
-  if (valorHoy <= 0 || valorAyer <= 0) return 0;
-  return ((valorHoy - valorAyer) / valorAyer) * 100;
-}
-
-// Componente auxiliar para badge de crecimiento
-function GrowthBadge({ value }: { value: number }) {
-  const isPositive = value >= 0;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded ${
-        isPositive
-          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
-          : "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400"
-      }`}
-    >
-      {isPositive ? (
-        <ArrowUpRight className="w-3 h-3" />
-      ) : (
-        <ArrowDownRight className="w-3 h-3" />
-      )}
-      {isPositive ? "+" : ""}
-      {value.toFixed(0)}%
-    </span>
   );
 }

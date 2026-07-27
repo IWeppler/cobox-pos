@@ -98,6 +98,14 @@ export function CajaQuickModal({
 
             <div className="px-6 pb-4 space-y-2 text-sm">
               <div className="flex justify-between">
+                <span className="text-muted-foreground">
+                  Efectivo esperado ahora
+                </span>
+                <span className="font-mono font-semibold text-foreground">
+                  {formatearMoneda(turno.montoActual)}
+                </span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Fondo inicial</span>
                 <span className="font-mono font-medium text-foreground">
                   {formatearMoneda(turno.monto_inicial)}

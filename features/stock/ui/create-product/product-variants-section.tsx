@@ -5,7 +5,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { ImageIcon, Layers, Plus, Trash2, X } from "lucide-react";
+import { Layers, Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -227,21 +227,31 @@ export const ProductVariantsSection = memo(function ProductVariantsSection({
                   key={op.id}
                   className="p-4 border border-border rounded-xl bg-s relative"
                 >
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-2 right-2 h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => handleRemoveOption(op.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  {!op.bloqueado && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleRemoveOption(op.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
 
                   <div className="space-y-4 pr-8">
                     <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-4">
                       <div className="space-y-2">
-                        <Label className="text-xs font-semibold text-muted-foreground">
+                        <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                           Propiedad
+                          {op.bloqueado && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0 h-4 bg-primary/10 text-primary border-primary/30"
+                            >
+                              Requerido por la categoría
+                            </Badge>
+                          )}
                         </Label>
                         {isCustom ? (
                           <Input
@@ -250,6 +260,7 @@ export const ProductVariantsSection = memo(function ProductVariantsSection({
                             onChange={(e) =>
                               handleUpdateOptionName(op.id, e.target.value)
                             }
+                            disabled={op.bloqueado}
                             className={`h-10 shadow-none bg-card ${
                               hasNameError
                                 ? "border-destructive focus-visible:ring-destructive"
@@ -264,6 +275,7 @@ export const ProductVariantsSection = memo(function ProductVariantsSection({
                                 ? op.nombre
                                 : ""
                             }
+                            disabled={op.bloqueado}
                             onValueChange={(val) => {
                               if (val === "custom") {
                                 setCustomTypeMode((prev) => ({

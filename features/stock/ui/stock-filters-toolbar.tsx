@@ -3,11 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   ArrowRightLeft,
   Check,
   ClipboardList,
   Filter,
   FilterX,
+  FolderOpen,
   LayoutGrid,
   List,
   MoreHorizontal,
@@ -42,13 +44,13 @@ import {
   construirUrlCategoria,
 } from "@/shared/utils/compartir-catalogo";
 
-type CategoriaToolbar =
-  | string
-  | {
-      nombre: string;
-      value: string;
-      count: number;
-    };
+export type CategoriaToolbarHijo = { nombre: string; value: string; count: number };
+
+export type CategoriaToolbar = CategoriaToolbarHijo & {
+  /** Presente y no-vacío = esta categoría es un "padre" — al seleccionarla
+   * o seleccionar uno de sus hijos, la barra pasa a modo nivel 2. */
+  hijos?: CategoriaToolbarHijo[];
+};
 
 interface StockFiltersToolbarProps {
   view: "table" | "grid";
@@ -59,7 +61,6 @@ interface StockFiltersToolbarProps {
   categoriaActiva: string;
   onCategoriaChange: (categoria: string) => void;
   categoriasDisponibles: CategoriaToolbar[];
-  conteosPorCategoria: Record<string, number>;
   totalProductos: number;
   hayFiltrosActivos: boolean;
   propiedadesGlobales: Record<string, string[]>;
@@ -70,6 +71,9 @@ interface StockFiltersToolbarProps {
   slugCategoriaActiva?: string | null;
   nombreCategoriaActiva?: string;
   nombreComercio?: string;
+  /** Búsqueda transversal: cuántos resultados matchean búsqueda/variante
+   * FUERA de la categoría activa — "ver N más en todo el stock/catálogo". */
+  resultadosFueraDeCategoria?: number;
 }
 
 export function StockFiltersToolbar({
@@ -81,7 +85,6 @@ export function StockFiltersToolbar({
   categoriaActiva,
   onCategoriaChange,
   categoriasDisponibles,
-  conteosPorCategoria,
   totalProductos,
   hayFiltrosActivos,
   propiedadesGlobales,
@@ -92,6 +95,7 @@ export function StockFiltersToolbar({
   slugCategoriaActiva,
   nombreCategoriaActiva,
   nombreComercio = "Tienda",
+  resultadosFueraDeCategoria = 0,
 }: Readonly<StockFiltersToolbarProps>) {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -307,74 +311,138 @@ export function StockFiltersToolbar({
         </div>
       </div>
 
-      {/* 2. BARRA DE CATEGORÍAS DINÁMICAS Y LIMPIEZA */}
-      <div className="flex w-full min-w-0 items-start gap-2 overflow-hidden mt-4 md:mt-2 px-2">
-        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-2 scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] px-1 sm:px-0">
-          <Button
-            variant={categoriaActiva === "todos" ? "default" : "outline"}
-            className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 shadow-none border-border/60 ${
-              categoriaActiva === "todos"
-                ? "bg-foreground text-background border-transparent"
-                : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-            }`}
-            onClick={() => onCategoriaChange("todos")}
-          >
-            Todas ({totalProductos})
-          </Button>
+      {/* 2. BARRA DE CATEGORÍAS DINÁMICAS Y LIMPIEZA — tolerante a árbol
+      mixto: si ningún elemento de categoriasDisponibles trae `hijos`, esto
+      degrada exactamente a la fila plana de siempre. */}
+      {(() => {
+        const padreEnVista = categoriasDisponibles.find((c) => {
+          if (!c.hijos || c.hijos.length === 0) return false;
+          if (c.value === categoriaActiva) return true;
+          return c.hijos.some((h) => h.value === categoriaActiva);
+        });
 
-          {categoriasDisponibles.map((categoria) => {
-            const catNombre =
-              typeof categoria === "string" ? categoria : categoria.nombre;
-            const catValue =
-              typeof categoria === "string" ? categoria : categoria.value;
-            const count =
-              typeof categoria === "string"
-                ? conteosPorCategoria[catNombre]
-                : categoria.count;
-            const isActive =
-              categoriaActiva.toLowerCase() === catValue.toLowerCase();
+        return (
+          <div className="flex w-full min-w-0 items-start gap-2 overflow-hidden mt-4 md:mt-2 px-2">
+            <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-2 scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] px-1 sm:px-0">
+              {padreEnVista ? (
+                <>
+                  <Button
+                    variant="outline"
+                    className="rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 shadow-none border-border/60 sticky left-0 bg-background gap-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={() => onCategoriaChange("todos")}
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    {padreEnVista.nombre}
+                  </Button>
 
-            return (
+                  {padreEnVista.hijos!.map((hijo) => {
+                    const isActive = categoriaActiva === hijo.value;
+                    return (
+                      <Button
+                        key={hijo.value}
+                        variant={isActive ? "default" : "outline"}
+                        className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none border-border/60 ${
+                          isActive
+                            ? "bg-foreground text-background border-transparent"
+                            : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                        onClick={() => onCategoriaChange(hijo.value)}
+                      >
+                        {hijo.nombre} ({hijo.count})
+                      </Button>
+                    );
+                  })}
+
+                  <Button
+                    variant={categoriaActiva === padreEnVista.value ? "default" : "outline"}
+                    className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none border-border/60 ${
+                      categoriaActiva === padreEnVista.value
+                        ? "bg-foreground text-background border-transparent"
+                        : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                    onClick={() => onCategoriaChange(padreEnVista.value)}
+                  >
+                    Todo {padreEnVista.nombre}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant={categoriaActiva === "todos" ? "default" : "outline"}
+                    className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 shadow-none border-border/60 ${
+                      categoriaActiva === "todos"
+                        ? "bg-foreground text-background border-transparent"
+                        : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                    onClick={() => onCategoriaChange("todos")}
+                  >
+                    Todas ({totalProductos})
+                  </Button>
+
+                  {categoriasDisponibles.map((categoria) => {
+                    const esPadre = (categoria.hijos?.length ?? 0) > 0;
+                    const isActive =
+                      categoriaActiva.toLowerCase() === categoria.value.toLowerCase();
+
+                    return (
+                      <Button
+                        key={categoria.value}
+                        variant="outline"
+                        className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none gap-1.5 ${
+                          esPadre
+                            ? "border-primary/30 bg-background text-foreground font-bold hover:bg-primary/10"
+                            : isActive
+                              ? "bg-foreground text-background border-transparent"
+                              : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground border-border/60"
+                        }`}
+                        onClick={() => onCategoriaChange(categoria.value)}
+                      >
+                        {esPadre && <FolderOpen className="w-3.5 h-3.5 text-primary" />}
+                        {categoria.nombre} ({categoria.count})
+                      </Button>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+
+            {resultadosFueraDeCategoria > 0 && categoriaActiva !== "todos" && (
               <Button
-                key={catValue}
-                variant={isActive ? "default" : "outline"}
-                className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none border-border/60 ${
-                  isActive
-                    ? "bg-foreground text-background border-transparent"
-                    : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-                onClick={() => onCategoriaChange(catValue)}
+                variant="ghost"
+                size="sm"
+                onClick={() => onCategoriaChange("todos")}
+                className="h-8 mt-0 text-xs font-semibold text-muted-foreground hover:text-foreground shrink-0 hidden sm:flex items-center"
               >
-                {catNombre} ({count})
+                Ver {resultadosFueraDeCategoria} más
               </Button>
-            );
-          })}
-        </div>
+            )}
 
-        {slugCategoriaActiva && (
-          <ShareButton
-            url={construirUrlCategoria(baseUrl, slugCategoriaActiva)}
-            title={`${nombreCategoriaActiva} | ${nombreComercio}`}
-            text={armarMensajeCategoria(nombreCategoriaActiva || "")}
-            label="Compartir esta categoría"
-            variant="outline"
-            size="sm"
-            className="h-8 mt-0 text-xs font-bold shrink-0 hidden sm:flex items-center bg-background"
-          />
-        )}
+            {slugCategoriaActiva && (
+              <ShareButton
+                url={construirUrlCategoria(baseUrl, slugCategoriaActiva)}
+                title={`${nombreCategoriaActiva} | ${nombreComercio}`}
+                text={armarMensajeCategoria(nombreCategoriaActiva || "")}
+                label="Compartir esta categoría"
+                variant="outline"
+                size="sm"
+                className="h-8 mt-0 text-xs font-bold shrink-0 hidden sm:flex items-center bg-background"
+              />
+            )}
 
-        {/* Botón de limpiar filtros si están activos */}
-        {hayFiltrosActivos && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onLimpiarFiltros}
-            className="h-8 mt-0 text-xs font-bold text-muted-foreground hover:text-foreground shrink-0 hidden sm:flex items-center"
-          >
-            <FilterX className="w-3.5 h-3.5 mr-1.5" /> Limpiar
-          </Button>
-        )}
-      </div>
+            {/* Botón de limpiar filtros si están activos */}
+            {hayFiltrosActivos && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onLimpiarFiltros}
+                className="h-8 mt-0 text-xs font-bold text-muted-foreground hover:text-foreground shrink-0 hidden sm:flex items-center"
+              >
+                <FilterX className="w-3.5 h-3.5 mr-1.5" /> Limpiar
+              </Button>
+            )}
+          </div>
+        );
+      })()}
     </>
   );
 }

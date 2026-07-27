@@ -137,7 +137,9 @@ export function CrearProductoSheet() {
                 ? "Resolvé los nombres de propiedad duplicados antes de guardar."
                 : form.genericPropertyNames.size > 0
                   ? "Renombrá las propiedades con nombre genérico (Propiedad/Opción) antes de guardar."
-                  : null
+                  : form.missingRequiredAttributes.size > 0
+                    ? "Esta categoría exige valores para uno o más atributos requeridos."
+                    : null
             }
           />
         </SheetContent>

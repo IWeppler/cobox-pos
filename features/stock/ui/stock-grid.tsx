@@ -5,7 +5,6 @@ import type { ProductoIndice } from "@/entities/productos/types";
 import { Image as ImageIcon } from "lucide-react";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import {
-  capitalizar,
   getTotalStock,
   obtenerPrimeraImagen,
 } from "../lib/stock-product-utils";
@@ -16,18 +15,27 @@ import {
   construirUrlProducto,
   esVisibleEnCatalogo,
 } from "@/shared/utils/compartir-catalogo";
+import {
+  resolverCategoriaDisplayLabel,
+  type CategoriaBase,
+} from "@/shared/utils/category-tree";
 
 interface StockGridProps {
   productos: ProductoIndice[];
   userRole: string;
   nombreComercio: string;
   mostrarSinStock: boolean;
+  /** Categorías reales (con parent_id) para armar el label combinado
+   * "Padre › Hijo" de cada producto — mismo fetch que stock-view.tsx ya usa
+   * para los chips, no uno nuevo. */
+  categorias: CategoriaBase[];
 }
 
 export function StockGrid({
   productos,
   nombreComercio,
   mostrarSinStock,
+  categorias,
 }: Readonly<StockGridProps>) {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
 
@@ -68,6 +76,10 @@ export function StockGrid({
         const motivoCompartirDeshabilitado = !urlProducto
           ? "Este producto no tiene link público"
           : "Este producto no está visible en el catálogo";
+        const categoriaLabel = resolverCategoriaDisplayLabel(
+          categorias,
+          producto.categoria_id,
+        );
 
         return (
           <div key={producto.id} className="flex flex-col group relative">
@@ -124,8 +136,16 @@ export function StockGrid({
                   {producto.nombre}
                 </h3>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
-                {capitalizar(producto.tipo)}
+              {producto.marca && (
+                <span className="text-[9px] uppercase font-medium tracking-wider bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50 w-fit mt-0.5 truncate max-w-full">
+                  {producto.marca}
+                </span>
+              )}
+              <p
+                className="text-[11px] text-muted-foreground mt-0.5 truncate"
+                title={categoriaLabel || undefined}
+              >
+                {categoriaLabel}
               </p>
               <p className="font-bold text-sm mt-1 text-foreground">
                 {formatearMoneda(producto.precio)}

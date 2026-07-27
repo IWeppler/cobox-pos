@@ -2,6 +2,10 @@ export type Opcion = {
   id: string;
   nombre: string;
   valores: string[];
+  // true cuando esta opción fue auto-agregada porque categoria_atributos la
+  // marca como requerida para la categoría elegida — no se puede eliminar
+  // ni renombrar desde la UI mientras la categoría siga exigiéndola.
+  bloqueado?: boolean;
 };
 
 export type VariantDataState = {

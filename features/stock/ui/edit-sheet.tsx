@@ -268,6 +268,7 @@ function EditProductForm({
   const variantSelection = useVariantSelection({
     initialOpciones: parsedProducto.opciones,
     initialVariantes: parsedProducto.variantes,
+    categoriaId: categoriaSeleccionada,
   });
 
   useEffect(() => {
@@ -390,6 +391,13 @@ function EditProductForm({
       return;
     }
 
+    if (showVariants && variantSelection.missingRequiredAttributes.size > 0) {
+      toast.error(
+        "Esta categoría exige valores para uno o más atributos requeridos — completalos antes de guardar.",
+      );
+      return;
+    }
+
     if (archivos.length > 0) {
       setIsCompressing(true);
       formData.delete("imagenes");
@@ -467,6 +475,7 @@ function EditProductForm({
           stockDespues: null,
           precioAntes,
           precioDespues: null,
+          atributos,
         });
         return;
       }
@@ -529,6 +538,22 @@ function EditProductForm({
 
   const handleConfirmSave = () => {
     if (!pendingFormData) return;
+
+    // Le mandamos al server exactamente lo que este modal mostró y el
+    // usuario confirmó como "se elimina" — es la única lista que el RPC va
+    // a aceptar como excepción al freno de variantes faltantes. Cualquier
+    // otra faltante que aparezca del lado servidor (estado stale, carrera
+    // entre pestañas) sigue bloqueando el guardado.
+    const atributosConfirmados = diffFilas
+      .filter((f) => f.tipo === "eliminada" && f.atributos)
+      .map((f) => f.atributos);
+    if (atributosConfirmados.length > 0) {
+      pendingFormData.set(
+        "confirmadasEliminar",
+        JSON.stringify(atributosConfirmados),
+      );
+    }
+
     setConfirmModalOpen(false);
     startTransition(() => formAction(pendingFormData));
     setPendingFormData(null);
@@ -636,7 +661,9 @@ function EditProductForm({
             ? "Resolvé los nombres de propiedad duplicados antes de guardar."
             : variantSelection.genericPropertyNames.size > 0
               ? "Renombrá las propiedades con nombre genérico (Propiedad/Opción) antes de guardar."
-              : null
+              : variantSelection.missingRequiredAttributes.size > 0
+                ? "Esta categoría exige valores para uno o más atributos requeridos."
+                : null
         }
       />
 

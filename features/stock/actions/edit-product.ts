@@ -8,6 +8,7 @@ import {
   construirCacheAtributos,
 } from "@/features/stock/lib/normalize-atributo";
 import { parseProductImages } from "@/features/stock/lib/stock-product-utils";
+import { obtenerAtributosRequeridosFaltantes } from "@/features/stock/lib/validate-required-atributos";
 
 type SupabaseServerClient = ReturnType<typeof createClient>;
 
@@ -117,6 +118,7 @@ export async function editarProductoAction(
   // no revierte ni condiciona lo que (a) ya haya guardado.
   const variantes = await procesarVariantes(supabase, {
     id,
+    categoria_id: categoria_id || null,
     tieneVariantes,
     stockBase,
     formData,
@@ -314,13 +316,15 @@ async function procesarVariantes(
   supabase: SupabaseServerClient,
   params: {
     id: string;
+    categoria_id: string | null;
     tieneVariantes: boolean;
     stockBase: number;
     formData: FormData;
     userId: string | null;
   },
 ): Promise<VariantesResult> {
-  const { id, tieneVariantes, stockBase, formData, userId } = params;
+  const { id, categoria_id, tieneVariantes, stockBase, formData, userId } =
+    params;
 
   try {
     if (!tieneVariantes) {
@@ -432,6 +436,21 @@ async function procesarVariantes(
       };
     }
 
+    // Espejo server-side de useVariantSelection: si la categoría exige
+    // atributos (categoria_atributos) que no tienen valor cargado acá, no
+    // confiamos en que el cliente ya lo haya validado.
+    const atributosFaltantes = await obtenerAtributosRequeridosFaltantes(
+      supabase,
+      categoria_id,
+      opciones,
+    );
+    if (atributosFaltantes.length > 0) {
+      return {
+        success: false,
+        error: `Esta categoría exige el/los atributo(s) "${atributosFaltantes.join('", "')}" — completalos antes de guardar.`,
+      };
+    }
+
     const variantesConAtributos = variantesRaw.filter(
       (v) =>
         v.valores &&
@@ -530,12 +549,24 @@ async function procesarVariantes(
       };
     });
 
+    // Lo que el usuario ya vio y confirmó explícitamente en el modal de
+    // confirmación (ConfirmSaveVariantsModal) — la RPC solo deja pasar
+    // faltantes que estén en esta lista; cualquier otra sigue bloqueando
+    // el guardado igual que antes.
+    const confirmadasEliminarStr = formData.get(
+      "confirmadasEliminar",
+    ) as string | null;
+    const confirmadasEliminar = confirmadasEliminarStr
+      ? (JSON.parse(confirmadasEliminarStr) as Record<string, string>[])
+      : [];
+
     const { data: rpcResult, error: rpcError } = await supabase.rpc(
       "guardar_variantes_producto",
       {
         p_producto_id: id,
         p_variantes: rpcPayload,
         p_editado_por: userId,
+        p_confirmadas_eliminar: confirmadasEliminar,
       },
     );
     if (rpcError) throw rpcError;
@@ -550,9 +581,9 @@ async function procesarVariantes(
       return {
         success: false,
         error:
-          `Guardado bloqueado: se detectaron ${resultado.faltantes} variante(s) menos que las que ya existen para este producto. ` +
-          `Esto puede borrar stock real sin que lo hayas pedido. Si de verdad querés eliminar una combinación, ` +
-          `avisá al equipo técnico — por ahora este guardado no la va a tocar.`,
+          `Guardado bloqueado: se detectaron ${resultado.faltantes} variante(s) que iban a desaparecer sin haber sido confirmadas en el paso anterior. ` +
+          `Esto puede borrar stock real sin que lo hayas pedido — cerrá este cambio, volvé a abrir el producto y confirmá de nuevo. ` +
+          `Si el mensaje persiste después de eso, avisá al equipo técnico.`,
       };
     }
 
