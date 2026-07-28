@@ -5,6 +5,10 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { ItemResuelto, SugerenciaSimilitud } from "@/entities/compras/types";
 import { slugify } from "@/shared/utils/slugify";
+import {
+  resolverAudienciaCategoria,
+  type CategoriaReal,
+} from "../lib/resolve-import-categoria";
 import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-attributes";
 import {
   construirCacheAtributos,
@@ -66,13 +70,14 @@ export async function getOrdenParaMergeAction(ordenId: string) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const [ordenRes, itemsRes, productosRes] = await Promise.all([
+  const [ordenRes, itemsRes, productosRes, categoriasRes] = await Promise.all([
     supabase.from("ordenes_compra").select("*").eq("id", ordenId).single(),
     supabase.from("ordenes_items").select("*").eq("orden_id", ordenId),
     supabase
       .from("productos")
       .select("id, nombre, precio, precio_costo, tipo")
       .eq("publicado", true),
+    supabase.from("categorias").select("id, nombre, slug, parent_id"),
   ]);
 
   if (ordenRes.error || !ordenRes.data) {
@@ -135,6 +140,64 @@ export async function getOrdenParaMergeAction(ordenId: string) {
     } else {
       sugerenciasSimilitud = (similaresData as SugerenciaSimilitud[]) || [];
     }
+  }
+
+  // Filtro de audiencia/marca: la similitud de texto sola no distingue
+  // "Remera Nene" de "Remera Beba" ni una marca de otra si comparten
+  // palabras genéricas ("remera", "estampada"). Si la fila importada ya
+  // resolvió categoría (raw_categoria_id) o trae marca, un candidato con
+  // audiencia o marca CONOCIDA y DISTINTA se descarta directo — no
+  // debería competir como "posible match". No bloqueante: si no hay
+  // árbol de categorías disponible, sigue sin filtrar en vez de romper.
+  if (sugerenciasSimilitud.length > 0 && !categoriasRes.error) {
+    const categoriasReales: CategoriaReal[] = categoriasRes.data || [];
+    const baselinePorRawNombre = new Map<
+      string,
+      { categoriaId: string | null; marca: string | null }
+    >();
+    for (const item of itemsRes.data || []) {
+      if (baselinePorRawNombre.has(item.raw_nombre)) continue;
+      baselinePorRawNombre.set(item.raw_nombre, {
+        categoriaId: item.raw_categoria_id ?? null,
+        marca: item.raw_marca ?? null,
+      });
+    }
+
+    sugerenciasSimilitud = sugerenciasSimilitud.filter((s) => {
+      const baseline = baselinePorRawNombre.get(s.raw_nombre);
+      if (!baseline) return true;
+
+      if (baseline.categoriaId && s.categoria_id) {
+        const audienciaFila = resolverAudienciaCategoria(
+          baseline.categoriaId,
+          categoriasReales,
+        );
+        const audienciaCandidato = resolverAudienciaCategoria(
+          s.categoria_id,
+          categoriasReales,
+        );
+        if (
+          audienciaFila &&
+          audienciaCandidato &&
+          audienciaFila !== audienciaCandidato
+        ) {
+          return false;
+        }
+      }
+
+      if (baseline.marca && s.marca) {
+        if (baseline.marca.trim().toLowerCase() !== s.marca.trim().toLowerCase()) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  } else if (categoriasRes.error) {
+    console.error(
+      "[PURCHASE MERGE] Error obteniendo categorías para filtrar sugerencias:",
+      JSON.stringify(categoriasRes.error, null, 2),
+    );
   }
 
   return {
@@ -300,151 +363,6 @@ export async function crearProductoAlVueloAction(
   }
 }
 
-async function actualizarPrecios(item: ItemResuelto, supabase: SupabaseDb) {
-  if (!item.precio_venta_actualizado && !item.precio_costo) return;
-
-  const updateData: { precio_costo?: number; precio?: number } = {};
-
-  if (item.precio_costo) updateData.precio_costo = item.precio_costo;
-  if (item.precio_venta_actualizado)
-    updateData.precio = item.precio_venta_actualizado;
-
-  const { error } = await supabase
-    .from("productos")
-    .update(updateData)
-    .eq("id", item.producto_id);
-
-  throwIfSupabaseError(
-    `Error actualizando precios de ${item.raw_nombre}`,
-    error,
-  );
-}
-
-async function actualizarStock(
-  item: ItemResuelto,
-  supabase: SupabaseDb,
-  precioBaseProducto: number,
-  atributoCache: AtributoCache,
-) {
-  if (!item.producto_id) return;
-
-  const variante = item.variante_match || item.raw_variante || "Unico";
-  const atributosRaw = parseVarianteAtributos(variante);
-  const atributos = canonicalizarValores(atributosRaw, atributoCache);
-  const skuRemito = item.raw_sku?.trim() || null;
-
-  const { data: varianteExistente, error: varianteSelectError } = await supabase
-    .from("producto_variantes")
-    .select("id, stock")
-    .eq("producto_id", item.producto_id)
-    .eq("nombre_display", variante)
-    .maybeSingle();
-
-  throwIfSupabaseError(
-    `Error buscando variante ${variante} de ${item.raw_nombre}`,
-    varianteSelectError,
-  );
-
-  if (varianteExistente) {
-    const { error: varianteUpdateError } = await supabase
-      .from("producto_variantes")
-      .update({
-        stock: Number(varianteExistente.stock || 0) + item.cantidad,
-        atributos,
-        // Solo pisa el SKU si este remito trajo uno — un reingreso de
-        // stock sin columna SKU no debe blanquear el que ya estaba cargado.
-        ...(skuRemito ? { sku: skuRemito } : {}),
-      })
-      .eq("id", varianteExistente.id);
-
-    throwIfSupabaseError(
-      `Error actualizando variante ${variante} de ${item.raw_nombre}`,
-      varianteUpdateError,
-    );
-  } else {
-    const difierePrecio =
-      (item.precio_venta_actualizado || 0) !== precioBaseProducto;
-
-    const { error: varianteInsertError } = await supabase
-      .from("producto_variantes")
-      .insert({
-        producto_id: item.producto_id,
-        nombre_display: variante,
-        atributos,
-        sku: skuRemito,
-        precio: difierePrecio ? (item.precio_venta_actualizado ?? null) : null,
-        costo: difierePrecio ? item.precio_costo : null,
-        stock: item.cantidad,
-      });
-
-    throwIfSupabaseError(
-      `Error creando variante ${variante} de ${item.raw_nombre}`,
-      varianteInsertError,
-    );
-  }
-
-  const { data: stockExistente, error: stockSelectError } = await supabase
-    .from("productos_stock")
-    .select("id, cantidad")
-    .eq("producto_id", item.producto_id)
-    .eq("variante", variante)
-    .maybeSingle();
-
-  throwIfSupabaseError(
-    `Error buscando stock ${variante} de ${item.raw_nombre}`,
-    stockSelectError,
-  );
-
-  if (stockExistente) {
-    const { error: stockUpdateError } = await supabase
-      .from("productos_stock")
-      .update({
-        cantidad: Number(stockExistente.cantidad || 0) + item.cantidad,
-      })
-      .eq("id", stockExistente.id);
-
-    throwIfSupabaseError(
-      `Error actualizando stock ${variante} de ${item.raw_nombre}`,
-      stockUpdateError,
-    );
-  } else {
-    const { error: stockInsertError } = await supabase
-      .from("productos_stock")
-      .insert({
-        producto_id: item.producto_id,
-        variante,
-        cantidad: item.cantidad,
-      });
-
-    throwIfSupabaseError(
-      `Error creando stock ${variante} de ${item.raw_nombre}`,
-      stockInsertError,
-    );
-  }
-}
-
-async function registrarAliasDiccionario(
-  item: ItemResuelto,
-  proveedor: string,
-  supabase: SupabaseDb,
-) {
-  if (
-    item.estado_match === "DESCONOCIDO" ||
-    item.estado_match === "NUEVO_ALIAS"
-  ) {
-    const { error } = await supabase.from("diccionario_alias").upsert(
-      {
-        proveedor,
-        raw_nombre: item.raw_nombre.trim().toLowerCase(),
-        producto_id: item.producto_id,
-      },
-      { onConflict: "proveedor, raw_nombre" },
-    );
-
-    throwIfSupabaseError(`Error registrando alias ${item.raw_nombre}`, error);
-  }
-}
-
 // 2. Aprobar e Impactar la Orden en la BD (Agrupada y Optimizada)
 export async function aprobarOrdenAction(
   ordenId: string,
@@ -455,12 +373,8 @@ export async function aprobarOrdenAction(
   const supabase = createClient(cookieStore);
 
   try {
-    // Sets de control para evitar golpear la DB repetidas veces por el mismo producto padre
-    const productosActualizados = new Set<string>();
-    const aliasRegistrados = new Set<string>();
-    // Precio unificado que efectivamente se escribió a nivel producto, por
-    // producto_id — referencia para saber si una variante puntual difiere.
-    const precioBasePorProducto = new Map<string, number>();
+    // Un solo barrido para juntar todos los valores de atributo del remito y
+    // resolver el cache de canonicalización de una sola vez.
     const valoresPorPropiedad: Record<string, Set<string>> = {};
     for (const item of itemsResueltos) {
       if (!item.producto_id) continue;
@@ -480,44 +394,41 @@ export async function aprobarOrdenAction(
       opcionesAtributos,
     );
 
-    for (const item of itemsResueltos) {
-      if (!item.producto_id) continue;
+    // El ciclo completo (precios + stock + alias + estado de la orden) corre
+    // dentro de la RPC `aprobar_orden_compra`, en UNA transacción. Antes esto
+    // era un for con await adentro: 4 round-trips por línea, ~1500 en el
+    // remito más grande real (347 líneas) — de ahí el timeout de 300s.
+    //
+    // La canonicalización de atributos se queda acá a propósito: es la misma
+    // que usa la creación manual de productos, y no se duplica en SQL. La
+    // RPC recibe `atributos` ya canonicalizado.
+    const itemsPayload = itemsResueltos
+      .filter((item) => item.producto_id)
+      .map((item) => {
+        const variante = item.variante_match || item.raw_variante || "Unico";
+        return {
+          producto_id: item.producto_id,
+          raw_nombre: item.raw_nombre,
+          estado_match: item.estado_match,
+          variante,
+          atributos: canonicalizarValores(
+            parseVarianteAtributos(variante),
+            atributoCache,
+          ),
+          sku: item.raw_sku?.trim() || null,
+          cantidad: item.cantidad,
+          precio_costo: item.precio_costo ?? null,
+          precio_venta_actualizado: item.precio_venta_actualizado ?? null,
+        };
+      });
 
-      // 1. Actualizar precios (Solo se hace 1 vez por Producto, aunque tenga 10 variantes)
-      if (!productosActualizados.has(item.producto_id)) {
-        await actualizarPrecios(item, supabase);
-        productosActualizados.add(item.producto_id);
-        precioBasePorProducto.set(
-          item.producto_id,
-          item.precio_venta_actualizado || 0,
-        );
-      }
+    const { error: aprobarError } = await supabase.rpc("aprobar_orden_compra", {
+      p_orden_id: ordenId,
+      p_proveedor: proveedor,
+      p_items: itemsPayload,
+    });
 
-      // 2. Actualizar stock (Se ejecuta siempre, por CADA variante individual)
-      await actualizarStock(
-        item,
-        supabase,
-        precioBasePorProducto.get(item.producto_id) ?? 0,
-        atributoCache,
-      );
-
-      // 3. Registrar Alias en el Diccionario (Solo 1 vez por nombre crudo)
-      const aliasKey = item.raw_nombre.trim().toLowerCase();
-      if (!aliasRegistrados.has(aliasKey)) {
-        await registrarAliasDiccionario(item, proveedor, supabase);
-        aliasRegistrados.add(aliasKey);
-      }
-    }
-
-    const { error: ordenUpdateError } = await supabase
-      .from("ordenes_compra")
-      .update({ estado: "APROBADA" })
-      .eq("id", ordenId);
-
-    throwIfSupabaseError(
-      "Error marcando orden como aprobada",
-      ordenUpdateError,
-    );
+    throwIfSupabaseError("Error impactando la orden", aprobarError);
 
     revalidatePath("/stock");
     revalidatePath("/compras");

@@ -25,7 +25,7 @@ export function StockPageClient({ userRole }: { userRole: string }) {
 
   if (error || data?.error) {
     return (
-      <div className="flex h-48 items-center justify-center rounded-xl bg-destructive/10 text-destructive border border-destructive/20 p-6 text-center">
+      <div className="flex h-48 items-center justify-center rounded-xl bg-destructive/10 text-destructive border border-destructive/20 p-6 text-center m-4">
         <p className="font-medium">
           {data?.error || "No se pudo cargar el stock."}
         </p>

@@ -16,7 +16,13 @@
  * que verifica que cada string exista exacto en la tabla.
  */
 
-type GeneroDetectado = "hombre" | "mujer" | "nena" | "nino" | null;
+export type GeneroDetectado =
+  | "hombre"
+  | "mujer"
+  | "nena"
+  | "nino"
+  | "bebe"
+  | null;
 
 export interface ReglaCategoria {
   /** Keywords de tipo de prenda, ya normalizadas (sin tildes, minúsculas). Basta con que UNA matchee (OR). */
@@ -77,6 +83,35 @@ export const REGLAS_CATEGORIA: ReglaCategoria[] = [
     keywords: ["conjunto"],
     categoriaPorGenero: { default: "CONJUNTOS" },
   },
+  // Vocabulario de bebé/infantil — faltaba por completo (2026-07-28): un
+  // remito de Ropa Bebé dejaba casi todas sus filas sin categoría. Cada
+  // regla incluye singular Y plural a propósito: las keywords se usan dos
+  // veces, para matchear el NOMBRE del producto ("body alondra") y para
+  // encontrar la SUBCATEGORÍA real en el árbol ("Bodies" -> slug "bodies").
+  {
+    keywords: [
+      "body",
+      "bodies",
+      "enterito",
+      "enteritos",
+      "ranita",
+      "ranitas",
+      "osito",
+      "ositos",
+      "pilucho",
+      "jardinero",
+      "jardineros",
+    ],
+    categoriaPorGenero: { default: "Bodies" },
+  },
+  {
+    keywords: ["vestido", "vestidos"],
+    categoriaPorGenero: { default: "Vestidos" },
+  },
+  {
+    keywords: ["pollera", "polleras"],
+    categoriaPorGenero: { default: "Polleras" },
+  },
   {
     keywords: ["calza", "joggin"],
     categoriaPorGenero: { default: "JOGGINS Y CALZAS MUJER" },
@@ -123,7 +158,13 @@ export const REGLAS_CATEGORIA: ReglaCategoria[] = [
 // Palabras de género/edad detectables en el nombre crudo del remito — misma
 // idea que GENERO_CANONICO ya hardcodeado en create-purchase-modal.tsx,
 // pero como función pura reusable fuera de un componente cliente.
+// `beba`/`bebe` van PRIMERO: son los más específicos y no son substring de
+// ningún otro (faltaban por completo hasta 2026-07-28 — una fila con
+// género "beba" no detectaba nada y caía al `default` de la regla, que en
+// un árbol por audiencia termina colgando de la audiencia equivocada).
 const GENERO_KEYWORDS: Array<[string, Exclude<GeneroDetectado, null>]> = [
+  ["beba", "bebe"],
+  ["bebe", "bebe"],
   ["hombre", "hombre"],
   ["varon", "hombre"],
   ["mujer", "mujer"],
@@ -133,16 +174,35 @@ const GENERO_KEYWORDS: Array<[string, Exclude<GeneroDetectado, null>]> = [
   ["nene", "nino"],
 ];
 
-function normalizar(texto: string): string {
+export function normalizar(texto: string): string {
   return texto
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
 }
 
-function detectarGenero(rawNombreNormalizado: string): GeneroDetectado {
+/** Detecta la audiencia a partir de un texto YA normalizado (sin tildes,
+ * minúsculas). Exportada para que la resolución por árbol la reuse en vez
+ * de reimplementar el vocabulario. */
+export function detectarGenero(
+  rawNombreNormalizado: string,
+): GeneroDetectado {
   for (const [keyword, genero] of GENERO_KEYWORDS) {
     if (rawNombreNormalizado.includes(keyword)) return genero;
+  }
+  return null;
+}
+
+/** Keywords de la familia de prenda que matchea un texto (ej. "blusa
+ * vueltio" -> ["buzo","remera","camiseta","blusa","musculosa"]). Sirve
+ * para buscar la SUBCATEGORÍA real dentro de un padre, sin depender de
+ * los nombres de categoría curados para un comercio puntual. */
+export function detectarKeywordsPrenda(texto: string): string[] | null {
+  const normalizado = normalizar(texto);
+  for (const regla of REGLAS_CATEGORIA) {
+    if (regla.keywords.some((kw) => normalizado.includes(kw))) {
+      return regla.keywords;
+    }
   }
   return null;
 }

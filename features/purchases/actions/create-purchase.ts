@@ -224,6 +224,7 @@ export async function procesarPedidoAction(
         raw_categoria_id: rawCategoriaIdResuelta,
         raw_sku: item.raw_sku?.trim() || null,
         raw_marca: item.raw_marca?.trim() || null,
+        raw_genero: item.raw_genero?.trim() || null,
         cantidad: isNaN(Number(item.cantidad)) ? 0 : Number(item.cantidad),
         precio_costo: isNaN(Number(item.precio_costo))
           ? 0

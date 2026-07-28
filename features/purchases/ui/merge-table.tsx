@@ -56,6 +56,7 @@ import {
   Trash2,
   Search,
   ChevronDown,
+  ChevronRight,
   Layers,
   RefreshCw,
   Sparkles,
@@ -76,6 +77,11 @@ import {
   construirMapaSimilares,
   BucketDesconocido,
 } from "../lib/match-classification";
+import {
+  construirArbolCategorias,
+  resolverCategoriaDisplayLabel,
+  type CategoriaBase,
+} from "@/shared/utils/category-tree";
 
 interface MergeTableProps {
   orden: OrdenCompra;
@@ -91,7 +97,13 @@ type ItemResueltoConCategoria = ItemResuelto & {
 // Timeout de UI para las acciones de red disparadas desde esta pantalla:
 // si no responden a tiempo, se tratan como error y el botón se destraba
 // en vez de quedar "cargando" para siempre.
-const ACTION_TIMEOUT_MS = 25_000;
+//
+// Había subido a 300s para tapar el N+1 de aprobarOrdenAction (un await por
+// línea, ~1500 round-trips en el remito de 347 líneas). Ahora eso es una
+// sola RPC transaccional que tarda ~330ms medida sobre ese mismo remito, así
+// que 45s vuelve a ser margen de sobra — y si se supera, es un problema real
+// que conviene ver como error y no como una pantalla colgada 5 minutos.
+const ACTION_TIMEOUT_MS = 45_000;
 
 // --- Combobox de Búsqueda Personalizado ---
 function SearchableSelect({
@@ -196,6 +208,116 @@ function SearchableSelect({
   );
 }
 
+/** Deriva el padre (o la propia categoría, si es raíz/suelta) a partir de
+ * un categoria_id ya resuelto — para precargar el select 1 cuando el
+ * valor final ya se conoce (ej. sugerencia del import, override previo). */
+function derivarSeleccionCategoria(
+  categoriaId: string | null | undefined,
+  categoriasFlat: CategoriaBase[],
+): { padreId: string; categoriaId: string } {
+  if (!categoriaId) return { padreId: "", categoriaId: "" };
+  const categoria = categoriasFlat.find((c) => c.id === categoriaId);
+  if (!categoria) return { padreId: "", categoriaId: "" };
+  return {
+    padreId: categoria.parent_id ?? categoria.id,
+    categoriaId: categoria.id,
+  };
+}
+
+// Selector de categoría en dos pasos (padre → subcategoría) — mismo
+// patrón ya usado en /stock para "Mover" en masa y en los chips del
+// catálogo público, no un dropdown agrupado nuevo (ese tenía además un
+// bug visual: el padre aparecía dos veces, como header Y como opción).
+// Select 1 lista padres (con hijos) + categorías sueltas. Select 2 solo
+// aparece si el padre elegido tiene hijos, y siempre incluye "Todo
+// {Padre}, sin subcategoría específica" — mismo criterio que el chip
+// "Todo {Padre}" de la navegación del catálogo. `value`/`onChange` son el
+// categoria_id FINAL (igual contrato que el <Select> plano que reemplaza).
+function CategoriaPadreHijoSelect({
+  arbol,
+  categoriasFlat,
+  value,
+  onChange,
+  disabled,
+  triggerClassName = "w-full",
+  size,
+}: Readonly<{
+  arbol: ReturnType<typeof construirArbolCategorias>;
+  categoriasFlat: CategoriaBase[];
+  value: string;
+  onChange: (categoriaId: string) => void;
+  disabled?: boolean;
+  triggerClassName?: string;
+  size?: "sm" | "default";
+}>) {
+  const [padreId, setPadreId] = useState(
+    () => derivarSeleccionCategoria(value, categoriasFlat).padreId,
+  );
+
+  // Si `value` cambia desde afuera (precarga del modal, override de otro
+  // lado, reset), resincroniza el padre derivado — si no, el select 2
+  // podría seguir mostrando los hijos del padre anterior.
+  useEffect(() => {
+    setPadreId(derivarSeleccionCategoria(value, categoriasFlat).padreId);
+  }, [value, categoriasFlat]);
+
+  const padreSeleccionado = arbol.padres.find((p) => p.id === padreId) ?? null;
+
+  const handlePadreChange = (val: string) => {
+    setPadreId(val);
+    const esPadreConHijos = arbol.padres.some(
+      (p) => p.id === val && p.hijos.length > 0,
+    );
+    // Padre sin hijos (o categoría suelta): el destino final ya se conoce
+    // con este solo click. Padre con hijos: esperamos el select 2.
+    onChange(esPadreConHijos ? "" : val);
+  };
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <Select
+        value={padreId}
+        onValueChange={handlePadreChange}
+        disabled={disabled}
+      >
+        <SelectTrigger size={size} className={triggerClassName}>
+          <SelectValue placeholder="Categoría" />
+        </SelectTrigger>
+        <SelectContent>
+          {arbol.padres.map((padre) => (
+            <SelectItem key={padre.id} value={padre.id}>
+              {padre.nombre}
+            </SelectItem>
+          ))}
+          {arbol.sinPadre.map((cat) => (
+            <SelectItem key={cat.id} value={cat.id}>
+              {cat.nombre}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {padreSeleccionado && padreSeleccionado.hijos.length > 0 && (
+        <Select value={value} onValueChange={onChange} disabled={disabled}>
+          <SelectTrigger size={size} className={triggerClassName}>
+            <SelectValue placeholder="Subcategoría" />
+          </SelectTrigger>
+          <SelectContent>
+            {padreSeleccionado.hijos.map((hijo) => (
+              <SelectItem key={hijo.id} value={hijo.id}>
+                {hijo.nombre}
+              </SelectItem>
+            ))}
+            <SelectItem value={padreSeleccionado.id}>
+              Todo {padreSeleccionado.nombre}, sin subcategoría específica
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+  );
+}
+
 export function MergeTable({
   orden,
   itemsOriginales,
@@ -214,8 +336,29 @@ export function MergeTable({
 
   // Loading/error por fila para las acciones de 1-click y masivas — separado
   // de crearLoading/crearError, que siguen siendo solo del modal manual.
-  const [loadingPorGrupo, setLoadingPorGrupo] = useState<Record<string, boolean>>({});
-  const [errorPorGrupo, setErrorPorGrupo] = useState<Record<string, string | null>>({});
+  const [loadingPorGrupo, setLoadingPorGrupo] = useState<
+    Record<string, boolean>
+  >({});
+  const [errorPorGrupo, setErrorPorGrupo] = useState<
+    Record<string, string | null>
+  >({});
+
+  // Qué chips de variante (talle/color) están expandidos a su desglose
+  // completo — colapsados por default. El chip compacto trunca a ~148px,
+  // así que el desglose es la única forma de leer variantes con varios
+  // atributos sin cortar; antes se mostraban las dos formas siempre,
+  // duplicando la misma info.
+  const [variantesExpandidas, setVariantesExpandidas] = useState<Set<string>>(
+    new Set(),
+  );
+  const toggleVarianteExpandida = (key: string) => {
+    setVariantesExpandidas((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   // Categoría elegida a mano por el usuario (override), por raw_nombre —
   // guarda categoria_id (uuid), NUNCA el nombre: el árbol permite nombres
@@ -224,7 +367,9 @@ export function MergeTable({
   // Independiente del modal. Si no hay override, se usa la sugerencia
   // automática de sugerirCategoria calculada en clasificacionPorGrupo
   // (resuelta a id contra categoriasDB antes de guardarse).
-  const [categoriaIdPorGrupo, setCategoriaIdPorGrupo] = useState<Record<string, string>>({});
+  const [categoriaIdPorGrupo, setCategoriaIdPorGrupo] = useState<
+    Record<string, string>
+  >({});
 
   // Selección múltiple de filas Ambiguas, para "Asignar categoría a selección".
   const [gruposSeleccionados, setGruposSeleccionados] = useState<Set<string>>(
@@ -234,9 +379,9 @@ export function MergeTable({
   const [bulkCrearLoading, setBulkCrearLoading] = useState(false);
 
   // Borrador local (IndexedDB) de esta conciliación
-  const [draftState, setDraftState] = useState<
-    "checking" | "prompt" | "ready"
-  >("checking");
+  const [draftState, setDraftState] = useState<"checking" | "prompt" | "ready">(
+    "checking",
+  );
   const [pendingDraft, setPendingDraft] =
     useState<Awaited<ReturnType<typeof getMergeDraft>>>(null);
 
@@ -247,6 +392,44 @@ export function MergeTable({
   const [groupToCreateName, setGroupToCreateName] = useState<string | null>(
     null,
   );
+
+  // Categorías reales del comercio — se declaran ACÁ (antes de
+  // clasificacionPorGrupo) porque la clasificación de filas desconocidas
+  // ahora resuelve la sugerencia contra el árbol real, no solo por nombre.
+  const [categoriasDB, setCategoriasDB] = useState<CategoriaBase[]>([]);
+
+  useEffect(() => {
+    const fetchCats = async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("categorias")
+        .select("id, nombre, slug, parent_id")
+        .eq("activa", true)
+        .order("nombre");
+      if (data) setCategoriasDB(data);
+    };
+    fetchCats();
+  }, []);
+
+  // Árbol para los dos <Select> de categoría de esta pantalla — mismo
+  // constructor que ya usa el filtro de /stock (construirArbolCategorias),
+  // acá sin conteos de stock: cada categoría "existe" siempre (count 1),
+  // solo nos interesa la agrupación padre → hijos para mostrar contexto.
+  const arbolCategoriasDB = useMemo(() => {
+    const countsUno = Object.fromEntries(categoriasDB.map((c) => [c.id, 1]));
+    return construirArbolCategorias(categoriasDB, countsUno);
+  }, [categoriasDB]);
+
+  // sugerirCategoria (category-suggestions.ts) es un diccionario portable
+  // entre tenants — devuelve NOMBRES a propósito, nunca ids hardcodeados.
+  // Estos dos helpers son el único punto donde ese nombre se resuelve
+  // contra el árbol real antes de guardarse en cualquier estado.
+  const idPorNombreCategoria = (nombre: string): string | undefined =>
+    categoriasDB.find(
+      (cat) => cat.nombre.trim().toLowerCase() === nombre.trim().toLowerCase(),
+    )?.id;
+  const nombrePorIdCategoria = (id: string): string | undefined =>
+    categoriasDB.find((cat) => cat.id === id)?.nombre;
 
   // Estado local para productos (permite inyectar los creados al vuelo)
   const [localProductos, setLocalProductos] = useState<Producto[]>(productos);
@@ -288,18 +471,32 @@ export function MergeTable({
     const mapa = new Map<string, BucketDesconocido>();
     for (const [rawNombre, group] of groupedItems) {
       if (group[0].estado_match === "DESCONOCIDO") {
-        mapa.set(rawNombre, clasificarDesconocido(rawNombre, similaresMap));
+        // El género de la fila entra en la clasificación: sin él, la
+        // sugerencia sale del diccionario plano y propone la subcategoría
+        // de otra audiencia (ver clasificarDesconocido).
+        mapa.set(
+          rawNombre,
+          clasificarDesconocido(
+            rawNombre,
+            similaresMap,
+            group[0].raw_genero ?? null,
+            categoriasDB,
+          ),
+        );
       }
     }
     return mapa;
-  }, [groupedItems, similaresMap]);
+  }, [groupedItems, similaresMap, categoriasDB]);
 
   // Cuántos grupos están en el bucket "nuevo sugerido" — usado para
   // habilitar/mostrar el botón de creación masiva.
   const gruposNuevoSugerido = useMemo(
     () =>
       groupedItems
-        .filter(([rawNombre]) => clasificacionPorGrupo.get(rawNombre)?.tipo === "NUEVO_SUGERIDO")
+        .filter(
+          ([rawNombre]) =>
+            clasificacionPorGrupo.get(rawNombre)?.tipo === "NUEVO_SUGERIDO",
+        )
         .map(([rawNombre]) => rawNombre),
     [groupedItems, clasificacionPorGrupo],
   );
@@ -331,34 +528,6 @@ export function MergeTable({
   const [archivosNuevoProducto, setArchivosNuevoProducto] = useState<File[]>(
     [],
   );
-  const [categoriasDB, setCategoriasDB] = useState<
-    { id: string; nombre: string }[]
-  >([]);
-
-  useEffect(() => {
-    const fetchCats = async () => {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("categorias")
-        .select("id, nombre")
-        .eq("activa", true)
-        .order("nombre");
-      if (data) setCategoriasDB(data);
-    };
-    fetchCats();
-  }, []);
-
-  // sugerirCategoria (category-suggestions.ts) es un diccionario portable
-  // entre tenants — devuelve NOMBRES a propósito, nunca ids hardcodeados.
-  // Estos dos helpers son el único punto donde ese nombre se resuelve
-  // contra el árbol real antes de guardarse en cualquier estado.
-  const idPorNombreCategoria = (nombre: string): string | undefined =>
-    categoriasDB.find(
-      (cat) => cat.nombre.trim().toLowerCase() === nombre.trim().toLowerCase(),
-    )?.id;
-  const nombrePorIdCategoria = (id: string): string | undefined =>
-    categoriasDB.find((cat) => cat.id === id)?.nombre;
-
   // Busca un borrador guardado de ESTA orden al entrar a la pantalla.
   useEffect(() => {
     let cancelled = false;
@@ -532,9 +701,7 @@ export function MergeTable({
     archivosMain?: File[];
     archivosThumb?: File[];
     archivosGrid?: File[];
-  }): Promise<
-    { ok: true; producto: Producto } | { ok: false; error: string }
-  > {
+  }): Promise<{ ok: true; producto: Producto } | { ok: false; error: string }> {
     const itemActual = items.find((i) => i.raw_nombre === params.rawNombre);
     if (!itemActual) {
       return { ok: false, error: "No se encontró el ítem en la conciliación." };
@@ -695,8 +862,7 @@ export function MergeTable({
       return next;
     });
 
-    const nombreElegido =
-      nombrePorIdCategoria(categoriaIdParaSeleccion) ?? "";
+    const nombreElegido = nombrePorIdCategoria(categoriaIdParaSeleccion) ?? "";
     toast.success(
       `Categoría "${nombreElegido}" asignada a ${gruposSeleccionados.size} agrupaciones. Ahora podés usar "Crear" en cada una.`,
     );
@@ -718,7 +884,8 @@ export function MergeTable({
       const bucket = clasificacionPorGrupo.get(rawNombre);
       const categoriaIdSugerida =
         bucket?.tipo === "NUEVO_SUGERIDO"
-          ? idPorNombreCategoria(bucket.categoriaSugerida.categoriaNombre)
+          ? (bucket.categoriaId ??
+            idPorNombreCategoria(bucket.categoriaSugerida.categoriaNombre))
           : undefined;
       const categoriaId = categoriaIdPorGrupo[rawNombre] ?? categoriaIdSugerida;
       const itemActual = items.find((i) => i.raw_nombre === rawNombre);
@@ -870,7 +1037,7 @@ export function MergeTable({
           <Button
             variant="secondary"
             size="sm"
-            className="bg-violet-100 text-violet-700 hover:bg-violet-200 w-full sm:w-auto"
+            className="bg-accent-indigo/10 text-accent-indigo hover:bg-accent-indigo/20 w-full sm:w-auto"
             onClick={handleCrearTodosSugeridos}
             disabled={bulkCrearLoading}
           >
@@ -888,21 +1055,14 @@ export function MergeTable({
           <span className="text-sm font-semibold text-rose-800 whitespace-nowrap">
             {gruposSeleccionados.size} agrupaciones seleccionadas
           </span>
-          <Select
+          <CategoriaPadreHijoSelect
+            arbol={arbolCategoriasDB}
+            categoriasFlat={categoriasDB}
             value={categoriaIdParaSeleccion}
-            onValueChange={setCategoriaIdParaSeleccion}
-          >
-            <SelectTrigger className="w-full sm:w-64 h-8 bg-background">
-              <SelectValue placeholder="Elegir categoría para todas..." />
-            </SelectTrigger>
-            <SelectContent className="max-h-50">
-              {categoriasDB.map((cat) => (
-                <SelectItem key={cat.id} value={cat.id}>
-                  {cat.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={setCategoriaIdParaSeleccion}
+            size="sm"
+            triggerClassName="w-full sm:w-52 h-8 bg-background"
+          />
           <Button
             size="sm"
             className="bg-rose-600 hover:bg-rose-700 text-white w-full sm:w-auto"
@@ -944,7 +1104,7 @@ export function MergeTable({
         </Badge>
         <Badge
           variant="outline"
-          className="bg-violet-50 text-violet-700 border-violet-200 px-3 py-1"
+          className="bg-accent-indigo/10 text-accent-indigo border-accent-indigo px-3 py-1"
         >
           <Sparkles className="w-4 h-4 mr-2" /> Nuevo (Categoría Sugerida)
         </Badge>
@@ -1009,9 +1169,10 @@ export function MergeTable({
                 else if (posibleMatch)
                   rowClassName = "bg-sky-50/30 hover:bg-sky-50/50";
                 else if (nuevoSugerido)
-                  rowClassName = "bg-violet-50/20 hover:bg-violet-50/40";
+                  rowClassName =
+                    "bg-accent-indigo/10 hover:bg-accent-indigo/20";
                 else if (isAmbiguo)
-                  rowClassName = "bg-rose-50/10 hover:bg-rose-50/20";
+                  rowClassName = "bg-destructive/10 hover:bg-destructive/20";
 
                 return (
                   <tr
@@ -1051,6 +1212,25 @@ export function MergeTable({
                       <p className="font-bold text-foreground uppercase tracking-wide">
                         {rawNombre}
                       </p>
+                      {/* Dato CRUDO tal como vino del CSV (raw_marca /
+                          raw_genero) — antes de cualquier resolución, para
+                          poder comparar de un vistazo contra lo que el
+                          sistema entendió (categoría/marca del candidato,
+                          en la columna de al lado). */}
+                      {(firstItem.raw_marca || firstItem.raw_genero) && (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {[
+                            firstItem.raw_marca
+                              ? `Marca: ${firstItem.raw_marca}`
+                              : null,
+                            firstItem.raw_genero
+                              ? `Género: ${firstItem.raw_genero}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      )}
                       {/* Sub-bloques de variantes integrados */}
                       <div className="mt-2 flex flex-wrap gap-2">
                         {group.map((item, idx) => {
@@ -1065,19 +1245,37 @@ export function MergeTable({
                                 valor: string;
                               } => segmento !== null,
                             );
+                          const key = item.id ?? `${rawNombre}-${idx}`;
+                          const expandible = segmentosDetectados.length > 0;
+                          const expandida = variantesExpandidas.has(key);
 
                           return (
                             <div key={idx} className="flex flex-col gap-1">
-                              <div className="flex items-center gap-1.5 bg-background border border-border/80 px-2 py-1 rounded text-xs text-muted-foreground">
-                                <Layers className="w-3 h-3 opacity-60" />
+                              <button
+                                type="button"
+                                disabled={!expandible}
+                                onClick={() => toggleVarianteExpandida(key)}
+                                className={`flex items-center gap-1.5 bg-background border border-border/80 px-2 py-1 rounded text-xs text-muted-foreground ${
+                                  expandible
+                                    ? "cursor-pointer hover:border-primary/50"
+                                    : "cursor-default"
+                                }`}
+                              >
+                                <Layers className="w-3 h-3 opacity-60 shrink-0" />
                                 <span className="truncate max-w-37">
                                   {item.raw_variante}
                                 </span>
                                 <span className="font-semibold text-emerald-600 ">
                                   +{item.cantidad}
                                 </span>
-                              </div>
-                              {segmentosDetectados.length > 0 && (
+                                {expandible &&
+                                  (expandida ? (
+                                    <ChevronDown className="w-3 h-3 shrink-0 opacity-60" />
+                                  ) : (
+                                    <ChevronRight className="w-3 h-3 shrink-0 opacity-60" />
+                                  ))}
+                              </button>
+                              {expandida && (
                                 <div className="flex flex-wrap gap-1 pl-1">
                                   {segmentosDetectados.map(
                                     (segmento, segIdx) => (
@@ -1129,10 +1327,17 @@ export function MergeTable({
                               )}% recargo = $${precioSugerido.toLocaleString("es-AR")}`
                             : "Precio sugerido por defecto (sin recargo aplicado todavía)";
 
+                          // La sugerencia de REGLAS_CATEGORIA es un NOMBRE
+                          // (diccionario portable entre comercios), así que
+                          // puede no existir en el árbol de este tenant —
+                          // en ese caso no hay id que precargar y el select
+                          // queda vacío, que es lo correcto: no inventamos
+                          // una categoría que no existe acá.
                           const categoriaIdSugerida = nuevoSugerido
-                            ? idPorNombreCategoria(
+                            ? (nuevoSugerido.categoriaId ??
+                              idPorNombreCategoria(
                                 nuevoSugerido.categoriaSugerida.categoriaNombre,
-                              )
+                              ))
                             : undefined;
 
                           setNuevoProductoData({
@@ -1171,6 +1376,13 @@ export function MergeTable({
                         );
 
                         if (posibleMatch) {
+                          const candidatoCategoriaLabel = posibleMatch.candidato
+                            .categoriaId
+                            ? resolverCategoriaDisplayLabel(
+                                categoriasDB,
+                                posibleMatch.candidato.categoriaId,
+                              )
+                            : "";
                           return (
                             <div className="flex flex-col gap-2">
                               <div className="flex items-start justify-between gap-2 p-2 bg-sky-50/60 border border-sky-200 rounded-md">
@@ -1180,9 +1392,25 @@ export function MergeTable({
                                     {posibleMatch.candidato.nombre}
                                   </p>
                                   <p className="text-[11px] text-sky-700/70 mt-0.5">
-                                    ~{Math.round(posibleMatch.candidato.score * 100)}%
-                                    similar — ¿es este producto?
+                                    ~
+                                    {Math.round(
+                                      posibleMatch.candidato.score * 100,
+                                    )}
+                                    % similar — ¿es este producto?
                                   </p>
+                                  {(posibleMatch.candidato.marca ||
+                                    candidatoCategoriaLabel) && (
+                                    <p className="text-[11px] text-sky-700/70 mt-0.5 truncate">
+                                      {[
+                                        posibleMatch.candidato.marca
+                                          ? `Marca: ${posibleMatch.candidato.marca}`
+                                          : null,
+                                        candidatoCategoriaLabel || null,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </p>
+                                  )}
                                 </div>
                                 <Button
                                   size="sm"
@@ -1210,32 +1438,41 @@ export function MergeTable({
                         }
 
                         if (nuevoSugerido) {
-                          const categoriaIdOverride = categoriaIdPorGrupo[rawNombre];
+                          const categoriaIdOverride =
+                            categoriaIdPorGrupo[rawNombre];
                           const categoriaNombreEfectiva = categoriaIdOverride
                             ? (nombrePorIdCategoria(categoriaIdOverride) ??
                               nuevoSugerido.categoriaSugerida.categoriaNombre)
                             : nuevoSugerido.categoriaSugerida.categoriaNombre;
+                          // Si la sugerencia salió del árbol real ya trae
+                          // el id resuelto; el lookup por nombre queda
+                          // solo como fallback del diccionario plano.
                           const categoriaIdEfectiva =
                             categoriaIdOverride ??
+                            nuevoSugerido.categoriaId ??
                             idPorNombreCategoria(
                               nuevoSugerido.categoriaSugerida.categoriaNombre,
                             );
                           return (
                             <div className="flex flex-col gap-2">
-                              <div className="flex items-start justify-between gap-2 p-2 bg-violet-50/60 border border-violet-200 rounded-md">
+                              <div className="flex items-start justify-between gap-2 p-2 bg-accent-indigo/10 border border-accent-indigo rounded-md">
                                 <div className="min-w-0">
-                                  <p className="font-semibold text-violet-700 flex items-center gap-1.5 truncate">
+                                  <p className="font-semibold text-foreground flex items-center gap-1.5 truncate">
                                     <Sparkles className="w-3.5 h-3.5 shrink-0" />
                                     {categoriaNombreEfectiva}
                                   </p>
-                                  <p className="text-[11px] text-violet-700/70 mt-0.5">
+                                  <p className="text-[11px] text-muted-foreground mt-0.5">
                                     Sugerido por &quot;
-                                    {nuevoSugerido.categoriaSugerida.matchedKeyword}&quot;
+                                    {
+                                      nuevoSugerido.categoriaSugerida
+                                        .matchedKeyword
+                                    }
+                                    &quot;
                                   </p>
                                 </div>
                                 <Button
                                   size="sm"
-                                  className="h-8 text-xs bg-violet-600 hover:bg-violet-700 text-white shrink-0"
+                                  className="h-8 text-xs bg-accent-indigo hover:bg-accent-indigo/80 text-white shrink-0"
                                   disabled={loadingPorGrupo[rawNombre]}
                                   onClick={() =>
                                     handleCrearSugerido(
@@ -1267,6 +1504,26 @@ export function MergeTable({
                                   No es esta categoría — elegir a mano
                                 </summary>
                                 <div className="mt-2 flex flex-col gap-2">
+                                  {/* Selector de CATEGORÍA (lo que promete el
+                                      label) — arranca en la sugerencia
+                                      vigente, así corregirla es un solo
+                                      paso y no se pierde lo ya elegido.
+                                      Antes acá solo había un buscador de
+                                      producto + "Crear", que abría el modal
+                                      con la categoría en blanco. */}
+                                  <CategoriaPadreHijoSelect
+                                    arbol={arbolCategoriasDB}
+                                    categoriasFlat={categoriasDB}
+                                    value={categoriaIdEfectiva ?? ""}
+                                    onChange={(val) =>
+                                      setCategoriaIdPorGrupo((prev) => ({
+                                        ...prev,
+                                        [rawNombre]: val,
+                                      }))
+                                    }
+                                    size="sm"
+                                    triggerClassName="h-8 w-full bg-background"
+                                  />
                                   {fallbackManual}
                                 </div>
                               </details>
@@ -1420,23 +1677,17 @@ export function MergeTable({
 
             <div className="space-y-2">
               <Label>Categoría</Label>
-              <Select
+              <CategoriaPadreHijoSelect
+                arbol={arbolCategoriasDB}
+                categoriasFlat={categoriasDB}
                 value={nuevoProductoData.categoriaId}
-                onValueChange={(val) =>
-                  setNuevoProductoData({ ...nuevoProductoData, categoriaId: val })
+                onChange={(val) =>
+                  setNuevoProductoData({
+                    ...nuevoProductoData,
+                    categoriaId: val,
+                  })
                 }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecciona una categoría..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-50">
-                  {categoriasDB.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
 
             <div className="space-y-2">
@@ -1477,9 +1728,9 @@ export function MergeTable({
                 </p>
               )}
               {grupoTieneCostoDisperso && (
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-md p-2.5 mt-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-900 font-medium leading-tight">
+                <div className="flex items-start gap-2 bg-accent-orange/10 border border-accent-orange rounded-md p-2.5 mt-2">
+                  <AlertTriangle className="w-4 h-4 text-accent-orange shrink-0 mt-0.5" />
+                  <p className="text-xs text-accent-orange font-medium leading-tight">
                     Este grupo tiene variantes con distinto costo — se va a
                     aplicar el precio calculado por variante, no un valor único.
                   </p>
@@ -1561,7 +1812,9 @@ export function MergeTable({
       <AlertDialog open={draftState === "prompt"}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Progreso sin confirmar encontrado</AlertDialogTitle>
+            <AlertDialogTitle>
+              Progreso sin confirmar encontrado
+            </AlertDialogTitle>
             <AlertDialogDescription>
               Encontramos un progreso sin confirmar de esta conciliación.
               ¿Querés continuar donde quedaste?
