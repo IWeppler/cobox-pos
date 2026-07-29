@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Producto } from "@/entities/productos/types";
+import type { Rubro } from "@/entities/config/types";
 import { matchPorNombre, matchSkuExacto, normalizarQuery } from "../lib/matching";
 import { confirmarCargaAction } from "../actions/confirmar-carga";
+import { buscarEnCatalogoMaestroAction } from "../actions/buscar-en-maestro";
+import type { PrefillMaestro } from "../lib/maestro-prefill";
 import type { LineaCarga, LineaCargaExistente, LineaCargaNueva } from "../types";
 
 type AltaRapidaPendiente = {
@@ -12,6 +15,10 @@ type AltaRapidaPendiente = {
   codigoPrefill: string;
   queryOriginal: string;
   editando: LineaCargaNueva | null;
+  /** No-null cuando el EAN escaneado matcheó en el Catálogo Maestro: el
+   * modal arranca con nombre/marca/modelo/atributos ya cargados y el
+   * empleado solo confirma cantidad y precio. */
+  maestro: PrefillMaestro | null;
 };
 
 type VarianteResuelta = {
@@ -31,7 +38,7 @@ function pareceCodigo(q: string): boolean {
   return !/\s/.test(q);
 }
 
-export function useCargaRapida(productos: Producto[]) {
+export function useCargaRapida(productos: Producto[], rubro: Rubro) {
   const [lineas, setLineas] = useState<LineaCarga[]>([]);
   const [query, setQuery] = useState("");
   const [pickerCandidatos, setPickerCandidatos] = useState<Producto[] | null>(
@@ -43,6 +50,7 @@ export function useCargaRapida(productos: Producto[]) {
     null,
   );
   const [isConfirming, setIsConfirming] = useState(false);
+  const [buscandoEnMaestro, setBuscandoEnMaestro] = useState(false);
   const [recargoGlobal, setRecargoGlobal] = useState<number | "">("");
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -102,6 +110,9 @@ export function useCargaRapida(productos: Producto[]) {
       nombrePrefill: linea.nombre,
       codigoPrefill: linea.codigo ?? "",
       editando: linea,
+      // Al reeditar, los datos del maestro ya están copiados en la línea —
+      // no se vuelve a consultar.
+      maestro: null,
     });
   }
 
@@ -130,7 +141,7 @@ export function useCargaRapida(productos: Producto[]) {
     setVariantSelectorProducto(producto);
   }
 
-  function procesarEnter(rawQuery: string) {
+  async function procesarEnter(rawQuery: string) {
     const q = rawQuery.trim();
     if (!q) return;
 
@@ -199,13 +210,37 @@ export function useCargaRapida(productos: Producto[]) {
     const candidatos = matchPorNombre(productos, q);
     if (candidatos.length === 0) {
       const esCodigo = pareceCodigo(q);
+
+      // 4. Último recurso antes del alta manual: si parece un código, se
+      // consulta el Catálogo Maestro (otro proyecto, solo lectura). Solo
+      // para códigos — buscar un nombre tipeado ahí no tendría sentido, el
+      // maestro se indexa por EAN — y solo en electro: el maestro no tiene
+      // nada que decir sobre una remera, así que en indumentaria ni se
+      // intenta (la action lo rechaza igual; esto evita el viaje y el
+      // spinner de "Buscando en el Catálogo Maestro…").
+      //
+      // La query se limpia ANTES del await para que la pickeadora no quede
+      // acumulando el próximo escaneo sobre el texto viejo mientras vuelve
+      // la red.
+      setQuery("");
+
+      let maestro: PrefillMaestro | null = null;
+      if (esCodigo && rubro === "electro") {
+        setBuscandoEnMaestro(true);
+        try {
+          maestro = await buscarEnCatalogoMaestroAction(q);
+        } finally {
+          setBuscandoEnMaestro(false);
+        }
+      }
+
       setAltaRapida({
-        nombrePrefill: esCodigo ? "" : q,
+        nombrePrefill: maestro?.nombre ?? (esCodigo ? "" : q),
         codigoPrefill: esCodigo ? q : "",
         queryOriginal: normalizado,
         editando: null,
+        maestro,
       });
-      setQuery("");
       return;
     }
     if (candidatos.length === 1) {
@@ -222,6 +257,7 @@ export function useCargaRapida(productos: Producto[]) {
       nombre: string;
       codigo: string;
       marca: string;
+      modelo: string;
       categoriaId: string;
       precioCompra: number;
       precioVenta: number;
@@ -243,9 +279,12 @@ export function useCargaRapida(productos: Producto[]) {
       nombre: datos.nombre,
       codigo: datos.codigo.trim() || null,
       marca: datos.marca.trim() || null,
+      modelo: datos.modelo.trim() || null,
       categoriaId: datos.categoriaId || null,
       precioCompra: datos.precioCompra,
       precioVenta: datos.precioVenta,
+      // Se preserva al reeditar una línea que ya venía del maestro.
+      idMaster: altaRapida.maestro?.idMaster ?? altaRapida.editando?.idMaster ?? null,
     };
     const nueva: LineaCargaNueva = datos.tieneVariantes
       ? {
@@ -344,6 +383,7 @@ export function useCargaRapida(productos: Producto[]) {
     removeLinea,
     confirmar,
     isConfirming,
+    buscandoEnMaestro,
     inputRef,
     modalAbierto,
     recargoGlobal,

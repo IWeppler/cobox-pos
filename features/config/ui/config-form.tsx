@@ -41,9 +41,6 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
         toast.success("Configuración actualizada correctamente.");
         setLogoFile(null);
 
-        // posName/posLogo viajan dentro de las 3 queries de catálogo
-        // cacheadas por React Query: sin esto, Evelyn vería su propio
-        // cambio recién a los 3 min de staleTime.
         CATALOG_QUERY_KEYS.forEach((key) =>
           queryClient.invalidateQueries({ queryKey: key }),
         );
@@ -175,7 +172,7 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
               id="direccion"
               name="direccion"
               defaultValue={config.direccion}
-              placeholder="Ej: Av. San Martín 456, Tostado"
+              placeholder="Ej: Av. San Martín 456, Santa Fe"
             />
           </div>
 

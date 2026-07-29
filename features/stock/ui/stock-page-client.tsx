@@ -5,6 +5,7 @@ import { getStockPageDataAction } from "@/features/stock/actions/get-product";
 import { queryKeys } from "@/shared/lib/query-keys";
 import { StockView } from "@/features/stock/ui/stock-view";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { RUBRO_DEFAULT } from "@/entities/config/types";
 
 const CATALOG_STALE_TIME_MS = 3 * 60 * 1000;
 
@@ -40,6 +41,7 @@ export function StockPageClient({ userRole }: { userRole: string }) {
         userRole={userRole}
         nombreComercio={data?.data?.nombreComercio ?? "Tienda Online"}
         mostrarSinStock={data?.data?.mostrarSinStock ?? true}
+        rubro={data?.data?.rubro ?? RUBRO_DEFAULT}
       />
     </div>
   );

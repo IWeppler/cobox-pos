@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Percent } from "lucide-react";
+import { ArrowLeft, Loader2, Percent } from "lucide-react";
 import { Producto } from "@/entities/productos/types";
+import type { Rubro } from "@/entities/config/types";
 import { Input } from "@/shared/ui/input";
 import { QuickAddModal } from "@/features/pos/ui/quick-add-modal";
 import { useCargaRapida } from "../hooks/use-carga-rapida";
@@ -13,10 +14,12 @@ import { CargaRapidaQuickCreateModal } from "./carga-rapida-quick-create-modal";
 
 interface CargaRapidaPageClientProps {
   productosIniciales: Producto[];
+  rubro: Rubro;
 }
 
 export function CargaRapidaPageClient({
   productosIniciales,
+  rubro,
 }: Readonly<CargaRapidaPageClientProps>) {
   const {
     lineas,
@@ -37,11 +40,12 @@ export function CargaRapidaPageClient({
     removeLinea,
     confirmar,
     isConfirming,
+    buscandoEnMaestro,
     inputRef,
     modalAbierto,
     recargoGlobal,
     setRecargoGlobal,
-  } = useCargaRapida(productosIniciales);
+  } = useCargaRapida(productosIniciales, rubro);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 px-2 py-2">
@@ -78,13 +82,24 @@ export function CargaRapidaPageClient({
         </div>
       </div>
 
-      <CargaRapidaInput
-        value={query}
-        onChange={setQuery}
-        onEnter={procesarEnter}
-        disabled={modalAbierto}
-        inputRef={inputRef}
-      />
+      <div className="space-y-1.5">
+        <CargaRapidaInput
+          value={query}
+          onChange={setQuery}
+          onEnter={procesarEnter}
+          // Durante la consulta al maestro el input queda bloqueado: si no,
+          // un segundo escaneo de la pickeadora entra mientras vuelve la red
+          // y pisa el alta que está por abrirse.
+          disabled={modalAbierto || buscandoEnMaestro}
+          inputRef={inputRef}
+        />
+        {buscandoEnMaestro ? (
+          <p className="flex items-center gap-1.5 pl-1 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Buscando en el Catálogo Maestro…
+          </p>
+        ) : null}
+      </div>
 
       <CargaRapidaLista
         lineas={lineas}

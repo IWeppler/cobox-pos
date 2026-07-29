@@ -1,5 +1,17 @@
 export type RecargoMoraTipo = "NINGUNO" | "MONTO_FIJO" | "PORCENTAJE";
 
+/** Rubro del comercio. Decide qué columnas muestra Inventario: indumentaria
+ * razona por talle/color (N variantes), electro por modelo/EAN. */
+export type Rubro = "indumentaria" | "electro";
+
+export const RUBRO_DEFAULT: Rubro = "indumentaria";
+
+/** Fail-closed: un rubro desconocido (columna nueva, valor viejo, fila sin
+ * config) cae a indumentaria, que es el comportamiento previo a T4. */
+export function normalizarRubro(valor: unknown): Rubro {
+  return valor === "electro" ? "electro" : RUBRO_DEFAULT;
+}
+
 export interface ConfiguracionPOS {
   id: string;
   posName: string;
@@ -55,4 +67,7 @@ export interface ConfiguracionPOS {
 
   // Configuración de Stock
   permitir_venta_sin_stock?: boolean;
+
+  // Rubro del comercio (T4) — default 'indumentaria' en la BD
+  rubro?: Rubro;
 }

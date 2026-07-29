@@ -17,6 +17,11 @@ import { useActiveCategories } from "@/features/stock/hooks/use-active-categorie
 import { useVariantSelection } from "@/features/stock/hooks/use-variant-selection";
 import type { Opcion, VarianteInput } from "@/features/stock/types";
 import type { LineaCargaNueva } from "../types";
+import {
+  prefillAVariantes,
+  type PrefillMaestro,
+} from "../lib/maestro-prefill";
+import { Sparkles } from "lucide-react";
 
 interface AltaRapidaPendiente {
   nombrePrefill: string;
@@ -26,12 +31,15 @@ interface AltaRapidaPendiente {
    * agregada (hoy solo pasa con líneas con variantes: no hay "cantidad"
    * única para sumar con un simple +1 al reescanear). */
   editando: LineaCargaNueva | null;
+  /** No-null cuando el EAN matcheó en el Catálogo Maestro. */
+  maestro: PrefillMaestro | null;
 }
 
 type DatosGuardar = {
   nombre: string;
   codigo: string;
   marca: string;
+  modelo: string;
   categoriaId: string;
   precioCompra: number;
   precioVenta: number;
@@ -80,11 +88,26 @@ function CargaRapidaQuickCreateModalContent({
   onGuardar: CargaRapidaQuickCreateModalProps["onGuardar"];
 }>) {
   const editando = altaRapida.editando;
+  const maestro = altaRapida.maestro;
   const categorias = useActiveCategories();
+
+  // Del maestro sale UNA combinación concreta (128GB / 4GB / Black), así que
+  // el alta arranca ya en modo variantes con esa fila cargada y el EAN como
+  // sku. Se calcula una sola vez: el modal se remonta por `key` cuando
+  // cambia el alta, así que no hace falta re-sincronizar por efecto.
+  const [prefillVariantes] = useState(() =>
+    maestro ? prefillAVariantes(maestro) : null,
+  );
+  const tienePrefillDeVariantes =
+    prefillVariantes !== null && prefillVariantes.opciones.length > 0;
+
   const [nombre, setNombre] = useState(editando?.nombre ?? altaRapida.nombrePrefill);
   const [codigo, setCodigo] = useState(editando?.codigo ?? altaRapida.codigoPrefill);
-  const [marca, setMarca] = useState(editando?.marca ?? "");
-  const [categoriaId, setCategoriaId] = useState(editando?.categoriaId ?? "");
+  const [marca, setMarca] = useState(editando?.marca ?? maestro?.marca ?? "");
+  const [modelo, setModelo] = useState(editando?.modelo ?? maestro?.modelo ?? "");
+  const [categoriaId, setCategoriaId] = useState(
+    editando?.categoriaId ?? maestro?.categoriaId ?? "",
+  );
   const [cantidad, setCantidad] = useState(
     editando && !editando.tieneVariantes ? String(editando.cantidad) : "1",
   );
@@ -95,12 +118,17 @@ function CargaRapidaQuickCreateModalContent({
     editando ? String(editando.precioVenta) : "",
   );
   const [showVariantes, setShowVariantes] = useState(
-    editando?.tieneVariantes ?? false,
+    editando?.tieneVariantes ?? tienePrefillDeVariantes,
   );
   const variantSelection = useVariantSelection(
     editando?.tieneVariantes
       ? { initialOpciones: editando.opciones, initialVariantes: editando.variantes }
-      : undefined,
+      : tienePrefillDeVariantes
+        ? {
+            initialOpciones: prefillVariantes.opciones,
+            initialVariantes: prefillVariantes.variantes,
+          }
+        : undefined,
   );
 
   const cantidadNum = Number.parseInt(cantidad, 10);
@@ -141,6 +169,7 @@ function CargaRapidaQuickCreateModalContent({
       nombre: nombre.trim(),
       codigo,
       marca,
+      modelo,
       categoriaId,
       precioCompra: precioCompraNum,
       precioVenta: precioVentaFinal,
@@ -166,11 +195,35 @@ function CargaRapidaQuickCreateModalContent({
           {editando ? "Editar variantes" : "Producto nuevo"}
         </DialogTitle>
         <p className="text-sm text-muted-foreground mt-1">
-          {editando
-            ? "Ajustá talles, colores y stock antes de confirmar la carga."
-            : "No se encontró en el catálogo — completá lo básico para recibirlo."}
+          {(() => {
+            if (editando) {
+              return "Ajustá talles, colores y stock antes de confirmar la carga.";
+            }
+            if (maestro) {
+              return "Encontrado en el Catálogo Maestro — revisá los datos y cargá cantidad y precio.";
+            }
+            return "No se encontró en el catálogo — completá lo básico para recibirlo.";
+          })()}
         </p>
       </DialogHeader>
+
+      {maestro && !editando ? (
+        <div className="mx-2 mt-2 flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div className="min-w-0 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">
+              Precargado desde el Catálogo Maestro
+            </p>
+            <p className="mt-0.5">
+              {maestro.categoriaId
+                ? `Categoría "${maestro.categoriaMaestro}" ya seleccionada.`
+                : `El maestro lo clasifica como "${maestro.categoriaMaestro}", pero esa categoría no existe en tu catálogo — elegila a mano.`}{" "}
+              Los datos se guardan como propios del producto: podés editarlos
+              y no dependen del maestro para vender.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="p-2 space-y-4 max-h-[70vh] overflow-y-auto">
         <div className="space-y-1.5">
@@ -192,13 +245,23 @@ function CargaRapidaQuickCreateModalContent({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <Label>Marca (opcional)</Label>
-          <Input
-            value={marca}
-            onChange={(e) => setMarca(e.target.value)}
-            placeholder="Marca"
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Marca (opcional)</Label>
+            <Input
+              value={marca}
+              onChange={(e) => setMarca(e.target.value)}
+              placeholder="Marca"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Modelo (opcional)</Label>
+            <Input
+              value={modelo}
+              onChange={(e) => setModelo(e.target.value)}
+              placeholder="Modelo oficial"
+            />
+          </div>
         </div>
 
         <ProductCategorySection

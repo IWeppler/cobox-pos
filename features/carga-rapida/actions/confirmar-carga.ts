@@ -113,6 +113,10 @@ async function procesarLineaNueva(
   formData.set("nombre", linea.nombre);
   formData.set("sku", linea.codigo ?? "");
   formData.set("marca", linea.marca ?? "");
+  formData.set("modelo", linea.modelo ?? "");
+  // Referencia al Catálogo Maestro. Los datos ya viajan copiados en los
+  // campos de arriba — esto es solo trazabilidad.
+  formData.set("id_master", linea.idMaster ?? "");
   formData.set("categoria_id", linea.categoriaId ?? "");
   formData.set("descripcion", "");
   formData.set("precio", String(linea.precioVenta));

@@ -20,9 +20,16 @@ type LineaCargaNuevaBase = {
   nombre: string;
   codigo: string | null;
   marca: string | null;
+  /** Modelo oficial (T4/T5). Se precarga del Catálogo Maestro cuando el EAN
+   * matchea, y queda editable. */
+  modelo: string | null;
   categoriaId: string | null;
   precioCompra: number;
   precioVenta: number;
+  /** Referencia al producto del maestro del que se precargó, si hubo match.
+   * Los datos ya están COPIADOS en los campos de arriba: esto es solo
+   * trazabilidad, nada de la venta depende de poder resolverlo después. */
+  idMaster: string | null;
 };
 
 /** Producto nuevo simple: una sola línea, cantidad editable inline en la

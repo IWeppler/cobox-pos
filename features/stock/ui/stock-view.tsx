@@ -14,12 +14,16 @@ import { StockFiltersToolbar } from "./stock-filters-toolbar";
 import { getTotalStock } from "../lib/stock-product-utils";
 import { createClient } from "@/shared/config/supabase/client";
 import { construirArbolCategorias } from "@/shared/utils/category-tree";
+import type { Rubro } from "@/entities/config/types";
 
 interface StockViewProps {
   productosIndice: ProductoIndice[];
   userRole: string;
   nombreComercio: string;
   mostrarSinStock: boolean;
+  /** Decide si la fila muestra "N var." (indumentaria) o Modelo + EAN
+   * (electro). Ver StockTable/StockGrid. */
+  rubro: Rubro;
 }
 
 interface CategoriaDB {
@@ -37,6 +41,7 @@ export function StockView({
   userRole,
   nombreComercio,
   mostrarSinStock,
+  rubro,
 }: Readonly<StockViewProps>) {
   const [view, setView] = useState<"table" | "grid">("table");
   const [paginaActual, setPaginaActual] = useState(1);
@@ -371,6 +376,7 @@ export function StockView({
             orden={orden}
             onSort={handleSort}
             categoriasArbol={categoriasDB}
+            rubro={rubro}
           />
         ) : (
           <StockGrid
@@ -379,6 +385,7 @@ export function StockView({
             nombreComercio={nombreComercio}
             mostrarSinStock={mostrarSinStock}
             categorias={categoriasDB}
+            rubro={rubro}
           />
         )}
       </div>

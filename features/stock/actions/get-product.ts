@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { Producto, ProductoIndice } from "@/entities/productos/types";
+import { normalizarRubro, type Rubro } from "@/entities/config/types";
 import {
   anotarStockDisponible,
   contarReservasActivasPorVariante,
@@ -68,11 +69,11 @@ export async function getStockIndexAction(): Promise<{
       .from("productos")
       .select(
         `
-        id, nombre, tipo, precio, precio_costo, categoria_id, marca,
+        id, nombre, tipo, precio, precio_costo, categoria_id, marca, modelo,
         imagen_url, thumbnail_url, grid_url, slug, publicado,
         categoria:categorias(id, nombre, slug),
         producto_variantes(
-          id, nombre_display, precio, costo, stock, atributos,
+          id, sku, nombre_display, precio, costo, stock, atributos,
           producto_variante_valores(
             atributo:atributos(nombre),
             atributo_valor:atributo_valores(valor)
@@ -102,6 +103,7 @@ export async function getStockPageDataAction(): Promise<{
     productosIndice: ProductoIndice[];
     nombreComercio: string;
     mostrarSinStock: boolean;
+    rubro: Rubro;
   } | null;
   error: string | null;
 }> {
@@ -112,7 +114,7 @@ export async function getStockPageDataAction(): Promise<{
     getStockIndexAction(),
     supabase
       .from("configuracion_pos")
-      .select("posName, mostrar_sin_stock")
+      .select("posName, mostrar_sin_stock, rubro")
       .single(),
   ]);
 
@@ -120,11 +122,26 @@ export async function getStockPageDataAction(): Promise<{
     return { data: null, error: result.error };
   }
 
+  // No aborta la pantalla —el inventario se puede seguir usando sin la
+  // config— pero tampoco se traga el error: si esta consulta falla, los tres
+  // valores de abajo caen al default a la vez y el síntoma que ve la dueña es
+  // "mi comercio se llama Tienda Online y volvieron a aparecer los productos
+  // sin stock", sin ninguna pista de por qué.
+  if (configRes.error) {
+    console.error(
+      "[getStockPageDataAction] No se pudo leer configuracion_pos; se usan defaults:",
+      configRes.error,
+    );
+  }
+
   return {
     data: {
       productosIndice: result.data ?? [],
       nombreComercio: configRes.data?.posName || "Tienda Online",
       mostrarSinStock: configRes.data?.mostrar_sin_stock ?? true,
+      // normalizarRubro es fail-closed: si la config no cargó o trae un valor
+      // desconocido, Inventario se comporta como indumentaria (lo de antes).
+      rubro: normalizarRubro(configRes.data?.rubro),
     },
     error: null,
   };

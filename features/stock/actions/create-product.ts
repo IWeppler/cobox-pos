@@ -18,7 +18,19 @@ export async function crearProductoAction(
   const categoria_id = formData.get("categoria_id") as string;
   const descripcion = formData.get("descripcion") as string;
   const marca = (formData.get("marca") as string | null)?.trim() || null;
+  const modelo = (formData.get("modelo") as string | null)?.trim() || null;
   const sku = (formData.get("sku") as string | null)?.trim() || null;
+  // Referencia opcional al Catálogo Maestro (T5). Se valida como UUID antes
+  // de tocar la base: un valor basura acá rompería el INSERT entero del
+  // producto por un campo que es meramente informativo.
+  const idMasterRaw = (formData.get("id_master") as string | null)?.trim();
+  const id_master =
+    idMasterRaw &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      idMasterRaw,
+    )
+      ? idMasterRaw
+      : null;
   const precio = Number.parseFloat(formData.get("precio") as string);
   const precio_costo = Number.parseFloat(
     formData.get("precio_costo") as string,
@@ -145,6 +157,13 @@ export async function crearProductoAction(
       categoria_id: categoria_id || null,
       descripcion,
       marca,
+      // Sin valor, la clave NO viaja: se omite entera en vez de mandar null.
+      // Omitir deja que la columna aplique su DEFAULT; un null explícito lo
+      // pisa. Hoy ambas son nullable sin default, así que el resultado es el
+      // mismo — pero si mañana alguna gana un default, este insert no lo
+      // rompe en silencio.
+      ...(modelo ? { modelo } : {}),
+      ...(id_master ? { id_master } : {}),
       precio,
       precio_costo,
       imagen_url,

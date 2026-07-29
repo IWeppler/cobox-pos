@@ -19,6 +19,8 @@ import {
   resolverCategoriaDisplayLabel,
   type CategoriaBase,
 } from "@/shared/utils/category-tree";
+import { badgesIdentidad } from "../lib/identidad-por-rubro";
+import type { Rubro } from "@/entities/config/types";
 
 interface StockGridProps {
   productos: ProductoIndice[];
@@ -29,6 +31,8 @@ interface StockGridProps {
    * "Padre › Hijo" de cada producto — mismo fetch que stock-view.tsx ya usa
    * para los chips, no uno nuevo. */
   categorias: CategoriaBase[];
+  /** indumentaria -> badge "N var."; electro -> Modelo + EAN. */
+  rubro: Rubro;
 }
 
 export function StockGrid({
@@ -36,6 +40,7 @@ export function StockGrid({
   nombreComercio,
   mostrarSinStock,
   categorias,
+  rubro,
 }: Readonly<StockGridProps>) {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
 
@@ -136,11 +141,26 @@ export function StockGrid({
                   {producto.nombre}
                 </h3>
               </div>
-              {producto.marca && (
-                <span className="text-[9px] uppercase font-medium tracking-wider bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50 w-fit mt-0.5 truncate max-w-full">
-                  {producto.marca}
-                </span>
-              )}
+              <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                {producto.marca && (
+                  <span className="text-[9px] uppercase font-medium tracking-wider bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50 w-fit truncate max-w-full">
+                    {producto.marca}
+                  </span>
+                )}
+                {badgesIdentidad(
+                  producto,
+                  producto.producto_variantes ?? [],
+                  rubro,
+                ).map((badge) => (
+                  <span
+                    key={badge.clave}
+                    title={badge.titulo}
+                    className="text-[9px] uppercase font-medium tracking-wider bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50 w-fit truncate max-w-full"
+                  >
+                    {badge.texto}
+                  </span>
+                ))}
+              </div>
               <p
                 className="text-[11px] text-muted-foreground mt-0.5 truncate"
                 title={categoriaLabel || undefined}

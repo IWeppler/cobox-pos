@@ -54,6 +54,9 @@ export interface Producto {
   slug: string | null;
   descripcion?: string | null;
   marca?: string | null;
+  /** Modelo oficial del fabricante (T4, rubro electro). Texto libre, mismo
+   * patrón que `marca`. Nullable: en indumentaria no se usa. */
+  modelo?: string | null;
   atributos_globales?: Record<string, string>;
   stock?: ProductoStock[];
   producto_variantes?: ProductoVariante[];
@@ -68,10 +71,15 @@ export interface Producto {
  * superficie necesita el suyo: la tabla usa el thumbnail (150px, fila
  * chica), la grilla usa `grid_url` (320px, celda de ~230-400px en
  * tablet — ver diagnóstico de borrosidad). Sigue sin traer `descripcion`,
- * `creado_en` ni `sku`/`producto_variante_valores` completos de variante —
- * esos solo hacen falta para el formulario de edición de UN producto, que
- * los trae con su propio fetch on-demand al abrir el sheet (ver
+ * `creado_en` ni `producto_variante_valores` completos de variante — esos
+ * solo hacen falta para el formulario de edición de UN producto, que los
+ * trae con su propio fetch on-demand al abrir el sheet (ver
  * getStockDetalleProductoAction).
+ *
+ * `sku` de variante SÍ se trae desde T4: en rubro electro la fila de
+ * inventario muestra el EAN, que se guarda en ese mismo campo. Es un texto
+ * corto por variante y evita un segundo fetch por fila; en indumentaria
+ * queda sin leer.
  */
 export type ProductoIndice = Pick<
   Producto,
@@ -82,6 +90,7 @@ export type ProductoIndice = Pick<
   | "precio_costo"
   | "categoria_id"
   | "marca"
+  | "modelo"
   | "imagen_url"
   | "thumbnail_url"
   | "grid_url"
@@ -92,6 +101,7 @@ export type ProductoIndice = Pick<
   producto_variantes?: Pick<
     ProductoVariante,
     | "id"
+    | "sku"
     | "nombre_display"
     | "precio"
     | "costo"

@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Tienda Oficial | Emprendimiento Tostado",
+  title: "Tienda Oficial | Emprendimiento Santa Fe",
   description: "Encontra el producto que buscás.",
 };
 

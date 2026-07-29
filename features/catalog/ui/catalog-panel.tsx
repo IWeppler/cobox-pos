@@ -253,7 +253,7 @@ export function CatalogPanel({ config }: Readonly<CatalogPanelProps>) {
               <Input
                 value={formData.instagram}
                 onChange={(e) => handleChange("instagram", e.target.value)}
-                placeholder="https://instagram.com/tu_vivero"
+                placeholder="https://instagram.com/tu_negocio"
                 className="bg-muted/50 border-border"
               />
             </div>
@@ -266,7 +266,7 @@ export function CatalogPanel({ config }: Readonly<CatalogPanelProps>) {
               <Input
                 value={formData.facebook}
                 onChange={(e) => handleChange("facebook", e.target.value)}
-                placeholder="https://facebook.com/tu_vivero"
+                placeholder="https://facebook.com/tu_negocio"
                 className="bg-muted/50 border-border"
               />
             </div>
@@ -288,7 +288,7 @@ export function CatalogPanel({ config }: Readonly<CatalogPanelProps>) {
                 onChange={(e) =>
                   handleChange("localidad_negocio", e.target.value)
                 }
-                placeholder="Ej: Tostado"
+                placeholder="Ej: Santa Fe"
                 className="bg-muted/50 border-border"
               />
               <p className="text-xs text-muted-foreground">

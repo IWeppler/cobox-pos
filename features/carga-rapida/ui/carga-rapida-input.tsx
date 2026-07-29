@@ -7,7 +7,9 @@ import type { RefObject } from "react";
 interface CargaRapidaInputProps {
   value: string;
   onChange: (value: string) => void;
-  onEnter: (value: string) => void;
+  /** Puede ser async: desde T5 el Enter consulta el Catálogo Maestro cuando
+   * no hay match local. */
+  onEnter: (value: string) => void | Promise<void>;
   disabled: boolean;
   inputRef: RefObject<HTMLInputElement | null>;
 }
@@ -31,7 +33,7 @@ export function CargaRapidaInput({
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            onEnter(value);
+            void onEnter(value);
           }
         }}
         placeholder="Escaneá o escribí código, SKU o nombre..."

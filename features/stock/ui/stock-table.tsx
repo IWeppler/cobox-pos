@@ -63,6 +63,8 @@ import {
   resolverCategoriaDisplayLabel,
   type CategoriaBase,
 } from "@/shared/utils/category-tree";
+import { badgesIdentidad } from "../lib/identidad-por-rubro";
+import type { Rubro } from "@/entities/config/types";
 import {
   Select,
   SelectContent,
@@ -97,6 +99,8 @@ interface StockTableProps {
    * (useActiveCategories, más abajo) que solo trae raíces para el dropdown
    * de "mover a categoría". */
   categoriasArbol: CategoriaBase[];
+  /** indumentaria -> badge "N var."; electro -> Modelo + EAN. */
+  rubro: Rubro;
 }
 
 const obtenerPrimeraImagen = (imagenUrl: unknown): string | null => {
@@ -139,6 +143,7 @@ export function StockTable({
   orden,
   onSort,
   categoriasArbol,
+  rubro,
 }: Readonly<StockTableProps>) {
   const { isAdmin } = useStockCartActions(userRole);
   const queryClient = useQueryClient();
@@ -709,11 +714,19 @@ export function StockTable({
                                 {producto.marca}
                               </span>
                             )}
-                            {hasVariantes && (
-                              <span className="text-[9px] sm:text-[10px] uppercase font-medium tracking-wider bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50">
-                                {variantesVisibles.length} var.
+                            {badgesIdentidad(
+                              producto,
+                              variantesVisibles,
+                              rubro,
+                            ).map((badge) => (
+                              <span
+                                key={badge.clave}
+                                title={badge.titulo}
+                                className="text-[9px] sm:text-[10px] uppercase font-medium tracking-wider bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50 truncate max-w-32"
+                              >
+                                {badge.texto}
                               </span>
-                            )}
+                            ))}
                           </div>
                         </div>
                       </div>
