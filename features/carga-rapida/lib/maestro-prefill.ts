@@ -23,6 +23,28 @@ export type PrefillMaestro = {
   categoriaMaestro: string;
 };
 
+/**
+ * Un candidato de la búsqueda por texto, tal como se ofrece en el picker: lo
+ * justo para que el empleado reconozca el producto.
+ *
+ * NO trae los atributos resueltos ni la categoría local a propósito. Eso
+ * cuesta dos queries contra la base del comercio por fila, y de 3 candidatos
+ * se descartan 2: se resuelve recién cuando elige uno
+ * (obtenerPrefillMaestroAction).
+ */
+export type CandidatoMaestro = {
+  idMaster: string;
+  nombre: string;
+  marca: string | null;
+  modelo: string | null;
+  /** El maestro puede no tenerlo — de hecho 354 de 1267 filas no lo tienen,
+   * que es justo por lo que existe la búsqueda por texto. */
+  ean: string | null;
+  categoriaMaestro: string;
+  /** 0..1, para mostrar cuán confiable es el match. */
+  score: number;
+};
+
 /** Fila cruda de catalogo_maestro, tal como la devuelve el otro proyecto. */
 export type FilaCatalogoMaestro = {
   id_master: string;

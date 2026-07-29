@@ -58,9 +58,7 @@ export const VariantSelectionMatrix = memo(function VariantSelectionMatrix({
     selectedCombinations[key] ?? opcionesValidas.length === 1;
 
   const visibleKeys = yProp.valores.flatMap((yVal) =>
-    xValues.map((xVal) =>
-      buildCellKey(yVal, xProp ? xVal : null),
-    ),
+    xValues.map((xVal) => buildCellKey(yVal, xProp ? xVal : null)),
   );
 
   return (
@@ -91,7 +89,7 @@ export const VariantSelectionMatrix = memo(function VariantSelectionMatrix({
 
       <div className="flex items-center justify-between gap-2">
         <Label className="text-xs font-semibold text-muted-foreground">
-          Marcá las combinaciones que existen en tu inventario
+          Marcá las combinaciones
         </Label>
         <div className="flex gap-1">
           <Button

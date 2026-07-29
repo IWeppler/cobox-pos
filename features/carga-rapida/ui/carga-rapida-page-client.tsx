@@ -10,6 +10,7 @@ import { useCargaRapida } from "../hooks/use-carga-rapida";
 import { CargaRapidaInput } from "./carga-rapida-input";
 import { CargaRapidaLista } from "./carga-rapida-lista";
 import { CargaRapidaProductoPicker } from "./carga-rapida-producto-picker";
+import { CargaRapidaMaestroPicker } from "./carga-rapida-maestro-picker";
 import { CargaRapidaQuickCreateModal } from "./carga-rapida-quick-create-modal";
 
 interface CargaRapidaPageClientProps {
@@ -32,11 +33,16 @@ export function CargaRapidaPageClient({
     variantSelectorProducto,
     onCerrarVariantSelector,
     onSeleccionarVariante,
+    maestroCandidatos,
+    onElegirCandidatoMaestro,
+    onCargarManualDesdeMaestro,
+    resolviendoCandidato,
     altaRapida,
     onCancelarAltaRapida,
     onGuardarAltaRapida,
     onEditarLineaNueva,
     updateCantidad,
+    updatePrecioLinea,
     removeLinea,
     confirmar,
     isConfirming,
@@ -104,6 +110,7 @@ export function CargaRapidaPageClient({
       <CargaRapidaLista
         lineas={lineas}
         onUpdateCantidad={updateCantidad}
+        onUpdatePrecio={updatePrecioLinea}
         onRemove={removeLinea}
         onEditarNueva={onEditarLineaNueva}
         onConfirmar={confirmar}
@@ -122,6 +129,14 @@ export function CargaRapidaPageClient({
         onClose={onCerrarVariantSelector}
         permitirVentaSinStock
         onSelectVariante={onSeleccionarVariante}
+      />
+
+      <CargaRapidaMaestroPicker
+        candidatos={maestroCandidatos?.lista ?? null}
+        query={maestroCandidatos?.query ?? ""}
+        resolviendoId={resolviendoCandidato}
+        onElegir={onElegirCandidatoMaestro}
+        onCargarManual={onCargarManualDesdeMaestro}
       />
 
       <CargaRapidaQuickCreateModal

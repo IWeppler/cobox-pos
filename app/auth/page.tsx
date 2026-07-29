@@ -83,7 +83,7 @@ export default function AuthPage() {
                 <Leaf size={18} />
               </div>
               <div>
-                <div className="text-xs font-bold text-foreground mb-0.5">
+                <div className="text-xs font-bold text-[#0f172a] mb-0.5">
                   Nueva venta registrada
                 </div>
                 <div className="text-[10px] text-muted-foreground">

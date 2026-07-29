@@ -83,8 +83,8 @@ export default async function ProductoPage({ params }: Readonly<PageProps>) {
   //  Bloquear acceso si la tienda está desactivada
   if (config && config.catalogo_activo === false) {
     return (
-      <div className="min-h-screen bg-[#fffefe] flex flex-col items-center justify-center p-4">
-        <h1 className="text-2xl font-bold mb-2">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <h1 className="text-2xl font-foreground font-bold mb-2">
           Comercio Cerrado Temporalmente
         </h1>
         <p className="text-muted-foreground text-center max-w-sm">

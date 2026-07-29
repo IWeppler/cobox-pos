@@ -46,6 +46,19 @@ export type LineaCargaNuevaConVariantes = LineaCargaNuevaBase & {
   tieneVariantes: true;
   opciones: Opcion[];
   variantes: VarianteInput[];
+  /**
+   * Label fijo de la combinación cuando la variante YA vino resuelta del
+   * Catálogo Maestro (ej. "Black / 64 GB").
+   *
+   * En electro cada combinación memoria/color es una fila distinta del
+   * maestro, con su propio EAN y su propia caja: no hay matriz que armar. Con
+   * este campo la lista muestra la variante como texto fijo y edita precio y
+   * cantidad inline, en vez de mandar al modal de combinaciones (que existe
+   * para el caso de indumentaria: 5 talles x 3 colores en UN producto).
+   *
+   * undefined = el empleado armó las variantes a mano, el modal manda.
+   */
+  varianteFijaLabel?: string;
 };
 
 export type LineaCargaNueva =

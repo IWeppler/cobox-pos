@@ -60,7 +60,7 @@ import {
 } from "../actions/delete-product";
 import {
   construirArbolCategorias,
-  resolverCategoriaDisplayLabel,
+  resolverCategoriaDisplayPartes,
   type CategoriaBase,
 } from "@/shared/utils/category-tree";
 import { badgesIdentidad } from "../lib/identidad-por-rubro";
@@ -544,20 +544,17 @@ export function StockTable({
                 </button>
               </TableHead>
 
+              {/* Sin columna "Recargo": era 100% derivable de Costo y Precio.
+                  El % vive ahora como badge al lado del Precio. */}
               {isAdmin && (
-                <>
-                  <TableHead className="text-right hidden md:table-cell text-muted-foreground w-28">
-                    <button
-                      onClick={() => handleSort("costo")}
-                      className="flex items-center justify-end w-full gap-1.5 hover:text-foreground transition-colors group font-semibold"
-                    >
-                      Costo {renderSortIcon("costo")}
-                    </button>
-                  </TableHead>
-                  <TableHead className="text-right hidden lg:table-cell text-muted-foreground w-28">
-                    Recargo
-                  </TableHead>
-                </>
+                <TableHead className="text-right hidden md:table-cell text-muted-foreground w-28">
+                  <button
+                    onClick={() => handleSort("costo")}
+                    className="flex items-center justify-end w-full gap-1.5 hover:text-foreground transition-colors group font-semibold"
+                  >
+                    Costo {renderSortIcon("costo")}
+                  </button>
+                </TableHead>
               )}
 
               <TableHead className="text-right text-muted-foreground w-20 sm:w-28 text-xs sm:text-sm">
@@ -580,10 +577,15 @@ export function StockTable({
                 obtenerPrimeraImagen(producto.thumbnail_url) ??
                 obtenerPrimeraImagen(producto.imagen_url);
               const totalUnidades = getTotalStock(producto);
-              const categoriaLabel = resolverCategoriaDisplayLabel(
+              const categoriaPartes = resolverCategoriaDisplayPartes(
                 categoriasArbol,
                 producto.categoria_id,
               );
+              const categoriaTitulo = categoriaPartes
+                ? [categoriaPartes.padre, categoriaPartes.nombre]
+                    .filter(Boolean)
+                    .join(" › ")
+                : undefined;
               const variantesVisibles = getVariantesVisibles(producto, isAdmin);
 
               const isSelected = selectedIds.has(producto.id);
@@ -732,14 +734,25 @@ export function StockTable({
                       </div>
                     </TableCell>
 
-                    {/* CATEGORÍA (combinada "Padre › Hijo", o solo el nombre si aún no tiene padre) */}
+                    {/* CATEGORÍA — padre e hijo apilados, no "Padre › Hijo" en
+                        una línea: en 160px la versión horizontal se truncaba
+                        justo en la parte específica ("COMPLEMENTOS › ..."). */}
                     <TableCell className="py-2.5 hidden sm:table-cell text-muted-foreground text-sm max-w-40">
-                      <span
-                        className="block truncate"
-                        title={categoriaLabel || undefined}
-                      >
-                        {categoriaLabel}
-                      </span>
+                      {categoriaPartes && (
+                        <div
+                          className="flex flex-col min-w-0"
+                          title={categoriaTitulo}
+                        >
+                          {categoriaPartes.padre && (
+                            <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground/70 leading-tight">
+                              {categoriaPartes.padre}
+                            </span>
+                          )}
+                          <span className="truncate text-foreground text-xs sm:text-sm leading-tight">
+                            {categoriaPartes.nombre}
+                          </span>
+                        </div>
+                      )}
                     </TableCell>
 
                     {/* STOCK (Oculto en móviles) */}
@@ -769,40 +782,28 @@ export function StockTable({
                       </TableCell>
                     )}
 
-                    {/* RECARGO DE GANANCIA */}
-                    {isAdmin && (
-                      <TableCell className="text-right hidden lg:table-cell py-2.5">
-                        {preciosVarian ? (
-                          <span className="text-xs text-muted-foreground italic">
-                            Variable
+                    {/* PRECIO + badge de recargo derivado de costo/precio.
+                        El badge es solo para admin: el % de margen deja leer
+                        el costo por diferencia, y Costo ya es columna admin. */}
+                    <TableCell className="text-right font-mono font-medium text-xs sm:text-sm px-1 sm:px-0 py-1.5 sm:py-2.5 whitespace-nowrap tabular-nums">
+                      <div className="flex flex-col items-end gap-0.5">
+                        {rangoPrecio && !rangoPrecio.esUniforme ? (
+                          <span title="Las variantes tienen precios distintos">
+                            {formatearMoneda(rangoPrecio.min)} -{" "}
+                            {formatearMoneda(rangoPrecio.max)}
                           </span>
-                        ) : costo > 0 ? (
-                          <div className="flex flex-col items-end">
-                            <span className="font-mono font-medium text-emerald-700 dark:text-emerald-500 text-xs">
-                              +{formatearMoneda(gananciaNeta)}
-                            </span>
-                            <span className="text-xs text-muted-foreground font-medium">
-                              {recargoPorcentaje}% recargo
-                            </span>
-                          </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground italic">
-                            Sin costo
+                          <span>{formatearMoneda(precio)}</span>
+                        )}
+                        {isAdmin && !preciosVarian && costo > 0 && (
+                          <span
+                            title={`Recargo sobre el costo: +${formatearMoneda(gananciaNeta)}`}
+                            className="text-[9px] sm:text-[10px] font-sans font-medium leading-none px-1.5 py-0.5 rounded border bg-emerald-500/10 text-emerald-700 dark:text-emerald-500 border-emerald-500/20"
+                          >
+                            +{recargoPorcentaje}%
                           </span>
                         )}
-                      </TableCell>
-                    )}
-
-                    {/* PRECIO (Adaptado) */}
-                    <TableCell className="text-right font-mono font-medium text-xs sm:text-sm px-1 sm:px-0 py-1.5 sm:py-2.5 whitespace-nowrap tabular-nums">
-                      {rangoPrecio && !rangoPrecio.esUniforme ? (
-                        <span title="Las variantes tienen precios distintos">
-                          {formatearMoneda(rangoPrecio.min)} -{" "}
-                          {formatearMoneda(rangoPrecio.max)}
-                        </span>
-                      ) : (
-                        formatearMoneda(precio)
-                      )}
+                      </div>
                     </TableCell>
 
                     {/* ACCIONES (oculta en mobile: cubierta por selección + barra flotante) */}

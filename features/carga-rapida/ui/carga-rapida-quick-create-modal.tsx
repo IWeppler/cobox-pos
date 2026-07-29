@@ -17,10 +17,7 @@ import { useActiveCategories } from "@/features/stock/hooks/use-active-categorie
 import { useVariantSelection } from "@/features/stock/hooks/use-variant-selection";
 import type { Opcion, VarianteInput } from "@/features/stock/types";
 import type { LineaCargaNueva } from "../types";
-import {
-  prefillAVariantes,
-  type PrefillMaestro,
-} from "../lib/maestro-prefill";
+import { prefillAVariantes, type PrefillMaestro } from "../lib/maestro-prefill";
 import { Sparkles } from "lucide-react";
 
 interface AltaRapidaPendiente {
@@ -101,10 +98,16 @@ function CargaRapidaQuickCreateModalContent({
   const tienePrefillDeVariantes =
     prefillVariantes !== null && prefillVariantes.opciones.length > 0;
 
-  const [nombre, setNombre] = useState(editando?.nombre ?? altaRapida.nombrePrefill);
-  const [codigo, setCodigo] = useState(editando?.codigo ?? altaRapida.codigoPrefill);
+  const [nombre, setNombre] = useState(
+    editando?.nombre ?? altaRapida.nombrePrefill,
+  );
+  const [codigo, setCodigo] = useState(
+    editando?.codigo ?? altaRapida.codigoPrefill,
+  );
   const [marca, setMarca] = useState(editando?.marca ?? maestro?.marca ?? "");
-  const [modelo, setModelo] = useState(editando?.modelo ?? maestro?.modelo ?? "");
+  const [modelo, setModelo] = useState(
+    editando?.modelo ?? maestro?.modelo ?? "",
+  );
   const [categoriaId, setCategoriaId] = useState(
     editando?.categoriaId ?? maestro?.categoriaId ?? "",
   );
@@ -122,7 +125,10 @@ function CargaRapidaQuickCreateModalContent({
   );
   const variantSelection = useVariantSelection(
     editando?.tieneVariantes
-      ? { initialOpciones: editando.opciones, initialVariantes: editando.variantes }
+      ? {
+          initialOpciones: editando.opciones,
+          initialVariantes: editando.variantes,
+        }
       : tienePrefillDeVariantes
         ? {
             initialOpciones: prefillVariantes.opciones,
@@ -134,7 +140,8 @@ function CargaRapidaQuickCreateModalContent({
   const cantidadNum = Number.parseInt(cantidad, 10);
   const precioCompraNum = Number.parseFloat(precioCompra);
   const precioVentaNum = Number.parseFloat(precioVenta);
-  const precioVentaCargado = Number.isFinite(precioVentaNum) && precioVentaNum > 0;
+  const precioVentaCargado =
+    Number.isFinite(precioVentaNum) && precioVentaNum > 0;
   const recargoValido = recargoGlobal !== "" && Number(recargoGlobal) >= 0;
 
   // Precio de venta calculado por recargo global — mismo cálculo que
@@ -200,30 +207,12 @@ function CargaRapidaQuickCreateModalContent({
               return "Ajustá talles, colores y stock antes de confirmar la carga.";
             }
             if (maestro) {
-              return "Encontrado en el Catálogo Maestro — revisá los datos y cargá cantidad y precio.";
+              return "Encontrado en el Catálogo Maestro";
             }
             return "No se encontró en el catálogo — completá lo básico para recibirlo.";
           })()}
         </p>
       </DialogHeader>
-
-      {maestro && !editando ? (
-        <div className="mx-2 mt-2 flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
-          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-          <div className="min-w-0 text-xs text-muted-foreground">
-            <p className="font-medium text-foreground">
-              Precargado desde el Catálogo Maestro
-            </p>
-            <p className="mt-0.5">
-              {maestro.categoriaId
-                ? `Categoría "${maestro.categoriaMaestro}" ya seleccionada.`
-                : `El maestro lo clasifica como "${maestro.categoriaMaestro}", pero esa categoría no existe en tu catálogo — elegila a mano.`}{" "}
-              Los datos se guardan como propios del producto: podés editarlos
-              y no dependen del maestro para vender.
-            </p>
-          </div>
-        </div>
-      ) : null}
 
       <div className="p-2 space-y-4 max-h-[70vh] overflow-y-auto">
         <div className="space-y-1.5">
@@ -270,7 +259,11 @@ function CargaRapidaQuickCreateModalContent({
           onCategoriaSeleccionadaChange={setCategoriaId}
         />
 
-        <div className={showVariantes ? "grid grid-cols-2 gap-3" : "grid grid-cols-3 gap-3"}>
+        <div
+          className={
+            showVariantes ? "grid grid-cols-2 gap-3" : "grid grid-cols-3 gap-3"
+          }
+        >
           {!showVariantes && (
             <div className="space-y-1.5">
               <Label>Cantidad</Label>
@@ -318,9 +311,7 @@ function CargaRapidaQuickCreateModalContent({
 
         {showVariantes ? (
           <p className="text-xs text-muted-foreground -mt-2">
-            $ Compra / $ Venta de arriba son el precio base del producto —
-            dejá vacío el precio de una fila de la grilla para que herede
-            estos valores, o cargale uno propio si esa variante vale distinto.
+            $ Compra / $ Venta de arriba son el precio base del producto
           </p>
         ) : null}
 

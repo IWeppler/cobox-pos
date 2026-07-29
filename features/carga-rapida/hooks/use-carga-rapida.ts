@@ -5,9 +5,14 @@ import { toast } from "sonner";
 import { Producto } from "@/entities/productos/types";
 import type { Rubro } from "@/entities/config/types";
 import { matchPorNombre, matchSkuExacto, normalizarQuery } from "../lib/matching";
+import { prefillAVariantes } from "../lib/maestro-prefill";
 import { confirmarCargaAction } from "../actions/confirmar-carga";
-import { buscarEnCatalogoMaestroAction } from "../actions/buscar-en-maestro";
-import type { PrefillMaestro } from "../lib/maestro-prefill";
+import {
+  buscarEnCatalogoMaestroAction,
+  buscarEnCatalogoMaestroPorNombreAction,
+  obtenerPrefillMaestroAction,
+} from "../actions/buscar-en-maestro";
+import type { CandidatoMaestro, PrefillMaestro } from "../lib/maestro-prefill";
 import type { LineaCarga, LineaCargaExistente, LineaCargaNueva } from "../types";
 
 type AltaRapidaPendiente = {
@@ -51,6 +56,17 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
   );
   const [isConfirming, setIsConfirming] = useState(false);
   const [buscandoEnMaestro, setBuscandoEnMaestro] = useState(false);
+  // Candidatos del maestro esperando que el empleado elija uno. Se guarda
+  // también el texto que los originó: sin eso, al elegir un candidato no se
+  // sabe con qué query dedupear la línea nueva.
+  const [maestroCandidatos, setMaestroCandidatos] = useState<{
+    lista: CandidatoMaestro[];
+    query: string;
+    queryNormalizada: string;
+  } | null>(null);
+  const [resolviendoCandidato, setResolviendoCandidato] = useState<
+    string | null
+  >(null);
   const [recargoGlobal, setRecargoGlobal] = useState<number | "">("");
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -58,11 +74,17 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
   const modalAbierto =
     pickerCandidatos !== null ||
     variantSelectorProducto !== null ||
-    altaRapida !== null;
+    altaRapida !== null ||
+    maestroCandidatos !== null;
 
+  // El input se deshabilita mientras hay un modal abierto o mientras vuelve la
+  // consulta al maestro, y un input deshabilitado pierde el foco. Hay que
+  // devolvérselo apenas se rehabilita por CUALQUIERA de las dos causas: si
+  // esto solo mira `modalAbierto`, cada búsqueda en el maestro deja el foco
+  // perdido y obliga a clickear antes de escanear la caja siguiente.
   useEffect(() => {
-    if (!modalAbierto) inputRef.current?.focus();
-  }, [modalAbierto]);
+    if (!modalAbierto && !buscandoEnMaestro) inputRef.current?.focus();
+  }, [modalAbierto, buscandoEnMaestro]);
 
   function resolverVariante(payload: VarianteResuelta) {
     setLineas((prev) => {
@@ -98,7 +120,19 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
     setLineas((prev) =>
       prev.map((l) => {
         if (l.clienteLineaId !== clienteLineaId) return l;
-        if (l.kind === "NUEVA" && l.tieneVariantes) return l;
+        if (l.kind === "NUEVA" && l.tieneVariantes) {
+          // Reescanear la misma caja suma una unidad a la variante fija, que
+          // es lo que espera quien está pasando la pickeadora por un pallet.
+          if (!l.varianteFijaLabel) return l;
+          return {
+            ...l,
+            variantes: l.variantes.map((v, i) =>
+              i === 0
+                ? { ...v, stock: String((Number.parseInt(v.stock, 10) || 0) + 1) }
+                : v,
+            ),
+          };
+        }
         return { ...l, cantidad: l.cantidad + 1 };
       }),
     );
@@ -139,6 +173,95 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
     }
     setPickerCandidatos(null);
     setVariantSelectorProducto(producto);
+  }
+
+  /**
+   * Agrega la línea directo, sin pasar por el modal de combinaciones.
+   *
+   * Solo para match del maestro en electro: una fila del maestro ES una
+   * combinación concreta (128GB / Black) con su propio EAN, así que la
+   * variante ya está resuelta y la matriz no aporta nada. El empleado
+   * completa precio y cantidad inline en la lista.
+   *
+   * Precios en 0 a propósito: el maestro no tiene precios y no debe
+   * inventarlos. La línea queda visiblemente incompleta hasta que los carga.
+   */
+  function agregarLineaDesdeMaestro(
+    prefill: PrefillMaestro,
+    queryNormalizada: string,
+  ) {
+    const { opciones, variantes } = prefillAVariantes(prefill);
+
+    const base = {
+      kind: "NUEVA" as const,
+      clienteLineaId: crypto.randomUUID(),
+      queryOriginal: queryNormalizada,
+      nombre: prefill.nombre,
+      codigo: prefill.ean || null,
+      marca: prefill.marca,
+      modelo: prefill.modelo,
+      categoriaId: prefill.categoriaId,
+      precioCompra: 0,
+      precioVenta: 0,
+      idMaster: prefill.idMaster,
+    };
+
+    // Sin atributos en el maestro no hay combinación que congelar: es un
+    // producto simple y sigue el camino de cantidad a nivel línea.
+    const nueva: LineaCargaNueva =
+      opciones.length > 0 && variantes.length > 0
+        ? {
+            ...base,
+            tieneVariantes: true,
+            opciones,
+            variantes,
+            varianteFijaLabel: Object.values(prefill.atributos).join(" / "),
+          }
+        : { ...base, tieneVariantes: false, cantidad: 1 };
+
+    setLineas((prev) => [...prev, nueva]);
+  }
+
+  /** "Ninguno de estos": sigue al alta manual con lo que ya venía tipeado, sin
+   * perder el texto. También es el camino de salida si resolver el candidato
+   * falla. */
+  function abrirAltaManualDesdeMaestro() {
+    setMaestroCandidatos((actual) => {
+      if (!actual) return null;
+      const esCodigo = pareceCodigo(actual.query);
+      setAltaRapida({
+        nombrePrefill: esCodigo ? "" : actual.query,
+        codigoPrefill: esCodigo ? actual.query : "",
+        queryOriginal: actual.queryNormalizada,
+        editando: null,
+        maestro: null,
+      });
+      return null;
+    });
+  }
+
+  async function elegirCandidatoMaestro(candidato: CandidatoMaestro) {
+    if (!maestroCandidatos || resolviendoCandidato) return;
+
+    setResolviendoCandidato(candidato.idMaster);
+    try {
+      const prefill = await obtenerPrefillMaestroAction(candidato.idMaster);
+
+      if (!prefill) {
+        toast.error(
+          "No se pudo traer ese producto del Catálogo Maestro. Cargalo a mano.",
+        );
+        abrirAltaManualDesdeMaestro();
+        return;
+      }
+
+      // Igual que el match por EAN: la variante ya vino resuelta del maestro,
+      // así que la línea entra directo a la lista sin modal de combinaciones.
+      agregarLineaDesdeMaestro(prefill, maestroCandidatos.queryNormalizada);
+      setMaestroCandidatos(null);
+    } finally {
+      setResolviendoCandidato(null);
+    }
   }
 
   async function procesarEnter(rawQuery: string) {
@@ -196,8 +319,9 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
     );
     if (lineaNueva) {
       // Con variantes no hay una "cantidad" única para sumarle +1 — se
-      // reabre el modal para que el usuario ajuste la grilla a mano.
-      if (lineaNueva.tieneVariantes) {
+      // reabre el modal para que el usuario ajuste la grilla a mano. Salvo
+      // que la variante venga fija del maestro: ahí sí hay una sola y suma.
+      if (lineaNueva.tieneVariantes && !lineaNueva.varianteFijaLabel) {
         abrirEdicionLineaNueva(lineaNueva);
       } else {
         incrementarLinea(lineaNueva.clienteLineaId);
@@ -225,21 +349,50 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
       setQuery("");
 
       let maestro: PrefillMaestro | null = null;
-      if (esCodigo && rubro === "electro") {
+      if (rubro === "electro") {
         setBuscandoEnMaestro(true);
         try {
-          maestro = await buscarEnCatalogoMaestroAction(q);
+          // Si parece un código se prueba primero el EAN exacto, que es el
+          // camino barato y sin ambigüedad.
+          if (esCodigo) {
+            maestro = await buscarEnCatalogoMaestroAction(q);
+          }
+
+          // Si el EAN no resolvió, se busca por texto. Esto cubre los dos
+          // agujeros reales: los productos del maestro sin ean_gtin cargado, y
+          // el empleado que tipea el nombre en vez de escanear. Ojo que
+          // pareceCodigo() marca "moto" como código (no tiene espacios), así
+          // que sin este fallback tipear una sola palabra no encontraba nada.
+          if (!maestro) {
+            const candidatos =
+              await buscarEnCatalogoMaestroPorNombreAction(q);
+            if (candidatos.length > 0) {
+              setMaestroCandidatos({
+                lista: candidatos,
+                query: q,
+                queryNormalizada: normalizado,
+              });
+              return;
+            }
+          }
         } finally {
           setBuscandoEnMaestro(false);
         }
       }
 
+      // Con match del maestro la variante ya está resuelta: línea directo a la
+      // lista. Sin match, el alta manual de siempre abre el modal.
+      if (maestro) {
+        agregarLineaDesdeMaestro(maestro, normalizado);
+        return;
+      }
+
       setAltaRapida({
-        nombrePrefill: maestro?.nombre ?? (esCodigo ? "" : q),
+        nombrePrefill: esCodigo ? "" : q,
         codigoPrefill: esCodigo ? q : "",
         queryOriginal: normalizado,
         editando: null,
-        maestro,
+        maestro: null,
       });
       return;
     }
@@ -304,13 +457,46 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
   }
 
   function updateCantidad(clienteLineaId: string, cantidad: number) {
-    if (!Number.isFinite(cantidad) || cantidad <= 0) return;
+    // Se acepta 0 para que el campo inline se pueda vaciar y retipear; la
+    // línea queda marcada como incompleta y `confirmar` la frena.
+    if (!Number.isFinite(cantidad) || cantidad < 0) return;
     setLineas((prev) =>
       prev.map((l) => {
         if (l.clienteLineaId !== clienteLineaId) return l;
-        if (l.kind === "NUEVA" && l.tieneVariantes) return l;
+        if (l.kind === "NUEVA" && l.tieneVariantes) {
+          // Con variante fija del maestro hay UNA sola combinación, así que la
+          // cantidad de la línea es su stock. Sin variante fija (matriz armada
+          // a mano) no existe una cantidad única: se edita en el modal.
+          if (!l.varianteFijaLabel) return l;
+          return {
+            ...l,
+            variantes: l.variantes.map((v, i) =>
+              i === 0 ? { ...v, stock: String(cantidad) } : v,
+            ),
+          };
+        }
+        // Líneas simples y EXISTENTE: no bajan de 1. Una línea de 0 unidades
+        // no significa nada — para eso está el botón de quitar.
+        if (cantidad <= 0) return l;
         return { ...l, cantidad };
       }),
+    );
+  }
+
+  /** Edición inline de precios en la lista, para las líneas de variante fija:
+   * el maestro no trae precios, así que se cargan acá en vez de en el modal. */
+  function updatePrecioLinea(
+    clienteLineaId: string,
+    campo: "precioCompra" | "precioVenta",
+    valor: number,
+  ) {
+    if (!Number.isFinite(valor) || valor < 0) return;
+    setLineas((prev) =>
+      prev.map((l) =>
+        l.clienteLineaId === clienteLineaId && l.kind === "NUEVA"
+          ? { ...l, [campo]: valor }
+          : l,
+      ),
     );
   }
 
@@ -320,6 +506,27 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
 
   async function confirmar() {
     if (!lineas.length || isConfirming) return;
+
+    // Las líneas de variante fija se completan inline, así que pueden llegar
+    // acá sin precio o sin cantidad. Se frena en el cliente para poder decir
+    // CUÁL falta: la validación del server devuelve un error global que no
+    // identifica la línea.
+    const incompleta = lineas.find(
+      (l) =>
+        l.kind === "NUEVA" &&
+        l.tieneVariantes &&
+        l.varianteFijaLabel &&
+        (l.precioCompra <= 0 ||
+          l.precioVenta <= 0 ||
+          (Number.parseInt(l.variantes[0]?.stock ?? "0", 10) || 0) <= 0),
+    );
+    if (incompleta && incompleta.kind === "NUEVA") {
+      toast.error(
+        `Completá costo, venta y cantidad de "${incompleta.nombre}" antes de confirmar.`,
+      );
+      return;
+    }
+
     setIsConfirming(true);
     try {
       const res = await confirmarCargaAction(lineas);
@@ -375,11 +582,16 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
         precioVenta: seleccion.precio ?? variantSelectorProducto.precio,
       });
     },
+    maestroCandidatos,
+    onElegirCandidatoMaestro: elegirCandidatoMaestro,
+    onCargarManualDesdeMaestro: abrirAltaManualDesdeMaestro,
+    resolviendoCandidato,
     altaRapida,
     onCancelarAltaRapida: () => setAltaRapida(null),
     onGuardarAltaRapida: guardarAltaRapida,
     onEditarLineaNueva: abrirEdicionLineaNueva,
     updateCantidad,
+    updatePrecioLinea,
     removeLinea,
     confirmar,
     isConfirming,

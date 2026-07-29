@@ -146,6 +146,31 @@ export function resolverCategoriaDisplayLabel(
   return padre ? `${padre.nombre} › ${categoria.nombre}` : categoria.nombre;
 }
 
+/**
+ * Igual que resolverCategoriaDisplayLabel, pero devuelve padre e hijo por
+ * separado en vez del string combinado.
+ *
+ * Existe porque en una celda angosta "COMPLEMENTOS › CARTERAS" se trunca y la
+ * parte que se pierde es justo la específica ("COMPLEMENTOS › ..."), que es la
+ * que identifica al producto. Apilando las dos líneas entran ambas enteras.
+ * Devuelve null cuando el producto no tiene categoría o quedó apuntando a una
+ * que ya no existe, mismo criterio que la versión de una línea (que ahí
+ * devuelve "").
+ */
+export function resolverCategoriaDisplayPartes(
+  categorias: CategoriaBase[],
+  categoriaId: string | null | undefined,
+): { padre: string | null; nombre: string } | null {
+  if (!categoriaId) return null;
+  const categoria = categorias.find((c) => c.id === categoriaId);
+  if (!categoria) return null;
+
+  if (!categoria.parent_id) return { padre: null, nombre: categoria.nombre };
+
+  const padre = categorias.find((c) => c.id === categoria.parent_id);
+  return { padre: padre?.nombre ?? null, nombre: categoria.nombre };
+}
+
 /** Aplana el árbol de vuelta a una lista simple — para callers que todavía
  * no necesitan la jerarquía (ej. selects planos de categoría). */
 export function aplanarArbolCategorias(arbol: ArbolCategorias): CategoriaConCount[] {

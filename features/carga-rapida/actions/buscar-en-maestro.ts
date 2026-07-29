@@ -6,9 +6,13 @@ import { createCatalogoMaestroClient } from "@/shared/config/supabase/catalogo-m
 import { normalizarRubro } from "@/entities/config/types";
 import { slugify } from "@/shared/utils/slugify";
 import type {
+  CandidatoMaestro,
   FilaCatalogoMaestro,
   PrefillMaestro,
 } from "@/features/carga-rapida/lib/maestro-prefill";
+
+const COLUMNAS_MAESTRO =
+  "id_master, categoria, marca, modelo_oficial, nombre_comercial, ean_gtin, variante_atributos";
 
 /**
  * Traduce las claves del JSONB del maestro ("almacenamiento") al nombre de
@@ -69,23 +73,23 @@ function capitalizar(texto: string): string {
  * trata el null como "no está" y cae al alta manual de siempre: que el
  * maestro no responda nunca puede impedir cargar stock.
  */
-export async function buscarEnCatalogoMaestroAction(
-  ean: string,
-): Promise<PrefillMaestro | null> {
-  const codigo = ean.trim();
-  if (!codigo) return null;
-
+/**
+ * Gate único para TODO acceso al maestro: valida el rubro contra la base del
+ * comercio y recién ahí abre el cliente del maestro.
+ *
+ * El chequeo vive del lado del servidor y no solo en el cliente porque estas
+ * son server actions: son alcanzables directo, y el rubro es la regla de
+ * negocio real. Que falten las env vars del maestro es un accidente de
+ * configuración, no una garantía — si algún día se setean a nivel team en
+ * Vercel, un comercio de indumentaria empezaría a resolver productos contra
+ * el catálogo de electro sin que nada lo avise.
+ *
+ * Fail-closed vía normalizarRubro: si la config no carga, no es electro.
+ */
+async function abrirMaestroSiCorresponde() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  // Gate por rubro, ANTES de tocar el maestro. El chequeo va acá y no solo en
-  // el cliente porque esto es una server action: es alcanzable directo, y el
-  // rubro es la regla de negocio real. Que falten las env vars del maestro es
-  // un accidente de configuración, no una garantía — si algún día se setean a
-  // nivel team en Vercel, un comercio de indumentaria empezaría a resolver
-  // códigos de barra contra el catálogo de electro sin que nada lo avise.
-  //
-  // Fail-closed vía normalizarRubro: si la config no carga, no es electro.
   const { data: config, error: configError } = await supabase
     .from("configuracion_pos")
     .select("rubro")
@@ -104,12 +108,47 @@ export async function buscarEnCatalogoMaestroAction(
   const maestro = createCatalogoMaestroClient();
   if (!maestro) return null;
 
+  return { supabase, maestro };
+}
+
+/** Traduce una fila del maestro al prefill que consume el alta rápida,
+ * resolviendo atributos y categoría contra la base de ESTE comercio. */
+async function construirPrefill(
+  supabase: ReturnType<typeof createClient>,
+  fila: FilaCatalogoMaestro,
+  eanElegido: string | null,
+): Promise<PrefillMaestro> {
+  const [atributos, categoriaId] = await Promise.all([
+    resolverNombresDeAtributo(supabase, fila.variante_atributos),
+    resolverCategoriaLocal(supabase, fila.categoria),
+  ]);
+
+  return {
+    idMaster: fila.id_master,
+    nombre: fila.nombre_comercial,
+    marca: fila.marca || null,
+    modelo: fila.modelo_oficial || null,
+    ean: eanElegido ?? fila.ean_gtin ?? "",
+    atributos,
+    categoriaId,
+    categoriaMaestro: fila.categoria,
+  };
+}
+
+export async function buscarEnCatalogoMaestroAction(
+  ean: string,
+): Promise<PrefillMaestro | null> {
+  const codigo = ean.trim();
+  if (!codigo) return null;
+
+  const conexion = await abrirMaestroSiCorresponde();
+  if (!conexion) return null;
+  const { supabase, maestro } = conexion;
+
   try {
     const { data, error } = await maestro
       .from("catalogo_maestro")
-      .select(
-        "id_master, categoria, marca, modelo_oficial, nombre_comercial, ean_gtin, variante_atributos",
-      )
+      .select(COLUMNAS_MAESTRO)
       .eq("ean_gtin", codigo)
       .maybeSingle<FilaCatalogoMaestro>();
 
@@ -120,23 +159,93 @@ export async function buscarEnCatalogoMaestroAction(
       return null;
     }
 
-    const [atributos, categoriaId] = await Promise.all([
-      resolverNombresDeAtributo(supabase, data.variante_atributos),
-      resolverCategoriaLocal(supabase, data.categoria),
-    ]);
-
-    return {
-      idMaster: data.id_master,
-      nombre: data.nombre_comercial,
-      marca: data.marca || null,
-      modelo: data.modelo_oficial || null,
-      ean: codigo,
-      atributos,
-      categoriaId,
-      categoriaMaestro: data.categoria,
-    };
+    return await construirPrefill(supabase, data, codigo);
   } catch (err) {
     console.error("[CARGA RAPIDA] Error consultando el Catálogo Maestro:", err);
+    return null;
+  }
+}
+
+/**
+ * Búsqueda por TEXTO en el maestro, para cuando el EAN no alcanza: o el
+ * producto no lo tiene cargado (354 de 1267 filas al 29/7/2026), o el
+ * empleado tipeó el nombre en vez de escanear.
+ *
+ * Devuelve CANDIDATOS, no un match. Nunca auto-confirma: el empleado elige,
+ * mismo criterio que el resto del proyecto. Lista vacía en todos los caminos
+ * de falla — el maestro caído nunca puede impedir cargar stock.
+ */
+export async function buscarEnCatalogoMaestroPorNombreAction(
+  query: string,
+): Promise<CandidatoMaestro[]> {
+  const texto = query.trim();
+  // Con menos de 3 caracteres el trigram devuelve ruido: "ab" matchea
+  // cualquier cosa que contenga esas letras seguidas.
+  if (texto.length < 3) return [];
+
+  const conexion = await abrirMaestroSiCorresponde();
+  if (!conexion) return [];
+
+  try {
+    const { data, error } = await conexion.maestro.rpc(
+      "buscar_en_catalogo_maestro",
+      { p_query: texto, p_umbral: 0.45, p_limite: 3 },
+    );
+
+    if (error) {
+      console.error("[CARGA RAPIDA] Búsqueda en el maestro falló:", error);
+      return [];
+    }
+
+    return ((data ?? []) as (FilaCatalogoMaestro & { score: number })[]).map(
+      (fila) => ({
+        idMaster: fila.id_master,
+        nombre: fila.nombre_comercial,
+        marca: fila.marca || null,
+        modelo: fila.modelo_oficial || null,
+        ean: fila.ean_gtin ?? null,
+        categoriaMaestro: fila.categoria,
+        score: fila.score,
+      }),
+    );
+  } catch (err) {
+    console.error("[CARGA RAPIDA] Error buscando en el Catálogo Maestro:", err);
+    return [];
+  }
+}
+
+/**
+ * Resuelve el prefill completo de UN candidato ya elegido por el empleado.
+ *
+ * Va separado de la búsqueda porque resolver atributos y categoría cuesta dos
+ * queries contra la base del comercio, y de 3 candidatos se descartan 2.
+ */
+export async function obtenerPrefillMaestroAction(
+  idMaster: string,
+): Promise<PrefillMaestro | null> {
+  if (!idMaster.trim()) return null;
+
+  const conexion = await abrirMaestroSiCorresponde();
+  if (!conexion) return null;
+  const { supabase, maestro } = conexion;
+
+  try {
+    const { data, error } = await maestro
+      .from("catalogo_maestro")
+      .select(COLUMNAS_MAESTRO)
+      .eq("id_master", idMaster)
+      .maybeSingle<FilaCatalogoMaestro>();
+
+    if (error || !data) {
+      if (error) {
+        console.error("[CARGA RAPIDA] No se pudo leer el candidato:", error);
+      }
+      return null;
+    }
+
+    return await construirPrefill(supabase, data, null);
+  } catch (err) {
+    console.error("[CARGA RAPIDA] Error resolviendo el candidato:", err);
     return null;
   }
 }
