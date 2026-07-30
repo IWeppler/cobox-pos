@@ -79,10 +79,21 @@ export function useCatalogFilters({
   // nunca debe filtrarse por su propia categoría).
   const matchSearchYVariante = useCallback(
     (c: Producto) => {
-      const nombreStr = c.nombre || "";
-      const matchSearch = nombreStr
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
+      const query = searchQuery.toLowerCase().trim();
+
+      // 1. Buscar en propiedades del producto padre
+      const matchNombre = (c.nombre || "").toLowerCase().includes(query);
+      const matchMarca = (c.marca || "").toLowerCase().includes(query);
+      const matchModelo = (c.modelo || "").toLowerCase().includes(query);
+
+      // 2. Buscar en el SKU de las variantes (producto_variantes)
+      const matchSku =
+        c.producto_variantes?.some((pv) =>
+          pv.sku?.toLowerCase().includes(query),
+        ) ?? false;
+
+      // 3. Matchea si alguna de las condiciones se cumple
+      const matchSearch = matchNombre || matchMarca || matchModelo || matchSku;
 
       const matchVariante = Object.entries(filtrosVariantes).every(
         ([propKey, propVal]) => {
@@ -184,7 +195,12 @@ export function useCatalogFilters({
       }
     });
     return { conteosTotales: totales, conteosFacetados: facetados };
-  }, [productos, pasaFiltroStock, resolverCategoriaIdDeProducto, matchSearchYVariante]);
+  }, [
+    productos,
+    pasaFiltroStock,
+    resolverCategoriaIdDeProducto,
+    matchSearchYVariante,
+  ]);
 
   const arbolCategorias: ArbolCategorias = useMemo(
     () =>
@@ -236,7 +252,11 @@ export function useCatalogFilters({
             fallbackName = k.charAt(0).toUpperCase() + k.slice(1);
           }
 
-          return { id: k, nombre: fallbackName, count: conteosFacetados[k] || 0 };
+          return {
+            id: k,
+            nombre: fallbackName,
+            count: conteosFacetados[k] || 0,
+          };
         })
         .sort((a, b) => a.nombre.localeCompare(b.nombre));
     }
@@ -246,7 +266,13 @@ export function useCatalogFilters({
       nombre: c.nombre,
       count: c.count,
     }));
-  }, [categorias, conteosTotales, conteosFacetados, productos, arbolCategorias]);
+  }, [
+    categorias,
+    conteosTotales,
+    conteosFacetados,
+    productos,
+    arbolCategorias,
+  ]);
 
   /**
    * Resuelve un slug o id de URL a `{ padre, hijo }` contra el árbol de 2
@@ -286,7 +312,8 @@ export function useCatalogFilters({
       if (!pasaFiltroStock(c)) return false;
 
       const matchTipo =
-        idsAMatchear === null || idsAMatchear.has(resolverCategoriaIdDeProducto(c));
+        idsAMatchear === null ||
+        idsAMatchear.has(resolverCategoriaIdDeProducto(c));
 
       return matchTipo && matchSearchYVariante(c);
     });
@@ -317,7 +344,14 @@ export function useCatalogFilters({
     });
 
     return resultado;
-  }, [productos, pasaFiltroStock, idsAMatchear, resolverCategoriaIdDeProducto, matchSearchYVariante, orden]);
+  }, [
+    productos,
+    pasaFiltroStock,
+    idsAMatchear,
+    resolverCategoriaIdDeProducto,
+    matchSearchYVariante,
+    orden,
+  ]);
 
   // Búsqueda transversal: cuántos productos matchean búsqueda+variante
   // (con el mismo filtro de stock) por FUERA de la categoría/subcategoría
@@ -328,7 +362,13 @@ export function useCatalogFilters({
       (p) => pasaFiltroStock(p) && matchSearchYVariante(p),
     ).length;
     return Math.max(0, totalSinCategoria - productosFiltrados.length);
-  }, [tipo, productos, pasaFiltroStock, matchSearchYVariante, productosFiltrados]);
+  }, [
+    tipo,
+    productos,
+    pasaFiltroStock,
+    matchSearchYVariante,
+    productosFiltrados,
+  ]);
 
   const productosVisibles = productosFiltrados.slice(0, visibleCount);
   const hayMasProductos = visibleCount < productosFiltrados.length;

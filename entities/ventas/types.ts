@@ -103,6 +103,11 @@ export interface TicketData {
   vendedor?: string;
   descuentoMonto?: number;
   promocionNombre?: string;
+  /** Recargo por método de pago cobrado en este ticket. Ya está sumado en
+   * `total`; se manda aparte para poder mostrarlo como renglón propio. */
+  recargoMetodoMonto?: number;
+  /** Ej. "Recargo Tarjeta (15%)". */
+  recargoMetodoEtiqueta?: string;
   comisionMonto?: number;
   montoNeto?: number;
   acreditacionDias?: number;

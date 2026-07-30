@@ -1,10 +1,25 @@
 # Cobox POS — Contexto del proyecto
 
-POS + catálogo público para comercios (cliente piloto: Evens Indumentaria,
-Tostado, Santa Fe). Next.js + TypeScript + Supabase. Deploy: Vercel, branch main.
-EN PRODUCCIÓN REAL: la dueña (Evelyn, admin) y 3 vendedoras (Mara, Brisa,
-Zunilda) lo usan a diario. Cualquier cambio que toque ventas/caja/stock
+POS + catálogo público para comercios (Tostado, Santa Fe). Next.js +
+TypeScript + Supabase. Deploy: Vercel, branch main.
+EN PRODUCCIÓN REAL: en Evens la dueña (Evelyn, admin) y 3 vendedoras (Mara,
+Brisa, Zunilda) lo usan a diario. Cualquier cambio que toque ventas/caja/stock
 es plata real.
+
+## Tres comercios, tres bases, UN repo
+
+Modelo por-proyecto (todavía NO multi-tenant): mismo código, una base Supabase
+por comercio. `supabase/migrations/` es carpeta COMPARTIDA — toda migración se
+aplica a las 3 bases o se genera drift. Nunca detección de comercio en runtime.
+
+| MCP ref | Comercio | Rubro |
+|---|---|---|
+| `evens-project` | Evens Indumentaria | indumentaria |
+| `estilo-bonito-project` | Estilo Bonito | indumentaria |
+| `click-project` | ClickTostado | electro |
+
+El drift es el riesgo #1 de este modelo (ver "Aprendizajes"). Antes de tocar
+schema: chequear las 3, aplicar a las 3, verificar en las 3.
 
 ## Regla de trabajo más importante (aprendida a los golpes)
 
@@ -46,19 +61,70 @@ Esta semana hubo 3 incidentes por confirmar solo una pata.
 - Normalización de atributos: siempre vía normalizarAtributoKeyValor /
   canonicalizarValores (slugify compartido) — en creación manual Y en
   conciliación de remitos (merge-purchase.ts).
+- Aprobación de remitos: TODO (precios + stock + alias + estado) corre en la
+  RPC `aprobar_orden_compra`, en una transacción y en batch (antes era un for
+  con await adentro: ~1500 round-trips en el remito más grande). El guard de
+  idempotencia (`update ... where estado <> 'APROBADA'` + `if not found`) va
+  PRIMERO, antes de escribir stock: toma el row lock que serializa dos
+  aprobaciones concurrentes y devuelve `{ya_aprobada: true}` como resultado
+  normal, no como excepción. La canonicalización de atributos se queda en
+  Node a propósito; la RPC recibe `atributos` ya canonicalizado.
+- Rubro: flag `configuracion_pos.rubro` ('indumentaria' | 'electro', CHECK
+  fail-closed, default indumentaria). Cambia la identidad del producto en la
+  UI, no el schema: indumentaria muestra "N var.", electro muestra Modelo +
+  EAN (`features/stock/lib/identidad-por-rubro.ts`). El EAN vive en
+  `producto_variantes.sku` — misma columna, otro label.
+- Catálogo Maestro (`catalogo_maestro`): tabla de fichas de electro que vive
+  en OTRO proyecto Supabase, solo-lectura por RLS (no hay política de
+  INSERT/UPDATE/DELETE: anon y authenticated no escriben ni por error).
+  Carga Rápida busca por EAN exacto y por texto (word_similarity + ranking,
+  porque word_similarity sola satura en 1.000). Los datos se COPIAN al
+  producto local; `productos.id_master` es trazabilidad SIN FK — la venta
+  nunca depende de alcanzar el maestro en tiempo real.
+- Categorías en árbol de 2 niveles (parent_id), tolerante a estado mixto:
+  padres con hijos, sueltas sin padre, o todo plano. `shared/utils/
+  category-tree.ts` separa resolución de slug (sin conteos, para que un link
+  viejo resuelva igual) de construcción del árbol (con conteos y facetado).
+- RLS: el baseline real de producción está versionado desde
+  `20260728130000_rls_baseline_desde_evens.sql` (antes el repo cubría 7 de 34
+  tablas; las 88 políticas vivas nunca habían estado en git).
 
-## Estado al 19/7/2026 (domingo)
+## Aprendizajes que ya costaron plata (no repetir)
 
-- PENDIENTE DE PUSH (decisión consciente del dueño, pushear lunes a
-  primera hora): fix transaccional guardar_variantes_producto + FK de
-  auditoría + modal de confirmación de variantes. Hasta ese push, editar
-  productos con variantes en prod puede seguir borrando filas.
-- La dueña debe recargar a mano el stock perdido de CAMISETA ARGENTINA:
-  variantes M, L, 16 y Talle 10 (2 unidades) — irrecuperables.
-- En curso: fix de cuenta corriente + método de pago (causa confirmada:
-  condición `anticipoActual > 0` con cc_anticipo_default=0 oculta la
-  sección; el fix es mostrarla siempre en CC, y no auto-seleccionar
-  método en CC), y el historial de movimientos por producto (fuentes
-  confirmadas: ventas, remitos, bajas con columna origen nueva
-  MANUAL/DEVOLUCION_VENTA, restauración por anulación como INGRESO
-  "Devolución de cliente", y auditoría ELIMINADA como egreso).
+- **Timeout de UI ≠ cancelación de server action.** `withTimeout` solo rechaza
+  la promesa del cliente; el server sigue hasta el final. Nunca envolver en
+  `withTimeout` una acción que muta stock o plata (ver comentario en
+  merge-table.tsx). Incidente 27/7 en Estilo Bonito: 8 reintentos = stock ×8
+  (1960 unidades donde iban 245).
+- **UPDATE condicional + chequeo de filas afectadas ANTES de cualquier
+  escritura derivada.** Mismo bug apareció en cancel-sale.ts (reembolso
+  fantasma) y en aprobar_orden_compra. Un `select` previo NO sirve: dos
+  llamadas concurrentes leen lo mismo y las dos escriben.
+- **Un cambio no está terminado hasta las 3 patas** (migración en las 3 bases +
+  push con deploy verde + smoke test real). Regla arriba del todo.
+- **Drift por-proyecto.** Cada categoría de schema (políticas, constraints,
+  columnas, seeds) se rompe por separado en cada base. Todo lo que se aplica
+  a mano en una base y no queda como migración, se pierde.
+
+## Estado al 30/7/2026 (jueves)
+
+Hecho y en producción en las 3 bases:
+
+- Idempotencia de aprobación de remitos (guard + `ya_aprobada` consumido por
+  merge-purchase.ts / merge-table.tsx) — aplicado en las 3, smoke test OK.
+- Baseline de RLS versionado, fix de drift de configuración y del trigger de
+  turno cerrado, `thumbnail_url`, `rubro` + `modelo`, `id_master`.
+- Catálogo Maestro + búsqueda por texto; Carga Rápida con picker de maestro,
+  prefill y quick-create.
+- Merge de remitos: sugerencias de match y de categoría, umbral y audiencia,
+  clasificación de match (T1/T2/T3). Gotcha visto en datos reales:
+  `estado_match` guardado puede quedar stale.
+- Categorías en árbol (Evens ya no es catálogo plano; REGLAS_CATEGORIA quedó
+  obsoleto y silencioso).
+- Seed de métodos de pago default; CC + método de pago (la sección se muestra
+  siempre en CC y no se auto-selecciona método); historial de movimientos por
+  producto (`features/stock/ui/movimientos-table.tsx`).
+
+Próximo: plan multicomercio y la decisión de arquitectura SaaS (multi-tenant
+`negocio_id` vs. seguir por-proyecto con provisioning automatizado) — está en
+ROADMAP.md, TIER 2, y es la decisión que conviene tomar antes del 4º cliente.

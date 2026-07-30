@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { CreateSalePaymentInput } from "@/entities/ventas/types";
 import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
 import { calcularFechaVencimiento } from "@/features/clients/lib/calcular-fecha-vencimiento";
+import { calcularPagosConRecargo } from "@/shared/lib/recargo-metodo";
 
 export async function registrarVentaAction(
   prevState: { error: string | null; success: boolean },
@@ -236,10 +237,18 @@ export async function registrarVentaAction(
     ? JSON.parse(pagosRaw)
     : [];
   const pagosValidos = pagosRawArray.filter((p) => Number(p.montoAsignado) > 0);
-  const sumaPagos = pagosValidos.reduce(
-    (acc, p) => acc + Number(p.montoAsignado),
-    0,
-  );
+
+  // `montoAsignado` es la BASE: lo que ese cobro imputa al ticket. El recargo
+  // por método se calcula acá, con los porcentajes leídos de la base — nunca
+  // con lo que mande el cliente, mismo criterio que los precios de los items.
+  // Por eso las validaciones de abajo siguen comparando bases contra el total
+  // del ticket: el recargo no cubre mercadería, así que no puede "completar"
+  // un pago que no alcanza.
+  const recargoCalculado = calcularPagosConRecargo(pagosValidos, metodosDb);
+  const sumaPagos = recargoCalculado.totalBase;
+  const recargoMetodoTotal = recargoCalculado.totalRecargo;
+  const totalConRecargoMetodo = totalConDescuentoYRecargo + recargoMetodoTotal;
+  const montoCobradoReal = sumaPagos + recargoMetodoTotal;
 
   const montoPendiente = totalConDescuentoYRecargo - sumaPagos;
   const estadoPago = montoPendiente > 0.05 ? "PARCIAL" : "PAGADA";
@@ -356,12 +365,16 @@ export async function registrarVentaAction(
   let totalNetoGeneral = 0;
   const ventaPagosPayloads = [];
 
-  for (const pago of pagosValidos) {
+  for (const pago of recargoCalculado.pagos) {
     const metodoData = metodosMap[pago.metodoPagoId];
     if (!metodoData)
       return { error: "Método de pago inválido.", success: false };
 
-    const montoBruto = Number(pago.montoAsignado);
+    // El bruto es base + recargo: es la plata que efectivamente pasa por el
+    // posnet, y por eso la comisión del procesador se calcula sobre ÉL y no
+    // sobre la base. Si se calculara sobre la base, el neto quedaría inflado
+    // justo en los métodos con recargo, que son los que más comisión tienen.
+    const montoBruto = pago.montoBruto;
     const comisionPorcentaje = Number(metodoData.comision || 0);
     const comisionMonto = (montoBruto * comisionPorcentaje) / 100;
     const montoNeto = montoBruto - comisionMonto;
@@ -373,6 +386,9 @@ export async function registrarVentaAction(
       metodo_pago_id: metodoData.id,
       metodo_nombre: metodoData.nombre,
       metodo_tipo: metodoData.tipo,
+      monto_base: pago.montoBase,
+      recargo_porcentaje: pago.recargoPorcentaje,
+      recargo_monto: pago.recargoMonto,
       monto_bruto: montoBruto,
       comision_porcentaje: comisionPorcentaje,
       comision_monto: comisionMonto,
@@ -400,14 +416,19 @@ export async function registrarVentaAction(
     turno_caja_id: turnoAbiertoId,
     estado_operacion: "CONFIRMADA",
     metodo_pago: metodoPagoSafe,
-    total: totalConDescuentoYRecargo,
+    // `total` incluye el recargo por método: es lo que el cliente paga y lo
+    // que tiene que cerrar contra monto_cobrado. La deuda de cuenta corriente
+    // (monto_pendiente) sigue calculándose sobre bases, así que el recargo de
+    // la entrega no le baja la deuda al cliente ni se la sube.
+    total: totalConRecargoMetodo,
     precio_costo: isNaN(costoTotalVenta) ? 0 : costoTotalVenta,
     cantidad: items.length,
-    total_bruto: totalConDescuentoYRecargo,
+    total_bruto: totalConRecargoMetodo,
+    recargo_metodo_total: recargoMetodoTotal,
     comision_total: comisionTotalGeneral,
     total_neto: totalNetoGeneral,
     es_pago_mixto: pagosValidos.length > 1,
-    monto_cobrado: sumaPagos,
+    monto_cobrado: montoCobradoReal,
     monto_pendiente: montoPendiente > 0 ? montoPendiente : 0,
     estado_pago: estadoPago,
   };

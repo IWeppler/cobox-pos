@@ -84,8 +84,9 @@ export function PaymentsPanel({ pagos }: Readonly<{ pagos: MetodoPago[] }>) {
         <div>
           <h2 className="text-xl font-bold text-foreground">Métodos de Pago</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Configura las comisiones y plazos de acreditación para calcular tu
-            margen real en los cobros.
+            El <strong>recargo</strong> se le suma al cliente en el ticket. La{" "}
+            <strong>comisión</strong> es lo que te cobra el procesador y se
+            descuenta de tu margen real.
           </p>
         </div>
         <CreatePaymentModal />
@@ -111,6 +112,7 @@ export function PaymentsPanel({ pagos }: Readonly<{ pagos: MetodoPago[] }>) {
               <thead className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-bold tracking-widest border-b border-border/50">
                 <tr>
                   <th className="px-5 py-4">Método</th>
+                  <th className="px-5 py-4 text-right">Recargo al cliente</th>
                   <th className="px-5 py-4 text-right">Comisión</th>
                   <th className="px-5 py-4">Acreditación</th>
                   <th className="px-5 py-4 text-center">Estado</th>
@@ -146,6 +148,19 @@ export function PaymentsPanel({ pagos }: Readonly<{ pagos: MetodoPago[] }>) {
                           </span>
                         </div>
                       </div>
+                    </td>
+
+                    {/* RECARGO AL CLIENTE — lo que se le suma al ticket */}
+                    <td className="px-5 py-4 text-right">
+                      {Number(pago.recargo_porcentaje) > 0 ? (
+                        <Badge className="font-bold rounded-lg border-amber-300 bg-amber-100 text-amber-800 shadow-none px-2 py-1 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
+                          +{pago.recargo_porcentaje}%
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Sin recargo
+                        </span>
+                      )}
                     </td>
 
                     {/* COMISIÓN */}

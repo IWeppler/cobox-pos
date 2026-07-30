@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import { CreditCard, Percent, Clock, Loader2 } from "lucide-react";
+import { CreditCard, Percent, Clock, Loader2, TrendingUp } from "lucide-react";
 import { editPaymentAction } from "../actions/manage-payment";
 import { toast } from "sonner";
 import { MetodoPago } from "@/entities/payments/types";
@@ -90,6 +90,28 @@ export function EditPaymentModal({
                 </SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+            <Label className="flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5 text-amber-600" />
+              Recargo al cliente (%)
+            </Label>
+            <Input
+              name="recargo_porcentaje"
+              type="number"
+              min="0"
+              max="100"
+              step="any"
+              defaultValue={pago.recargo_porcentaje ?? 0}
+              required
+              className="rounded-lg shadow-none bg-card"
+            />
+            <p className="text-[10px] text-muted-foreground leading-tight">
+              Se le SUMA al total del ticket cuando el cliente paga con este
+              método (0 = sin recargo). Distinto de la comisión de abajo, que
+              es lo que te cobra el procesador y no se le muestra al cliente.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

@@ -33,6 +33,10 @@ import {
   getPromocionesElegibles,
 } from "../../../shared/components/cart-sidebar/cart-sidebar-utils";
 import { ClienteBasico } from "../../../shared/components/cart-sidebar/client-selector";
+import {
+  calcularPagosConRecargo,
+  etiquetaRecargo,
+} from "@/shared/lib/recargo-metodo";
 
 const subscribeToClientMount = () => () => {};
 const getClientSnapshot = () => true;
@@ -183,7 +187,7 @@ export function CartPanelAdmin({
 
         const { data: metodos } = await supabase
           .from("metodos_pago")
-          .select("id, nombre, tipo, comision")
+          .select("id, nombre, tipo, comision, recargo_porcentaje")
           .eq("activo", true)
           .order("comision", { ascending: true });
 
@@ -272,6 +276,22 @@ export function CartPanelAdmin({
       ),
     [pagosSincronizados],
   );
+
+  // Recargo por método: se recalcula cada vez que cambia el método elegido o
+  // el reparto del pago mixto, porque el total a cobrar depende de CÓMO se
+  // paga. `sumaPagos` sigue siendo la suma de bases (lo que cubre el ticket);
+  // el recargo va aparte y se suma recién en `totalACobrar`. El server
+  // recalcula lo mismo con los % de la base — este número es solo para que la
+  // vendedora vea antes de cobrar lo que se va a persistir.
+  const recargoMetodo = useMemo(
+    () => calcularPagosConRecargo(pagosSincronizados, metodosPagoDB),
+    [pagosSincronizados, metodosPagoDB],
+  );
+  const recargoMetodoEtiqueta = useMemo(
+    () => etiquetaRecargo(recargoMetodo.pagos, metodosPagoDB),
+    [recargoMetodo, metodosPagoDB],
+  );
+  const totalACobrar = totalFinal + recargoMetodo.totalRecargo;
 
   // 🚀 FIX: AUTO-SYNC DE PAGOS (Garantiza que el cajero nunca vea "$4.248 de $4.720")
   if (!mounted) return null;
@@ -405,6 +425,14 @@ export function CartPanelAdmin({
           ];
         }
 
+        // El anticipo tipeado en el modal cambia la base, así que el recargo
+        // del ticket se recalcula sobre los pagos DEFINITIVOS, no sobre los
+        // que se estaban mostrando en el panel.
+        const recargoSubmit = calcularPagosConRecargo(
+          pagosToSubmit,
+          metodosPagoDB,
+        );
+
         const formData = new FormData();
         formData.append("cart_items", JSON.stringify(items));
         formData.append("pagos", JSON.stringify(pagosToSubmit));
@@ -477,16 +505,21 @@ export function CartPanelAdmin({
 
         setVentaExitosa({
           items: [...items],
-          total: totalFinal,
+          total: totalFinal + recargoSubmit.totalRecargo,
           metodoPago: nombreMetodoMostrar,
           nroRecibo: idReal,
           descuentoMonto: descuentoDetalle.monto,
           promocionNombre: descuentoDetalle.nombre,
+          recargoMetodoMonto: recargoSubmit.totalRecargo,
+          recargoMetodoEtiqueta: etiquetaRecargo(
+            recargoSubmit.pagos,
+            metodosPagoDB,
+          ),
           vendedor: vendedorNombre || "Tú",
           clienteNombre: clienteSeleccionado?.nombre || "Consumidor final",
           estadoPago: estadoVenta,
           montoPendiente,
-          montoCobrado: montoRealAsignado,
+          montoCobrado: montoRealAsignado + recargoSubmit.totalRecargo,
           esFiadoDirecto: isCuentaCorriente,
         });
 
@@ -543,7 +576,10 @@ export function CartPanelAdmin({
               isPending={isPending}
               totalCarrito={totalCarrito}
               recargoCuentaCorriente={recargoCuentaCorriente}
+              recargoMetodoMonto={recargoMetodo.totalRecargo}
+              recargoMetodoEtiqueta={recargoMetodoEtiqueta}
               totalFinal={totalFinal}
+              totalACobrar={totalACobrar}
               sumaPagos={sumaPagos}
               isCuentaCorriente={isCuentaCorriente}
               isReserva={isReserva}

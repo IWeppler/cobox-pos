@@ -19,7 +19,7 @@ export async function getProductosAction() {
         `
       id, nombre, tipo, categoria_id, precio, precio_costo, imagen_url, thumbnail_url, grid_url, slug, publicado,
       stock:productos_stock(id, variante, cantidad),
-      producto_variantes(id, nombre_display, precio, stock, atributos)
+      producto_variantes(id, sku, nombre_display, precio, stock, atributos)
     `,
       )
       .eq("publicado", true)
@@ -91,7 +91,7 @@ export async function getProductoBySlugAction(slug: string) {
       `
       *,
       stock:productos_stock(id, variante, cantidad),
-      producto_variantes(id, nombre_display, precio, stock, atributos)
+      producto_variantes(id, sku, nombre_display, precio, stock, atributos)
     `,
     )
     .eq("slug", slug)

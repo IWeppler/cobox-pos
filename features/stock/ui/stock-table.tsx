@@ -661,8 +661,8 @@ export function StockTable({
                     </TableCell>
 
                     {/* 1. Celda Unificada: Flecha + Imagen + Producto (Más compacta en móviles) */}
-                    <TableCell className="py-1.5 sm:py-2.5 px-0 pl-1 sm:pl-2">
-                      <div className="flex items-center gap-1 sm:gap-3 min-w-0">
+                    <TableCell className="py-1.5 px-0 pl-1 sm:pl-2">
+                      <div className="flex items-center gap-1 sm:gap-2 min-w-0">
                         <button
                           onClick={() =>
                             hasVariantes && toggleVariantes(producto.id)
@@ -737,7 +737,7 @@ export function StockTable({
                     {/* CATEGORÍA — padre e hijo apilados, no "Padre › Hijo" en
                         una línea: en 160px la versión horizontal se truncaba
                         justo en la parte específica ("COMPLEMENTOS › ..."). */}
-                    <TableCell className="py-2.5 hidden sm:table-cell text-muted-foreground text-sm max-w-40">
+                    <TableCell className="py-1 hidden sm:table-cell text-muted-foreground text-sm max-w-40">
                       {categoriaPartes && (
                         <div
                           className="flex flex-col min-w-0"
@@ -756,7 +756,7 @@ export function StockTable({
                     </TableCell>
 
                     {/* STOCK (Oculto en móviles) */}
-                    <TableCell className="text-center py-1.5 sm:py-2.5 hidden sm:table-cell">
+                    <TableCell className="text-center py-1 hidden sm:table-cell">
                       <div className="flex items-center justify-center gap-1.5">
                         <div className={`w-2 h-2 rounded-full ${dotColor}`} />
                         <span className="font-mono font-medium text-foreground">
@@ -785,7 +785,7 @@ export function StockTable({
                     {/* PRECIO + badge de recargo derivado de costo/precio.
                         El badge es solo para admin: el % de margen deja leer
                         el costo por diferencia, y Costo ya es columna admin. */}
-                    <TableCell className="text-right font-mono font-medium text-xs sm:text-sm px-1 sm:px-0 py-1.5 sm:py-2.5 whitespace-nowrap tabular-nums">
+                    <TableCell className="text-right font-mono font-medium text-xs sm:text-sm px-1 sm:px-0 py-1 whitespace-nowrap tabular-nums">
                       <div className="flex flex-col items-end gap-0.5">
                         {rangoPrecio && !rangoPrecio.esUniforme ? (
                           <span title="Las variantes tienen precios distintos">
@@ -807,7 +807,7 @@ export function StockTable({
                     </TableCell>
 
                     {/* ACCIONES (oculta en mobile: cubierta por selección + barra flotante) */}
-                    <TableCell className="text-right pl-0 pr-1 sm:pr-6 py-1.5 sm:py-2.5 hidden sm:table-cell">
+                    <TableCell className="text-right pl-0 pr-1 sm:pr-6 py-1 hidden sm:table-cell">
                       <div className="flex items-center justify-end gap-0.5 md:gap-1.5">
                         <ShareButton
                           url={urlProducto ?? ""}
@@ -931,19 +931,19 @@ export function StockTable({
                                         key={v.id || v.variante}
                                         className="hover:bg-muted/30 transition-colors"
                                       >
-                                        <td className="px-2 sm:px-4 py-1.5 sm:py-2.5 font-medium text-xs sm:text-sm text-foreground">
+                                        <td className="px-2 py-1 font-medium text-xs sm:text-sm text-foreground">
                                           {v.nombre_display || v.variante}
                                         </td>
-                                        <td className="px-2 sm:px-4 py-1.5 sm:py-2.5 text-center">
+                                        <td className="px-2 py-1 text-center">
                                           <div className="flex items-center justify-center gap-1 sm:gap-1.5">
                                             <div
-                                              className={`w-1.5 h-1.5 rounded-full ${
+                                              className={`w-1.5 h-1.5 rounded-full font-mono ${
                                                 varStock === 0
                                                   ? "bg-rose-500"
                                                   : "bg-emerald-500"
                                               }`}
                                             />
-                                            <span className="font-semibold text-xs sm:text-sm text-foreground">
+                                            <span className="font-semibold text-xs sm:text-sm font-mono text-foreground">
                                               {varStock}{" "}
                                               <span className="text-[9px] sm:text-[10px] font-medium opacity-70 uppercase tracking-widest">
                                                 u.
@@ -953,7 +953,7 @@ export function StockTable({
                                         </td>
                                         {isAdmin && (
                                           <td
-                                            className={`px-2 sm:px-4 py-1.5 sm:py-2.5 text-right text-xs sm:text-sm ${
+                                            className={`px-2 font-mono py-1 text-right text-xs sm:text-sm ${
                                               varCostoHeredado
                                                 ? "text-muted-foreground italic"
                                                 : "font-medium text-foreground"
@@ -968,7 +968,7 @@ export function StockTable({
                                           </td>
                                         )}
                                         <td
-                                          className={`px-2 sm:px-4 py-1.5 sm:py-2.5 text-right text-xs sm:text-sm ${
+                                          className={`px-2 font-mono py-1 text-right text-xs sm:text-sm ${
                                             varPrecioHeredado
                                               ? "text-muted-foreground italic"
                                               : "font-semibold text-foreground"

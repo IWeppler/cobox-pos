@@ -21,9 +21,16 @@ import {
   BookUser,
 } from "lucide-react";
 import { ClienteBasico } from "./client-selector";
+import { calcularRecargoMonto } from "@/shared/lib/recargo-metodo";
 
 interface PaymentModalProps {
+  /** Total de la mercadería, SIN recargo por método. */
   totalFinal: number;
+  /** Lo que el cliente entrega (incluye el recargo por método). */
+  totalACobrar?: number;
+  /** % de recargo del método elegido, para calcular el recargo del anticipo
+   * mientras se tipea en Cuenta Corriente. */
+  recargoPorcentajeSeleccionado?: number;
   sumaPagos: number;
   isPending: boolean;
   clienteSeleccionado: ClienteBasico | null;
@@ -36,6 +43,8 @@ interface PaymentModalProps {
 
 export function PaymentModal({
   totalFinal,
+  totalACobrar,
+  recargoPorcentajeSeleccionado = 0,
   sumaPagos,
   isPending,
   clienteSeleccionado,
@@ -59,9 +68,14 @@ export function PaymentModal({
 
   // 1. LÓGICA DE VENTA NORMAL (Al Contado)
   if (!isCuentaCorriente) {
+    // El sobrepago se mide contra la mercadería (bases), que es lo que los
+    // pagos tienen que cubrir; el vuelto, contra lo que el cliente entrega de
+    // verdad (con recargo). Mezclarlos daría vuelto de menos justo en los
+    // tickets con tarjeta.
     const isSobrePagoError = sumaPagos > totalFinal + 0.05;
+    const montoACobrar = totalACobrar ?? totalFinal;
     const recibidoNum = Number(montoRecibido) || 0;
-    const vuelto = recibidoNum > totalFinal ? recibidoNum - totalFinal : 0;
+    const vuelto = recibidoNum > montoACobrar ? recibidoNum - montoACobrar : 0;
 
     return (
       <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -96,12 +110,18 @@ export function PaymentModal({
                     $
                   </span>
                   <Input
-                    value={totalFinal.toLocaleString("es-AR")}
+                    value={montoACobrar.toLocaleString("es-AR")}
                     readOnly
                     disabled
                     className="pl-8 font-mono font-medium h-11 text-lg text-foreground"
                   />
                 </div>
+                {montoACobrar > totalFinal ? (
+                  <p className="text-[11px] font-medium text-amber-700 dark:text-amber-500">
+                    Incluye ${(montoACobrar - totalFinal).toLocaleString("es-AR")}{" "}
+                    de recargo por el método de pago.
+                  </p>
+                ) : null}
               </div>
 
               {isEfectivoOnly ? (
@@ -167,7 +187,13 @@ export function PaymentModal({
 
   // 2. 🚀 LÓGICA DE CUENTA CORRIENTE INTERACTIVA (Calculadora Fiado)
   const isAnticipoInsuficiente = anticipoLocalNum < anticipoMinimo - 0.05;
+  // La deuda se calcula sobre el anticipo SIN recargo: el recargo es plata
+  // que entra por el método de pago, no capital que el cliente amortiza.
   const deudaGenerada = totalFinal - anticipoLocalNum;
+  const recargoAnticipo = calcularRecargoMonto(
+    anticipoLocalNum,
+    recargoPorcentajeSeleccionado,
+  );
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -218,7 +244,30 @@ export function PaymentModal({
             </div>
           </div>
 
+          {recargoAnticipo > 0 ? (
+            <div className="flex justify-between items-center text-xs font-medium text-amber-700 dark:text-amber-500">
+              <span>
+                Recargo del método ({recargoPorcentajeSeleccionado}%) sobre el
+                anticipo
+              </span>
+              <span className="font-mono">
+                +${recargoAnticipo.toLocaleString("es-AR")}
+              </span>
+            </div>
+          ) : null}
+
           <div className="p-4 mt-4">
+            {recargoAnticipo > 0 ? (
+              <div className="flex justify-between items-center pb-3 mb-3 border-b border-border">
+                <p className="text-sm text-muted-foreground font-medium">
+                  Cobrás hoy
+                </p>
+                <p className="text-lg font-mono font-medium">
+                  $
+                  {(anticipoLocalNum + recargoAnticipo).toLocaleString("es-AR")}
+                </p>
+              </div>
+            ) : null}
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground font-medium">
                 Saldo a deber

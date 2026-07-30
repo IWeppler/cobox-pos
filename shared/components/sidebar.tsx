@@ -281,7 +281,7 @@ export function Sidebar({
                   >
                     <div className="relative flex items-center justify-center">
                       <Icon
-                        className={`w-5 h-5 shrink-0 transition-colors ${
+                        className={`w-5 h-5 shrink-0 transition-colors stroke-1.5 opacity-60 ${
                           isActive ? "text-primary-foreground" : ""
                         }`}
                       />

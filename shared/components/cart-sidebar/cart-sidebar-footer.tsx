@@ -20,7 +20,14 @@ interface CartSidebarFooterProps {
   isPending: boolean;
   totalCarrito: number;
   recargoCuentaCorriente: number;
+  /** Recargo por método de pago. Ya NO está incluido en `totalFinal`. */
+  recargoMetodoMonto?: number;
+  recargoMetodoEtiqueta?: string;
+  /** Total del ticket SIN recargo por método: es contra este número que se
+   * valida que los pagos cubran la mercadería. */
   totalFinal: number;
+  /** Lo que el cliente entrega: totalFinal + recargo por método. */
+  totalACobrar?: number;
   sumaPagos: number;
   isCuentaCorriente: boolean;
   isReserva?: boolean;
@@ -45,8 +52,11 @@ export function CartSidebarFooter({
   isPending,
   totalCarrito,
   totalFinal,
+  totalACobrar,
   sumaPagos,
   recargoCuentaCorriente,
+  recargoMetodoMonto = 0,
+  recargoMetodoEtiqueta = "",
   clienteSeleccionado,
   descuentoDetalle,
   isCuentaCorriente,
@@ -120,12 +130,22 @@ export function CartSidebarFooter({
               </span>
             </div>
           ) : null}
+          {recargoMetodoMonto > 0 ? (
+            <div className="flex items-center justify-between font-mono text-sm text-amber-700 dark:text-amber-500">
+              <span className="truncate uppercase">
+                {recargoMetodoEtiqueta || "Recargo por método"}
+              </span>
+              <span className="font-mono">
+                +{formatCurrency(recargoMetodoMonto)}
+              </span>
+            </div>
+          ) : null}
           <div className="flex items-center justify-between border-t border-border pt-3">
             <span className="font-mono text-xl font-semibold uppercase text-foreground">
               Total
             </span>
             <span className="font-mono text-2xl font-medium text-foreground">
-              {formatCurrency(totalFinal)}
+              {formatCurrency(totalACobrar ?? totalFinal)}
             </span>
           </div>
         </div>
@@ -174,6 +194,8 @@ export function CartSidebarFooter({
       {modalAbierto && (
         <PaymentModal
           totalFinal={totalFinal}
+          totalACobrar={totalACobrar}
+          recargoPorcentajeSeleccionado={recargoPorcentajeSeleccionado}
           sumaPagos={sumaPagos}
           isPending={isPending}
           clienteSeleccionado={clienteSeleccionado}

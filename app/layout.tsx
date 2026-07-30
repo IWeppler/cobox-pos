@@ -4,20 +4,20 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/shared/ui/sonner";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
-import { DM_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { Geist_Mono, Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 
-const dmMono = DM_Mono({
+const geistMono = Geist_Mono({
   subsets: ["latin"],
-  weight: ["300", "400", "500"],
-  style: ["normal", "italic"],
+  weight: ["300", "400", "500", "600", "700"],
+  style: ["normal"],
   variable: "--font-mono",
 });
 
-const plusJakarta = Plus_Jakarta_Sans({
+const geist = Geist({
   subsets: ["latin"],
   weight: ["200", "300", "400", "500", "600", "700", "800"],
-  style: ["normal", "italic"],
+  style: ["normal"],
   variable: "--font-sans",
 });
 
@@ -61,8 +61,8 @@ export default async function RootLayout({
         "h-full",
         "antialiased",
         "font-sans",
-        plusJakarta.variable,
-        dmMono.variable,
+        geist.variable,
+        geistMono.variable,
       )}
       suppressHydrationWarning
     >

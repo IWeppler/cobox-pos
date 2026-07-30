@@ -21,8 +21,6 @@ interface StockViewProps {
   userRole: string;
   nombreComercio: string;
   mostrarSinStock: boolean;
-  /** Decide si la fila muestra "N var." (indumentaria) o Modelo + EAN
-   * (electro). Ver StockTable/StockGrid. */
   rubro: Rubro;
 }
 
@@ -33,7 +31,7 @@ interface CategoriaDB {
   parent_id: string | null;
 }
 
-const ITEMS_POR_PAGINA = 10;
+const ITEMS_POR_PAGINA = 12;
 const SEARCH_DEBOUNCE_MS = 300;
 
 export function StockView({

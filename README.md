@@ -1,97 +1,142 @@
-# 📦 Sistema POS & Catálogo E-commerce (Multirrubro)
+# Cobox POS
 
-Un sistema integral de Punto de Venta (POS), gestión empresarial y catálogo web público. Construido con **Next.js, Supabase y Tailwind CSS**. Gracias a su arquitectura de base de datos basada en JSONB, es altamente flexible y se adapta a cualquier rubro minorista (indumentaria, viveros, tecnología, almacenes, etc.).
+**El sistema de gestión que reemplaza el cuaderno, el Excel y el grupo de WhatsApp.**
+Punto de venta, stock, caja, clientes y catálogo web — todo en un solo lugar, funcionando desde el celular del mostrador.
 
-## ✨ Características Principales
+> Hoy en producción real en comercios de Tostado, Santa Fe: indumentaria y electro.
+> Lo usan dueñas y vendedoras todos los días, con plata real.
 
-### 🏪 Para los Clientes (Catálogo Web)
+---
 
-- **Catálogo Dinámico:** Visualización de productos por categorías con atributos configurables (talles, colores, materiales, peso, etc.).
-- **Carrito de Compras Optimizados:** Sistema rápido con persistencia local y cálculo de descuentos.
-- **Integración con WhatsApp:** Checkout sin fricción que genera un mensaje pre-armado hacia el WhatsApp del local con el detalle exacto del pedido.
+## Por qué existe
 
-### 💼 Para el Local (Terminal POS & ERP)
+Los comercios chicos y medianos del interior no necesitan un ERP de 200 pantallas.
+Necesitan cobrar rápido, saber qué stock les queda, cuánto les debe cada cliente y
+cuánto quedó en la caja al cerrar. Cobox hace exactamente eso, bien.
 
-- **Terminal POS Súper Rápida:** Interfaz táctil de mostrador (Quick Add) que descuenta inventario en tiempo real. Soporte para múltiples métodos de pago (Mixtos) y calculadora de vuelto.
-- **Inventario Dinámico (JSONB):** Creación de productos simples o con variantes ilimitadas. Cálculo automático de costos, precios y márgenes de rentabilidad.
-- **Módulo de Caja y Finanzas (Multi-caja):**
-  - Apertura y cierre de turnos (Tickets Z).
-  - Dashboard en tiempo real (Ingresos Brutos - Costos - Egresos = Ganancia Neta).
-  - Arqueo ciego para control estricto de los vendedores.
-- **CRM y Cuentas Corrientes:**
-  - Ficha detallada por cliente con historial de compras (Contado y Crédito).
-  - Gestión de saldos, pagos parciales a cuenta y reglas de recargo/pago mínimo configurables por cliente.
-- **Gestión de Bajas / Mermas:** Registro de roturas, robos o vencimientos para métricas precisas de pérdida de capital.
-- **Gestión de Usuarios y Permisos Granulares:** Sistema de Roles personalizable (Admin, Cajero, Vendedor, etc.) con restricciones específicas (ej: ocultar costos o rentabilidad al staff).
-- **Marca Blanca (Configuración):** Panel para modificar dinámicamente el nombre del local, logos, números de contacto y opciones de visualización sin tocar el código.
+- **Se aprende en una tarde.** Una vendedora nueva vende sola el primer día.
+- **Anda en el celular.** Mostrador, depósito o feria: la misma app.
+- **Sin instalación ni servidor.** Web, siempre actualizado.
+- **Tu catálogo online, gratis.** Los clientes miran precios y piden por WhatsApp.
 
-## 🛠️ Stack Tecnológico
+---
 
-- **Framework:** Next.js (App Router, Server Actions, React)
-- **Base de Datos & Auth:** Supabase (PostgreSQL, Row Level Security, JSONB, Storage)
-- **Estilos:** Tailwind CSS
-- **Componentes UI:** Shadcn UI / Radix Primitives
-- **Gestión de Estado (Client):** Zustand
-- **Iconos:** Lucide React
-- **Notificaciones:** Sonner
+## Qué incluye
 
-🚀 Instalación y Configuración Local
+### 🛒 Punto de venta
 
-1. Clonar el repositorio
-   git clone [https://github.com/tu-usuario/vivero-tostado.git](https://github.com/tu-usuario/vivero-tostado.git)
-   cd vivero-tostado
+Venta en pocos toques, con búsqueda instantánea y carga rápida por código de barras o
+SKU. Pagos mixtos (efectivo + tarjeta + transferencia en un mismo ticket), calculadora
+de vuelto, descuentos y promociones. El stock se descuenta en el momento, sin
+sobreventa: el descuento es atómico a nivel base de datos, no "a ver si llega".
 
-2. Instalar dependencias
-   npm install
+### 📦 Inventario que se adapta a tu rubro
 
-# o yarn install / pnpm install
+Productos simples o con variantes ilimitadas (talle, color, capacidad, material, lo que
+uses). Costos, precios y margen calculados solos. Historial de cambios de precio y de
+variantes, con auditoría de quién tocó qué.
 
-3. Variables de Entorno
-   Crea un archivo .env.local en la raíz del proyecto y agrega tus credenciales de Supabase:
-   NEXT_PUBLIC_SUPABASE_URL=tu_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_supabase_anon_key
+- **Indumentaria:** grillas de talle × color, carga masiva por matriz de variantes.
+- **Electro:** modelo y EAN como identidad del producto, con **Catálogo Maestro**
+  compartido: escaneás el código y las especificaciones ya vienen cargadas.
+- **Carga rápida:** alta de productos en lote, con sugerencia de categoría y detección
+  de duplicados antes de crear basura en el inventario.
 
-4. Ejecutar en entorno de desarrollo
-   npm run dev
+### 💵 Caja y finanzas
 
-La aplicación estará disponible en http://localhost:3000.
-🗄️ Estructura de la Base de Datos (Supabase)
-El proyecto requiere las siguientes tablas en PostgreSQL:
-productos: Información base (nombre, tipo, precio, costo, imagen, publicado).
-productos_stock: Control de cantidad vinculada a una variante (Ej: Talle N12) por cada producto.
-ventas: Registro de transacciones con vendedor_id para trazabilidad.
-perfiles: Vinculada al sistema de auth.users. Define el rol (ADMIN o VENDEDOR).
-bajas: Solicitudes de baja de inventario con estado (PENDIENTE, APROBADA, RECHAZADA).
-egresos: Registro de gastos operativos para el cálculo de caja.
-configuracion_pos: Tabla de una sola fila para persistir el branding (Logo, WhatsApp, etc.).
-(Asegurarse de tener configuradas correctamente las políticas de Row Level Security - RLS para que los vendedores solo tengan permisos de lectura en catálogos y escritura en ventas).
-📂 Arquitectura de Carpetas
-El proyecto sigue una arquitectura modular basada en Features (Funcionalidades):
-├── app/
-│ ├── (dashboard)/ # Rutas privadas del POS (Admin & Vendedores)
-│ ├── (public)/ # Rutas públicas (Catálogo para clientes)
-│ ├── auth/ # Pantallas de Login/Registro
-│ └── layout.tsx # Layout principal
-├── entities/ # Tipos globales e interfaces de TypeScript
-├── features/ # Funcionalidades encapsuladas
-│ ├── auth/ # Server Actions de sesión
-│ ├── caja/ # Lógica y UI del módulo financiero
-│ ├── configuracion/ # Formularios de branding del POS
-│ ├── productos/ # Acciones y vistas del catálogo público
-│ ├── purchases/ # Importación de pedidos/remitos
-│ ├── sales/ # Registro de ventas, tablas y acciones
-│ └── stock/ # Inventario, edición, bajas y modales
-└── shared/
-├── components/ # Componentes reutilizables (Navbar, Sidebar, etc.)
-├── config/ # Configuración de clientes (Supabase)
-├── store/ # Zustand stores (Ej: Carrito)
-├── ui/ # Componentes base de diseño (Botones, Inputs - Shadcn)
-└── utils/ # Helpers (formateo de moneda, slugs)
+Apertura y cierre de turno con arqueo ciego (el vendedor no ve el esperado antes de
+contar). Multi-caja por usuario: cada vendedora ve y cierra **solo su turno**; la dueña
+ve todos. Turno cerrado es inmutable. Egresos, ingresos y ganancia neta del día en una
+sola pantalla.
 
-🛡️ Seguridad y Middleware
-El proyecto utiliza un middleware.ts en Next.js para proteger las rutas.
-Si un usuario no autenticado intenta acceder a /stock, es redirigido a /store (o /auth).
-Si un usuario con rol VENDEDOR intenta acceder a / (Dashboard Financiero), /configuracion o /caja, es redirigido forzosamente a /stock.
+### 👥 Clientes y cuenta corriente
 
-👨‍💻 Autor
-Desarrollado por Ignacio Weppler para la gestión optimizada de emprendimientosy pequeños y medianos negocios.
+Fiado bien resuelto — el diferencial que la mayoría de los sistemas hace mal.
+Ficha por cliente con historial, saldo, pagos parciales a cuenta, anticipos, límite de
+crédito, recargo por mora y plazo configurables. Sabés a quién llamar y por cuánto.
+
+### 📥 Remitos y órdenes de compra
+
+Cargás el remito del proveedor (CSV o pegado) y el sistema **aprende los nombres**:
+"REM. NEG. T2" queda asociado a tu producto para siempre. Sugiere el match, sugiere la
+categoría, y al aprobar impacta precios, stock y alias en una sola operación
+transaccional e idempotente — apretar dos veces no duplica el stock.
+
+### 🌐 Catálogo web público
+
+Tu vidriera online, con tu logo, tus colores y tu WhatsApp. Categorías en árbol,
+filtros, banner y marquee de promos configurables desde el panel. El cliente arma el
+carrito y el pedido llega a tu WhatsApp ya escrito, con detalle exacto.
+
+### 🔐 Roles y permisos
+
+Admin, encargado y vendedor, con permisos granulares (por ejemplo: ocultar costos y
+rentabilidad al staff). Trazabilidad de cada venta, anulación y baja de stock por
+usuario.
+
+### 📉 Bajas y mermas
+
+Roturas, robos, vencimientos y devoluciones registradas con motivo y origen, para que
+la pérdida de capital sea un número y no una sorpresa.
+
+### 🎨 Marca blanca
+
+Nombre, logo, contacto, textos, visibilidad de precios y stock: todo se cambia desde el
+panel, sin tocar código.
+
+---
+
+## Stack
+
+Next.js (App Router, Server Actions) · TypeScript · Supabase (PostgreSQL, RLS, JSONB,
+Storage, Auth) · Tailwind CSS · shadcn/ui · Zustand · Vercel.
+
+Decisiones que importan: toda operación que toca plata se **revalida en el servidor**,
+el stock se mueve con UPDATE atómico condicional, y los datos de cada comercio viven en
+su propia base con Row Level Security.
+
+---
+
+## Puesta en marcha (desarrollo)
+
+```bash
+git clone <repo>
+cd cobox-pos
+npm install
+npm run dev
+```
+
+Variables mínimas en `.env.local`:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+```
+
+App en http://localhost:3000. Las migraciones de base viven en `supabase/migrations/` y
+se aplican a cada proyecto Supabase del comercio.
+
+### Arquitectura de carpetas
+
+```
+app/
+  (dashboard)/   Rutas privadas (POS, stock, caja, clientes, reportes)
+  (public)/      Catálogo público
+  auth/          Login
+entities/        Tipos e interfaces compartidas
+features/        Módulos: pos, stock, caja, clients, purchases, carga-rapida,
+                 catalog, categories, promotions, payments, reports, config…
+shared/          UI base, utils, stores, clientes de Supabase
+supabase/        Migraciones SQL versionadas
+```
+
+`middleware.ts` protege las rutas: sin sesión → login; rol VENDEDOR fuera del dashboard
+financiero, configuración y caja ajena.
+
+---
+
+## Contacto
+
+Desarrollado por **Ignacio Weppler** para comercios que quieren dejar de adivinar cuánto
+vendieron.
+¿Querés verlo funcionando en tu negocio? Escribime.
