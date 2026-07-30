@@ -47,8 +47,41 @@ function cleanAttributeValue(propName: string, rawValue: string): string {
 
 type ProductoVarianteDb = NonNullable<Producto["producto_variantes"]>[number];
 
+/**
+ * "Producto sin variantes reales": la fila placeholder que representa al
+ * producto simple.
+ *
+ * Se compara SIN tildes y case-insensitive a propósito, porque el nombre se
+ * escribe distinto según por dónde entró el producto y las dos formas son
+ * válidas en la base:
+ *
+ *   - creación manual (create-product.ts / edit-product.ts) -> "Único"
+ *   - remitos y carga rápida (merge-purchase.ts, aprobar_orden_compra) -> "Unico"
+ *
+ * Comparar contra el literal con tilde hacía que todo producto creado desde
+ * un remito pareciera tener variantes: el formulario de edición abría la
+ * sección de variantes con una sola fila fantasma "Unico".
+ *
+ * Acá se normaliza solo para LEER — el texto guardado no se toca nunca (misma
+ * regla que productos_stock).
+ */
+export function esNombreVarianteUnica(
+  nombre: string | null | undefined,
+): boolean {
+  if (!nombre) return false;
+
+  const crudo = nombre.trim().toLowerCase();
+  // "Ãšnico" es el mojibake de "Único" leído como Latin-1; está en datos
+  // viejos y hay que seguir reconociéndolo. Se compara antes de sacar
+  // tildes porque al normalizarlo queda "asnico", no "unico".
+  if (crudo === "ãšnico") return true;
+
+  const sinTildes = crudo.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return sinTildes === "unico";
+}
+
 function isPlaceholderVariant(variante: ProductoVarianteDb) {
-  return variante.nombre_display === "Único";
+  return esNombreVarianteUnica(variante.nombre_display);
 }
 
 /** Reconstruye las variantes desde la tabla normalizada `producto_variantes`. */
@@ -154,10 +187,7 @@ export function isSingleVariantProduct(producto: Producto): boolean {
   if (producto.producto_variantes?.length) return false;
 
   const variantName = producto.stock?.[0]?.variante;
-  return (
-    producto.stock?.length === 1 &&
-    (variantName === "Único" || variantName === "Ãšnico")
-  );
+  return producto.stock?.length === 1 && esNombreVarianteUnica(variantName);
 }
 
 export function parseLegacyVariant(

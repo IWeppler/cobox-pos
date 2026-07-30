@@ -4,6 +4,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { useActiveCategories } from "@/features/stock/hooks/use-active-categories";
+import { esNombreVarianteUnica } from "@/features/stock/utils/parse-legacy-variant";
 import type { LineaCarga, LineaCargaNueva } from "../types";
 
 function formatearPrecio(valor: number): string {
@@ -123,8 +124,12 @@ export function CargaRapidaLista({
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground truncate">
                 {linea.kind === "EXISTENTE" ? linea.nombreProducto : linea.nombre}
+                {/* Mismo criterio que el formulario de edición: el
+                    placeholder se escribe "Único" o "Unico" según por dónde
+                    entró el producto, y en los dos casos no es una variante
+                    que valga la pena mostrar. */}
                 {linea.kind === "EXISTENTE" &&
-                linea.nombreDisplay !== "Único"
+                !esNombreVarianteUnica(linea.nombreDisplay)
                   ? ` · ${linea.nombreDisplay}`
                   : ""}
               </p>

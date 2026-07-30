@@ -483,6 +483,12 @@ export function MergeTable({
             similaresMap,
             group[0].raw_genero ?? null,
             categoriasDB,
+            group[0].raw_categoria ?? null,
+            // La categoría que el import ya resolvió (columna Categoría del
+            // CSV matcheada contra el árbol real). Sin pasarla, la fila se
+            // reclasificaba desde cero por nombre y las categorías que no
+            // son de ropa —JUGUETES— caían siempre en Ambiguo.
+            group[0].raw_categoria_id ?? null,
           ),
         );
       }

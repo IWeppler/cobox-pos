@@ -67,14 +67,39 @@ export function clasificarDesconocido(
   similares: Map<string, CandidatoSimilar>,
   rawGenero?: string | null,
   categoriasReales?: CategoriaReal[],
+  /** Columna Categoría del CSV, tal cual vino. */
+  rawCategoria?: string | null,
+  /** Categoría que el import YA resolvió contra el árbol real. */
+  rawCategoriaId?: string | null,
 ): BucketDesconocido {
   const candidato = similares.get(rawNombre);
   if (candidato) return { tipo: "POSIBLE_MATCH", candidato };
 
   if (categoriasReales && categoriasReales.length > 0) {
+    // La categoría ya resuelta en el import gana sobre cualquier
+    // heurística: salió de un match exacto contra el árbol real (o de una
+    // elección previa), así que volver a adivinarla acá solo puede
+    // empeorarla. Sin esto, una fila con Categoría="JUGUETES" en el CSV
+    // llegaba a la conciliación como Ambigua: el diccionario de keywords
+    // es de ropa y el corte por árbol de audiencia (abajo) descarta todo
+    // lo que no sea Mujer/Hombre/Niña/Niño/Bebé.
+    const yaResuelta = rawCategoriaId
+      ? categoriasReales.find((c) => c.id === rawCategoriaId)
+      : undefined;
+    if (yaResuelta) {
+      return {
+        tipo: "NUEVO_SUGERIDO",
+        categoriaSugerida: {
+          categoriaNombre: yaResuelta.nombre,
+          matchedKeyword: "categoría del archivo",
+        },
+        categoriaId: yaResuelta.id,
+      };
+    }
+
     const resolucion = resolverCategoriaImport(
       rawNombre,
-      null,
+      rawCategoria ?? null,
       rawGenero ?? null,
       categoriasReales,
     );
