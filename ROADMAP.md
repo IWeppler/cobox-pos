@@ -1,5 +1,8 @@
 ideas:
-- atajos con teclado
+- mejorar ux de seleccion multiple dentro del modulo de /stock. Actualmente se abre una barra abajo que no me deja avanzar de pagina y necesito que tenga simplemente para ver cantidad de productos seleccionados y acciones entonces ahi pongo que accion quiero hacer: editar precios, eliminar, cambiar de categoria, subcategoria.
+- ver historial de productos cargadaos a traves de remitos. como agrupaciones y luego detalle de cada remito. Esto va de la mano con la mejora de la creacion de la pagina de movimientos que actualmente ni siquiera me esta leyendo los productos que ingresan a traves de remitos, no tiene paginacion, creo que podria tener mas filtros y podemos poner esto que digo directamente ahi adentro.
+- Badges de stripe. Utilizar tal vez claude design  
+- Atajos con teclado.
 - Agregar mas campos a CLIENTES: Razon social/Nombre, CUIT, Condicion IVA:
 - Login con huella: Entrás con tu huella o Face ID en vez de escribir la contraseña cada vez.
 - Multi-sucursal: Hasta 5 sucursales bajo la misma cuenta, con stock y caja independientes.

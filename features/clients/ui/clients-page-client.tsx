@@ -53,12 +53,12 @@ export function ClientsPageClient({ isAdmin }: { isAdmin: boolean }) {
 
 function ClientsSkeleton() {
   return (
-    <div className="space-y-4 mt-8">
+    <div className="space-y-4 mt-8 m-4">
       <div className="flex justify-between items-center">
         <Skeleton className="h-10 w-64 rounded-lg" />
         <Skeleton className="h-10 w-32 rounded-lg" />
       </div>
-      <div className="rounded-xl border border-border bg-card">
+      <div className="rounded-xl border border-border bg-card ">
         <div className="h-12 border-b border-border bg-muted/50 px-4 flex items-center">
           <Skeleton className="h-4 w-full max-w-md" />
         </div>

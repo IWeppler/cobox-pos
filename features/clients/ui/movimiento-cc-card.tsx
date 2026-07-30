@@ -81,18 +81,18 @@ export function MovimientoCCCard({
   return (
     <>
       <div
-        className={`flex items-center justify-between p-3 bg-background border border-border rounded-lg ${
+        className={`flex items-center justify-between p-2 bg-background border border-border rounded-lg ${
           mov.anulado ? "opacity-50" : ""
         }`}
       >
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           <div
-            className={`p-2 rounded-full shrink-0 ${mov.tipo === "DEBITO" ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}
+            className={`p-1 rounded-full shrink-0 ${mov.tipo === "DEBITO" ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}
           >
             {mov.tipo === "DEBITO" ? (
-              <ArrowUpRight className="w-4 h-4" />
+              <ArrowUpRight className="w-2 h-2" />
             ) : (
-              <ArrowDownRight className="w-4 h-4" />
+              <ArrowDownRight className="w-2 h-2" />
             )}
           </div>
           <div className="min-w-0">
@@ -114,26 +114,27 @@ export function MovimientoCCCard({
                 </Badge>
               )}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {fechaMostrada}
-            </p>
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {fechaMostrada}
+              </p>
+              <span
+                className={`font-mono font-medium ${
+                  mov.anulado
+                    ? "line-through text-muted-foreground"
+                    : mov.tipo === "DEBITO"
+                      ? "text-rose-600"
+                      : "text-emerald-600"
+                }`}
+              >
+                {mov.tipo === "DEBITO" ? "+" : "-"}
+                {formatearMoneda(Number(mov.monto))}
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <span
-            className={`font-mono font-medium ${
-              mov.anulado
-                ? "line-through text-muted-foreground"
-                : mov.tipo === "DEBITO"
-                  ? "text-rose-600"
-                  : "text-emerald-600"
-            }`}
-          >
-            {mov.tipo === "DEBITO" ? "+" : "-"}
-            {formatearMoneda(Number(mov.monto))}
-          </span>
-
           {puedeGestionar && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

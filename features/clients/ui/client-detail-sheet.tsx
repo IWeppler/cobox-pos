@@ -185,7 +185,7 @@ export function ClientDetailSheet({
               onClick={() => setIsEditOpen(true)}
               className="h-8 text-xs font-medium border-border"
             >
-              <Edit2 className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+              <Edit2 className="w-3.5 h-3.5 mr-1.5 text-primary" />
               Editar datos
             </Button>
           </div>
@@ -197,8 +197,8 @@ export function ClientDetailSheet({
             defaultValue="historial"
             className="w-full h-full flex flex-col"
           >
-            <div className="px-2 pt-4 shrink-0">
-              <TabsList className="grid w-full grid-cols-4 bg-muted/50 border border-border h-12">
+            <div className="px-4 pt-4 shrink-0">
+              <TabsList className="grid w-full grid-cols-3 bg-muted/50 border border-border">
                 <TabsTrigger
                   value="historial"
                   className="text-xs font-bold uppercase tracking-wide sm:tracking-widest"
@@ -222,7 +222,7 @@ export function ClientDetailSheet({
               </TabsList>
             </div>
 
-            <div className="p-6 flex-1">
+            <div className="p-6 md:p-4 flex-1">
               {isLoading ? (
                 <div className="flex items-center justify-center h-40 text-muted-foreground">
                   <Loader2 className="w-6 h-6 animate-spin" />

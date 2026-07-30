@@ -15,10 +15,21 @@ import type {
   ProductActionState,
 } from "@/features/stock/types";
 
-export function useCreateProductForm() {
+/** Apertura controlada desde afuera. Sirve para montar UNA sola instancia del
+ * sheet y dispararla desde varios botones (ej: el botón de la toolbar en
+ * desktop y el ítem del dropdown en mobile) sin duplicar el hook — que trae
+ * su propio fetch de categorías y su propio useActionState. */
+type ControlDeApertura = {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+};
+
+export function useCreateProductForm(control?: ControlDeApertura) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpenInterno, setIsOpenInterno] = useState(false);
+  const esControlado = control?.open !== undefined;
+  const isOpen = esControlado ? control.open! : isOpenInterno;
   const [archivos, setArchivos] = useState<File[]>([]);
   const [isCompressing, setIsCompressing] = useState(false);
 
@@ -58,8 +69,12 @@ export function useCreateProductForm() {
       ? ((gananciaNeta / costoNum) * 100).toFixed(1)
       : "0";
 
+  // Todos los cierres del sheet pasan por acá (botón cancelar, flecha del
+  // header y el cierre automático tras crear el producto), así que avisarle
+  // al padre desde este único lugar alcanza para que no quede colgado.
   const handleOpenChange = (open: boolean) => {
-    setIsOpen(open);
+    if (!esControlado) setIsOpenInterno(open);
+    control?.onOpenChange?.(open);
     if (!open) {
       setArchivos([]);
       setShowPrice(false);

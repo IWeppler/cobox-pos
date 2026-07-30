@@ -14,6 +14,7 @@ import {
   List,
   MoreHorizontal,
   PackagePlus,
+  Plus,
   ScanBarcode,
   Search,
 } from "lucide-react";
@@ -99,6 +100,9 @@ export function StockFiltersToolbar({
 }: Readonly<StockFiltersToolbarProps>) {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  // El sheet de carga manual se monta UNA vez y se abre desde dos botones
+  // distintos según breakpoint (barra en desktop, dropdown en mobile).
+  const [isCrearProductoOpen, setIsCrearProductoOpen] = useState(false);
   const propiedadesVariantes = Object.entries(propiedadesGlobales);
   const hayFiltrosVariantesActivos = Object.values(filtrosVariantes).some(
     (valor) => (Array.isArray(valor) ? valor.length > 0 : valor !== "todos"),
@@ -114,12 +118,20 @@ export function StockFiltersToolbar({
   return (
     <>
       {/* 1. BARRA SUPERIOR: Buscador y Acciones */}
-      <div className="flex flex-row gap-2 p-1.5 border-b border-border">
+      <div className="flex flex-row gap-2 py-1.5 border-b border-border">
         <ImportarPedidoModal
           open={isImportModalOpen}
           onOpenChange={setIsImportModalOpen}
           hideTrigger
         />
+
+        {isAdmin && (
+          <CrearProductoSheet
+            open={isCrearProductoOpen}
+            onOpenChange={setIsCrearProductoOpen}
+            hideTrigger
+          />
+        )}
 
         <div className="flex flex-1 items-center gap-2 min-w-0">
           <div className="relative flex-1 min-w-0">
@@ -215,8 +227,10 @@ export function StockFiltersToolbar({
 
         {/* Controles y Botonera Admin (No se encoge nunca en mobile) */}
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Carga rápida — visible para todos los roles, no solo Admin */}
-          <Link href="/stock/carga-rapida">
+          {/* Carga rápida — visible para todos los roles, no solo Admin. En
+              mobile no vive acá sino dentro del dropdown de acciones: al lado
+              del buscador no entraba sin comerle ancho. */}
+          <Link href="/stock/carga-rapida" className="hidden sm:block">
             <Button
               variant="outline"
               size="sm"
@@ -254,60 +268,102 @@ export function StockFiltersToolbar({
             </div>
           )}
 
-          {/* Botonera de Acciones Admin */}
-          {isAdmin && (
-            <div className="flex items-center gap-1.5 sm:gap-2 sm:ml-2 sm:pl-4 sm:border-l sm:border-border shrink-0">
-              {/* Opciones Secundarias en Dropdown (Icono en Mobile, Texto en Desktop) */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-10 w-10 sm:w-auto bg-background border-border/60 hover:bg-muted text-foreground p-0 sm:px-3 cursor-pointer shrink-0"
-                  >
-                    <MoreHorizontal className="h-4 w-4 sm:mr-2 text-muted-foreground" />
-                    <span className="hidden sm:inline font-semibold">
-                      Acciones
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="w-48 p-1.5 rounded-xl border-border/60 shadow-lg bg-card z-50"
+          {/* Botonera de Acciones. El dropdown NO está gateado por isAdmin
+              porque en mobile es el único acceso a Carga rápida, que es para
+              todos los roles; para un vendedor el menú tiene solo esa entrada
+              y por eso se oculta en desktop (ahí ya tiene su botón propio). */}
+          <div className="flex items-center gap-1.5 sm:gap-2 sm:ml-2 sm:pl-4 sm:border-l sm:border-border shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`h-10 w-10 sm:w-auto bg-background border-border/60 hover:bg-muted text-foreground p-0 sm:px-3 cursor-pointer shrink-0 ${
+                    isAdmin ? "" : "sm:hidden"
+                  }`}
                 >
-                  <div className="flex flex-col gap-0.5 [&_button]:w-full [&_button]:justify-start [&_button]:h-9 [&_button]:px-2 [&_button]:bg-transparent [&_button]:border-0 [&_button]:shadow-none [&_button]:font-medium [&_button]:text-sm [&_button:hover]:bg-muted [&_button]:rounded-md [&_button_span.hidden]:!inline-block [&_button_svg]:mr-2 [&_button_svg]:w-4 [&_button_svg]:h-4 [&_button_svg]:shrink-0">
-                    <UpdatePricesModal />
-                    <PriceHistoryModal />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setIsImportModalOpen(true)}
-                    >
-                      <PackagePlus className="w-4 h-4 mr-2 text-emerald-600 shrink-0" />
-                      <span>Ingresar Remito</span>
-                    </Button>
-                    <DropdownMenuSeparator className="my-1 bg-border/60" />
-                    <Link href="/stock/bajas" className="w-full block">
-                      <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-amber-50 rounded-md hover:text-amber-800 transition-colors">
-                        <ClipboardList className="w-4 h-4 mr-2 text-amber-600 shrink-0" />
-                        Bajas de Inventario
-                      </button>
-                    </Link>
-                    <Link href="/stock/movimientos" className="w-full block">
-                      <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors">
-                        <ArrowRightLeft className="w-4 h-4 mr-2 text-primary shrink-0" />
-                        Movimientos Stock
-                      </button>
-                    </Link>
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  <MoreHorizontal className="h-4 w-4 sm:mr-2 text-muted-foreground" />
+                  <span className="hidden sm:inline font-semibold">
+                    Acciones
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-48 p-1.5 rounded-xl border-border/60 shadow-lg bg-card z-50"
+              >
+                <div className="flex flex-col gap-0.5 [&_button]:w-full [&_button]:justify-start [&_button]:h-9 [&_button]:px-2 [&_button]:bg-transparent [&_button]:border-0 [&_button]:shadow-none [&_button]:font-medium [&_button]:text-sm [&_button:hover]:bg-muted [&_button]:rounded-md [&_button_span.hidden]:!inline-block [&_button_svg]:mr-2 [&_button_svg]:w-4 [&_button_svg]:h-4 [&_button_svg]:shrink-0">
+                  {/* Las dos cargas solo aparecen acá en mobile: en desktop
+                      siguen siendo botones sueltos de la barra. */}
+                  <Link
+                    href="/stock/carga-rapida"
+                    className="w-full block sm:hidden"
+                  >
+                    <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors">
+                      <ScanBarcode className="w-4 h-4 mr-2 text-muted-foreground shrink-0" />
+                      Carga rápida
+                    </button>
+                  </Link>
 
-              <div className="[&_button]:h-10 [&_button]:w-10 sm:[&_button]:w-auto [&_button]:p-0 sm:[&_button]:px-4 [&_button_span]:hidden sm:[&_button_span]:inline [&_button_svg]:mr-0 sm:[&_button_svg]:mr-2 [&_button]:shrink-0">
-                <CrearProductoSheet />
-              </div>
-            </div>
-          )}
+                  {isAdmin && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="sm:hidden"
+                        onClick={() => setIsCrearProductoOpen(true)}
+                      >
+                        <Plus className="w-4 h-4 mr-2 text-primary shrink-0" />
+                        <span>Carga manual</span>
+                      </Button>
+                      <DropdownMenuSeparator className="my-1 bg-border/60 sm:hidden" />
+                    </>
+                  )}
+
+                  {isAdmin && (
+                    <>
+                      <UpdatePricesModal />
+                      <PriceHistoryModal />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setIsImportModalOpen(true)}
+                      >
+                        <PackagePlus className="w-4 h-4 mr-2 text-emerald-600 shrink-0" />
+                        <span>Ingresar Remito</span>
+                      </Button>
+                      <DropdownMenuSeparator className="my-1 bg-border/60" />
+                      <Link href="/stock/bajas" className="w-full block">
+                        <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-amber-50 rounded-md hover:text-amber-800 transition-colors">
+                          <ClipboardList className="w-4 h-4 mr-2 text-amber-600 shrink-0" />
+                          Bajas de Inventario
+                        </button>
+                      </Link>
+                      <Link href="/stock/movimientos" className="w-full block">
+                        <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors">
+                          <ArrowRightLeft className="w-4 h-4 mr-2 text-primary shrink-0" />
+                          Movimientos Stock
+                        </button>
+                      </Link>
+                    </>
+                  )}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Carga manual en desktop: mismo sheet, otro disparador. */}
+            {isAdmin && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsCrearProductoOpen(true)}
+                className="hidden sm:flex h-10 px-4 shrink-0"
+              >
+                <Plus className="h-4 w-4 sm:mr-2" />
+                <span>Nuevo Producto</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -322,7 +378,7 @@ export function StockFiltersToolbar({
         });
 
         return (
-          <div className="flex w-full min-w-0 items-start gap-2 overflow-hidden mt-4 md:mt-2 px-2">
+          <div className="flex w-full min-w-0 items-start gap-2 overflow-hidden mt-4 md:mt-2">
             <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-2 scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] px-1 sm:px-0">
               {padreEnVista ? (
                 <>

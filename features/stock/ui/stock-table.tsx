@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useMemo, useTransition } from "react";
+import { Fragment, useState, useMemo, useRef, useTransition } from "react";
 import Image from "next/image";
 import { useQueryClient } from "@tanstack/react-query";
 import { ProductoIndice } from "@/entities/productos/types";
@@ -25,7 +25,9 @@ import {
   ArrowDown,
   ChevronDown,
   ChevronRight,
+  Check,
   FolderInput,
+  ListChecks,
   Loader2,
   X,
 } from "lucide-react";
@@ -107,6 +109,40 @@ const obtenerPrimeraImagen = (imagenUrl: unknown): string | null => {
   return getPrimeraImagen(imagenUrl);
 };
 
+/** En modo selección el tap sobre la fila selecciona/deselecciona, así que el
+ * detalle NO debe abrirse: en vez de interceptar el click, directamente no se
+ * monta el trigger del sheet (el click burbujea a la fila y listo). */
+function AbrirDetalle({
+  activo,
+  producto,
+  nombreComercio,
+  mostrarSinStock,
+  children,
+}: Readonly<{
+  activo: boolean;
+  producto: ProductoIndice;
+  nombreComercio: string;
+  mostrarSinStock: boolean;
+  children: React.ReactNode;
+}>) {
+  if (!activo) return <>{children}</>;
+  return (
+    <ProductEditDetailSheet
+      producto={producto}
+      nombreComercio={nombreComercio}
+      mostrarSinStock={mostrarSinStock}
+    >
+      {children}
+    </ProductEditDetailSheet>
+  );
+}
+
+/** Long press que entra en "modo selección" (mobile). 420ms es el punto donde
+ * ya no se confunde con un tap pero todavía no se siente trabado. */
+const LONG_PRESS_MS = 420;
+/** Si el dedo se movió más que esto, era scroll, no long press. */
+const LONG_PRESS_TOLERANCIA_PX = 10;
+
 type StockTableVariant = {
   id?: string;
   variante?: string;
@@ -152,6 +188,11 @@ export function StockTable({
     Record<string, boolean>
   >({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // En mobile no hay columna de checkbox (comía demasiado ancho): la selección
+  // se activa con long press y, mientras el modo está activo, el tap sobre la
+  // fila selecciona/deselecciona en vez de abrir el detalle. En desktop el
+  // modo nunca se enciende: ahí sigue mandando el checkbox.
+  const [modoSeleccion, setModoSeleccion] = useState(false);
   // bulkPadreId maneja el primer select (padre o categoría suelta);
   // bulkCategoryId es el destino FINAL que se manda al server — igual al
   // padre elegido si no tiene hijos, o a la subcategoría/"todo el padre"
@@ -215,6 +256,7 @@ export function StockTable({
   const toggleAll = () => {
     if (selectedIds.size === productos.length) {
       setSelectedIds(new Set());
+      setModoSeleccion(false);
     } else {
       setSelectedIds(new Set(productos.map((p) => p.id)));
     }
@@ -225,12 +267,67 @@ export function StockTable({
     if (newSet.has(id)) newSet.delete(id);
     else newSet.add(id);
     setSelectedIds(newSet);
+    // Deseleccionar el último producto sale del modo selección: si no, la
+    // fila queda "muerta" (ni abre el detalle ni se ve seleccionada).
+    if (newSet.size === 0) setModoSeleccion(false);
   };
 
   const clearSelection = () => {
     setSelectedIds(new Set());
+    setModoSeleccion(false);
     setBulkCategoryId("");
     setBulkPadreId("");
+  };
+
+  // --- LONG PRESS (solo touch) ---
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressDisparado = useRef(false);
+  const puntoInicial = useRef<{ x: number; y: number } | null>(null);
+
+  const cancelarLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    puntoInicial.current = null;
+  };
+
+  const handlePointerDown = (
+    e: React.PointerEvent<HTMLTableRowElement>,
+    id: string,
+  ) => {
+    // Con mouse el long press no aplica: en desktop está el checkbox.
+    if (e.pointerType === "mouse") return;
+    cancelarLongPress();
+    longPressDisparado.current = false;
+    puntoInicial.current = { x: e.clientX, y: e.clientY };
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null;
+      longPressDisparado.current = true;
+      setModoSeleccion(true);
+      setSelectedIds((prev) => new Set(prev).add(id));
+      navigator.vibrate?.(25);
+    }, LONG_PRESS_MS);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLTableRowElement>) => {
+    if (!longPressTimer.current || !puntoInicial.current) return;
+    const dx = Math.abs(e.clientX - puntoInicial.current.x);
+    const dy = Math.abs(e.clientY - puntoInicial.current.y);
+    if (dx > LONG_PRESS_TOLERANCIA_PX || dy > LONG_PRESS_TOLERANCIA_PX) {
+      cancelarLongPress();
+    }
+  };
+
+  const handleRowClick = (id: string) => {
+    // El click sintético que sigue al long press no debe deseleccionar lo que
+    // el long press acaba de seleccionar.
+    if (longPressDisparado.current) {
+      longPressDisparado.current = false;
+      return;
+    }
+    if (!modoSeleccion) return;
+    toggleSelect(id);
   };
 
   const handleBulkMove = () => {
@@ -364,6 +461,21 @@ export function StockTable({
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {/* Reemplaza al checkbox "seleccionar todo" del header, que en
+                mobile ya no existe. */}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 shrink-0 text-xs bg-background sm:hidden"
+              onClick={toggleAll}
+              disabled={isPending}
+            >
+              <ListChecks className="w-3.5 h-3.5 mr-1.5" />
+              {selectedIds.size === productos.length
+                ? "Ninguno"
+                : "Seleccionar todo"}
+            </Button>
             <ShareButton
               url={construirUrlSeleccion(baseUrl, idsVisiblesParaCompartir)}
               title={`Productos de ${nombreComercio}`}
@@ -504,8 +616,9 @@ export function StockTable({
         <Table className="w-full sm:min-w-200 bg-card">
           <TableHeader>
             <TableRow className="bg-muted/30 border-b border-border/60 hover:bg-muted/30">
-              {/* Columna Checkbox (visible en todos los breakpoints) */}
-              <TableHead className="w-12 pl-2 md:pl-4 pr-0">
+              {/* Columna Checkbox (oculta en mobile: ahí se selecciona con
+                  long press sobre la fila) */}
+              <TableHead className="w-12 pl-2 md:pl-4 pr-0 hidden sm:table-cell">
                 <input
                   type="checkbox"
                   checked={
@@ -517,8 +630,10 @@ export function StockTable({
                 />
               </TableHead>
 
-              {/* 1. Unificamos Foto y Producto en una sola columna */}
-              <TableHead className="text-muted-foreground pl-2 text-xs sm:text-sm">
+              {/* 1. Unificamos Foto y Producto en una sola columna. Ancho fijo
+                  en desktop: es la única columna elástica, así que sin esto se
+                  come todo el sobrante y Categoría queda apretada. */}
+              <TableHead className="text-muted-foreground pl-2 text-xs sm:text-sm sm:w-50 md:w-60">
                 <button
                   onClick={() => handleSort("nombre")}
                   className="flex items-center gap-1.5 hover:text-foreground transition-colors group font-semibold"
@@ -526,7 +641,7 @@ export function StockTable({
                   Producto {renderSortIcon("nombre")}
                 </button>
               </TableHead>
-              <TableHead className="text-left hidden sm:table-cell text-muted-foreground w-40">
+              <TableHead className="text-right hidden sm:table-cell text-muted-foreground w-24">
                 <button
                   onClick={() => handleSort("categoria")}
                   className="flex items-center justify-start w-full gap-1.5 hover:text-foreground transition-colors group font-semibold"
@@ -535,7 +650,7 @@ export function StockTable({
                 </button>
               </TableHead>
               {/* Stock Total (Oculto en móviles) */}
-              <TableHead className="text-center hidden sm:table-cell text-muted-foreground w-32">
+              <TableHead className="text-center hidden sm:table-cell text-muted-foreground w-16">
                 <button
                   onClick={() => handleSort("stock")}
                   className="flex items-center justify-center w-full gap-1.5 hover:text-foreground transition-colors group font-semibold"
@@ -547,7 +662,7 @@ export function StockTable({
               {/* Sin columna "Recargo": era 100% derivable de Costo y Precio.
                   El % vive ahora como badge al lado del Precio. */}
               {isAdmin && (
-                <TableHead className="text-right hidden md:table-cell text-muted-foreground w-28">
+                <TableHead className="text-right hidden md:table-cell text-muted-foreground w-16">
                   <button
                     onClick={() => handleSort("costo")}
                     className="flex items-center justify-end w-full gap-1.5 hover:text-foreground transition-colors group font-semibold"
@@ -557,7 +672,7 @@ export function StockTable({
                 </TableHead>
               )}
 
-              <TableHead className="text-right text-muted-foreground w-20 sm:w-28 text-xs sm:text-sm">
+              <TableHead className="text-right text-muted-foreground w-20 sm:w-20 text-xs sm:text-sm">
                 <button
                   onClick={() => handleSort("precio")}
                   className="flex items-center justify-end w-full gap-1.5 hover:text-foreground transition-colors group font-semibold"
@@ -642,16 +757,25 @@ export function StockTable({
               return (
                 <Fragment key={producto.id}>
                   <TableRow
-                    className={`group transition-colors border-b border-border/40 ${
+                    onPointerDown={(e) => handlePointerDown(e, producto.id)}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={cancelarLongPress}
+                    onPointerCancel={cancelarLongPress}
+                    onPointerLeave={cancelarLongPress}
+                    onClick={() => handleRowClick(producto.id)}
+                    // Sin esto, mantener el dedo sobre el nombre/imagen abre el
+                    // menú nativo de iOS/Android justo cuando entra el modo.
+                    onContextMenu={(e) => e.preventDefault()}
+                    className={`group transition-colors border-b border-border/40 select-none sm:select-auto [-webkit-touch-callout:none] ${
                       isSelected
-                        ? "bg-primary/5 hover:bg-primary/10"
+                        ? "bg-primary/10 hover:bg-primary/15"
                         : variantesEstanAbiertas
                           ? "bg-muted"
                           : "hover:bg-muted/20"
                     }`}
                   >
-                    {/* Checkbox (visible en todos los breakpoints) */}
-                    <TableCell className="pl-2 md:pl-4 pr-0">
+                    {/* Checkbox (oculto en mobile: long press + tap) */}
+                    <TableCell className="pl-2 md:pl-4 pr-0 hidden sm:table-cell">
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -664,9 +788,12 @@ export function StockTable({
                     <TableCell className="py-1.5 px-0 pl-1 sm:pl-2">
                       <div className="flex items-center gap-1 sm:gap-2 min-w-0">
                         <button
-                          onClick={() =>
-                            hasVariantes && toggleVariantes(producto.id)
-                          }
+                          onClick={(e) => {
+                            // Expandir variantes no debe contar como tap de
+                            // selección sobre la fila.
+                            e.stopPropagation();
+                            if (hasVariantes) toggleVariantes(producto.id);
+                          }}
                           className={`p-0.5 sm:p-1 rounded hover:bg-muted/80 transition-colors shrink-0 ${
                             !hasVariantes && "opacity-0 cursor-default"
                           }`}
@@ -679,12 +806,13 @@ export function StockTable({
                           )}
                         </button>
 
-                        <ProductEditDetailSheet
+                        <AbrirDetalle
+                          activo={!modoSeleccion}
                           producto={producto}
                           nombreComercio={nombreComercio}
                           mostrarSinStock={mostrarSinStock}
                         >
-                          <button className="w-8 h-8 sm:w-10 sm:h-10 rounded-md md:rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden border border-border/80 cursor-pointer hover:opacity-85 transition-opacity shrink-0 shadow-none">
+                          <button className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-md md:rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden border border-border/80 cursor-pointer hover:opacity-85 transition-opacity shrink-0 shadow-none">
                             {primeraImagen ? (
                               <Image
                                 src={primeraImagen}
@@ -697,19 +825,28 @@ export function StockTable({
                             ) : (
                               <ImageIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-muted-foreground/60" />
                             )}
+                            {/* Marca de selección sobre la miniatura: en mobile
+                                es el único indicador además del fondo, porque
+                                ya no hay columna de checkbox. */}
+                            {modoSeleccion && isSelected && (
+                              <span className="absolute inset-0 flex items-center justify-center bg-primary/85 text-primary-foreground">
+                                <Check className="w-4 h-4" strokeWidth={3} />
+                              </span>
+                            )}
                           </button>
-                        </ProductEditDetailSheet>
+                        </AbrirDetalle>
 
                         <div className="flex flex-col min-w-0 flex-1">
-                          <ProductEditDetailSheet
+                          <AbrirDetalle
+                            activo={!modoSeleccion}
                             producto={producto}
                             nombreComercio={nombreComercio}
                             mostrarSinStock={mostrarSinStock}
                           >
-                            <button className="font-semibold text-foreground text-xs sm:text-sm hover:text-primary transition-colors text-left truncate block w-full max-w-40 sm:max-w-60 cursor-pointer">
+                            <button className="font-semibold text-foreground text-xs sm:text-sm text-left truncate block w-full max-w-50 md:max-w-60 cursor-pointer">
                               {producto.nombre}
                             </button>
-                          </ProductEditDetailSheet>
+                          </AbrirDetalle>
                           <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
                             {producto.marca && (
                               <span className="text-[9px] sm:text-[10px] uppercase font-medium tracking-wider bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50 truncate max-w-24">
@@ -735,9 +872,10 @@ export function StockTable({
                     </TableCell>
 
                     {/* CATEGORÍA — padre e hijo apilados, no "Padre › Hijo" en
-                        una línea: en 160px la versión horizontal se truncaba
-                        justo en la parte específica ("COMPLEMENTOS › ..."). */}
-                    <TableCell className="py-1 hidden sm:table-cell text-muted-foreground text-sm max-w-40">
+                        una línea: la versión horizontal se truncaba justo en la
+                        parte específica ("COMPLEMENTOS › ..."). El ancho sale
+                        de la columna Producto, no de Stock. */}
+                    <TableCell className="py-1 hidden sm:table-cell text-muted-foreground text-sm max-w-56">
                       {categoriaPartes && (
                         <div
                           className="flex flex-col min-w-0"
@@ -808,7 +946,10 @@ export function StockTable({
 
                     {/* ACCIONES (oculta en mobile: cubierta por selección + barra flotante) */}
                     <TableCell className="text-right pl-0 pr-1 sm:pr-2 py-1 hidden sm:table-cell">
-                      <div className="flex items-center justify-end gap-0.5 md:gap-1.5">
+                      <div
+                        className="flex items-center justify-end gap-0.5 md:gap-1.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <ShareButton
                           url={urlProducto ?? ""}
                           title={`${producto.nombre} | ${nombreComercio}`}

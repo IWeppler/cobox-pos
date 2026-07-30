@@ -18,18 +18,33 @@ import { ProductMediaSection } from "./create-product/product-media-section";
 import { ProductPriceSection } from "./create-product/product-price-section";
 import { ProductVariantsSection } from "./create-product/product-variants-section";
 
-export function CrearProductoSheet() {
-  const form = useCreateProductForm();
+interface CrearProductoSheetProps {
+  /** Apertura controlada por el padre. Omitir = el sheet se maneja solo con
+   * su propio trigger (uso original: dashboard). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Para cuando el/los botón/es que abren el sheet viven en otro lado. */
+  hideTrigger?: boolean;
+}
+
+export function CrearProductoSheet({
+  open,
+  onOpenChange,
+  hideTrigger = false,
+}: Readonly<CrearProductoSheetProps> = {}) {
+  const form = useCreateProductForm({ open, onOpenChange });
 
   return (
     <>
       <Sheet open={form.isOpen} onOpenChange={form.handleOpenChange}>
-        <SheetTrigger asChild>
-          <Button variant="ghost">
-            <Plus className="w-4 h-4 mr-2" />
-            <span className="hidden md:flex">Nuevo Producto</span>
-          </Button>
-        </SheetTrigger>
+        {!hideTrigger && (
+          <SheetTrigger asChild>
+            <Button variant="ghost">
+              <Plus className="w-4 h-4 mr-2" />
+              <span className="hidden md:flex">Nuevo Producto</span>
+            </Button>
+          </SheetTrigger>
+        )}
 
         <SheetContent
           side="right"

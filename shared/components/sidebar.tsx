@@ -338,18 +338,16 @@ export function Sidebar({
 
           {/* WATERMARK POWERED BY */}
           {!isCollapsed && (
-            <div className="flex text-center mx-auto pt-2 gap-1">
-              <p className="text-[10px] text-muted-foreground">
-                Powered by Cobox{" "}
-              </p>
+            <div className="flex mx-auto pt-2 gap-1">
+              <p className="text-xs text-muted-foreground">Powered by </p>
               <Link
                 href="https://www.ignacioweppler.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[10px] font-semibold text-primary"
+                className="text-xs font-semibold text-primary"
               >
                 {" "}
-                Ignacio Weppler
+                Cobox
               </Link>
             </div>
           )}
