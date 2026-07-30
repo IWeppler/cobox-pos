@@ -2,11 +2,10 @@ ideas:
 - atajos con teclado
 - Agregar mas campos a CLIENTES: Razon social/Nombre, CUIT, Condicion IVA:
 - Login con huella: Entrás con tu huella o Face ID en vez de escribir la contraseña cada vez.
-- Multi-sucursal: Hasta 5 sucursales bajo la misma cuenta, con stock y caja independientes. 
+- Multi-sucursal: Hasta 5 sucursales bajo la misma cuenta, con stock y caja independientes.
 - UX, caso Evens, 1 dueña, 2 negocios. Switch de negocio tipo github.
 - Exportación contable: Resumen de IVA, libro de ventas y compras, caja X y Z: un Excel listo para tu contador.
 - Conectar mercado pago para que te aparezca el qr y que te avise que se pago. entiendo que no sirve si tenes varias vendedoras en un local. Se puede hacer si tengo muchas vendedoras?
-- Creacion de producto al vuelo desde el /POS para que puedan empezar a vender desde el primer dia: Pickeo un producto o escribo un nombre, no coincide con ningun producto, el producto no existe. Crear Producto? Que tan bien lo ves? con esta actualizacion,probablemente pasaria el modulo de carga rapida al POS
 - Agregar mas Datos de la empresa: nombre comercial +/ razon social, cuit. etiquetas de codigo de barra: a4, 50x30, 40x25, modo de facturacion: AFIP Manual (generar cuando se necesite), AFIP Automatico, Ticket Interno (Sin Afip)
 - Alicuota IVA (creacion de productos): 21% general; 10,5% alimentos básicos, carne, panificados, harinas; 0% exento.
 
@@ -69,6 +68,7 @@ ideas:
 <!-- - Emprendedor ($30k): caja + ventas + stock + catálogo público básico. Sin cuenta corriente (o con tope chico de clientes), sin reportes avanzados, sin multi-caja.
 - Gestión ($50k): + cuenta corriente/fiado completo (tu diferencial más fuerte para el interior, casi nadie gastronómico lo tiene bien resuelto), + reportes, + multi-caja/roles.
 - Empresa ($70k): + multi-sucursal, + facturación fiscal (cuando esté ARCA), + integraciones (impresora térmica, código de barras avanzado). -->
+
 
  Seeds por industria (quiosco, ferretería, carnicería...)
 <!-- "Tu arquitectura ya está bastante bien parada para esto sin saberlo: producto_variantes.atributos es JSONB libre — "Talle"/"Color" no están hardcodeados en el schema, son solo los valores que Evens usó. Un quiosco puede simplemente no usar atributos (cada producto es su propia variante única), y categoria_atributos (la tabla que encontraste "de fachada") es exactamente la pieza pensada para declarar qué atributos aplican por categoría/rubro — hoy sin terminar, pero es la dirección correcta para los seeds por industria que ya tenías en el backlog.

@@ -98,12 +98,14 @@ type ItemResueltoConCategoria = ItemResuelto & {
 // si no responden a tiempo, se tratan como error y el botón se destraba
 // en vez de quedar "cargando" para siempre.
 //
-// Había subido a 300s para tapar el N+1 de aprobarOrdenAction (un await por
-// línea, ~1500 round-trips en el remito de 347 líneas). Ahora eso es una
-// sola RPC transaccional que tarda ~330ms medida sobre ese mismo remito, así
-// que 45s vuelve a ser margen de sobra — y si se supera, es un problema real
-// que conviene ver como error y no como una pantalla colgada 5 minutos.
-const ACTION_TIMEOUT_MS = 45_000;
+// OJO: NO se usa para aprobar la orden, a propósito. `withTimeout` rechaza
+// la promesa del cliente pero el server action sigue corriendo hasta el
+// final — destrabar el botón por timeout es exactamente lo que multiplicó
+// el stock ×8 en Estilo Bonito el 27/07 (8 apretadas = 8 impactos). Acá
+// solo cubre acciones seguras de reintentar: crear producto al vuelo
+// (INSERT que, si duplica, deja un producto de más visible y borrable, no
+// stock inflado en silencio).
+const ACTION_TIMEOUT_MS = 100_000;
 
 // --- Combobox de Búsqueda Personalizado ---
 function SearchableSelect({
@@ -937,13 +939,23 @@ export function MergeTable({
     toast.info("Impactando stock y precios...");
 
     try {
-      const res = await withTimeout(
-        aprobarOrdenAction(orden.id, orden.proveedor, items),
-        ACTION_TIMEOUT_MS,
-      );
+      // SIN withTimeout, a propósito: esta acción muta stock y precios. Un
+      // timeout de UI no cancela el server action, solo destraba el botón
+      // para que la misma impactación se dispare de nuevo. El botón queda
+      // deshabilitado hasta que la respuesta llegue o falle explícitamente,
+      // aunque tarde.
+      const res = await aprobarOrdenAction(orden.id, orden.proveedor, items);
 
       if (res.success) {
-        toast.success("¡Orden conciliada! Stock actualizado.");
+        if (res.yaAprobada) {
+          // Camino idempotente: la RPC no tocó nada porque esta orden ya
+          // estaba impactada. No es error y no hay nada que reintentar.
+          toast.warning(
+            "Esta orden ya estaba aprobada. No se volvió a sumar stock.",
+          );
+        } else {
+          toast.success("¡Orden conciliada! Stock actualizado.");
+        }
         queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
         queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
         // Guardado real confirmado contra el server: el borrador local ya
@@ -954,12 +966,14 @@ export function MergeTable({
         setAprobarError(res.error || "Ocurrió un error.");
       }
     } catch (err) {
+      // Reintentar acá es seguro: el guard de idempotencia de
+      // `aprobar_orden_compra` corre antes de escribir stock, así que si la
+      // corrida que se cortó ya había impactado, la próxima sale por
+      // `ya_aprobada` sin sumar de nuevo.
       setAprobarError(
-        err instanceof TimeoutError
-          ? "La operación tardó demasiado y se canceló. Tu progreso sigue guardado localmente, podés reintentar."
-          : err instanceof Error
-            ? err.message
-            : "Ocurrió un error inesperado al impactar los datos.",
+        err instanceof Error
+          ? err.message
+          : "Ocurrió un error inesperado al impactar los datos.",
       );
     } finally {
       setAprobarLoading(false);
@@ -1165,9 +1179,9 @@ export function MergeTable({
 
                 let rowClassName = "hover:bg-muted/30";
                 if (isInflacion)
-                  rowClassName = "bg-amber-50/30 hover:bg-amber-50/50";
+                  rowClassName = "bg-accent-orange/10 hover:bg-accent-orange/20";
                 else if (posibleMatch)
-                  rowClassName = "bg-sky-50/30 hover:bg-sky-50/50";
+                  rowClassName = "bg-accent-blue/10 hover:bg-accent-blue/20";
                 else if (nuevoSugerido)
                   rowClassName =
                     "bg-accent-indigo/10 hover:bg-accent-indigo/20";
@@ -1385,22 +1399,22 @@ export function MergeTable({
                             : "";
                           return (
                             <div className="flex flex-col gap-2">
-                              <div className="flex items-start justify-between gap-2 p-2 bg-sky-50/60 border border-sky-200 rounded-md">
+                              <div className="flex items-start justify-between gap-2 p-2 bg-sky-300/10 border border-sky-300 rounded-md">
                                 <div className="min-w-0">
-                                  <p className="font-semibold text-sky-700 flex items-center gap-1.5 truncate">
+                                  <p className="font-semibold text-sky-400 flex items-center gap-1.5 truncate">
                                     <Search className="w-3.5 h-3.5 shrink-0" />
                                     {posibleMatch.candidato.nombre}
                                   </p>
-                                  <p className="text-[11px] text-sky-700/70 mt-0.5">
+                                  <p className="text-[11px] text-sky-300 mt-0.5">
                                     ~
                                     {Math.round(
                                       posibleMatch.candidato.score * 100,
                                     )}
-                                    % similar — ¿es este producto?
+                                    % similar
                                   </p>
                                   {(posibleMatch.candidato.marca ||
                                     candidatoCategoriaLabel) && (
-                                    <p className="text-[11px] text-sky-700/70 mt-0.5 truncate">
+                                    <p className="text-[11px] text-sky-300 mt-0.5 truncate">
                                       {[
                                         posibleMatch.candidato.marca
                                           ? `Marca: ${posibleMatch.candidato.marca}`

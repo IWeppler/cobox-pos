@@ -422,18 +422,29 @@ export async function aprobarOrdenAction(
         };
       });
 
-    const { error: aprobarError } = await supabase.rpc("aprobar_orden_compra", {
-      p_orden_id: ordenId,
-      p_proveedor: proveedor,
-      p_items: itemsPayload,
-    });
+    const { data: resultado, error: aprobarError } = await supabase.rpc(
+      "aprobar_orden_compra",
+      {
+        p_orden_id: ordenId,
+        p_proveedor: proveedor,
+        p_items: itemsPayload,
+      },
+    );
 
     throwIfSupabaseError("Error impactando la orden", aprobarError);
+
+    // La RPC es idempotente: si la orden ya estaba aprobada no tocó nada y
+    // avisa por acá. NO es un error — es el resultado correcto de una
+    // segunda aprobación (doble click, pestaña vieja, reintento después de
+    // un timeout que en realidad había impactado). El cliente lo usa para
+    // no ofrecer "Reintentar" sobre algo que ya está hecho.
+    const yaAprobada =
+      (resultado as { ya_aprobada?: boolean } | null)?.ya_aprobada === true;
 
     revalidatePath("/stock");
     revalidatePath("/compras");
 
-    return { success: true };
+    return { success: true, yaAprobada };
   } catch (error) {
     console.error("Error al aprobar orden:", error);
     return {

@@ -396,20 +396,13 @@ export function ImportarPedidoModal({
               Formato esperado (Columnas)
             </Label>
             <code className="text-xs bg-background border border-border px-2 py-1 rounded block mb-1">
-              producto, cantidad, precio-costo, categoria, talle, color,
-              genero, marca, sku
+              producto, cantidad, precio-costo, categoria, talle, color, genero,
+              marca, sku
             </code>
             <p className="text-[10px] text-muted-foreground mt-2">
-              Solo &quot;producto&quot; y &quot;cantidad&quot; son
-              obligatorias. &quot;categoria&quot; se intenta matchear contra
-              tus categorías reales (padre y subcategoría) — si no hay match
-              seguro, la fila queda para elegir a mano en la conciliación,
-              nunca se inventa una categoría nueva. &quot;genero&quot; solo
-              se guarda como atributo si la fila termina en una subcategoría
-              de Ropa Bebé; para el resto solo ayuda a desambiguar la
-              categoría. &quot;marca&quot; y &quot;sku&quot;/&quot;codigo&quot;
-              se guardan en sus propios campos. Cualquier otra columna
-              (talle, color...) se guarda como atributo de la variante.
+              Solo &quot;producto&quot; y &quot;cantidad&quot; son obligatorias.
+              &quot;categoria&quot;. Cualquier otra columna (talle, color...) se
+              guarda como atributo de la variante.
             </p>
           </div>
 
@@ -446,7 +439,7 @@ export function ImportarPedidoModal({
                 isLoading
                   ? "border-border bg-muted/50 cursor-not-allowed opacity-70"
                   : file
-                    ? "border-emerald-500 bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer"
+                    ? "border-emerald-500 bg-emerald-300/10 cursor-pointer"
                     : "border-border bg-muted/20 hover:bg-emerald-300/10 hover:border-emerald-200 cursor-pointer"
               }`}
             >
@@ -454,14 +447,14 @@ export function ImportarPedidoModal({
                 {isLoading ? (
                   <Loader2 className="w-8 h-8 mb-3 text-emerald-600 animate-spin" />
                 ) : file ? (
-                  <CheckCircle2 className="w-8 h-8 mb-3 text-emerald-600" />
+                  <CheckCircle2 className="w-8 h-8 mb-3 text-emerald-500" />
                 ) : (
                   <UploadCloud className="w-8 h-8 mb-3 text-muted-foreground" />
                 )}
 
                 <p className="mb-1 text-sm text-foreground font-medium">
                   {file ? (
-                    <span className="text-emerald-700 font-bold">
+                    <span className="text-emerald-700 dark:text-emerald-500 font-bold">
                       {file.name}
                     </span>
                   ) : (
