@@ -1,5 +1,8 @@
 import { cookies } from "next/headers";
-import { getVentasAction } from "@/features/sales/actions/get-sales";
+import {
+  getVentasAction,
+  getPagosCuentaCorrienteAction,
+} from "@/features/sales/actions/get-sales";
 import { getStockAction } from "@/features/stock/actions/get-product";
 import { createClient } from "@/shared/config/supabase/server";
 import {
@@ -28,7 +31,7 @@ import { BajaAprobadaReporte } from "@/entities/reportes/types";
 import { VentasTab } from "@/features/reports/ui/ventas-tab";
 import { CrmTab } from "@/features/reports/ui/crm-tab";
 import { VendedoresTab } from "@/features/reports/ui/vendedores-tab";
-import { Venta } from "@/entities/ventas/types";
+import { Venta, VentaPago } from "@/entities/ventas/types";
 import { ConfiguracionPOS } from "@/entities/config/types";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +63,7 @@ export default async function ReportesPage({
     bajasResponse,
     clientesResponse,
     configResponse,
+    pagosCuentaCorrienteResponse,
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
@@ -75,6 +79,7 @@ export default async function ReportesPage({
       .from("configuracion_pos")
       .select("cc_plazo_mora, crm_dias_inactivo")
       .single(),
+    getPagosCuentaCorrienteAction(),
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
@@ -86,6 +91,10 @@ export default async function ReportesPage({
   const egresos = egresosResponse.data || [];
   const bajasAprobadas = (bajasResponse.data || []) as BajaAprobadaReporte[];
   const clientes = clientesResponse.data || [];
+  // Cobros de deuda: aportan comisión y recargo, no ingresos (el ticket
+  // fiado ya computó su total el día de la venta).
+  const pagosCuentaCorriente = (pagosCuentaCorrienteResponse.data ||
+    []) as unknown as VentaPago[];
 
   const config: Partial<ConfiguracionPOS> = configResponse.data || {};
   const plazoMora = config.cc_plazo_mora ?? 30;
@@ -99,6 +108,7 @@ export default async function ReportesPage({
     periodoParam,
     desdeParam,
     hastaParam,
+    pagosCuentaCorriente,
   );
 
   const now = new Date();

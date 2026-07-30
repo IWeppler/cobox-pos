@@ -64,6 +64,10 @@ export interface VentaCaja {
     id?: string;
     metodo_nombre: string;
     metodo_tipo: string;
+    /** Lo que el cobro imputa al ticket/deuda. monto_bruto = base + recargo. */
+    monto_base?: number;
+    recargo_porcentaje?: number;
+    recargo_monto?: number;
     monto_bruto: number;
     comision_monto: number;
     monto_neto: number;

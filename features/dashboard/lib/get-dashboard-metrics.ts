@@ -3,6 +3,7 @@ import { EgresoCaja } from "@/entities/caja/types";
 import {
   Venta,
   VentaItem,
+  VentaPago,
   VentaProducto,
   getSupabaseRelation,
 } from "@/entities/ventas/types";
@@ -56,6 +57,16 @@ export function getDashboardMetrics(
   periodo: PeriodoDashboard = "mes",
   desde?: string,
   hasta?: string,
+  /**
+   * Cobros de cuenta corriente (venta_pagos sin venta_id). Van aparte porque
+   * NO son ingresos nuevos — el ticket fiado ya computó su total el día de la
+   * venta, y volver a sumar el capital cobrado lo contaría dos veces. Lo que
+   * sí traen es plata real que hasta ahora nadie estaba mirando en Reportes:
+   * la comisión que retiene el procesador y el recargo por método. Sin esto,
+   * cobrar una deuda con tarjeta descontaba comisión en el arqueo de Caja
+   * pero no en el dashboard, y la ganancia neta quedaba sobreestimada.
+   */
+  pagosCuentaCorriente: VentaPago[] = [],
 ) {
   const now = new Date();
   let startDate = new Date(0);
@@ -119,12 +130,33 @@ export function getDashboardMetrics(
           return f >= startDate && f <= endDate;
         });
 
+  // Los cobros anulados no se descuentan de la caja, así que tampoco pueden
+  // descontar comisión acá — mismo criterio que ventasOperativas.
+  const pagosCCOperativos = pagosCuentaCorriente.filter(
+    (p) => p.estado_pago_operacion !== "ANULADO",
+  );
+
+  const pagosCCFiltrados =
+    periodo === "historico"
+      ? pagosCCOperativos
+      : pagosCCOperativos.filter((p) => {
+          if (!p.creado_en) return false;
+          const f = new Date(p.creado_en);
+          return f >= startDate && f <= endDate;
+        });
+
   // --- CORE KPIs FINANCIEROS ---
   let ingresosBrutos = 0;
   let costoMercaderiaVendida = 0;
   let gananciaBrutaVentas = 0;
   let unidadesVendidas = 0;
   let totalComisiones = 0; // NUEVO: Fuga de capital por comisiones
+  // Recargo por método cobrado al cliente. NO es venta de mercadería: es
+  // recupero financiero, y existe justamente para compensar `totalComisiones`.
+  // Por eso viaja separado en vez de sumar a ingresos/ganancia bruta, donde
+  // inflaba el margen de producto (un ticket con 15% de recargo aparentaba
+  // vender más caro de lo que en realidad se vendió).
+  let recargosCobrados = 0;
 
   const catMap = new Map<
     string,
@@ -187,9 +219,15 @@ export function getDashboardMetrics(
   >();
 
   ventasFiltradas.forEach((v) => {
-    const totalTicket = Number(v.total || 0);
+    // `ventas.total` incluye el recargo por método; acá se lo saca para que
+    // "Ingresos" y "Ganancia bruta" hablen solo de mercadería. La resta que
+    // hace reportes/page.tsx (ingresos - gananciaBruta = costo de mercadería)
+    // sigue cerrando porque ambos quedan sobre la misma base.
+    const recargoTicket = Number(v.recargo_metodo_total || 0);
+    const totalTicket = Number(v.total || 0) - recargoTicket;
     const costoTicket = Number(v.precio_costo || 0);
 
+    recargosCobrados += recargoTicket;
     ingresosBrutos += totalTicket;
     costoMercaderiaVendida += costoTicket;
     gananciaBrutaVentas += totalTicket - costoTicket;
@@ -339,6 +377,35 @@ export function getDashboardMetrics(
     });
   });
 
+  // --- COBROS DE CUENTA CORRIENTE ---
+  // Solo su costo/recupero financiero: el capital cobrado NO suma a ingresos
+  // (ya se contó cuando se hizo la venta fiada), pero la comisión es plata
+  // que se va igual y el recargo es plata que entra y nunca estuvo en ningún
+  // `ventas.total`. Sí entran al desglose por método, que es "cobros por
+  // método" — así el Bruto de esa tabla cierra contra lo que muestra Caja.
+  let cobrosCuentaCorriente = 0;
+  pagosCCFiltrados.forEach((pago) => {
+    const metodo = pago.metodo_nombre;
+    const bruto = Number(pago.monto_bruto || 0);
+    const comision = Number(pago.comision_monto || 0);
+    const neto = Number(pago.monto_neto || 0);
+
+    const current = metodoPagoMap.get(metodo) || {
+      bruto: 0,
+      comision: 0,
+      neto: 0,
+    };
+    metodoPagoMap.set(metodo, {
+      bruto: current.bruto + bruto,
+      comision: current.comision + comision,
+      neto: current.neto + neto,
+    });
+
+    totalComisiones += comision;
+    recargosCobrados += Number(pago.recargo_monto || 0);
+    cobrosCuentaCorriente += bruto;
+  });
+
   const ordenes = ventasFiltradas.length;
   const ticketPromedio = ordenes > 0 ? ingresosBrutos / ordenes : 0;
 
@@ -368,9 +435,13 @@ export function getDashboardMetrics(
     );
   });
 
-  // Ganancia Neta Real
+  // Ganancia Neta Real. El recargo entra acá, del mismo lado que la comisión
+  // que compensa: si se lo dejara dentro de la ganancia bruta, el margen de
+  // producto mentiría; si se lo omitiera del todo, el negocio aparecería
+  // perdiendo plata por cobrar con tarjeta, que es exactamente lo que el
+  // recargo evita.
   const resultadoOperativo =
-    gananciaBrutaVentas - totalEgresos - totalComisiones;
+    gananciaBrutaVentas + recargosCobrados - totalEgresos - totalComisiones;
   const margenPorcentaje =
     ingresosBrutos > 0 ? (resultadoOperativo / ingresosBrutos) * 100 : 0;
 
@@ -540,6 +611,9 @@ export function getDashboardMetrics(
     gananciaNeta: resultadoOperativo,
     totalEgresos,
     totalComisiones,
+    recargosCobrados,
+    /** Bruto cobrado de deudas en el período. No suma a `ingresos`. */
+    cobrosCuentaCorriente,
     costoPerdidoBajas,
     unidadesBajas,
     margenPorcentaje,

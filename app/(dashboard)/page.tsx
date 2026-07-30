@@ -1,4 +1,7 @@
-import { getVentasAction } from "@/features/sales/actions/get-sales";
+import {
+  getVentasAction,
+  getPagosCuentaCorrienteAction,
+} from "@/features/sales/actions/get-sales";
 import { getStockAction } from "@/features/stock/actions/get-product";
 import { CrearProductoSheet } from "@/features/stock/ui/create-sheet";
 import { EgresoModal } from "@/features/caja/ui/egreso-modal";
@@ -39,6 +42,7 @@ import {
   getSupabaseRelation,
   SupabaseRelation,
   Venta,
+  VentaPago,
 } from "@/entities/ventas/types";
 import Link from "next/link";
 import { Receipt, Plus } from "lucide-react";
@@ -97,6 +101,7 @@ export default async function DashboardPage({
     deudaVencida,
     remitosPendientes,
     categoriasResponse,
+    pagosCuentaCorrienteResponse,
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
@@ -108,9 +113,13 @@ export default async function DashboardPage({
     getDeudaVencidaAction(),
     getRemitosPendientesAction(),
     supabase.from("categorias").select("id, nombre, slug, parent_id"),
+    getPagosCuentaCorrienteAction(),
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
+  // Cobros de deuda: aportan comisión y recargo a las métricas, no ingresos.
+  const pagosCuentaCorriente = (pagosCuentaCorrienteResponse.data ||
+    []) as unknown as VentaPago[];
   const ventasOperativas = ventas.filter(
     (venta) =>
       venta.estado_operacion !== "ANULADA" && venta.estado_pago !== "ANULADA",
@@ -141,6 +150,7 @@ export default async function DashboardPage({
     "personalizado",
     formatearFechaISO(rangoActual.inicio),
     formatearFechaISO(rangoActual.fin),
+    pagosCuentaCorriente,
   );
   const metricasAnteriores = getDashboardMetrics(
     ventasOperativas,
@@ -150,6 +160,7 @@ export default async function DashboardPage({
     "personalizado",
     formatearFechaISO(rangoAnterior.inicio),
     formatearFechaISO(rangoAnterior.fin),
+    pagosCuentaCorriente,
   );
   // Rankings: SIEMPRE ventana semanal como mínimo (nunca diaria) — ventana
   // de mes si el selector está en "Mes".

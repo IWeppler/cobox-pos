@@ -69,6 +69,17 @@ Esta semana hubo 3 incidentes por confirmar solo una pata.
   aprobaciones concurrentes y devuelve `{ya_aprobada: true}` como resultado
   normal, no como excepción. La canonicalización de atributos se queda en
   Node a propósito; la RPC recibe `atributos` ya canonicalizado.
+- Métodos de pago, dos porcentajes que NO son lo mismo: `comision` es lo que
+  el comercio le paga al procesador (se resta, interno) y `recargo_porcentaje`
+  es lo que le cobra al cliente (se suma, se muestra). El cálculo vive en
+  `shared/lib/recargo-metodo.ts` y lo comparten POS y server; el server SIEMPRE
+  recalcula desde la base. Invariante: `venta_pagos.monto_bruto = monto_base +
+  recargo_monto`, donde la base es lo que imputa al ticket o a la deuda — la
+  deuda de cuenta corriente baja por base, nunca por bruto. El recargo se
+  aplica por método sobre SU porción del pago (mixto), se redondea al peso, y
+  queda congelado en la fila del pago. La comisión se calcula sobre el bruto
+  (es lo que pasa por el posnet). anon lee `recargo_porcentaje` para el
+  catálogo público vía policy + GRANT por columna: `comision` NO se expone.
 - Rubro: flag `configuracion_pos.rubro` ('indumentaria' | 'electro', CHECK
   fail-closed, default indumentaria). Cambia la identidad del producto en la
   UI, no el schema: indumentaria muestra "N var.", electro muestra Modelo +

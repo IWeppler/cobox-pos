@@ -26,6 +26,7 @@ import { queryKeys } from "@/shared/lib/query-keys";
 import { Cliente } from "@/entities/clientes/type";
 import { MetodoPago } from "@/entities/payments/types";
 import { cn } from "@/lib/utils";
+import { calcularRecargoMonto } from "@/shared/lib/recargo-metodo";
 
 export function RegisterPaymentModal({
   cliente,
@@ -43,6 +44,19 @@ export function RegisterPaymentModal({
   const queryClient = useQueryClient();
   const saldoBase = Number(cliente.saldo_pendiente || 0);
   const montoSugerido = saldoBase + recargoMoraEstimado;
+
+  // Monto y método son controlados solo para poder mostrar el recargo por
+  // método en vivo: lo que se imputa a la deuda es el monto tipeado, y el
+  // recargo se cobra encima. El server recalcula igual el mismo número.
+  const [monto, setMonto] = useState<string>(montoSugerido.toString());
+  const [metodoPagoId, setMetodoPagoId] = useState<string>(
+    metodosPago[0]?.id ?? "",
+  );
+  const metodoElegido = metodosPago.find((m) => m.id === metodoPagoId);
+  const recargoMetodo = calcularRecargoMonto(
+    Number(monto) || 0,
+    Number(metodoElegido?.recargo_porcentaje ?? 0),
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,7 +102,7 @@ export function RegisterPaymentModal({
 
           <div className="space-y-2">
             <Label className="text-xs font-semibold uppercase text-muted-foreground">
-              Monto que entrega
+              Monto que descuenta de la deuda
             </Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
@@ -101,7 +115,8 @@ export function RegisterPaymentModal({
                 max={montoSugerido}
                 step="any"
                 placeholder={montoSugerido.toString()}
-                defaultValue={montoSugerido}
+                value={monto}
+                onChange={(event) => setMonto(event.target.value)}
                 required
                 className="pl-8 h-12 text-lg font-bold shadow-none border-border"
               />
@@ -135,7 +150,8 @@ export function RegisterPaymentModal({
             <Select
               name="metodo_pago_id"
               required
-              defaultValue={metodosPago[0]?.id}
+              value={metodoPagoId}
+              onValueChange={setMetodoPagoId}
             >
               <SelectTrigger className="h-12 border-border bg-card shadow-none font-semibold">
                 <SelectValue placeholder="Seleccionar método..." />
@@ -144,10 +160,35 @@ export function RegisterPaymentModal({
                 {metodosPago.map((m) => (
                   <SelectItem key={m.id} value={m.id} className="font-medium">
                     {m.nombre}
+                    {Number(m.recargo_porcentaje) > 0
+                      ? ` (+${m.recargo_porcentaje}%)`
+                      : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {recargoMetodo > 0 ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs dark:border-amber-900/50 dark:bg-amber-950/20">
+                <div className="flex justify-between text-amber-800 dark:text-amber-400">
+                  <span>
+                    Recargo {metodoElegido?.nombre} (
+                    {metodoElegido?.recargo_porcentaje}%)
+                  </span>
+                  <span className="font-mono font-bold">
+                    +${recargoMetodo.toLocaleString("es-AR")}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex justify-between border-t border-amber-200 pt-1.5 font-bold text-foreground dark:border-amber-900/50">
+                  <span>Cobrás</span>
+                  <span className="font-mono">
+                    $
+                    {((Number(monto) || 0) + recargoMetodo).toLocaleString(
+                      "es-AR",
+                    )}
+                  </span>
+                </div>
+              </div>
+            ) : null}
             <p className="text-[10px] text-muted-foreground">
               Este dinero ingresará directamente en el arqueo de tu Caja de hoy.
             </p>

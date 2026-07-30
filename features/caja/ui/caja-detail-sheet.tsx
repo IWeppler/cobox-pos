@@ -40,7 +40,10 @@ type MovimientoDetalle = {
   concepto: string;
   metodo: string;
   metodo_tipo: string;
+  /** Bruto: lo que entró, recargo por método incluido. */
   monto: number;
+  /** Parte del bruto que fue recargo por método (0 si el método no cobra). */
+  recargo: number;
   comision: number;
   neto: number;
   fecha: string;
@@ -96,6 +99,7 @@ export function CajaDetailSheet({
               metodo: pago.metodo_nombre,
               metodo_tipo: pago.metodo_tipo,
               monto: Number(pago.monto_bruto),
+              recargo: Number(pago.recargo_monto ?? 0),
               comision: Number(pago.comision_monto),
               neto: Number(pago.monto_neto),
               fecha: v.fecha_venta,
@@ -111,6 +115,7 @@ export function CajaDetailSheet({
                 metodo: v.metodo_pago || "EFECTIVO",
                 metodo_tipo: isEfectivo ? "EFECTIVO" : "TARJETA",
                 monto: Number(v.total),
+                recargo: 0,
                 comision: 0,
                 neto: Number(v.total),
                 fecha: v.fecha_venta,
@@ -131,6 +136,7 @@ export function CajaDetailSheet({
               metodo: p.metodo_nombre,
               metodo_tipo: p.metodo_tipo,
               monto: Number(p.monto_bruto),
+              recargo: Number(p.recargo_monto ?? 0),
               comision: Number(p.comision_monto),
               neto: Number(p.monto_neto),
               fecha: p.creado_en || new Date().toISOString(),
@@ -146,6 +152,7 @@ export function CajaDetailSheet({
           metodo: "CAJA FÍSICA",
           metodo_tipo: "EFECTIVO",
           monto: Number(e.monto),
+          recargo: 0,
           comision: 0,
           neto: Number(e.monto),
           fecha: e.fecha,
@@ -378,6 +385,11 @@ export function CajaDetailSheet({
                         {mov.tipo === "INGRESO" ? "+" : "-"}
                         {formatearMoneda(mov.monto)}
                       </div>
+                      {mov.recargo > 0 && (
+                        <div className="text-xs text-amber-600 font-medium leading-none mt-1">
+                          incl. {formatearMoneda(mov.recargo)} de recargo
+                        </div>
+                      )}
                       {mov.comision > 0 && (
                         <div className="text-xs text-rose-500 font-medium leading-none mt-1">
                           -{formatearMoneda(mov.comision)}

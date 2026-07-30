@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Tag } from "lucide-react";
+import { CreditCard, Tag } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { formatearPromoPublica } from "@/shared/components/cart-sidebar/cart-sidebar-utils";
 import { PromocionDB } from "@/shared/components/cart-sidebar/types";
@@ -15,6 +15,10 @@ interface CartFooterPublicoProps {
   calculablesAplicadas?: PromocionDB[];
   /** METODO_PAGO: aviso aparte, no afecta el total (se define después por WhatsApp). */
   informativasCondicionales?: PromocionDB[];
+  /** Métodos con recargo activo. Informativo, igual criterio que las promos
+   * condicionales: el precio se cierra en el mostrador, acá solo se avisa
+   * para que el total no sea una sorpresa al momento de pagar. */
+  metodosConRecargo?: { id: string; nombre: string; recargo_porcentaje: number }[];
   whatsappHref: string;
   puedeEnviar: boolean;
   motivoInvalido?: string;
@@ -32,6 +36,7 @@ export function CartFooterPublico({
   costoEnvio = 0,
   calculablesAplicadas = [],
   informativasCondicionales = [],
+  metodosConRecargo = [],
   whatsappHref,
   puedeEnviar,
   motivoInvalido,
@@ -82,6 +87,26 @@ export function CartFooterPublico({
           <p className="text-[10px] text-muted-foreground">
             Este descuento depende del método de pago: se confirma al
             coordinar por WhatsApp, no está aplicado en el total de abajo.
+          </p>
+        </div>
+      )}
+
+      {metodosConRecargo.length > 0 && (
+        <div className="mb-4 space-y-1.5">
+          {metodosConRecargo.map((metodo) => (
+            <div
+              key={metodo.id}
+              className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-500/20 dark:text-amber-100 px-2.5 py-1.5 text-xs font-medium text-amber-800"
+            >
+              <CreditCard className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                {metodo.nombre}: +{metodo.recargo_porcentaje}% de recargo
+              </span>
+            </div>
+          ))}
+          <p className="text-[10px] text-muted-foreground">
+            El recargo se suma solo si pagás con ese método — no está incluido
+            en el total de abajo.
           </p>
         </div>
       )}

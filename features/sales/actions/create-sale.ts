@@ -222,15 +222,38 @@ export async function registrarVentaAction(
   const { data: configVenta } = await supabase
     .from("configuracion_pos")
     .select(
-      "permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante",
+      "permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante, cc_recargo_default",
     )
     .single();
   const permitirVentaSinStock = configVenta?.permitir_venta_sin_stock ?? false;
 
+  const subtotalConDescuento = Math.max(
+    0,
+    totalVentaBrutaItems - descuentoMonto,
+  );
+
+  // Recargo de cuenta corriente recalculado server-side desde
+  // configuracion_pos. `recargo_cc` sigue llegando por formData pero YA NO se
+  // usa para cobrar: se compara y se loguea, igual que el precio de los items.
+  // Antes se confiaba en el número del cliente, así que un request modificado
+  // podía fiar sin recargo (o inventarse uno) sobre plata real.
+  const pctRecargoCC = Number(configVenta?.cc_recargo_default) || 0;
+  const recargoCCServer = isCuentaCorriente
+    ? (subtotalConDescuento * pctRecargoCC) / 100
+    : 0;
+
+  const recargoCCCliente = isNaN(recargoCC) ? 0 : recargoCC;
+  if (Math.abs(recargoCCCliente - recargoCCServer) > 0.05) {
+    console.error("[VENTA RECARGO CC MISMATCH]", {
+      vendedorId: user.id,
+      clienteId,
+      recargoCliente: recargoCCCliente,
+      recargoServer: recargoCCServer,
+    });
+  }
+
   // Calculamos el Total Real del Ticket
-  const totalConDescuentoYRecargo =
-    Math.max(0, totalVentaBrutaItems - descuentoMonto) +
-    (isNaN(recargoCC) ? 0 : recargoCC);
+  const totalConDescuentoYRecargo = subtotalConDescuento + recargoCCServer;
 
   // --- 2. VALIDACIÓN DEL ARRAY DE PAGOS ---
   const pagosRawArray: CreateSalePaymentInput[] = pagosRaw

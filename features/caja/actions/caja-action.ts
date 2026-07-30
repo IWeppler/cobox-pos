@@ -201,7 +201,7 @@ export async function getDetallesTurnoAction(turnoId: string) {
           id, total, metodo_pago, fecha_venta, cliente_id, clientes(nombre),
           monto_cobrado, monto_pendiente, estado_pago, perfiles(nombre),
           ventas_items(producto:productos(nombre)),
-          venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_porcentaje, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)
+          venta_pagos(metodo_nombre, metodo_tipo, monto_base, recargo_porcentaje, recargo_monto, monto_bruto, comision_porcentaje, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)
         `,
         )
         .eq("turno_caja_id", turnoId)
@@ -210,7 +210,7 @@ export async function getDetallesTurnoAction(turnoId: string) {
       supabase
         .from("venta_pagos")
         .select(
-          "id, metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento, creado_en, clientes(nombre)",
+          "id, metodo_nombre, metodo_tipo, monto_base, recargo_porcentaje, recargo_monto, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento, creado_en, clientes(nombre)",
         )
         .eq("turno_caja_id", turnoId)
         .is("venta_id", null)

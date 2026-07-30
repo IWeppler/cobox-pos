@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { calcularRecargoMonto } from "@/shared/lib/recargo-metodo";
 import { parseClientesCSV } from "@/features/clients/lib/parse-clientes-csv";
 import {
   calcularRecargoMoraTotal,
@@ -159,10 +160,23 @@ export async function registrarPagoDeudaAction(
   if (!metodo)
     return { error: "Método de pago no encontrado.", success: false };
 
-  // C. Cálculos de comisión para la caja
+  // C. Recargo por método + comisión.
+  //
+  // `monto` es la BASE: lo que el cliente amortiza de su deuda. El recargo se
+  // le suma encima (paga más, debe lo mismo de menos), así pagar fiado con
+  // tarjeta no le sale más barato que haber pagado con tarjeta en el momento.
+  // Se recalcula server-side desde metodos_pago, nunca desde el formulario —
+  // mismo criterio que el recargo por mora de acá abajo y que los precios de
+  // create-sale.ts.
+  const recargoPorcentaje = Number(metodo.recargo_porcentaje || 0);
+  const recargoMetodoMonto = calcularRecargoMonto(monto, recargoPorcentaje);
+  const montoBruto = monto + recargoMetodoMonto;
+
+  // La comisión del procesador se calcula sobre el bruto: es lo que pasa por
+  // el posnet, recargo incluido.
   const comisionPorcentaje = Number(metodo.comision || 0);
-  const comisionMonto = (monto * comisionPorcentaje) / 100;
-  const montoNeto = monto - comisionMonto;
+  const comisionMonto = (montoBruto * comisionPorcentaje) / 100;
+  const montoNeto = montoBruto - comisionMonto;
 
   // C-bis. Recargo por mora — recalculado server-side, nunca confiar en
   // lo que mande el cliente (mismo criterio que create-sale.ts con
@@ -199,7 +213,10 @@ export async function registrarPagoDeudaAction(
       metodo_pago_id: metodo.id,
       metodo_nombre: metodo.nombre,
       metodo_tipo: metodo.tipo,
-      monto_bruto: monto,
+      monto_base: monto,
+      recargo_porcentaje: recargoPorcentaje,
+      recargo_monto: recargoMetodoMonto,
+      monto_bruto: montoBruto,
       comision_porcentaje: comisionPorcentaje,
       comision_monto: comisionMonto,
       monto_neto: montoNeto,
@@ -213,9 +230,22 @@ export async function registrarPagoDeudaAction(
     return { error: "Error al registrar pago en caja.", success: false };
 
   // 2. Guardar en el Ledger de la Cuenta Corriente (Para que baje la deuda)
-  const descripcionPago =
+  //
+  // El movimiento va por la BASE, no por el bruto: el recargo por método es
+  // plata del cobro, no capital amortizado. Si fuera por el bruto, la deuda
+  // bajaría más de lo que el cliente realmente pagó a cuenta.
+  const detallesPago = [
     montoRecargoAplicado > 0
-      ? `Pago a cuenta - ${metodo.nombre} (incluye $${montoRecargoAplicado.toLocaleString("es-AR")} de recargo por mora)`
+      ? `$${montoRecargoAplicado.toLocaleString("es-AR")} de recargo por mora`
+      : null,
+    recargoMetodoMonto > 0
+      ? `$${recargoMetodoMonto.toLocaleString("es-AR")} de recargo por ${metodo.nombre}`
+      : null,
+  ].filter(Boolean);
+
+  const descripcionPago =
+    detallesPago.length > 0
+      ? `Pago a cuenta - ${metodo.nombre} (incluye ${detallesPago.join(" y ")})`
       : `Pago a cuenta - ${metodo.nombre}`;
 
   const { error: ccError } = await supabase

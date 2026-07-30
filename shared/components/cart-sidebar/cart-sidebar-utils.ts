@@ -309,6 +309,7 @@ export function generarLinkWhatsAppPublico({
   nota,
   promocionesAplicadas,
   promocionesCondicionales,
+  metodosConRecargo,
 }: {
   numeroWhatsApp?: string;
   nombreComercio?: string | null;
@@ -325,6 +326,9 @@ export function generarLinkWhatsAppPublico({
   promocionesAplicadas?: PromocionDB[];
   /** Dependen del método de pago: aviso aparte, no afectan el total. */
   promocionesCondicionales?: PromocionDB[];
+  /** Métodos que cobran recargo. Informativo: el total de arriba NO lo
+   * incluye porque todavía no se sabe con qué va a pagar. */
+  metodosConRecargo?: { nombre: string; recargo_porcentaje: number }[];
 }) {
   if (!numeroWhatsApp) return "#";
 
@@ -367,6 +371,13 @@ export function generarLinkWhatsAppPublico({
     mensaje += `\n\nPromos según método de pago (a confirmar):`;
     promocionesCondicionales.forEach((promo) => {
       mensaje += `\n- ${formatearPromoPublica(promo)}`;
+    });
+  }
+
+  if (metodosConRecargo && metodosConRecargo.length > 0) {
+    mensaje += `\n\nRecargos según método de pago (no incluidos en el total):`;
+    metodosConRecargo.forEach((metodo) => {
+      mensaje += `\n- ${metodo.nombre}: +${metodo.recargo_porcentaje}%`;
     });
   }
 

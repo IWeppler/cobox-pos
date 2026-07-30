@@ -27,6 +27,11 @@ type MetricaCategoria = "ingresos" | "unidades" | "tickets";
 export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
   const [metricaCat, setMetricaCat] = useState<MetricaCategoria>("ingresos");
 
+  const totalBrutoCobrado = (metrics.ventasPorMetodo || []).reduce(
+    (acc: number, metodo: { bruto: number }) => acc + Number(metodo.bruto || 0),
+    0,
+  );
+
   // Formateo Dinámico de la data de categorías según el selector elegido
   const dataCategoria = metrics.ventasPorCategoria
     .map((c: any) => ({
@@ -210,9 +215,12 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
             {metrics.ventasPorMetodo.length > 0 ? (
               <div className="space-y-4 w-full">
                 {metrics.ventasPorMetodo.map((metodo: any, idx: number) => {
+                  // Sobre el total cobrado por método, no sobre ingresos: el
+                  // desglose incluye cobros de deuda, que no son ingresos del
+                  // período y desbordarían la barra.
                   const porcentaje =
-                    metrics.ingresos > 0
-                      ? (metodo.bruto / metrics.ingresos) * 100
+                    totalBrutoCobrado > 0
+                      ? (metodo.bruto / totalBrutoCobrado) * 100
                       : 0;
                   return (
                     <div key={idx} className="flex flex-col gap-1">

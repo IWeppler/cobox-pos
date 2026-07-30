@@ -218,6 +218,18 @@ export function VentasTable({
       tipoMovimiento: pago.tipo_movimiento,
     }));
 
+    const pagosConRecargo = (venta.venta_pagos || []).filter(
+      (pago) => Number(pago.recargo_monto || 0) > 0,
+    );
+    const recargoMetodoMonto = pagosConRecargo.reduce(
+      (acc, pago) => acc + Number(pago.recargo_monto || 0),
+      0,
+    );
+    const recargoMetodoEtiqueta =
+      pagosConRecargo.length === 1
+        ? `Recargo ${pagosConRecargo[0].metodo_nombre} (${pagosConRecargo[0].recargo_porcentaje}%)`
+        : "Recargo por método de pago";
+
     setTicketAbierto({
       items: (venta.ventas_items || []).map(
         (item: VentaItem): TicketItemData => ({
@@ -237,6 +249,10 @@ export function VentasTable({
         ? Number(descuento.monto_descontado)
         : undefined,
       promocionNombre: descuento ? descuento.promocion_nombre : undefined,
+      // Reimpresión: el recargo sale de lo que quedó congelado en cada pago,
+      // no del % que el método tenga HOY.
+      recargoMetodoMonto: recargoMetodoMonto || undefined,
+      recargoMetodoEtiqueta: recargoMetodoEtiqueta || undefined,
       comisionMonto: pagoInfo ? Number(pagoInfo.comision_monto) : 0,
       montoNeto: pagoInfo ? Number(pagoInfo.monto_neto) : venta.total,
       acreditacionDias: pagoInfo ? Number(pagoInfo.acreditacion_dias) : 0,

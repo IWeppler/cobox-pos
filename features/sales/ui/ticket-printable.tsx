@@ -90,6 +90,15 @@ export function TicketPrintable({
             </div>
           )}
 
+          {(ticket?.recargoMetodoMonto ?? 0) > 0 && (
+            <div className="flex justify-between items-center text-gray-700">
+              <span className="truncate pr-2">
+                {ticket?.recargoMetodoEtiqueta || "Recargo método de pago"}
+              </span>
+              <span>+{formatTicketMoney(ticket?.recargoMetodoMonto)}</span>
+            </div>
+          )}
+
           <div className="flex justify-between items-center font-semibold text-base pt-2 mt-2 border-t border-gray-300">
             <span>TOTAL</span>
             <span>{formatTicketMoney(ticket?.total)}</span>

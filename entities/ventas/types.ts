@@ -39,6 +39,12 @@ export interface VentaPago {
   metodo_pago_id?: string | null;
   metodo_nombre: string;
   metodo_tipo: string;
+  /** Lo que el cobro imputa al ticket o a la deuda. */
+  monto_base?: number;
+  /** % de recargo por método, congelado al momento del cobro. */
+  recargo_porcentaje?: number;
+  recargo_monto?: number;
+  /** Lo que efectivamente entró: monto_base + recargo_monto. */
   monto_bruto: number;
   comision_porcentaje?: number;
   comision_monto: number;
@@ -83,6 +89,9 @@ export interface Venta {
   total_bruto?: number;
   comision_total?: number;
   total_neto?: number;
+  /** Recargo por método ya incluido en `total`. Los reportes lo restan para
+   * no contarlo como venta de mercadería. */
+  recargo_metodo_total?: number;
   es_pago_mixto?: boolean;
 }
 

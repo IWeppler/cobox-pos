@@ -23,6 +23,11 @@ export function RentabilidadTab({
   metrics,
   costoMercaderiaVendida,
 }: Readonly<RentabilidadTabProps>) {
+  const totalBrutoCobrado = (metrics.ventasPorMetodo || []).reduce(
+    (acc: number, metodo: { bruto: number }) => acc + Number(metodo.bruto || 0),
+    0,
+  );
+
   return (
     <TabsContent
       value="rentabilidad"
@@ -78,6 +83,12 @@ export function RentabilidadTab({
             <p className="text-xs text-muted-foreground mt-1">
               Retenciones MP / Tarjetas
             </p>
+            {metrics.recargosCobrados > 0 ? (
+              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-2">
+                +{formatearMoneda(metrics.recargosCobrados)} recuperados por
+                recargo al cliente
+              </p>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -249,8 +260,12 @@ export function RentabilidadTab({
                         {formatearMoneda(metodo.neto)}
                       </td>
                       <td className="px-2 py-4 text-right font-semibold text-muted-foreground">
-                        {metrics.ingresos > 0
-                          ? ((metodo.bruto / metrics.ingresos) * 100).toFixed(1)
+                        {/* Participación sobre el total COBRADO por método,
+                            no sobre ingresos: la tabla incluye cobros de
+                            deuda, que no son ingresos del período y harían
+                            pasar la suma del 100%. */}
+                        {totalBrutoCobrado > 0
+                          ? ((metodo.bruto / totalBrutoCobrado) * 100).toFixed(1)
                           : 0}
                         %
                       </td>

@@ -334,6 +334,17 @@ export function TicketSheet({
                         </div>
                       )}
 
+                      {(ticket?.recargoMetodoMonto ?? 0) > 0 ? (
+                        <div className="flex justify-between font-mono text-xs text-amber-600 font-bold">
+                          <span className="uppercase">
+                            {ticket?.recargoMetodoEtiqueta || "Recargo método"}
+                          </span>
+                          <span>
+                            +{formatTicketMoney(ticket?.recargoMetodoMonto)}
+                          </span>
+                        </div>
+                      ) : null}
+
                       <div className="my-1" />
                       <div className="flex justify-between font-mono text-sm font-semibold text-foreground">
                         <span>TOTAL</span>

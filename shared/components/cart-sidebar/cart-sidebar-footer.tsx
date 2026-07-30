@@ -79,6 +79,17 @@ export function CartSidebarFooter({
     metodosPagoDB?.find((m) => m.id === pagos[0]?.metodoPagoId)?.tipo ===
       "EFECTIVO";
 
+  // Solo para la calculadora de anticipo de Cuenta Corriente, donde el monto
+  // se tipea dentro del modal y el recargo tiene que seguirlo en vivo. En
+  // pago mixto no aplica: ahí el anticipo no se edita en el modal.
+  const recargoPorcentajeSeleccionado =
+    !modoMixto && pagos?.length === 1
+      ? Number(
+          metodosPagoDB?.find((m) => m.id === pagos[0]?.metodoPagoId)
+            ?.recargo_porcentaje ?? 0,
+        )
+      : 0;
+
   const handleCobrar = () => {
     if (isReserva) {
       onConfirmarReserva?.();

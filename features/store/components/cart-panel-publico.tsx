@@ -23,6 +23,13 @@ const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
 type CheckoutStep = "CART" | "CHECKOUT";
 
+/** Lo único que el catálogo público necesita (y puede) saber de un método. */
+type MetodoConRecargoPublico = {
+  id: string;
+  nombre: string;
+  recargo_porcentaje: number;
+};
+
 export function CartPanelPublico({
   numeroWhatsApp,
 }: Readonly<{ numeroWhatsApp?: string }>) {
@@ -54,6 +61,9 @@ export function CartPanelPublico({
 
   const [branding, setBranding] = useState<ConfiguracionPOS | null>(null);
   const [promocionesDB, setPromocionesDB] = useState<PromocionDB[]>([]);
+  const [metodosConRecargo, setMetodosConRecargo] = useState<
+    MetodoConRecargoPublico[]
+  >([]);
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("CART");
 
   const [nombre, setNombre] = useState("");
@@ -103,6 +113,25 @@ export function CartPanelPublico({
     };
 
     fetchPromos();
+  }, []);
+
+  useEffect(() => {
+    // Métodos con recargo, para avisarlo antes de que el cliente pida.
+    // anon solo puede leer las columnas no sensibles (ver la policy y los
+    // GRANT por columna de 20260730170000): `comision` no se expone acá.
+    const fetchRecargos = async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("metodos_pago")
+        .select("id, nombre, recargo_porcentaje")
+        .eq("activo", true)
+        .gt("recargo_porcentaje", 0)
+        .order("recargo_porcentaje", { ascending: false });
+
+      if (data) setMetodosConRecargo(data as MetodoConRecargoPublico[]);
+    };
+
+    fetchRecargos();
   }, []);
 
   const promocionesElegibles = useMemo(() => {
@@ -234,6 +263,7 @@ export function CartPanelPublico({
                 informativasCondicionales={
                   descuentoCarrito.informativasCondicionales
                 }
+                metodosConRecargo={metodosConRecargo}
                 puedeEnviar={puedeEnviar}
                 motivoInvalido={motivoInvalido}
                 whatsappHref={generarLinkWhatsAppPublico({
@@ -250,6 +280,7 @@ export function CartPanelPublico({
                   promocionesAplicadas: descuentoCarrito.calculablesAplicadas,
                   promocionesCondicionales:
                     descuentoCarrito.informativasCondicionales,
+                  metodosConRecargo,
                 })}
                 onEnviarPedido={handleEnviarPedido}
                 onClearCart={clearCartAndResetStep}

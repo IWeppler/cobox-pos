@@ -26,6 +26,7 @@ import {
 } from "@/shared/ui/select";
 import { ClientSelector, ClienteBasico } from "./client-selector";
 import { MetodoPagoPOS, PromocionDB } from "./types";
+import { calcularPagosConRecargo } from "@/shared/lib/recargo-metodo";
 
 interface CartStepCheckoutProps {
   isPOSMode: boolean;
@@ -81,11 +82,17 @@ export function CartStepCheckout({
   const anticipoActual =
     anticipoManual === "" ? anticipoMinimo : Number(anticipoManual);
   const montoObjetivo = isCuentaCorriente ? anticipoActual : totalFinal;
+  // `montoAsignado` es la base: lo que ese cobro cubre del ticket. Por eso
+  // la diferencia ("falta asignar") se calcula sin recargo — si el recargo
+  // contara, un método recargado parecería cubrir más ticket del que cubre.
   const sumaPagos = pagos.reduce(
     (acc, pago) => acc + Number(pago.montoAsignado || 0),
     0,
   );
   const diferencia = montoObjetivo - sumaPagos;
+  const recargoPorPago = calcularPagosConRecargo(pagos, metodosPagoDB).pagos.map(
+    (pago) => pago.recargoMonto,
+  );
 
   const syncSinglePayment = (monto: number, metodoId?: string) => {
     // Para Cuenta Corriente no autocompletamos ningún método salvo que
@@ -305,6 +312,11 @@ export function CartStepCheckout({
                         <span className="w-full truncate text-center">
                           {metodo.nombre}
                         </span>
+                        {Number(metodo.recargo_porcentaje) > 0 ? (
+                          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500">
+                            +{metodo.recargo_porcentaje}%
+                          </span>
+                        ) : null}
                       </button>
                     );
                   })}
@@ -314,8 +326,9 @@ export function CartStepCheckout({
                   {pagos.map((pago, index) => (
                     <div
                       key={`${pago.metodoPagoId}-${index}`}
-                      className="flex items-center gap-2 bg-card p-2 rounded-lg border border-border"
+                      className="space-y-1 bg-card p-2 rounded-lg border border-border"
                     >
+                      <div className="flex items-center gap-2">
                       <Select
                         value={pago.metodoPagoId}
                         onValueChange={(value) =>
@@ -368,6 +381,21 @@ export function CartStepCheckout({
                         >
                           <X className="h-4 w-4" />
                         </Button>
+                      ) : null}
+                      </div>
+
+                      {/* El monto tipeado es la BASE (lo que cubre del
+                          ticket); el recargo se muestra aparte para que
+                          quede claro que no descuenta mercadería. */}
+                      {recargoPorPago[index] > 0 ? (
+                        <p className="px-2 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
+                          + ${recargoPorPago[index].toLocaleString("es-AR")} de
+                          recargo — se cobran $
+                          {(
+                            Number(pago.montoAsignado || 0) +
+                            recargoPorPago[index]
+                          ).toLocaleString("es-AR")}
+                        </p>
                       ) : null}
                     </div>
                   ))}

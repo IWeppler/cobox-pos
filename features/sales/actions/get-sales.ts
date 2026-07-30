@@ -18,6 +18,7 @@ export async function getVentasAction(opts?: { soloPropias?: boolean }) {
         total_bruto,
         comision_total,
         total_neto,
+        recargo_metodo_total,
         es_pago_mixto,
         precio_costo,
         cantidad,
@@ -46,6 +47,9 @@ export async function getVentasAction(opts?: { soloPropias?: boolean }) {
         venta_pagos (
           metodo_nombre,
           metodo_tipo,
+          monto_base,
+          recargo_porcentaje,
+          recargo_monto,
           monto_bruto,
           comision_porcentaje,
           comision_monto,
@@ -78,6 +82,46 @@ export async function getVentasAction(opts?: { soloPropias?: boolean }) {
     return {
       data: null,
       error: "Ocurrió un error inesperado al obtener las ventas.",
+    };
+  }
+}
+
+/**
+ * Cobros de cuenta corriente: filas de venta_pagos SIN venta_id.
+ *
+ * Existe aparte de getVentasAction porque estos pagos no cuelgan de ninguna
+ * venta y, por lo tanto, nunca llegaban a Reportes: la comisión que retiene
+ * el procesador al cobrar una deuda con tarjeta se veía en el arqueo de Caja
+ * pero no en el dashboard, sobreestimando la ganancia neta.
+ *
+ * Devuelve el bruto además de la comisión para que el desglose por método de
+ * Reportes cierre contra el de Caja; el capital cobrado NO se suma a ingresos
+ * (ver getDashboardMetrics: el ticket fiado ya computó su total).
+ */
+export async function getPagosCuentaCorrienteAction() {
+  try {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+
+    const { data, error } = await supabase
+      .from("venta_pagos")
+      .select(
+        "id, metodo_nombre, metodo_tipo, monto_base, recargo_porcentaje, recargo_monto, monto_bruto, comision_porcentaje, comision_monto, monto_neto, tipo_movimiento, estado_pago_operacion, creado_en",
+      )
+      .is("venta_id", null)
+      .order("creado_en", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching pagos de cuenta corriente:", error);
+      return { data: null, error: "No se pudieron cargar los cobros de deuda." };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error("Unexpected error in getPagosCuentaCorrienteAction:", err);
+    return {
+      data: null,
+      error: "Ocurrió un error inesperado al obtener los cobros de deuda.",
     };
   }
 }
