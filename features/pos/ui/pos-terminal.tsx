@@ -339,14 +339,14 @@ export function PosTerminal({
                   // agregar-al-carrito (no anidado — un <button> dentro de
                   // otro <button> es HTML inválido) para no competir con el
                   // tap principal de la card.
-                  <div key={producto.id} className="relative h-full">
+                  <div key={producto.id} className="relative h-full group">
                     <button
                       onClick={() => handleProductClick(producto)}
                       disabled={bloqueado}
-                      className={`flex flex-col text-left rounded-md border transition-all overflow-hidden cursor-pointer w-full h-full ${
+                      className={`flex flex-col text-left rounded-lg bg-card transition-all overflow-hidden x w-full h-full cursor-pointer ${
                         !bloqueado
-                          ? "border-border hover:border-foreground/50 active:scale-95"
-                          : "border-border/40 opacity-50"
+                          ? "shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-150"
+                          : "shadow-xs opacity-50"
                       }`}
                     >
                       <div className="w-full aspect-4/3 bg-muted relative border-b border-border/40">
@@ -365,18 +365,18 @@ export function PosTerminal({
                           </div>
                         )}
                         {sinStock && (
-                          <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center">
-                            <span className="bg-white px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest text-rose-600 border border-rose-100">
+                          <div className="absolute inset-0 bg-background/55 backdrop-blur-[1px]" > 
+                            <span className="px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-rose-100 text-rose-800 border border-rose-200">
                               Agotado
                             </span>
                           </div>
                         )}
                       </div>
-                      <div className="p-3 flex flex-col flex-1 justify-between">
-                        <p className="font-medium text-xs sm:text-sm text-muted-foreground leading-tight line-clamp-2 mb-2">
+                      <div className="px-3 pt-2 pb-3 flex flex-col flex-1 justify-between">
+                        <p className="font-medium text-xs sm:text-sm text-foreground leading-tight line-clamp-2 mb-2">
                           {producto.nombre}
                         </p>
-                        <p className="font-mono font-medium text-sm sm:text-base text-foreground">
+                        <p className="font-mono font-semibold tracking-tight text-sm sm:text-base text-muted-foreground">
                           {formatearMoneda(producto.precio)}
                         </p>
                       </div>
@@ -392,8 +392,8 @@ export function PosTerminal({
                       disabled={compartirDeshabilitado}
                       disabledReason={motivoCompartirDeshabilitado}
                       variant="secondary"
-                      size="icon-sm"
-                      className="absolute top-2 right-2 bg-background/90 backdrop-blur-sm shadow-sm hover:bg-background"
+                      size="icon-xs"
+                      className="absolute top-2 right-2 bg-background/90 backdrop-blur-sm shadow-sm hover:bg-background opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                     />
                   </div>
                 );

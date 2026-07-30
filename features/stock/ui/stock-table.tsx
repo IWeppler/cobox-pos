@@ -807,7 +807,7 @@ export function StockTable({
                     </TableCell>
 
                     {/* ACCIONES (oculta en mobile: cubierta por selección + barra flotante) */}
-                    <TableCell className="text-right pl-0 pr-1 sm:pr-6 py-1 hidden sm:table-cell">
+                    <TableCell className="text-right pl-0 pr-1 sm:pr-2 py-1 hidden sm:table-cell">
                       <div className="flex items-center justify-end gap-0.5 md:gap-1.5">
                         <ShareButton
                           url={urlProducto ?? ""}
