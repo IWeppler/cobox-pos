@@ -1,3 +1,5 @@
+Ayudar a vender más, estar organizado y prever qué está pasando en el negocio.
+
 ideas:
 - mejorar ux de seleccion multiple dentro del modulo de /stock. Actualmente se abre una barra abajo que no me deja avanzar de pagina y necesito que tenga simplemente para ver cantidad de productos seleccionados y acciones entonces ahi pongo que accion quiero hacer: editar precios, eliminar, cambiar de categoria, subcategoria.
 - ver historial de productos cargadaos a traves de remitos. como agrupaciones y luego detalle de cada remito. Esto va de la mano con la mejora de la creacion de la pagina de movimientos que actualmente ni siquiera me esta leyendo los productos que ingresan a traves de remitos, no tiene paginacion, creo que podria tener mas filtros y podemos poner esto que digo directamente ahi adentro.
@@ -12,6 +14,8 @@ ideas:
 - Agregar mas Datos de la empresa: nombre comercial +/ razon social, cuit. etiquetas de codigo de barra: a4, 50x30, 40x25, modo de facturacion: AFIP Manual (generar cuando se necesite), AFIP Automatico, Ticket Interno (Sin Afip)
 - Alicuota IVA (creacion de productos): 21% general; 10,5% alimentos básicos, carne, panificados, harinas; 0% exento.
 
+
+
 # TIER 1 — Plata correcta y operación diaria (2-4 semanas)
 
 ## Caja:
@@ -20,6 +24,124 @@ ideas:
 2.  Tabla admin "cuánto tengo en cada caja/banco/MP" (alto valor para dueñas, y es agregación de datos que ya tenés).
 3.  Marcar esperado-negativo como revisado.
 4.  Compras ≠ gastos.
+
+
+## EPIC 1 — Datos Fiscales de la Empresa
+Objetivo: poder configurar correctamente un comercio argentino.
+
+### Empresa
+ Nombre comercial
+ Razón social
+ CUIT
+ Condición IVA
+ Inicio de actividades
+ Dirección fiscal
+ Provincia
+ Localidad
+ Teléfono
+ Email
+ Logo
+
+### Configuración Fiscal
+ Tipo de comprobante por defecto
+ Ticket interno
+ Factura manual
+ Factura automática (ARCA)
+ Punto de venta
+ Certificados ARCA
+
+## EPIC 2 — Clientes Fiscales
+Falta prácticamente convertir un cliente "comercial" en un cliente "fiscal".
+
+###  Datos
+ Razón Social
+ Nombre Fantasía
+ CUIT
+ Condición IVA
+ Dirección
+ Provincia
+ Localidad
+ Código Postal
+ Email
+ Teléfono
+
+### Extras
+ Observaciones
+ Límite de crédito
+ Lista de precios
+ Historial de compras
+
+
+## EPIC 3 — Productos Fiscales
+Falta agregar:
+
+ Alícuota IVA
+ Código interno
+ Unidad de medida
+ Exento / Gravado
+ Código AFIP (si aplica)
+
+## EPIC 4 — Facturación Electrónica (ARCA)
+Esta es una épica enorme.
+
+La dividiría.
+
+### Configuración
+ Conectar ARCA
+ Validar certificados
+ Estado conexión
+
+### Emisión
+ Factura A
+ Factura B
+ Factura C
+ Nota Crédito
+ Nota Débito
+
+
+## EPIC 5 — IVA
+No empezaría por liquidaciones complejas.
+Primero lo básico.
+
+### Dashboard IVA
+
+ IVA Débito
+ IVA Crédito
+ IVA Neto
+
+### Productos
+
+ 21%
+ 10.5%
+ 27%
+ Exento
+ No Gravado
+
+### Ventas
+Que automáticamente calcule.
+No pedirle al usuario hacer cuentas.
+
+
+## EPIC 6 — Contabilidad
+Acá creo que hay mucho valor.
+
+### Exportaciones
+ Libro IVA Ventas
+ Libro IVA Compras
+ Caja diaria
+ Caja X
+ Caja Z
+ Excel movimientos
+ CSV
+
+### Reportes
+ Ventas por día
+ Ventas por categoría
+ Medios de pago
+ Clientes
+ Productos
+
+
 
 # TIER 2 — Decisión de arquitectura SaaS (antes del tercer cliente, no después)
 

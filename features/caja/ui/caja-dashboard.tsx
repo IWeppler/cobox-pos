@@ -37,7 +37,6 @@ import {
   VentaCaja,
 } from "@/entities/caja/types";
 import { VentaPago, getSupabaseRelation } from "@/entities/ventas/types";
-import { CajaHistoryTable } from "./caja-history-table";
 import { formatearMoneda } from "@/shared/utils/formatters";
 
 export interface CajaDashboardProps {
@@ -70,7 +69,7 @@ export function CajaDashboard({
   ventas,
   pagosSueltos,
   egresos,
-  historial,
+  historial: _historial,
   modoCaja: _modoCaja,
   userRole: _userRole,
   userId,
@@ -85,6 +84,7 @@ export function CajaDashboard({
   >([]);
   void _modoCaja;
   void _userRole;
+  void _historial;
 
   // El turno propio se matchea siempre por vendedor_id en modo POR_USUARIO,
   // donde cada vendedor tiene su propia caja. En modo UNICA la caja es una
@@ -274,65 +274,65 @@ export function CajaDashboard({
   return (
     <div className="space-y-6 animate-in fade-in-50 px-4 p-2">
       {!turno ? (
-        <Card className="border-border bg-background shadow-none overflow-hidden rounded-2xl">
-          <div className="flex flex-col md:flex-row">
-            <div className="p-6 md:px-10 md:w-1/2 flex flex-col justify-center">
-              <div className="w-12 h-12 bg-primary/5 text-primary border border-primary/30 rounded-xl flex items-center justify-center mb-5">
-                <Lock className="w-5 h-5" />
+        /* Versión compacta del formulario de apertura. Antes era un banner a
+           media pantalla; el mismo formulario vive ahora también en el botón
+           de caja del navbar (CajaQuickModal), así que acá alcanza con una
+           barra al tono del resto de la página. */
+        <Card className="border-border bg-card shadow-none rounded-2xl p-4 sm:p-5">
+          <form
+            action={abrirAction}
+            className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
+          >
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-9 h-9 bg-muted text-muted-foreground border border-border rounded-lg flex items-center justify-center shrink-0">
+                <Lock className="w-4 h-4" />
               </div>
-              <h2 className="text-2xl font-bold text-foreground mb-3 tracking-tight">
-                {hayCajaAjenaAbierta
-                  ? "No tenes una caja abierta"
-                  : "La caja esta cerrada"}
-              </h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {hayCajaAjenaAbierta
-                  ? "Hay otras cajas abiertas en el local, pero no tenes un turno propio. Antes de registrar ventas o movimientos de dinero, inicia tu turno declarando el efectivo inicial."
-                  : "Antes de comenzar a registrar ventas o movimientos de dinero, debes iniciar un nuevo turno de caja declarando el efectivo inicial."}
-              </p>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">
+                  {hayCajaAjenaAbierta
+                    ? "No tenés un turno propio abierto"
+                    : "La caja está cerrada"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {hayCajaAjenaAbierta
+                    ? "Hay otras cajas abiertas en el local. Declará tu fondo inicial para empezar."
+                    : "Declará el efectivo inicial del cajón para empezar a vender."}
+                </p>
+              </div>
             </div>
-            <div className="p-6 md:p-10 md:w-1/2 border-t md:border-t-0 md:border-l border-border bg-card flex flex-col justify-center">
-              <form action={abrirAction} className="space-y-6">
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="monto_inicial"
-                    className="text-sm font-semibold text-foreground uppercase tracking-widest"
-                  >
-                    Fondo Inicial
-                  </Label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">
-                      $
-                    </span>
-                    <Input
-                      id="monto_inicial"
-                      name="monto_inicial"
-                      type="number"
-                      min="0"
-                      required
-                      className="pl-9 text-lg font-bold h-12 shadow-none rounded-xl border-border hover:border-foreground/40 transition-colors bg-card focus-visible:bg-background"
-                      placeholder="Ej: 5000"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Monto de cambio (billetes/monedas) en el cajon.
-                  </p>
-                </div>
-                <Button
-                  type="submit"
-                  disabled={isAbrirPending}
-                  className="w-full h-12 bg-primary hover:bg-primary/90 text-white rounded-xl shadow-none cursor-pointer transition-colors"
-                >
-                  {isAbrirPending ? (
-                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  ) : (
-                    <Unlock className="w-5 h-5 mr-2" />
-                  )}
-                  Abrir Turno
-                </Button>
-              </form>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Label htmlFor="monto_inicial" className="sr-only">
+                Fondo inicial
+              </Label>
+              <div className="relative flex-1 sm:flex-none">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">
+                  $
+                </span>
+                <Input
+                  id="monto_inicial"
+                  name="monto_inicial"
+                  type="number"
+                  min="0"
+                  required
+                  className="pl-8 h-10 w-full sm:w-36 font-mono shadow-none rounded-xl border-border hover:border-foreground/40 transition-colors bg-background"
+                  placeholder="Fondo inicial"
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={isAbrirPending}
+                className="h-10 rounded-xl shadow-none cursor-pointer shrink-0"
+              >
+                {isAbrirPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Unlock className="w-4 h-4 mr-2" />
+                )}
+                Abrir turno
+              </Button>
             </div>
-          </div>
+          </form>
         </Card>
       ) : (
         <div className="space-y-6">
@@ -648,7 +648,9 @@ export function CajaDashboard({
         </div>
       )}
 
-      <CajaHistoryTable historial={historial} />
+      {/* El historial se renderiza afuera (page.tsx): tiene que verse también
+          cuando la dueña está en "Vista general" y este componente no se
+          monta. */}
     </div>
   );
 }
