@@ -20,6 +20,11 @@ export async function registrarVentaAction(
   // REGLAS DE NEGOCIO CRM Y CC
   const isCuentaCorriente = formData.get("is_cuenta_corriente") === "true";
   const recargoCC = Number(formData.get("recargo_cc") || 0);
+  // Exención del recargo CC decidida por la vendedora en el ticket. Es la
+  // ÚNICA cosa del cálculo de plata que sí se toma del cliente, y a propósito:
+  // es una decisión comercial puntual (cliente de confianza, arreglo previo)
+  // que no puede salir de la config, porque la config es global.
+  const ccSinRecargo = formData.get("cc_sin_recargo") === "true";
   const clienteId = formData.get("cliente_id") as string | null;
   const reservaIdsRaw = formData.get("reserva_ids") as string | null;
   const reservaIds: string[] = reservaIdsRaw ? JSON.parse(reservaIdsRaw) : [];
@@ -327,9 +332,23 @@ export async function registrarVentaAction(
   // Antes se confiaba en el número del cliente, así que un request modificado
   // podía fiar sin recargo (o inventarse uno) sobre plata real.
   const pctRecargoCC = Number(configVenta?.cc_recargo_default) || 0;
-  const recargoCCServer = isCuentaCorriente
-    ? (subtotalConDescuento * pctRecargoCC) / 100
-    : 0;
+  const recargoCCServer =
+    isCuentaCorriente && !ccSinRecargo
+      ? (subtotalConDescuento * pctRecargoCC) / 100
+      : 0;
+
+  // Sin columna que lo registre, el log es el único rastro de que esta venta
+  // se fió sin el recargo que la config exige. Va como error para que quede
+  // en los logs de producción, no como info.
+  if (isCuentaCorriente && ccSinRecargo && pctRecargoCC > 0) {
+    console.error("[VENTA CC SIN RECARGO]", {
+      vendedorId: user.id,
+      clienteId,
+      subtotal: subtotalConDescuento,
+      pctRecargoCCOmitido: pctRecargoCC,
+      recargoOmitido: (subtotalConDescuento * pctRecargoCC) / 100,
+    });
+  }
 
   const recargoCCCliente = isNaN(recargoCC) ? 0 : recargoCC;
   if (Math.abs(recargoCCCliente - recargoCCServer) > 0.05) {

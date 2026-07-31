@@ -122,7 +122,7 @@ export function StockFiltersToolbar({
   return (
     <>
       {/* 1. BARRA SUPERIOR: Buscador y Acciones */}
-      <div className="flex flex-row gap-2 py-1.5 border-b border-border">
+      <div className="flex flex-row gap-2 px-2 py-1.5 border-b border-border">
         <ImportarPedidoModal
           open={isImportModalOpen}
           onOpenChange={setIsImportModalOpen}

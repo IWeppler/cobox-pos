@@ -19,7 +19,13 @@ interface CartSidebarFooterProps {
   isPOSMode: boolean;
   isPending: boolean;
   totalCarrito: number;
+  /** Recargo CC efectivamente aplicado: 0 si la vendedora lo anuló. */
   recargoCuentaCorriente: number;
+  /** Lo que el recargo CC sería si se aplicara. Se usa para poder mostrar la
+   * línea (y el botón de restaurar) cuando está anulado. */
+  recargoCuentaCorrientePotencial?: number;
+  ccSinRecargo?: boolean;
+  onCcSinRecargoChange?: (value: boolean) => void;
   /** Recargo por método de pago. Ya NO está incluido en `totalFinal`. */
   recargoMetodoMonto?: number;
   recargoMetodoEtiqueta?: string;
@@ -55,6 +61,9 @@ export function CartSidebarFooter({
   totalACobrar,
   sumaPagos,
   recargoCuentaCorriente,
+  recargoCuentaCorrientePotencial = 0,
+  ccSinRecargo = false,
+  onCcSinRecargoChange,
   recargoMetodoMonto = 0,
   recargoMetodoEtiqueta = "",
   clienteSeleccionado,
@@ -89,6 +98,14 @@ export function CartSidebarFooter({
             ?.recargo_porcentaje ?? 0,
         )
       : 0;
+
+  // La línea de recargo CC sigue visible cuando está anulado (tachada), para
+  // que la vendedora vea qué se le está perdonando al cliente y pueda
+  // deshacerlo. `recargoCuentaCorriente` ya viene en 0 en ese caso.
+  const recargoCCMostrado = ccSinRecargo
+    ? recargoCuentaCorrientePotencial
+    : recargoCuentaCorriente;
+  const mostrarLineaCC = recargoCCMostrado > 0;
 
   const handleCobrar = () => {
     if (isReserva) {
@@ -133,11 +150,29 @@ export function CartSidebarFooter({
               </span>
             </div>
           ) : null}
-          {recargoCuentaCorriente > 0 ? (
-            <div className="flex items-center justify-between font-mono text-sm text-amber-700 dark:text-amber-500">
-              <span>RECARGO CC</span>
-              <span className="font-mono">
-                +{formatCurrency(recargoCuentaCorriente)}
+          {mostrarLineaCC ? (
+            <div
+              className={`flex items-center justify-between font-mono text-sm ${
+                ccSinRecargo
+                  ? "text-muted-foreground"
+                  : "text-amber-700 dark:text-amber-500"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <span>RECARGO CC</span>
+                {onCcSinRecargoChange ? (
+                  <button
+                    type="button"
+                    onClick={() => onCcSinRecargoChange(!ccSinRecargo)}
+                    disabled={isPending}
+                    className="text-[11px] uppercase tracking-wide underline underline-offset-2 hover:text-foreground disabled:opacity-50 cursor-pointer"
+                  >
+                    {ccSinRecargo ? "Aplicar" : "Anular"}
+                  </button>
+                ) : null}
+              </span>
+              <span className={ccSinRecargo ? "line-through" : ""}>
+                +{formatCurrency(recargoCCMostrado)}
               </span>
             </div>
           ) : null}

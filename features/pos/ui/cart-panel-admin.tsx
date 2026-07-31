@@ -177,6 +177,9 @@ export function CartPanelAdmin({
   const [pagos, setPagos] = useState<CreateSalePaymentInput[]>([]);
   const [modoMixto, setModoMixto] = useState(false);
   const [isCuentaCorriente, setIsCuentaCorriente] = useState(false);
+  /** La vendedora anuló el recargo CC para ESTE ticket. No persiste entre
+   * ventas: se resetea al cerrar la venta y al apagar Cuenta Corriente. */
+  const [ccSinRecargo, setCcSinRecargo] = useState(false);
   const [isReserva, setIsReserva] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   // Corte propio para celular (<640px, Tailwind `sm`) — distinto del corte
@@ -323,9 +326,14 @@ export function CartPanelAdmin({
   }, [promocionActivaId, promocionesElegibles, totalCarrito, items]);
 
   const subtotalConDescuento = totalCarrito - descuentoDetalle.monto;
-  const recargoCuentaCorriente = isCuentaCorriente
+  // Lo que el recargo CC sería si se aplicara. Se calcula igual esté anulado
+  // o no: es lo que el footer necesita para poder ofrecer "restaurar".
+  const recargoCuentaCorrientePotencial = isCuentaCorriente
     ? (subtotalConDescuento * (branding?.cc_recargo_default || 0)) / 100
     : 0;
+  const recargoCuentaCorriente = ccSinRecargo
+    ? 0
+    : recargoCuentaCorrientePotencial;
 
   const totalFinal = subtotalConDescuento + recargoCuentaCorriente;
   const clienteExceptuadoEntregaMinima =
@@ -403,6 +411,9 @@ export function CartPanelAdmin({
 
   const handleCuentaCorrienteChange = (value: boolean) => {
     setIsCuentaCorriente(value);
+    // Apagar CC descarta la exención: si se vuelve a prender, arranca con el
+    // recargo puesto. Anularlo tiene que ser siempre un acto explícito.
+    if (!value) setCcSinRecargo(false);
     if (value) {
       setIsReserva(false);
       setPromocionId("ninguna");
@@ -553,6 +564,7 @@ export function CartPanelAdmin({
         formData.append("metodo_pago_id", pagosToSubmit[0]?.metodoPagoId || "");
         formData.append("is_cuenta_corriente", String(isCuentaCorriente));
         formData.append("recargo_cc", String(recargoCuentaCorriente));
+        formData.append("cc_sin_recargo", String(ccSinRecargo));
 
         if (clienteSeleccionado) {
           formData.append("cliente_id", clienteSeleccionado.id);
@@ -663,6 +675,7 @@ export function CartPanelAdmin({
         setPromocionId("ninguna");
         setModoMixto(false);
         setIsCuentaCorriente(false);
+        setCcSinRecargo(false);
         setClienteSeleccionado(null);
         closeSidebar();
       } catch (error) {
@@ -713,6 +726,9 @@ export function CartPanelAdmin({
               isPending={isPending}
               totalCarrito={totalCarrito}
               recargoCuentaCorriente={recargoCuentaCorriente}
+              recargoCuentaCorrientePotencial={recargoCuentaCorrientePotencial}
+              ccSinRecargo={ccSinRecargo}
+              onCcSinRecargoChange={setCcSinRecargo}
               recargoMetodoMonto={recargoMetodo.totalRecargo}
               recargoMetodoEtiqueta={recargoMetodoEtiqueta}
               totalFinal={totalFinal}
