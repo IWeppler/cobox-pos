@@ -24,6 +24,12 @@ export async function registrarVentaAction(
   const reservaIdsRaw = formData.get("reserva_ids") as string | null;
   const reservaIds: string[] = reservaIdsRaw ? JSON.parse(reservaIdsRaw) : [];
 
+  // Unidades serializadas elegidas en el modal: [{varianteId, unidadId}].
+  // Vacío para todo lo que no usa unidades_serie, que es el caso normal.
+  const unidadesRaw = formData.get("unidades_serie") as string | null;
+  const unidadesElegidas: { varianteId: string; unidadId: string }[] =
+    unidadesRaw ? JSON.parse(unidadesRaw) : [];
+
   if (!cartData) return { error: "El carrito está vacío.", success: false };
   const items = JSON.parse(cartData) as any[];
   if (items.length === 0) return { error: "Agrega productos.", success: false };
@@ -161,6 +167,89 @@ export async function registrarVentaAction(
       costoServer,
     });
   }
+
+  // --- 0bis. RESOLVER QUÉ LÍNEAS REQUIEREN UNIDAD SERIALIZADA ---
+  // Espejo server-side de lo que el POS marca en el carrito. Esa marca es
+  // client-side y por lo tanto bypasseable llamando esta action directo:
+  // la regla real de "esta variante no se vende sin elegir aparato" se
+  // decide acá, contra la base, y es fail-closed (si la variante tiene
+  // unidades disponibles y no vino ninguna elegida, la venta se rechaza).
+  //
+  // Una variante SIN unidades disponibles no requiere nada y sigue el
+  // camino de siempre: es toda la indumentaria y los accesorios.
+  const varianteIdsCarrito = itemsResueltos
+    .map((i) => i.varianteId)
+    .filter((id): id is string => Boolean(id));
+
+  const disponiblesPorVariante = new Map<string, number>();
+  if (varianteIdsCarrito.length > 0) {
+    const { data: unidadesLibres, error: unidadesError } = await supabase
+      .from("unidades_serie")
+      .select("producto_variante_id")
+      .in("producto_variante_id", varianteIdsCarrito)
+      .eq("estado", "disponible");
+
+    if (unidadesError) {
+      console.error("[VENTA] Error consultando unidades_serie:", unidadesError);
+      return {
+        error: "No se pudo verificar las unidades con número de serie.",
+        success: false,
+      };
+    }
+
+    for (const row of unidadesLibres ?? []) {
+      const vId = row.producto_variante_id as string;
+      disponiblesPorVariante.set(vId, (disponiblesPorVariante.get(vId) ?? 0) + 1);
+    }
+  }
+
+  const unidadPorVariante = new Map(
+    unidadesElegidas
+      .filter((u) => u?.varianteId && u?.unidadId)
+      .map((u) => [u.varianteId, u.unidadId]),
+  );
+
+  // Pares (unidad, variante) que se le pasan a la RPC. Van con la variante
+  // para que la propia RPC verifique que la unidad pertenece a la línea:
+  // el id de unidad viene del cliente y no se usa sin contrastar.
+  const unidadesAVender: { unidad_id: string; variante_id: string }[] = [];
+
+  for (const item of itemsResueltos) {
+    const varianteId = item.varianteId;
+    if (!varianteId) continue;
+
+    const disponibles = disponiblesPorVariante.get(varianteId) ?? 0;
+    if (disponibles === 0) continue;
+
+    const unidadId = unidadPorVariante.get(varianteId);
+    if (!unidadId) {
+      return {
+        error: `"${item.variante}" se vende por número de serie: elegí la unidad antes de confirmar.`,
+        success: false,
+      };
+    }
+
+    // Una unidad por línea. Vender dos aparatos del mismo modelo son dos
+    // líneas, cada una con su IMEI — con una sola línea de cantidad 2 no
+    // habría a qué unidad atar el segundo ventas_items, y la trazabilidad
+    // por aparato es justamente el punto de todo esto.
+    if (item.cantidad !== 1) {
+      return {
+        error: `"${item.variante}" se vende por número de serie: cargá una línea por aparato (cantidad 1).`,
+        success: false,
+      };
+    }
+
+    unidadesAVender.push({ unidad_id: unidadId, variante_id: varianteId });
+  }
+
+  /** Solo las unidades que realmente entran a la venta. `unidadPorVariante`
+   * es lo que mandó el cliente y puede traer de más (una unidad para una
+   * variante que no es serializada); esto es lo que se marca y lo que se
+   * enlaza después en ventas_items. */
+  const unidadesVendidasPorVariante = new Map(
+    unidadesAVender.map((u) => [u.variante_id, u.unidad_id]),
+  );
 
   let totalElegible = 0;
   itemsResueltos.forEach((item) => {
@@ -332,7 +421,73 @@ export async function registrarVentaAction(
   // hubiera descontado de items anteriores en este mismo loop y no
   // creamos la venta — así no queda un ticket fantasma sin stock
   // descontado detrás.
+  // --- 1bis. MARCAR LAS UNIDADES SERIALIZADAS (TODO O NADA) ---
+  // Va ANTES de descontar stock y antes de crear la venta, a propósito: es
+  // el paso que puede rechazar la operación por "ese aparato ya se vendió",
+  // y esa decisión tiene que tomarse antes de cualquier escritura derivada.
+  //
+  // El id de la venta se genera acá y se usa después como PK explícita de
+  // `ventas`. Eso permite atar las unidades a la venta antes de que la
+  // cabecera exista; funciona porque unidades_serie.venta_id NO tiene FK
+  // dura (decisión de la migración: la trazabilidad del aparato tiene que
+  // sobrevivir a que la venta desaparezca). Si algún paso posterior falla,
+  // `revertir_unidades_serie` las libera.
+  //
+  // La RPC hace UPDATE ... WHERE id = ? AND estado = 'disponible' y aborta
+  // si no afecta exactamente la cantidad pedida: dos cajas vendiendo el
+  // mismo IMEI a la vez se serializan en el row lock y la segunda rebota.
+  const ventaId = crypto.randomUUID();
+
+  if (unidadesAVender.length > 0) {
+    const { error: unidadesError } = await supabase.rpc(
+      "vender_unidades_serie",
+      { p_venta_id: ventaId, p_unidades: unidadesAVender },
+    );
+
+    if (unidadesError) {
+      console.error("[VENTA] Error marcando unidades serie:", unidadesError);
+      const yaVendida = unidadesError.message?.includes(
+        "UNIDADES_NO_DISPONIBLES",
+      );
+      return {
+        error: yaVendida
+          ? "Alguna de las unidades seleccionadas ya fue vendida. Volvé a elegir el aparato."
+          : "No se pudieron reservar las unidades con número de serie.",
+        success: false,
+      };
+    }
+  }
+
+  /** Libera las unidades de ESTA venta. Se llama cuando un paso posterior
+   * falla y la venta no va a existir. */
+  const liberarUnidades = async () => {
+    if (unidadesAVender.length === 0) return;
+    const { error } = await supabase.rpc("revertir_unidades_serie", {
+      p_venta_id: ventaId,
+    });
+    if (error) {
+      // Grave y silencioso si no se deja rastro: las unidades quedarían
+      // marcadas como vendidas de una venta que nunca existió.
+      console.error(
+        "[VENTA] CRÍTICO: no se pudieron liberar las unidades de la venta abortada",
+        { ventaId, unidades: unidadesAVender, error },
+      );
+    }
+  };
+
   const itemsConStockDescontado: typeof itemsProcesados = [];
+
+  /** Devuelve el stock que este mismo request ya había descontado. */
+  const revertirStockDescontado = async () => {
+    for (const previo of itemsConStockDescontado) {
+      if (!previo.varianteId) continue;
+      await supabase.rpc("ajustar_stock_variante", {
+        p_variante_id: previo.varianteId,
+        p_delta: previo.cantidad,
+      });
+    }
+  };
+
   for (const item of itemsProcesados) {
     if (!item.varianteId) {
       // Producto legacy sin producto_variantes: no hay fila atómica que
@@ -353,13 +508,8 @@ export async function registrarVentaAction(
 
     if (descuentoError) {
       console.error("[VENTA] Error descontando stock:", descuentoError);
-      for (const previo of itemsConStockDescontado) {
-        if (!previo.varianteId) continue;
-        await supabase.rpc("ajustar_stock_variante", {
-          p_variante_id: previo.varianteId,
-          p_delta: previo.cantidad,
-        });
-      }
+      await revertirStockDescontado();
+      await liberarUnidades();
       return {
         error: `Error al descontar stock de "${item.variante}".`,
         success: false,
@@ -367,13 +517,8 @@ export async function registrarVentaAction(
     }
 
     if (!descontado || descontado.length === 0) {
-      for (const previo of itemsConStockDescontado) {
-        if (!previo.varianteId) continue;
-        await supabase.rpc("ajustar_stock_variante", {
-          p_variante_id: previo.varianteId,
-          p_delta: previo.cantidad,
-        });
-      }
+      await revertirStockDescontado();
+      await liberarUnidades();
       return {
         error: `Sin stock suficiente para la variante "${item.variante}".`,
         success: false,
@@ -390,8 +535,14 @@ export async function registrarVentaAction(
 
   for (const pago of recargoCalculado.pagos) {
     const metodoData = metodosMap[pago.metodoPagoId];
-    if (!metodoData)
+    if (!metodoData) {
+      // Este return ya dejaba el stock descontado antes de este cambio; ahora
+      // que además hay unidades marcadas, se revierten las dos cosas para no
+      // dejar aparatos "vendidos" en una venta que no se creó.
+      await revertirStockDescontado();
+      await liberarUnidades();
       return { error: "Método de pago inválido.", success: false };
+    }
 
     // El bruto es base + recargo: es la plata que efectivamente pasa por el
     // posnet, y por eso la comisión del procesador se calcula sobre ÉL y no
@@ -434,6 +585,10 @@ export async function registrarVentaAction(
   }
 
   const payloadVentas = {
+    // PK explícita: es el mismo id con el que ya se marcaron las unidades
+    // serializadas más arriba. Sin esto no habría forma de atar el aparato
+    // a la venta antes de que la venta exista.
+    id: ventaId,
     vendedor_id: user.id,
     cliente_id: clienteId || null,
     turno_caja_id: turnoAbiertoId,
@@ -462,8 +617,13 @@ export async function registrarVentaAction(
     .insert(payloadVentas)
     .select("id, fecha_venta")
     .single();
-  if (ventaError || !nuevaVenta)
-    return { error: `Fallo en BD: ${ventaError.message}`, success: false };
+  if (ventaError || !nuevaVenta) {
+    // La venta no existe: hay que devolver el stock y liberar los aparatos,
+    // que a esta altura ya están marcados como vendidos.
+    await revertirStockDescontado();
+    await liberarUnidades();
+    return { error: `Fallo en BD: ${ventaError?.message}`, success: false };
+  }
 
   // --- 5. REGISTRAR DEUDA EN CUENTA CORRIENTE ---
   if (isCuentaCorriente && montoPendiente > 0.05 && clienteId) {
@@ -554,6 +714,13 @@ export async function registrarVentaAction(
     venta_id: nuevaVenta.id,
     producto_id: item.productoId,
     variante: item.variante,
+    // Cierra la cadena venta > ventas_items > unidad_serie > variante.
+    // Se lee de `unidadesVendidasPorVariante`, no del payload del cliente:
+    // solo se enlaza la unidad que la RPC efectivamente marcó como vendida.
+    // NULL en todo lo no serializado, que es el caso normal.
+    unidad_serie_id: item.varianteId
+      ? (unidadesVendidasPorVariante.get(item.varianteId) ?? null)
+      : null,
     cantidad: item.cantidad,
     precio_unitario: item.precioUnitario,
     precio_costo: item.precioCosto,

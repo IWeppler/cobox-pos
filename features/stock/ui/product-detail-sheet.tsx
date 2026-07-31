@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"; // 1. Importamos hooks de React
 import { Producto } from "@/entities/productos/types";
+import { UnidadesSeriePanel } from "./unidades-serie-panel";
 import {
   Sheet,
   SheetContent,
@@ -87,6 +88,15 @@ export function ProductDetailSheet({
   const [varianteSeleccionada, setVarianteSeleccionada] = useState<string>(
     stockDisponible.length > 0 ? stockDisponible[0].variante : "",
   );
+
+  // `productos_stock` (de donde sale `stockDisponible`) se relaciona por
+  // nombre de variante y no trae el id; el panel de números de serie sí lo
+  // necesita, así que se resuelve contra producto_variantes por el mismo
+  // nombre_display que ya usa el mapa de precios de arriba.
+  const varianteSeleccionadaId =
+    (producto.producto_variantes ?? []).find(
+      (v) => v.nombre_display === varianteSeleccionada,
+    )?.id ?? null;
 
   const handleAñadirAlCarrito = () => {
     if (!varianteSeleccionada) return;
@@ -231,6 +241,10 @@ export function ProductDetailSheet({
                   </div>
                 )}
               </div>
+
+              {/* Trazabilidad por aparato. No renderiza nada si la variante
+                  no tiene unidades serializadas. */}
+              <UnidadesSeriePanel varianteId={varianteSeleccionadaId} />
 
               {/* Botones de Admin (Solo visibles si es ADMIN) */}
               {isAdmin && (

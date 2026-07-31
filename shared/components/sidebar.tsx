@@ -318,7 +318,7 @@ export function Sidebar({
               <TooltipTrigger asChild>
                 <button
                   type="submit"
-                  className={`flex items-center text-muted-foreground rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer font-semibold ${
+                  className={`flex items-center text-muted-foreground rounded-xl hover:bg-rose-50 dark:hover:bg-rose-500/20 hover:text-rose-600 transition-colors cursor-pointer font-semibold ${
                     isCollapsed
                       ? "justify-center h-12 w-12 mx-auto"
                       : "w-full gap-3 px-3.5 py-3"

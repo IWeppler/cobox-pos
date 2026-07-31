@@ -73,21 +73,35 @@ export default async function CajaPage() {
 
   // 4. Identificamos los turnos ABIERTOS actuales
   const turnosAbiertos = turnos.filter((t) => t.estado === "ABIERTO");
-  const turnosAbiertosIds = turnosAbiertos.map((t) => t.id);
+
+  // El turno que ESTA persona opera, con la misma regla que usa CajaDashboard:
+  // en POR_USUARIO cada quien tiene el suyo; en UNICA la caja es una sola
+  // compartida por todo el local.
+  //
+  // Los movimientos se traen SOLO de este turno. Antes se traían de todos los
+  // turnos abiertos visibles, y como un admin ve los ajenos, el efectivo de
+  // otra cajera se sumaba a su "Efectivo en Cajón". Con un turno de otro día
+  // que quedó abierto, eso aparecía como un sobrante fantasma en un turno
+  // recién abierto (incidente 30/7: los 22.650 de Brisa del 20/7 aparecían en
+  // la caja de Evelyn).
+  const turnoPropio =
+    turnosAbiertos.find((t) =>
+      t.modo === "POR_USUARIO" ? t.vendedor_id === user.id : true,
+    ) ?? null;
 
   let ventas: VentaCaja[] = [];
   let pagosSueltos: VentaPago[] = [];
   let egresos: EgresoCaja[] = [];
 
-  // 5. Traemos los movimientos SOLAMENTE si hay cajas abiertas
-  if (turnosAbiertosIds.length > 0) {
+  // 5. Traemos los movimientos SOLAMENTE del turno propio abierto
+  if (turnoPropio) {
     const [ventasRes, pagosSueltosRes, egresosRes] = await Promise.all([
       supabase
         .from("ventas")
         .select(
           "id, total, metodo_pago, fecha_venta, turno_caja_id, cliente_id, clientes(nombre), monto_cobrado, monto_pendiente, estado_pago, perfiles(nombre), ventas_items(producto:productos(nombre)), venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)",
         )
-        .in("turno_caja_id", turnosAbiertosIds)
+        .eq("turno_caja_id", turnoPropio.id)
         .neq("estado_operacion", "ANULADA")
         .order("fecha_venta", { ascending: false }),
       supabase
@@ -96,7 +110,7 @@ export default async function CajaPage() {
           "id, turno_caja_id, metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento, creado_en, clientes(nombre)",
         )
         .is("venta_id", null)
-        .in("turno_caja_id", turnosAbiertosIds)
+        .eq("turno_caja_id", turnoPropio.id)
         .neq("estado_pago_operacion", "ANULADO")
         .order("creado_en", { ascending: false }),
       supabase
@@ -104,7 +118,7 @@ export default async function CajaPage() {
         .select(
           "id, concepto, monto, fecha, creado_por, turno_caja_id, perfiles(nombre)",
         )
-        .in("turno_caja_id", turnosAbiertosIds)
+        .eq("turno_caja_id", turnoPropio.id)
         .order("fecha", { ascending: false }),
     ]);
 

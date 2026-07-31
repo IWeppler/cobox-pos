@@ -32,6 +32,35 @@ export interface ProductoVariante {
   }[];
 }
 
+/**
+ * Estados de una unidad serializada. El CHECK de la tabla es fail-closed:
+ * agregar un estado acá sin migración no lo hace válido en la base.
+ */
+export type EstadoUnidadSerie = "disponible" | "vendido";
+
+/**
+ * Una unidad física con IMEI / número de serie (rubro electro). A diferencia
+ * de `ProductoVariante.stock`, que es un contador de unidades intercambiables,
+ * acá cada fila es UN aparato: es lo que permite garantía y trazabilidad por
+ * equipo.
+ *
+ * Todavía nada del flujo de ventas lee ni escribe esta tabla: la fuente de
+ * verdad del stock sigue siendo `producto_variantes.stock`.
+ */
+export interface UnidadSerie {
+  id: string;
+  /** Reservado para multi-tenant (ROADMAP TIER 2). Siempre null en el modelo por-proyecto actual. */
+  negocio_id?: string | null;
+  producto_variante_id: string;
+  imei: string;
+  estado: EstadoUnidadSerie;
+  fecha_ingreso: string;
+  /** La base garantiza el par: no-null si y solo si estado === 'vendido'. */
+  fecha_venta: string | null;
+  /** Sin FK en la base — puede apuntar a una venta que ya no existe, o ser null en una venta cargada a mano. */
+  venta_id: string | null;
+}
+
 export interface CategoriaRelacion {
   id: string;
   nombre: string;

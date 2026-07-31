@@ -13,6 +13,12 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { registrarVentaAction } from "@/features/sales/actions/create-sale";
+import { getDisponibilidadUnidadesAction } from "@/features/sales/actions/get-unidades-serie";
+import { SeleccionarUnidadesModal } from "./seleccionar-unidades-modal";
+import type {
+  DisponibilidadPorVariante,
+  UnidadSeleccionada,
+} from "@/entities/ventas/unidades-serie-types";
 import { crearReservaAction } from "@/features/reservations/actions/manage-reservations";
 import { TicketSheet } from "@/features/sales/ui/ticket-sheet";
 import { TicketData, CreateSalePaymentInput } from "@/entities/ventas/types";
@@ -69,6 +75,94 @@ export function CartPanelAdmin({
   );
 
   const router = useRouter();
+
+  // --- UNIDADES SERIALIZADAS (IMEI / número de serie) ---
+  // `variantesSerializadas` son las variantes del carrito que tienen al
+  // menos una unidad libre en unidades_serie: esas líneas no se pueden
+  // cobrar sin elegir el aparato. Se recalcula cuando cambia el carrito.
+  // Para un catálogo sin unidades_serie (toda la indumentaria) esto queda
+  // vacío y no cambia absolutamente nada del flujo.
+  // Resultado crudo de la última consulta. `variantesSerializadas` se deriva
+  // de acá cruzándolo con el carrito actual, en vez de resetearse por efecto:
+  // si el carrito se vacía, el memo ya da un Set vacío sin escribir estado.
+  const [disponibilidadUnidades, setDisponibilidadUnidades] =
+    useState<DisponibilidadPorVariante>({});
+  const [unidadesElegidasRaw, setUnidadesElegidasRaw] = useState<
+    UnidadSeleccionada[]
+  >([]);
+  const [modalUnidadesAbierto, setModalUnidadesAbierto] = useState(false);
+  /** El anticipo tipeado en el modal de CC se guarda mientras el vendedor
+   * elige los aparatos, para retomar la confirmación con el mismo monto. */
+  const [anticipoPendiente, setAnticipoPendiente] = useState<
+    number | undefined
+  >(undefined);
+
+  const varianteIdsCarrito = useMemo(
+    () =>
+      items
+        .map((i) => i.varianteId)
+        .filter((id): id is string => Boolean(id))
+        .sort()
+        .join(","),
+    [items],
+  );
+
+  useEffect(() => {
+    const ids = varianteIdsCarrito ? varianteIdsCarrito.split(",") : [];
+    if (ids.length === 0) return;
+
+    let cancelado = false;
+    getDisponibilidadUnidadesAction(ids).then((res) => {
+      // Guard de carrera: si el carrito cambió mientras volvía la consulta,
+      // esta respuesta ya no corresponde y se descarta.
+      if (cancelado) return;
+      setDisponibilidadUnidades(res.disponibilidad);
+    });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [varianteIdsCarrito]);
+
+  const variantesSerializadas = useMemo(() => {
+    const enCarrito = new Set(
+      varianteIdsCarrito ? varianteIdsCarrito.split(",") : [],
+    );
+    return new Set(
+      Object.entries(disponibilidadUnidades)
+        .filter(([varianteId, cantidad]) => cantidad > 0 && enCarrito.has(varianteId))
+        .map(([varianteId]) => varianteId),
+    );
+  }, [disponibilidadUnidades, varianteIdsCarrito]);
+
+  // Una unidad elegida deja de valer si esa línea salió del carrito. Se
+  // filtra al leer en vez de limpiarse por efecto, para no encadenar un
+  // render extra cada vez que cambia el carrito.
+  const unidadesElegidas = useMemo(
+    () =>
+      unidadesElegidasRaw.filter((u) => variantesSerializadas.has(u.varianteId)),
+    [unidadesElegidasRaw, variantesSerializadas],
+  );
+
+  const lineasSerializadas = useMemo(
+    () =>
+      items
+        .filter((i) => i.varianteId && variantesSerializadas.has(i.varianteId))
+        .map((i) => ({
+          varianteId: i.varianteId as string,
+          nombre: i.nombre,
+          variante: i.variante,
+        })),
+    [items, variantesSerializadas],
+  );
+
+  const imeiPorVariante = useMemo(
+    () =>
+      Object.fromEntries(unidadesElegidas.map((u) => [u.varianteId, u.imei])),
+    [unidadesElegidas],
+  );
+
+
 
   const mounted = useSyncExternalStore(
     subscribeToClientMount,
@@ -381,9 +475,29 @@ export function CartPanelAdmin({
     }, 1000);
   };
 
-  const handleConfirmarVentaPOS = (montoAnticipoModal?: number) => {
+  const handleConfirmarVentaPOS = (
+    montoAnticipoModal?: number,
+    // La selección del modal llega por argumento y no por estado: al salir
+    // del modal, este closure todavía vería `unidadesElegidas` vacío y la
+    // venta saldría sin aparatos.
+    unidadesOverride?: UnidadSeleccionada[],
+  ) => {
     const montoRealAsignado =
       montoAnticipoModal !== undefined ? montoAnticipoModal : sumaPagos;
+
+    const unidadesParaVenta = unidadesOverride ?? unidadesElegidas;
+    const imeisParaVenta = Object.fromEntries(
+      unidadesParaVenta.map((u) => [u.varianteId, u.imei]),
+    );
+
+    // Antes que cualquier otra validación: si hay líneas serializadas sin
+    // aparato elegido, se abre el modal y no se cobra nada. El server hace
+    // el mismo chequeo (esto es solo la UX; la regla vive en create-sale).
+    if (lineasSerializadas.some((l) => !imeisParaVenta[l.varianteId])) {
+      setAnticipoPendiente(montoAnticipoModal);
+      setModalUnidadesAbierto(true);
+      return;
+    }
 
     if (isCuentaCorriente && !clienteSeleccionado) {
       toast.error("Selecciona un cliente para Cuenta Corriente.");
@@ -442,6 +556,20 @@ export function CartPanelAdmin({
 
         if (clienteSeleccionado) {
           formData.append("cliente_id", clienteSeleccionado.id);
+        }
+
+        // Solo las unidades de líneas que siguen en el carrito. El server
+        // vuelve a validar cuáles corresponden y rechaza las que no.
+        if (unidadesParaVenta.length > 0) {
+          formData.append(
+            "unidades_serie",
+            JSON.stringify(
+              unidadesParaVenta.map((u) => ({
+                varianteId: u.varianteId,
+                unidadId: u.unidadId,
+              })),
+            ),
+          );
         }
 
         const reservaIds = items.flatMap((item) => item.reservaIds ?? []);
@@ -504,7 +632,14 @@ export function CartPanelAdmin({
           : "PAGADA";
 
         setVentaExitosa({
-          items: [...items],
+          // El IMEI viaja al ticket recién impreso: es el comprobante de
+          // garantía del aparato que el cliente se acaba de llevar.
+          items: items.map((item) => ({
+            ...item,
+            imei: item.varianteId
+              ? (imeisParaVenta[item.varianteId] ?? null)
+              : null,
+          })),
           total: totalFinal + recargoSubmit.totalRecargo,
           metodoPago: nombreMetodoMostrar,
           nroRecibo: idReal,
@@ -548,6 +683,8 @@ export function CartPanelAdmin({
           onRemoveItem={removeItem}
           totalCarrito={totalCarrito}
           onContinueToPayment={handleContinueToPayment}
+          variantesSerializadas={variantesSerializadas}
+          imeiPorVariante={imeiPorVariante}
         />
       ) : (
         <CartStepCheckout
@@ -648,6 +785,22 @@ export function CartPanelAdmin({
       >
         <DrawerContent>{CartContent}</DrawerContent>
       </Drawer>
+
+      {/* Montado solo cuando está abierto: así arranca con estado limpio y
+          la carga de unidades ocurre en el montaje, sin resets por efecto. */}
+      {modalUnidadesAbierto && (
+        <SeleccionarUnidadesModal
+          onCerrar={() => setModalUnidadesAbierto(false)}
+          lineas={lineasSerializadas}
+          onConfirmar={(seleccion) => {
+            setUnidadesElegidasRaw(seleccion);
+            setModalUnidadesAbierto(false);
+            // La selección va por argumento: el estado de arriba todavía no
+            // se aplicó en este closure.
+            handleConfirmarVentaPOS(anticipoPendiente, seleccion);
+          }}
+        />
+      )}
 
       <TicketSheet
         ticket={ventaExitosa}

@@ -238,6 +238,7 @@ export function VentasTable({
           variante: item.variante,
           cantidad: item.cantidad,
           precioUnitario: item.precio_unitario,
+          imei: getSupabaseRelation(item.unidad_serie)?.imei ?? null,
         }),
       ),
       total: venta.total,
@@ -366,6 +367,19 @@ export function VentasTable({
                                 )}
                               </span>
                             </div>
+                            {/* IMEI a la vista en el listado: es el dato por
+                                el que se busca una venta cuando alguien
+                                vuelve con el aparato. */}
+                            {getSupabaseRelation(primerItem.unidad_serie)
+                              ?.imei && (
+                              <p className="mt-1 font-mono text-[10px] font-normal text-muted-foreground">
+                                IMEI{" "}
+                                {
+                                  getSupabaseRelation(primerItem.unidad_serie)
+                                    ?.imei
+                                }
+                              </p>
+                            )}
                           </TableCell>
 
                           <TableCell>
@@ -503,6 +517,15 @@ export function VentasTable({
                         ) : (
                           <span className="text-muted-foreground text-xs mt-0.5">
                             Talle {primerItem.variante} · x{primerItem.cantidad}
+                          </span>
+                        )}
+                        {getSupabaseRelation(primerItem.unidad_serie)?.imei && (
+                          <span className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                            IMEI{" "}
+                            {
+                              getSupabaseRelation(primerItem.unidad_serie)
+                                ?.imei
+                            }
                           </span>
                         )}
                       </div>

@@ -44,3 +44,5 @@ next-env.d.ts
 .claude.md
 # symlinks generados por `npx skills add` (la fuente vive en .agents/skills/)
 /.claude/skills/
+.AGENTS.md
+.codex

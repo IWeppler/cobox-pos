@@ -30,7 +30,7 @@ export default function AuthPage() {
         {/* Mockup Central (Simulado 100% con CSS/Tailwind) */}
         <div className="relative z-10 w-full max-w-lg mx-auto mt-12 select-none">
           {/* Ventana principal oscura */}
-          <div className="bg-[#0f172a] rounded-2xl shadow-2xl border border-white/10 overflow-hidden transform transition-transform hover:scale-[1.02] duration-500">
+          <div className="bg-[#0f172a] rounded-2xl shadow-2xl border border-white/10 overflow-hidden transform transition-transform duration-500">
             {/* Header del Mockup (Botones tipo Mac) */}
             <div className="h-12 border-b border-white/10 flex items-center px-4 gap-4 bg-white/5">
               <div className="flex gap-1.5">

@@ -2,7 +2,7 @@
 
 import { CartItemStore } from "@/entities/cart/types";
 import { Button } from "@/shared/ui/button";
-import { Minus, Plus, ShoppingBag, X } from "lucide-react";
+import { Barcode, Minus, Plus, ShoppingBag, X } from "lucide-react";
 
 interface CartStepItemsProps {
   items: CartItemStore[];
@@ -15,6 +15,10 @@ interface CartStepItemsProps {
   totalCarrito: number;
   onContinueToPayment: () => void;
   continueLabel?: string;
+  /** varianteId de las líneas que no se pueden vender sin elegir el aparato. */
+  variantesSerializadas?: Set<string>;
+  /** IMEI ya elegido por varianteId, para mostrarlo en la línea. */
+  imeiPorVariante?: Record<string, string>;
 }
 
 export function CartStepItems({
@@ -24,6 +28,8 @@ export function CartStepItems({
   totalCarrito,
   onContinueToPayment,
   continueLabel = "Continuar al Pago",
+  variantesSerializadas,
+  imeiPorVariante,
 }: Readonly<CartStepItemsProps>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
@@ -67,6 +73,22 @@ export function CartStepItems({
                         <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                           {item.variante}
                         </p>
+                        {/* Producto serializado: hasta que no se elija el
+                            aparato, la venta no se puede confirmar. */}
+                        {item.varianteId &&
+                          variantesSerializadas?.has(item.varianteId) && (
+                            <p
+                              className={`mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest ${
+                                imeiPorVariante?.[item.varianteId]
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : "text-amber-600"
+                              }`}
+                            >
+                              <Barcode className="h-3 w-3 shrink-0" />
+                              {imeiPorVariante?.[item.varianteId] ??
+                                "Requiere elegir unidad"}
+                            </p>
+                          )}
                       </div>
                       <button
                         type="button"

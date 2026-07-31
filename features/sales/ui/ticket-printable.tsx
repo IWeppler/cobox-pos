@@ -64,6 +64,13 @@ export function TicketPrintable({
                   {item.cantidad}x {item.nombre}{" "}
                   {item.variante && `(${item.variante})`}
                 </p>
+                {/* El IMEI va en el ticket porque es el comprobante con el
+                    que el cliente reclama la garantía del aparato. */}
+                {item.imei && (
+                  <p className="font-mono text-[10px] leading-tight text-gray-700">
+                    IMEI: {item.imei}
+                  </p>
+                )}
                 <div className="flex justify-between items-center text-gray-700 text-xs mt-0.5">
                   <span>{formatTicketMoney(precioUnitario)} c/u</span>
                   <span className="font-bold text-black text-sm">

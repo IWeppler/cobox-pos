@@ -19,6 +19,13 @@ export interface VentaItem {
   precio_final?: number;
   promocion_nombre?: string | null;
   producto?: VentaProducto | null;
+  /** Unidad física vendida en esta línea (IMEI / número de serie). Ausente
+   * o null en todo lo que no es serializado, que es el caso normal. */
+  unidad_serie?: {
+    id: string;
+    imei: string;
+    fecha_venta?: string | null;
+  } | null;
 }
 
 export interface VentaProducto {
@@ -101,6 +108,9 @@ export interface TicketItemData {
   cantidad: number;
   precio?: number;
   precioUnitario?: number;
+  /** IMEI / número de serie del aparato vendido. El ticket lo imprime
+   * porque es el comprobante que el cliente presenta en una garantía. */
+  imei?: string | null;
 }
 
 export interface TicketData {

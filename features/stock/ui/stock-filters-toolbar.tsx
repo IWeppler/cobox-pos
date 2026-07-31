@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRightLeft,
   Check,
   ClipboardList,
+  FileSpreadsheet,
   Filter,
   FilterX,
   FolderOpen,
@@ -37,6 +38,7 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { ImportarPedidoModal } from "@/features/purchases/ui/create-purchase-modal";
 import { CrearProductoSheet } from "@/features/stock/ui/create-sheet";
+import { ImportProductosModal } from "./import-productos-modal";
 import { UpdatePricesModal } from "./update-prices-modal";
 import { PriceHistoryModal } from "./price-history-modal";
 import { ShareButton } from "@/shared/components/share-button";
@@ -103,6 +105,8 @@ export function StockFiltersToolbar({
   // El sheet de carga manual se monta UNA vez y se abre desde dos botones
   // distintos según breakpoint (barra en desktop, dropdown en mobile).
   const [isCrearProductoOpen, setIsCrearProductoOpen] = useState(false);
+  const [isImportProductosOpen, setIsImportProductosOpen] = useState(false);
+  const seImportoAlgo = useRef(false);
   const propiedadesVariantes = Object.entries(propiedadesGlobales);
   const hayFiltrosVariantesActivos = Object.values(filtrosVariantes).some(
     (valor) => (Array.isArray(valor) ? valor.length > 0 : valor !== "todos"),
@@ -130,6 +134,22 @@ export function StockFiltersToolbar({
             open={isCrearProductoOpen}
             onOpenChange={setIsCrearProductoOpen}
             hideTrigger
+          />
+        )}
+
+        {isAdmin && (
+          <ImportProductosModal
+            open={isImportProductosOpen}
+            // El refresh se difiere al cierre a propósito: recargar apenas
+            // termina de escribir se llevaría por delante el reporte fila
+            // por fila, que es justo lo que hay que leer cuando alguna falló.
+            onOpenChange={(open) => {
+              setIsImportProductosOpen(open);
+              if (!open && seImportoAlgo.current) window.location.reload();
+            }}
+            onImportado={() => {
+              seImportoAlgo.current = true;
+            }}
           />
         )}
 
@@ -331,6 +351,14 @@ export function StockFiltersToolbar({
                       >
                         <PackagePlus className="w-4 h-4 mr-2 text-emerald-600 shrink-0" />
                         <span>Ingresar Remito</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setIsImportProductosOpen(true)}
+                      >
+                        <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600 shrink-0" />
+                        <span>Importar Planilla</span>
                       </Button>
                       <DropdownMenuSeparator className="my-1 bg-border/60" />
                       <Link href="/stock/bajas" className="w-full block">
