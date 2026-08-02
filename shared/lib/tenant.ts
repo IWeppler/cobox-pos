@@ -44,7 +44,7 @@ const buscarPorSlug = cache(async (slug: string) => {
 /**
  * ÚNICA forma de obtener el negocio de un catálogo público.
  *
- * El slug sale del subdominio (evens.cobox.app) o del path (/store/evens); si
+ * El slug sale del subdominio (evens.comerz.app) o del path (/store/evens); si
  * llegan los dos, manda el subdominio. No hay tenant por defecto: sin slug, o
  * con un slug que no existe o está suspendido, la respuesta es 404. Nunca
  * devuelve "el único negocio".

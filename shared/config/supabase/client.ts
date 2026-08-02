@@ -1,7 +1,10 @@
 import { createBrowserClient } from "@supabase/ssr";
 import { HEADER_NEGOCIO_SLUG, slugDesdeHost } from "@/shared/lib/negocio-slug";
 import {
+  COOKIE_IMPERSONATE,
+  HEADER_IMPERSONATE,
   HEADER_NEGOCIO_ACTIVO,
+  leerCookie,
   leerCookieNegocioActivo,
 } from "@/shared/lib/negocio-activo";
 
@@ -24,9 +27,16 @@ export const createClient = () => {
     ? leerCookieNegocioActivo(document.cookie)
     : null;
 
+  // Modo Dios del super admin. Por eso la cookie no es httpOnly: el cliente de
+  // browser tiene que poder reenviarla como header.
+  const impersonando = enNavegador
+    ? leerCookie(document.cookie, COOKIE_IMPERSONATE)
+    : null;
+
   const headers: Record<string, string> = {};
   if (negocioSlug) headers[HEADER_NEGOCIO_SLUG] = negocioSlug;
   if (negocioActivo) headers[HEADER_NEGOCIO_ACTIVO] = negocioActivo;
+  if (impersonando) headers[HEADER_IMPERSONATE] = impersonando;
 
   return createBrowserClient(supabaseUrl, supabaseKey, {
     global: Object.keys(headers).length ? { headers } : undefined,

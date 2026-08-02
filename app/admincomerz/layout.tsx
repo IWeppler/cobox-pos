@@ -1,12 +1,18 @@
-// src/app/admin-cobox/layout.tsx
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ShieldAlert, LayoutDashboard, Building2, LogOut } from "lucide-react";
+import {
+  ShieldAlert,
+  LayoutDashboard,
+  Building2,
+  CreditCard,
+  Inbox,
+  LogOut,
+} from "lucide-react";
 import { logoutAction } from "@/features/auth/actions/logout";
 
-export default async function AdminCoboxLayout({
+export default async function AdminComerzLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const cookieStore = await cookies();
@@ -29,23 +35,37 @@ export default async function AdminCoboxLayout({
         <div className="space-y-6">
           <div className="flex items-center gap-2 px-2">
             <ShieldAlert className="w-6 h-6 text-primary" />
-            <span className="font-bold text-lg tracking-wider">COBOX ADMIN</span>
+            <span className="font-bold text-lg tracking-wider">COMERZ ADMIN</span>
           </div>
 
           <nav className="space-y-1">
             <Link
-              href="/admincobox"
+              href="/admincomerz"
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
             >
               <LayoutDashboard className="w-4 h-4" />
               Dashboard
             </Link>
             <Link
-              href="/admincobox/negocios"
+              href="/admincomerz/negocios"
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
             >
               <Building2 className="w-4 h-4" />
-              Comercios (Tenants)
+              Comercios
+            </Link>
+            <Link
+              href="/admincomerz/planes"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <CreditCard className="w-4 h-4" />
+              Planes
+            </Link>
+            <Link
+              href="/admincomerz/solicitudes"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <Inbox className="w-4 h-4" />
+              Solicitudes
             </Link>
           </nav>
         </div>

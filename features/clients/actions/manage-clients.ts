@@ -551,13 +551,23 @@ export async function ajustarSaldoAction(
       ? vencimientoActual
       : nuevoVencimiento;
 
-  await supabase
+  const { error: errorSaldo } = await supabase
     .from("clientes")
     .update({
       saldo_pendiente: saldoActual + montoTotal,
       fecha_vencimiento_deuda: fechaVencimientoFinal,
     })
     .eq("id", clienteId);
+
+  if (errorSaldo) {
+    // 23514 = tope de clientes con cuenta corriente del plan. El mensaje del
+    // trigger ya viene redactado para el comerciante: se pasa tal cual.
+    if (errorSaldo.code === "23514") {
+      return { error: errorSaldo.message, success: false };
+    }
+    console.error("[REGISTRAR DEUDA ERROR]", errorSaldo);
+    return { error: "No se pudo registrar la deuda.", success: false };
+  }
 
   revalidatePath("/clientes");
   return { error: null, success: true };
@@ -591,13 +601,15 @@ export async function importarClientesCSVAction(formData: FormData) {
     } = await supabase.auth.getUser();
 
     let importados = 0;
+    // Los que entraron pero sin su deuda inicial, por el tope del plan.
+    let importadosSinDeuda = 0;
 
     for (const candidato of parsed.clientes) {
       const { nombre, telefono, dni, deudaInicial, fechaVencimientoDeuda } =
         candidato;
 
       // Insertamos el cliente
-      const { data: nuevoCliente, error: errCli } = await supabase
+      let { data: nuevoCliente, error: errCli } = await supabase
         .from("clientes")
         .insert({
           nombre,
@@ -609,6 +621,31 @@ export async function importarClientesCSVAction(formData: FormData) {
         })
         .select("id")
         .single();
+
+      // 23514 = se llegó al tope de cuenta corriente del plan. El cliente
+      // igual entra, pero sin la deuda inicial: perder el contacto entero por
+      // un límite de facturación sería peor que importarlo en cero.
+      if (errCli?.code === "23514" && deudaInicial > 0) {
+        console.warn(
+          `[IMPORTAR CLIENTES] "${nombre}" se importa sin su deuda inicial: ${errCli.message}`,
+        );
+        ({ data: nuevoCliente, error: errCli } = await supabase
+          .from("clientes")
+          .insert({
+            nombre,
+            telefono,
+            dni: dni || null,
+            saldo_pendiente: 0,
+            activo: true,
+          })
+          .select("id")
+          .single());
+
+        if (!errCli) {
+          importadosSinDeuda++;
+          continue;
+        }
+      }
 
       if (errCli) {
         console.error(`Error insertando cliente ${nombre}:`, errCli.message);
@@ -648,7 +685,12 @@ export async function importarClientesCSVAction(formData: FormData) {
       };
     }
 
-    return { error: null, success: true, count: importados };
+    return {
+      error: null,
+      success: true,
+      count: importados + importadosSinDeuda,
+      sinDeuda: importadosSinDeuda,
+    };
   } catch (error) {
     console.error("Error importando CSV:", error);
     return { error: "Error procesando el archivo CSV.", success: false };

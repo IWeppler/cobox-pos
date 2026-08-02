@@ -2,7 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies, headers } from "next/headers";
 import { HEADER_NEGOCIO_SLUG } from "@/shared/lib/negocio-slug";
 import {
+  COOKIE_IMPERSONATE,
   COOKIE_NEGOCIO_ACTIVO,
+  HEADER_IMPERSONATE,
   HEADER_NEGOCIO_ACTIVO,
 } from "@/shared/lib/negocio-activo";
 
@@ -15,10 +17,17 @@ export const createClient = (
   // Qué negocio está mirando el usuario. La base valida la membresía, así que
   // un valor manipulado no abre nada: como mucho deja de resolver.
   const negocioActivo = cookieStore.get(COOKIE_NEGOCIO_ACTIVO)?.value;
+  // Modo Dios. La base solo lo honra si is_super_admin(): mandarlo a mano
+  // desde otra cuenta no hace nada.
+  const impersonando = cookieStore.get(COOKIE_IMPERSONATE)?.value;
+
+  const headersNegocio: Record<string, string> = {};
+  if (negocioActivo) headersNegocio[HEADER_NEGOCIO_ACTIVO] = negocioActivo;
+  if (impersonando) headersNegocio[HEADER_IMPERSONATE] = impersonando;
 
   return createServerClient(supabaseUrl!, supabaseKey!, {
-    global: negocioActivo
-      ? { headers: { [HEADER_NEGOCIO_ACTIVO]: negocioActivo } }
+    global: Object.keys(headersNegocio).length
+      ? { headers: headersNegocio }
       : undefined,
     cookies: {
       getAll() {

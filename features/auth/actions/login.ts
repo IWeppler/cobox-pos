@@ -37,12 +37,12 @@ export async function loginAction(
     return { error: "Credenciales inválidas. Intenta de nuevo." };
   }
 
-  // El super admin de Cobox no entra a ningún negocio: va al panel de la
+  // El super admin de Comerz no entra a ningún negocio: va al panel de la
   // plataforma. Se chequea antes que las membresías, que no tiene ni necesita.
   const { data: esSuperAdmin } = await supabase.rpc("is_super_admin");
   if (esSuperAdmin) {
     cookieStore.delete(COOKIE_NEGOCIO_ACTIVO);
-    return { error: "", success: true, destino: "/admincobox" };
+    return { error: "", success: true, destino: "/admincomerz" };
   }
 
   // Un usuario puede trabajar en varios negocios. Con uno solo se entra

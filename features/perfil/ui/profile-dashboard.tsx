@@ -1,6 +1,6 @@
 "use client";
 
-import {  useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -24,27 +24,38 @@ import {
   CreditCard,
   Sparkles,
 } from "lucide-react";
-import { updateProfileAction, updatePasswordAction } from "../actions/profile-actions";
+import {
+  updateProfileAction,
+  updatePasswordAction,
+} from "../actions/profile-actions";
 import { Switch } from "@/shared/ui/switch";
 import { Badge } from "@/shared/ui/badge";
 import { Check } from "lucide-react";
+import type { PlanDelNegocio } from "@/features/admin/actions/planes-actions";
+import {
+  NOMBRE_FEATURE,
+  precioMensualEfectivo,
+  precioPorCiclo,
+} from "@/shared/lib/planes";
+import { formatearMoneda } from "@/shared/utils/formatters";
 
 interface CuentaFormProps {
   usuario: {
     id: string;
     nombre: string;
     email: string;
-    plan: string;
   };
+  /** Null si la sesión todavía no tiene un negocio resuelto. */
+  plan: PlanDelNegocio | null;
 }
 
-export function ProfileDashboard({ usuario }: Readonly<CuentaFormProps>) {
+export function ProfileDashboard({ usuario, plan }: Readonly<CuentaFormProps>) {
   const [isPending, startTransition] = useTransition();
-const [isAnnual, setIsAnnual] = useState(true); // Empieza en true para incentivar el anual
+  const [isAnnual, setIsAnnual] = useState(true); // Empieza en true para incentivar el anual
   const handleSaveProfile = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    
+
     startTransition(async () => {
       const result = await updateProfileAction(formData);
       if (result.success) {
@@ -72,7 +83,7 @@ const [isAnnual, setIsAnnual] = useState(true); // Empieza en true para incentiv
   };
 
   return (
-    <div className="max-w-7xl mx-auto w-full space-y-8 pb-12">
+    <div className="max-w-7xl mx-auto px-4 w-full space-y-8 pb-12">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
           Mi Cuenta
@@ -153,7 +164,7 @@ const [isAnnual, setIsAnnual] = useState(true); // Empieza en true para incentiv
                   />
                   <p className="text-xs text-muted-foreground mb-2">
                     Si cambias tu correo, deberás usar el nuevo para iniciar
-                    sesión en Cobox.
+                    sesión en Comerz.
                   </p>
                 </div>
               </CardContent>
@@ -264,9 +275,19 @@ const [isAnnual, setIsAnnual] = useState(true); // Empieza en true para incentiv
                     Plan Actual
                   </h3>
                   <div className="flex items-center gap-2 text-2xl font-black text-foreground">
-                    {usuario.plan}
-                    <Sparkles className="w-5 h-5 text-amber-500" />
+                    {plan?.plan ?? "Sin plan asignado"}
+                    {plan?.plan && (
+                      <Sparkles className="w-5 h-5 text-amber-500" />
+                    )}
                   </div>
+                  {plan && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {plan.negocio}
+                      {plan.plan
+                        ? ` · ${formatearMoneda(precioMensualEfectivo(plan.precioLista, plan.modalidad))}/mes`
+                        : ""}
+                    </p>
+                  )}
                 </div>
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
                   <CreditCard className="w-6 h-6 text-primary" />
@@ -276,8 +297,8 @@ const [isAnnual, setIsAnnual] = useState(true); // Empieza en true para incentiv
 
             <CardContent className="p-6">
               <p className="text-sm text-muted-foreground mb-6">
-                Estás disfrutando de todos los beneficios del sistema. El
-                próximo ciclo de facturación se calculará automáticamente.
+                {plan?.descripcion ??
+                  "Todavía no hay un plan asignado a este comercio. Mientras tanto no hay límites aplicados."}
               </p>
 
               <div className="bg-muted/30 rounded-lg p-4 border border-border/50 flex flex-col gap-2">
@@ -285,27 +306,79 @@ const [isAnnual, setIsAnnual] = useState(true); // Empieza en true para incentiv
                   <span className="text-muted-foreground font-medium">
                     Estado de la cuenta
                   </span>
-                  <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded text-xs uppercase tracking-wider">
-                    Activa
+                  <span
+                    className={`font-bold px-2 py-0.5 rounded text-xs uppercase tracking-wider ${
+                      plan?.estado === "activo"
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : "bg-danger/10 text-danger"
+                    }`}
+                  >
+                    {plan?.estado ?? "—"}
                   </span>
                 </div>
+
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground font-medium">
-                    Facturación electrónica (ARCA)
+                    Modalidad
                   </span>
-                  <span className="font-semibold text-foreground">
-                    Habilitada
+                  <span className="font-semibold text-foreground capitalize">
+                    {plan?.modalidad ?? "—"}
+                    {plan?.plan && plan.modalidad === "semestral"
+                      ? ` (${formatearMoneda(precioPorCiclo(plan.precioLista, "semestral"))} cada 6 meses)`
+                      : ""}
                   </span>
                 </div>
+
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground font-medium">
-                    Usuarios permitidos
+                    Próximo vencimiento
                   </span>
                   <span className="font-semibold text-foreground">
-                    Ilimitados
+                    {plan?.vencimiento
+                      ? new Date(plan.vencimiento).toLocaleDateString("es-AR")
+                      : "—"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground font-medium">
+                    Usuarios
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {plan?.usuariosUsados ?? 0}
+                    {plan?.reglas.max_usuarios
+                      ? ` de ${plan.reglas.max_usuarios}`
+                      : ""}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground font-medium">
+                    Cuenta corriente
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {plan?.reglas.max_clientes_cuenta_corriente
+                      ? `hasta ${plan.reglas.max_clientes_cuenta_corriente} clientes`
+                      : "sin tope"}
                   </span>
                 </div>
               </div>
+
+              {plan?.reglas.features?.length ? (
+                <div className="mt-6">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                    Incluye
+                  </p>
+                  <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+                    {plan.reglas.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-sm">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <span>{NOMBRE_FEATURE[f] ?? f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </CardContent>
 
             <CardFooter className="bg-muted/5 border-t border-border/50 p-6">

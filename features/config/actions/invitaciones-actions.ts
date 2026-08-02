@@ -63,6 +63,15 @@ export async function invitarEmpleadoAction(
         success: false,
       };
     }
+    // El tope de usuarios lo aplica un trigger sobre el plan del negocio. El
+    // mensaje ya viene redactado para el dueño, así que se pasa tal cual en
+    // vez de taparlo con un "no se pudo".
+    if (errorInsert.code === "23514") {
+      return {
+        error: `${errorInsert.message} Para sumar gente hay que pasar a un plan mayor.`,
+        success: false,
+      };
+    }
     return { error: "No se pudo crear la invitación.", success: false };
   }
 
@@ -87,7 +96,7 @@ export async function invitarEmpleadoAction(
     console.error("[INVITAR EMPLEADO MAIL]", errorMail);
     revalidatePath("/configuracion");
 
-    // Caso común y esperable: ya tiene cuenta de Cobox (trabaja en otro
+    // Caso común y esperable: ya tiene cuenta de Comerz (trabaja en otro
     // negocio, o ya trabajó acá). No hay mail de alta que mandarle, pero la
     // invitación es válida igual.
     const yaRegistrado =
@@ -101,7 +110,7 @@ export async function invitarEmpleadoAction(
       success: true,
       link,
       aviso: yaRegistrado
-        ? "Esa persona ya tiene cuenta en Cobox, así que no se le manda un alta nueva. Pasale este enlace para que entre al negocio."
+        ? "Esa persona ya tiene cuenta en Comerz, así que no se le manda un alta nueva. Pasale este enlace para que entre al negocio."
         : "La invitación quedó creada pero el mail no salió. Pasale este enlace.",
     };
   }

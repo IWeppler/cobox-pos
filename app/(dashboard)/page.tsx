@@ -137,7 +137,7 @@ export default async function DashboardPage({
 
   // Zona analítica (KPIs + chart + rankings): TODO lo de acá para abajo
   // depende de `periodo`. La zona de excepciones (Atención Requerida,
-  // Cobox Insights) es fija y vive fuera de este bloque.
+  // Comerz Insights) es fija y vive fuera de este bloque.
   const rangoActual = resolverRangoActual(periodo, hoy);
   const rangoAnterior = resolverRangoAnterior(periodo, hoy);
   const rangoRanking = resolverRangoRanking(periodo, hoy);

@@ -88,7 +88,7 @@ END;
 $function$;
 
 -- 3. is_super_admin vivía solo en el schema security, que PostgREST no expone:
--- supabase.rpc("is_super_admin") fallaba y el layout de /admincobox mandaba al
+-- supabase.rpc("is_super_admin") fallaba y el layout de /admincomerz mandaba al
 -- POS a su propio super admin.
 CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS boolean

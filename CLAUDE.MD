@@ -1,4 +1,4 @@
-# Cobox POS — Contexto del proyecto
+# Comerz POS — Contexto del proyecto
 
 POS + catálogo público para comercios (Tostado, Santa Fe). Next.js +
 TypeScript + Supabase. Deploy: Vercel, branch main.

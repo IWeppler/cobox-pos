@@ -277,7 +277,7 @@ const ReceiptDocument = ({
             COMPROBANTE INTERNO - NO VÁLIDO COMO FACTURA FISCAL
           </Text>
           <Text style={[styles.footerText, { marginTop: 4 }]}>
-            Generado por Cobox POS
+            Generado por Comerz POS
           </Text>
         </View>
       </Page>

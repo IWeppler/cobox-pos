@@ -403,6 +403,34 @@ export async function registrarVentaAction(
     };
   }
 
+  // --- 2ter. TOPE DE CLIENTES CON CUENTA CORRIENTE DEL PLAN ---
+  // Se pregunta ACÁ y no al actualizar el saldo: la deuda se registra después
+  // de crear la venta y sin transacción, así que frenar más adelante dejaría
+  // la venta grabada como fiada y el saldo del cliente sin tocar. El trigger
+  // de la base sigue siendo la red para el resto de los caminos.
+  if (isCuentaCorriente && montoPendiente > 0.05 && clienteId) {
+    const { data: puedeFiar, error: errorTope } = await supabase.rpc(
+      "puede_fiar",
+      { p_cliente: clienteId },
+    );
+
+    if (errorTope) {
+      console.error("[TOPE CUENTA CORRIENTE]", errorTope);
+      return {
+        error: "No se pudo verificar el límite de cuenta corriente del plan.",
+        success: false,
+      };
+    }
+
+    if (puedeFiar === false) {
+      return {
+        error:
+          "El plan llegó al máximo de clientes con cuenta corriente. Cobrá alguna deuda o pasá a un plan mayor para seguir fiando.",
+        success: false,
+      };
+    }
+  }
+
   // --- 2bis. VALIDAR ENTREGA MÍNIMA (CUENTA CORRIENTE) ---
   // Espejo server-side del chequeo de cart-panel-admin.tsx — ese es
   // client-side y trivialmente bypasseable llamando esta action directo.

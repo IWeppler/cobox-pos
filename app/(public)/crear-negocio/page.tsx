@@ -3,7 +3,7 @@ import { CrearNegocioForm } from "@/features/auth/ui/crear-negocio-form";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Crear negocio | Cobox",
+  title: "Crear negocio | Comerz",
 };
 
 export default function CrearNegocioPage() {

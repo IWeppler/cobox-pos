@@ -4,8 +4,8 @@ import { Suspense } from "react";
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Nueva Contraseña | Cobox",
-  description: "Crea una nueva contraseña para tu cuenta de Cobox POS.",
+  title: "Nueva Contraseña | Comerz",
+  description: "Crea una nueva contraseña para tu cuenta de Comerz POS.",
 };
 
 export default function UpdatePasswordPage() {
@@ -24,7 +24,7 @@ export default function UpdatePasswordPage() {
               />
             </div>
             <span className="font-bold text-2xl tracking-tight text-foreground">
-              Cobox
+              Comerz
             </span>
           </div>
 
@@ -44,7 +44,7 @@ export default function UpdatePasswordPage() {
         </div>
 
         <p className="absolute bottom-8 left-0 right-0 text-xs font-medium text-muted-foreground text-center">
-          © {new Date().getFullYear()} Cobox POS. Todos los derechos reservados.
+          © {new Date().getFullYear()} Comerz POS. Todos los derechos reservados.
         </p>
       </div>
 

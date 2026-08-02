@@ -5,7 +5,7 @@ import { SelectorNegocio } from "@/features/auth/ui/selector-negocio";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Elegí el negocio | Cobox",
+  title: "Elegí el negocio | Comerz",
 };
 
 export default async function SeleccionarNegocioPage() {

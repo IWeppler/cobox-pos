@@ -176,7 +176,7 @@ export function TicketPanel({ config }: Readonly<{ config: ConfigTicket }>) {
                   <RadioGroupItem value="manual" id="modo-manual" />
                 </div>
                 <span className="text-xs text-muted-foreground font-normal leading-relaxed">
-                  Las ventas se registran en Cobox, pero las facturas las haces
+                  Las ventas se registran en Comerz, pero las facturas las haces
                   manualmente en la web de ARCA.
                 </span>
               </Label>
@@ -196,7 +196,7 @@ export function TicketPanel({ config }: Readonly<{ config: ConfigTicket }>) {
                   <RadioGroupItem value="arca" id="modo-arca" />
                 </div>
                 <span className="text-xs text-muted-foreground font-normal leading-relaxed">
-                  Cobox se conecta con ARCA y emite facturas electrónicas
+                  Comerz se conecta con ARCA y emite facturas electrónicas
                   válidas (con CAE) automáticamente.
                 </span>
               </Label>
@@ -389,7 +389,7 @@ export function TicketPanel({ config }: Readonly<{ config: ConfigTicket }>) {
                               <strong className="text-foreground">
                                 Agregar alias
                               </strong>{" "}
-                              e ingresá un nombre (ej: <em>cobox_pos</em>).
+                              e ingresá un nombre (ej: <em>comerz_pos</em>).
                             </li>
                             <li>
                               Pegá el texto del CSR que copiaste en el paso
@@ -415,11 +415,11 @@ export function TicketPanel({ config }: Readonly<{ config: ConfigTicket }>) {
                             <span className="flex items-center justify-center w-6 h-6 rounded bg-primary text-white text-sm font-bold">
                               3
                             </span>
-                            <h4 className="font-bold">Subir el .crt a Cobox</h4>
+                            <h4 className="font-bold">Subir el .crt a Comerz</h4>
                           </div>
 
                           <p className="text-xs text-muted-foreground mb-4">
-                            Subí el archivo que te dio ARCA. Cobox lo combinará
+                            Subí el archivo que te dio ARCA. Comerz lo combinará
                             con tu llave privada automáticamente.
                           </p>
 

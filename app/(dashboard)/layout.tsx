@@ -7,8 +7,14 @@ import { ConfiguracionPOS } from "@/entities/config/types";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { QueryProvider } from "@/shared/components/query-provider";
 import { listarMisNegociosAction } from "@/features/auth/actions/negocios";
-import { COOKIE_NEGOCIO_ACTIVO } from "@/shared/lib/negocio-activo";
+import {
+  COOKIE_IMPERSONATE,
+  COOKIE_NEGOCIO_ACTIVO,
+} from "@/shared/lib/negocio-activo";
+import { BannerImpersonation } from "@/features/admin/ui/banner-impersonation";
 import { NegocioActivoProvider } from "@/shared/components/negocio-activo-provider";
+import { PlanProvider } from "@/features/planes/ui/plan-provider";
+import { getContextoPlanAction } from "@/features/planes/actions/contexto-plan";
 
 export default async function DashboardLayout({
   children,
@@ -28,14 +34,18 @@ export default async function DashboardLayout({
   }
 
   // El rol es por negocio (usuarios_negocios), el nombre es del perfil global.
-  const [{ data: perfil }, { data: rolActual }, negocios] = await Promise.all([
-    supabase.from("perfiles").select("nombre").eq("id", user.id).single(),
-    supabase.rpc("rol_actual"),
-    listarMisNegociosAction(),
-  ]);
+  const [{ data: perfil }, { data: rolActual }, negocios, contextoPlan] =
+    await Promise.all([
+      supabase.from("perfiles").select("nombre").eq("id", user.id).single(),
+      supabase.rpc("rol_actual"),
+      listarMisNegociosAction(),
+      getContextoPlanAction(),
+    ]);
 
   const userRole = rolActual || "VENDEDOR";
   const negocioActivoId = cookieStore.get(COOKIE_NEGOCIO_ACTIVO)?.value;
+  // Modo dios: el super admin mirando el negocio de un cliente.
+  const impersonando = Boolean(cookieStore.get(COOKIE_IMPERSONATE)?.value);
 
   const { data: settings } = await supabase
     .from("configuracion_pos")
@@ -74,6 +84,7 @@ export default async function DashboardLayout({
 
   return (
     <NegocioActivoProvider negocio={negocioActivo}>
+      <PlanProvider contexto={contextoPlan}>
     <div className="min-h-screen bg-sidebar flex flex-col md:flex-row">
       <Sidebar
         branding={systemBranding}
@@ -88,6 +99,9 @@ export default async function DashboardLayout({
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden md:p-2 md:pl-0 h-screen">
         {/* El "Cajón" blanco redondeado que contiene la app */}
         <div className="flex-1 flex flex-col bg-background md:border md:border-border md:rounded-xl md:shadow-sm overflow-hidden relative">
+          {impersonando && (
+            <BannerImpersonation nombreNegocio={systemBranding.posName} />
+          )}
           <DashboardNavbar
             modoCaja={systemBranding.modo_caja || "UNICA"}
             userId={user.id}
@@ -101,6 +115,7 @@ export default async function DashboardLayout({
         </div>
       </div>
     </div>
+      </PlanProvider>
     </NegocioActivoProvider>
   );
 }

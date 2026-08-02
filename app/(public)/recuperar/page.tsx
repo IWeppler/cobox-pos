@@ -3,8 +3,8 @@ import Image from "next/image";
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Recuperar Contraseña | Cobox",
-  description: "Restablece el acceso a tu cuenta de Cobox POS.",
+  title: "Recuperar Contraseña | Comerz",
+  description: "Restablece el acceso a tu cuenta de Comerz POS.",
 };
 
 export default function RecoverPage() {
@@ -27,7 +27,7 @@ export default function RecoverPage() {
               />
             </div>
             <span className="font-bold text-2xl tracking-tight text-foreground">
-              Cobox
+              Comerz
             </span>
           </div>
 
@@ -44,7 +44,7 @@ export default function RecoverPage() {
         </div>
 
         <p className="absolute bottom-8 left-0 right-0 text-xs font-medium text-muted-foreground text-center">
-          © {new Date().getFullYear()} Cobox POS. Todos los derechos reservados.
+          © {new Date().getFullYear()} Comerz POS. Todos los derechos reservados.
         </p>
       </div>
 

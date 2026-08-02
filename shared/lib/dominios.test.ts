@@ -20,7 +20,7 @@ describe("urlDeCatalogo", () => {
 
   beforeEach(() => {
     delete process.env.NEXT_PUBLIC_ROOT_DOMAIN;
-    process.env.NEXT_PUBLIC_SITE_URL = "https://cobox-pos.vercel.app";
+    process.env.NEXT_PUBLIC_SITE_URL = "https://comerz-pos.vercel.app";
   });
 
   afterEach(() => {
@@ -30,16 +30,16 @@ describe("urlDeCatalogo", () => {
   it("sin wildcard usa el path sobre el dominio del sitio", async () => {
     const { urlDeCatalogo } = await cargarModulo();
     expect(urlDeCatalogo("evens")).toBe(
-      "https://cobox-pos.vercel.app/store/evens",
+      "https://comerz-pos.vercel.app/store/evens",
     );
   });
 
   it("con wildcard usa el subdominio del negocio", async () => {
-    process.env.NEXT_PUBLIC_ROOT_DOMAIN = "cobox.app";
+    process.env.NEXT_PUBLIC_ROOT_DOMAIN = "comerz.app";
     const { urlDeCatalogo } = await cargarModulo();
-    expect(urlDeCatalogo("evens")).toBe("https://evens.cobox.app");
+    expect(urlDeCatalogo("evens")).toBe("https://evens.comerz.app");
     expect(urlDeCatalogo("evens", "campera-negra")).toBe(
-      "https://evens.cobox.app/store/evens/campera-negra",
+      "https://evens.comerz.app/store/evens/campera-negra",
     );
   });
 

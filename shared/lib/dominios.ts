@@ -1,6 +1,6 @@
 /**
  * Dónde vive cada cosa. Hoy todo sale del mismo deploy de Vercel; el día que
- * exista el wildcard *.cobox.app, se define NEXT_PUBLIC_ROOT_DOMAIN y los
+ * exista el wildcard *.comerz.app, se define NEXT_PUBLIC_ROOT_DOMAIN y los
  * links de catálogo pasan solos a subdominio sin tocar código.
  *
  * A propósito NO hay default de dominio de producción: sin la variable, se

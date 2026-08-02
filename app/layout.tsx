@@ -6,6 +6,10 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { Geist_Mono, Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
+import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
+
 
 const geistMono = Geist_Mono({
   subsets: ["latin"],
@@ -38,7 +42,10 @@ export async function generateMetadata(): Promise<Metadata> {
     .limit(1)
     .single();
 
-  const posName = data?.posName;
+  // Fuera de un negocio (login, recuperar contraseña, landing) no hay
+  // configuración que leer: ahí la marca es la de la plataforma, no la de un
+  // comercio. Sin este fallback el título salía "undefined | Gestión POS".
+  const posName = data?.posName || "Comerz";
 
   return {
     title: `${posName} | Gestión POS`,
@@ -84,6 +91,20 @@ export default async function RootLayout({
           {children}
           <Toaster />
         </ThemeProvider>
+        <Analytics/>
+        <SpeedInsights/>
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-PGP6P5VS3Y"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-PGP6P5VS3Y');
+          `}
+        </Script>
       </body>
     </html>
   );

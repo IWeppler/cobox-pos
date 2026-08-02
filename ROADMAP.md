@@ -35,8 +35,13 @@ ideas:
 ## EPIC 1 — Datos Fiscales de la Empresa
 Objetivo: poder configurar correctamente un comercio argentino.
 
+### Datos Personales
+ nombre completo obligatorio
+ whatsapp de contacto obligatorio
+ email opcional
+
 ### Empresa                DONE UI
- Nombre comercial
+ Nombre comercial obligatorio
  Razón social
  CUIT
  Condición IVA
@@ -46,7 +51,7 @@ Objetivo: poder configurar correctamente un comercio argentino.
  Localidad
  Teléfono
  Email
- Logo
+ Logo esto no
 
 ### Configuración Fiscal    DONE UI
  Tipo de comprobante por defecto
@@ -76,7 +81,7 @@ Falta prácticamente convertir un cliente "comercial" en un cliente "fiscal".
 - editar modal: features\clients\ui\edit-client-modal.tsx
 
 3. El "Killer Feature" (Auto-completado con AFIP)
-Si quieres que Cobox sea un sistema Premium que se venda solo, los datos fiscales no se deberían tipear a mano.
+Si quieres que Comerz sea un sistema Premium que se venda solo, los datos fiscales no se deberían tipear a mano.
 Dado que ya estamos implementando afip.js en tu backend para emitir facturas, puedes usar esa misma librería para consultar el padrón de AFIP.
 El flujo ideal en el POS es:
 La cajera escribe el CUIT (ej: 30712345678) y presiona "Enter" o un botón de búsqueda.
@@ -210,12 +215,7 @@ Acá creo que hay mucho valor.
 - una tabla para admin donde aparezca cuanto dinero tengo en cada caja/banco/tarjeta/mercado pago...
 
 
-<!-- - Emprendedor ($30k): caja + ventas + stock + catálogo público básico. Sin cuenta corriente (o con tope chico de clientes), sin reportes avanzados, sin multi-caja.
-- Gestión ($50k): + cuenta corriente/fiado completo (tu diferencial más fuerte para el interior, casi nadie gastronómico lo tiene bien resuelto), + reportes, + multi-caja/roles.
-- Empresa ($70k): + multi-sucursal, + facturación fiscal (cuando esté ARCA), + integraciones (impresora térmica, código de barras avanzado). -->
-
-
- Seeds por industria (quiosco, ferretería, carnicería...)
+ Seeds por industria (quiosco, minimercado, ferretería, carnicería, indumentaria ...)
 <!-- "Tu arquitectura ya está bastante bien parada para esto sin saberlo: producto_variantes.atributos es JSONB libre — "Talle"/"Color" no están hardcodeados en el schema, son solo los valores que Evens usó. Un quiosco puede simplemente no usar atributos (cada producto es su propia variante única), y categoria_atributos (la tabla que encontraste "de fachada") es exactamente la pieza pensada para declarar qué atributos aplican por categoría/rubro — hoy sin terminar, pero es la dirección correcta para los seeds por industria que ya tenías en el backlog.
 
 Quiosco — el más fácil de los tres. Productos de SKU único (sin talle/color), altísimo volumen de tickets chicos. Lo que más necesita ya está en tu Tier 1: código de barras + carga rápida por SKU. Fiado también es común en quioscos de barrio, así que tu módulo de clientes/cuenta corriente aplica igual. Prácticamente sin desarrollo nuevo, es configuración.
@@ -224,26 +224,19 @@ Herboristería — fácil-medio. Mezcla de productos por unidad (empaquetados, c
 
 Carnicería — la que sí exige una feature nueva de verdad: venta por peso. Hoy tu sistema asume cantidad entera (1, 2, 3 unidades). Vender por kg necesita cantidad decimal de punta a punta: línea de venta, descuento de stock, cálculo de precio, reportes — no es un flag, es tocar el camino completo de la venta. La integración con balanza (Bluetooth/USB) es la versión "de lujo" — con carga manual del peso por teclado ya funciona sin hardware. Es la única de las tres que no podés resolver por configuración; es la que corresponde planificar como feature real, tal como ya la tenías anotada." -->
 
+Modalidad	Precio	      Beneficio
+Mensual	   Precio normal	Sin compromiso
+Semestral   15%  off       Recomendado
 
+- Emprendedor ($30k/mes): Punto de venta + caja + ventas + Gestión básica de productos + Control de stock + Catálogo online para compartir por WhatsApp + Registro de clientes + Cuenta corriente de clientes (hasta 100 clientes activos, por ejemplo) + Historial completo de ventas + Tickets digitales. Cuenta corriente con tope chico de clientes, sin reportes avanzados, sin multi-caja. 1 solo usuario.
+No incluye: Reportes avanzados, Roles de usuarios, Multi caja, Multi sucursal, Integraciones
 
-# Fase 4: Migrar a los otros 2 inquilinos
-Una vez que Evens esté blindado con RLS y funcionando perfecto en su nueva estructura:
-1. Creás los 2 negocios nuevos en la tabla negocios.
-2. Exportás los datos de sus proyectos viejos de Supabase (en formato CSV o SQL).
-3. Les inyectás su respectivo negocio_id a esos datos.
-4. Los importás a la base de datos principal de Evens.
+- Gestión ($50k/mes): + Cuenta corriente completa e ilimitada + Reportes de ventas + multi-caja/roles. Máx 5 usuarios + Reportes por productos + Reportes por categorías + Reportes por fechas + Ranking de productos + Ranking de clientes + Roles de usuarios + Hasta 5 usuarios + Múltiples cajas + Apertura y cierre de caja + Control de movimientos de caja + Historial de acciones (auditoría básica) + Exportación de reportes
 
-
-
-
-1. El Panel de Super Admin (/admincobox).
-- Dashboard Global: Para ver tu MRR (Ingreso Mensual Recurrente), altas de la semana, bajas (Churn) y negocios activos.
-- Gestión de Comercios (Tenants): Un listado de todos los negocios donde puedas ver qué plan tienen, cuándo vence y quién es el dueño.
-- Impersonation (Modo Dios): Un botón crucial que te permita "Iniciar sesión como este negocio" sin pedirles la contraseña. Es vital para dar soporte técnico cuando un cliente te dice "no me funciona X cosa".
-
+- Empresa ($70k/mes): + Múltiples sucursales + Stock por sucursal + Transferencias entre sucursales + Dashboard consolidado + Usuarios por sucursal + Permisos avanzados + Facturación electrónica (cuando esté ARCA) + Integración con impresoras térmicas + Lectores de código de barras + Integraciones futuras + API (si algún día existe)
 
 2. Sistema de Permisos y Límites (Base de Datos)
-Para lograr esa granularidad sin volverte loco con miles de condicionales en el código, lo ideal es tener una tabla planes en Supabase con una columna JSON que defina las reglas exactas de cada nivel.
+Para lograr esa granularidad en vez de utilizar  miles de condicionales en el código, lo ideal es tener una tabla planes en Supabase con una columna JSON que defina las reglas exactas de cada nivel.
 - Estructura sugerida del JSON de un plan: Podrías guardar algo como { "max_usuarios": 1, "max_sucursales": 1, "features": ["caja", "stock", "arca_basico"] }.
 - Límites Cuantitativos: Si el negocio tiene el plan Emprendedor (max_usuarios: 1) y el dueño intenta invitar a un empleado, el backend lee este límite y bloquea la acción devolviendo un error.
 - Permisos Cualitativos (Features): Para restringir vistas parciales (ej: ver el gráfico de rentabilidad en la sección de reportes), tu frontend verificará si el array de features incluye ese permiso específico.

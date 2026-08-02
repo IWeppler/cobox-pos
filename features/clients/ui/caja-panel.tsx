@@ -16,6 +16,7 @@ import {
 import { Calculator, Loader2, Lock, Users, Store } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
+import { PaywallGate } from "@/features/planes/ui/paywall-gate";
 
 interface CajaConfigPanelProps {
   config: ConfiguracionPOS;
@@ -96,6 +97,9 @@ export function CajaConfigPanel({ config }: Readonly<CajaConfigPanelProps>) {
                 </p>
               </div>
 
+              {/* Multicaja es del plan Gestión para arriba: acá el dueño se
+                  entera antes de intentarlo, no cuando le rebota. */}
+              <PaywallGate feature="multicaja" className="w-full">
               <Select
                 value={formData.modo_caja}
                 onValueChange={(val) => handleChange("modo_caja", val)}
@@ -136,6 +140,7 @@ export function CajaConfigPanel({ config }: Readonly<CajaConfigPanelProps>) {
                   </SelectItem>
                 </SelectContent>
               </Select>
+              </PaywallGate>
             </div>
           </div>
         </div>

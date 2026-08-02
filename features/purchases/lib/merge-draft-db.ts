@@ -2,7 +2,7 @@ import { openDB, type IDBPDatabase } from "idb";
 import { ItemResuelto } from "@/entities/compras/types";
 import { Producto } from "@/entities/productos/types";
 
-const DB_NAME = "cobox-purchases-drafts";
+const DB_NAME = "comerz-purchases-drafts";
 const STORE_NAME = "merge-drafts";
 const DB_VERSION = 1;
 

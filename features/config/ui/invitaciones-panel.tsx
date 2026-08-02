@@ -20,6 +20,7 @@ import {
   type InvitacionActionState,
 } from "../actions/invitaciones-actions";
 import type { Rol } from "@/entities/roles/types";
+import { PaywallGate } from "@/features/planes/ui/paywall-gate";
 
 export interface InvitacionPendiente {
   id: string;
@@ -125,14 +126,19 @@ export function InvitacionesPanel({
           </Select>
         </div>
 
-        <Button type="submit" disabled={isPending} className="h-10 gap-2">
-          {isPending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Send className="size-4" />
-          )}
-          Invitar
-        </Button>
+        {/* Sumar gente al negocio depende del plan: Emprendedor es de un
+            solo usuario. El tope real lo aplica un trigger en la base; esto
+            evita que el dueño se entere recién cuando le rebota. */}
+        <PaywallGate feature="roles" etiqueta="Sumar usuarios al negocio">
+          <Button type="submit" disabled={isPending} className="h-10 gap-2">
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
+            Invitar
+          </Button>
+        </PaywallGate>
       </form>
 
       {state.error ? (

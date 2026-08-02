@@ -226,20 +226,20 @@ export function Sidebar({
         ${isCollapsed ? "md:w-18" : "w-full md:w-64"} w-64
       `}
       >
-        {/* 1. COBOX LOGO (Alineado a la izquierda, con rounded-md) */}
+        {/* 1. Comerz LOGO (Alineado a la izquierda, con rounded-md) */}
         <div
           className={`hidden md:flex items-center h-16 shrink-0 border-b border-border/50 transition-all duration-300 ${isCollapsed ? "justify-center px-0" : "px-4 justify-start"}`}
         >
           <Image
             src="/logow.png"
-            alt="Cobox"
+            alt="Comerz Logo"
             width={30}
             height={30}
             className="object-contain rounded-sm bg-white"
           />
           {!isCollapsed && (
             <span className="ml-2.5 font-bold text-lg tracking-tight">
-              Cobox
+              Comerz
             </span>
           )}
         </div>
@@ -450,7 +450,7 @@ function InstallAppWidget({ isCollapsed }: Readonly<{ isCollapsed: boolean }>) {
                 App Nativa
               </p>
               <p className="text-sm font-bold text-indigo-950 dark:text-indigo-100">
-                Instalar Cobox
+                Instalar Comerz
               </p>
             </div>
           </div>

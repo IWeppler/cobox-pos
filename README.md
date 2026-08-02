@@ -1,4 +1,4 @@
-# Cobox POS
+# Comerz POS
 
 **El sistema de gestión que reemplaza el cuaderno, el Excel y el grupo de WhatsApp.**
 Punto de venta, stock, caja, clientes y catálogo web — todo en un solo lugar, funcionando desde el celular del mostrador.
@@ -12,7 +12,7 @@ Punto de venta, stock, caja, clientes y catálogo web — todo en un solo lugar,
 
 Los comercios chicos y medianos del interior no necesitan un ERP de 200 pantallas.
 Necesitan cobrar rápido, saber qué stock les queda, cuánto les debe cada cliente y
-cuánto quedó en la caja al cerrar. Cobox hace exactamente eso, bien.
+cuánto quedó en la caja al cerrar. Comerz hace exactamente eso, bien.
 
 - **Se aprende en una tarde.** Una vendedora nueva vende sola el primer día.
 - **Anda en el celular.** Mostrador, depósito o feria: la misma app.
@@ -101,7 +101,7 @@ su propia base con Row Level Security.
 
 ```bash
 git clone <repo>
-cd cobox-pos
+cd comerz-pos
 npm install
 npm run dev
 ```

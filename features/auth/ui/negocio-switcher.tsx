@@ -68,7 +68,7 @@ export function NegocioSwitcher({
     </div>
   );
 
-  const claseBoton = `flex items-center gap-2.5 rounded-lg border border-border/50 bg-background/50 hover:bg-muted transition-colors w-full shadow-sm ${
+  const claseBoton = `flex items-center gap-2.5 rounded-lg border border-border/50 bg-background/50 w-full ${
     isCollapsed ? "p-1.5 justify-center" : "p-2"
   }`;
 

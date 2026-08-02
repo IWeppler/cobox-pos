@@ -2,7 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { HEADER_NEGOCIO_SLUG, slugDesdeHost } from "@/shared/lib/negocio-slug";
 import {
+  COOKIE_IMPERSONATE,
   COOKIE_NEGOCIO_ACTIVO,
+  HEADER_IMPERSONATE,
   HEADER_NEGOCIO_ACTIVO,
 } from "@/shared/lib/negocio-activo";
 
@@ -10,7 +12,7 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Qué negocio sirve el catálogo. Dos formas, misma resolución dinámica:
-  // el subdominio (evens.cobox.app) o el primer segmento del path
+  // el subdominio (evens.comerz.app) o el primer segmento del path
   // (/store/evens). Si llegan las dos, gana el subdominio.
   const slugDelHost = slugDesdeHost(request.headers.get("host"));
   const slugDelPath = pathname.startsWith("/store/")
@@ -48,10 +50,15 @@ export async function middleware(request: NextRequest) {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 
   const negocioActivo = request.cookies.get(COOKIE_NEGOCIO_ACTIVO)?.value;
+  const impersonando = request.cookies.get(COOKIE_IMPERSONATE)?.value;
+
+  const headersNegocio: Record<string, string> = {};
+  if (negocioActivo) headersNegocio[HEADER_NEGOCIO_ACTIVO] = negocioActivo;
+  if (impersonando) headersNegocio[HEADER_IMPERSONATE] = impersonando;
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
-    global: negocioActivo
-      ? { headers: { [HEADER_NEGOCIO_ACTIVO]: negocioActivo } }
+    global: Object.keys(headersNegocio).length
+      ? { headers: headersNegocio }
       : undefined,
     cookies: {
       getAll() {
@@ -78,8 +85,7 @@ export async function middleware(request: NextRequest) {
   const isAuthRoute = pathname.startsWith("/auth");
   const isPublicRoute =
     pathname.startsWith("/store") ||
-    pathname.startsWith("/recuperar") ||
-    pathname.startsWith("/bienvenida");
+    pathname.startsWith("/recuperar")
   // Rutas donde todavía no hay negocio elegido: son justamente las que sirven
   // para elegirlo o crear el primero.
   const isRutaSinNegocio =
@@ -102,10 +108,10 @@ export async function middleware(request: NextRequest) {
   // 2. Control de usuarios NO autenticados
   if (!user) {
     if (pathname === "/") {
-      // La raíz sin sesión y sin subdominio de tienda es la landing de Cobox,
+      // La raíz sin sesión y sin subdominio de tienda es la landing de comerz,
       // no el catálogo de un comercio: no hay tenant por defecto.
       const url = request.nextUrl.clone();
-      url.pathname = "/bienvenida";
+      url.pathname = "/auth";
       return NextResponse.redirect(url);
     }
     if (!isAuthRoute && !isPublicRoute) {
@@ -116,13 +122,13 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // 3. Super admin de Cobox: no pertenece a ningún negocio, así que queda
-  // fuera de todo el control por rol y negocio activo. Su lugar es /admincobox.
+  // 3. Super admin de comerz: no pertenece a ningún negocio, así que queda
+  // fuera de todo el control por rol y negocio activo. Su lugar es /admincomerz.
   const { data: esSuperAdmin } = await supabase.rpc("is_super_admin");
   if (esSuperAdmin) {
     if (isAuthRoute || pathname === "/") {
       const url = request.nextUrl.clone();
-      url.pathname = "/admincobox";
+      url.pathname = "/admincomerz";
       return NextResponse.redirect(url);
     }
     return supabaseResponse;

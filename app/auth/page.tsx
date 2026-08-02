@@ -1,5 +1,5 @@
 // app/auth/page.tsx
-import { LoginForm } from "@/features/auth/ui/login-form";
+import { AuthPanel } from "@/features/auth/ui/auth-panel";
 import Image from "next/image";
 import { Suspense } from "react";
 
@@ -21,30 +21,20 @@ export default function AuthPage() {
             />
           </div>
           <span className="font-bold text-lg tracking-tight text-foreground">
-            Cobox
+            Comerz
           </span>
         </div>
 
-        {/* Contenedor del Formulario Centrado */}
-        <div className="flex-1 flex flex-col justify-center w-full max-w-sm mx-auto space-y-8 mt-16 lg:mt-0">
-          <div className="flex flex-col space-y-2 text-center lg:text-left">
-            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
-              Iniciar sesión
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Ingresá tus credenciales para acceder a tu panel.
-            </p>
-          </div>
-
-          {/* El form lee ?error= de la URL, así que necesita Suspense. */}
-          <Suspense fallback={null}>
-            <LoginForm />
-          </Suspense>
-        </div>
+        {/* Contenedor del Formulario Centrado. El panel alterna entre login y
+            alta de comercio sin cambiar de ruta; el de login lee ?error= de la
+            URL, así que necesita Suspense. */}
+        <Suspense fallback={null}>
+          <AuthPanel />
+        </Suspense>
 
         {/* Footer */}
         <p className="absolute bottom-8 left-0 right-0 text-xs font-medium text-muted-foreground text-center">
-          © {new Date().getFullYear()} Cobox POS. Todos los derechos reservados.
+          © {new Date().getFullYear()} Comerz POS. Todos los derechos reservados.
         </p>
       </div>
 
