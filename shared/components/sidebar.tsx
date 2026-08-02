@@ -114,6 +114,13 @@ export function Sidebar({
     })).filter((group) => group.items.length > 0);
   }, [userRole]);
 
+  // En móvil el menú tapa la pantalla: al entrar a un módulo tiene que cerrarse
+  // solo. Se hace por cambio de ruta y no con un onClick por link para que
+  // valga también para el logo, el perfil y cualquier link que se agregue.
+  useEffect(() => {
+    setIsOpenMobile(false);
+  }, [pathname, setIsOpenMobile]);
+
   useEffect(() => {
     let isMounted = true;
     const modo = branding.modo_caja || "UNICA";
@@ -186,6 +193,18 @@ export function Sidebar({
         </Link>
 
         <div className="flex items-center gap-1">
+          {/* Con un solo negocio no hay nada que elegir y el header ya muestra
+              su nombre al lado del logo: mostrarlo sería ruido. */}
+          {negocios.length > 1 && (
+            <NegocioSwitcher
+              negocios={negocios}
+              negocioActivoId={negocioActivoId}
+              nombreActivo={branding.posName}
+              logoActivo={branding.posLogo}
+              inicial={initial}
+              isCollapsed
+            />
+          )}
           <CajaStatusButton
             modoCaja={branding.modo_caja || "UNICA"}
             userId={userId}
@@ -244,8 +263,11 @@ export function Sidebar({
           )}
         </div>
 
-        {/* 2. STORE SWITCHER — en móvil también: el aside ES el menú desplegable */}
-        <div className={`flex p-3 ${isCollapsed ? "justify-center" : ""}`}>
+        {/* 2. STORE SWITCHER — solo desktop. En móvil vive en el header, para
+            no repetirlo dentro del menú desplegable. */}
+        <div
+          className={`hidden md:flex p-3 ${isCollapsed ? "justify-center" : ""}`}
+        >
           <NegocioSwitcher
             negocios={negocios}
             negocioActivoId={negocioActivoId}
@@ -257,7 +279,12 @@ export function Sidebar({
         </div>
 
         {/* 3. NAVEGACIÓN COMPACTA */}
-        <nav className="flex-1 px-3 overflow-y-auto overflow-x-hidden flex flex-col">
+        {/* El cierre por cambio de ruta no cubre tocar el módulo en el que ya
+            estás (la ruta no cambia); este onClick sí. */}
+        <nav
+          onClick={() => setIsOpenMobile(false)}
+          className="flex-1 px-3 overflow-y-auto overflow-x-hidden flex flex-col"
+        >
           <div className="space-y-4 pb-4 flex-1">
             {visibleNavGroups.map((group, groupIndex) => (
               <div
