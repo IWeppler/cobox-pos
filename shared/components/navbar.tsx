@@ -9,6 +9,7 @@ import { ConfiguracionPOS } from "@/entities/config/types";
 import { FaFacebook, FaInstagram, FaWhatsapp } from "react-icons/fa";
 import { AnnouncementBar } from "../ui/announcement-bar";
 import { SearchBar } from "./search-bar";
+import { useRutaCatalogo } from "@/shared/lib/use-negocio";
 
 interface NavbarProps {
   branding: ConfiguracionPOS;
@@ -16,6 +17,7 @@ interface NavbarProps {
 
 export function Navbar({ branding }: Readonly<NavbarProps>) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const rutaDelCatalogo = useRutaCatalogo();
 
   return (
     <>
@@ -44,7 +46,7 @@ export function Navbar({ branding }: Readonly<NavbarProps>) {
 
           {/* CENTRO: Logo y Nombre (Centrado en Mobile, Izquierda en Desktop) */}
           <div className="flex items-center justify-center md:justify-start w-1/3 md:w-auto">
-            <Link href="/store" className="flex items-center gap-2 shrink-0">
+            <Link href={rutaDelCatalogo} className="flex items-center gap-2 shrink-0">
               {branding.posLogo && (
                 <div className="w-10 h-10 flex items-center justify-center rounded-lg overflow-hidden text-white shrink-0">
                   <Image
@@ -118,7 +120,7 @@ export function Navbar({ branding }: Readonly<NavbarProps>) {
                 href={branding.facebook}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 hover:text-blue-600 transition-colors uppercase"
+                className="flex items-center gap-1.5 hover:text-info transition-colors uppercase"
               >
                 <FaFacebook className="w-3.5 h-3.5" /> Facebook
               </a>
@@ -172,7 +174,7 @@ export function Navbar({ branding }: Readonly<NavbarProps>) {
                     href={branding.facebook}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-3 bg-blue-600/10 text-blue-600 rounded-full"
+                    className="p-3 bg-info/10 text-info rounded-full"
                   >
                     <FaFacebook className="w-5 h-5" />
                   </a>

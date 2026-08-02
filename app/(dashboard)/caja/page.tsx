@@ -30,13 +30,13 @@ export default async function CajaPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
 
-  const { data: perfil } = await supabase
-    .from("perfiles")
-    .select("rol, nombre")
-    .eq("id", user.id)
-    .single();
+  // El rol es por negocio (usuarios_negocios), el nombre es del perfil global.
+  const [{ data: perfil }, { data: rolActual }] = await Promise.all([
+    supabase.from("perfiles").select("nombre").eq("id", user.id).single(),
+    supabase.rpc("rol_actual"),
+  ]);
 
-  const userRole = perfil?.rol || "VENDEDOR";
+  const userRole = rolActual || "VENDEDOR";
 
   const { data: puedeCerrarAjenaRaw } = await supabase.rpc("tiene_permiso", {
     clave: "caja.cerrar_ajena",

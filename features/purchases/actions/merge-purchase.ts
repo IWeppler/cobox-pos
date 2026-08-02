@@ -227,6 +227,11 @@ export async function crearProductoAlVueloAction(
     } = await supabase.auth.getUser();
     if (!user) return { error: "No autorizado." };
 
+    // Las imágenes se guardan bajo la carpeta del negocio: es lo que la policy
+    // de storage exige para poder escribir.
+    const { data: negocioId } = await supabase.rpc("negocio_actual");
+    if (!negocioId) return { error: "No hay un negocio activo en esta sesión." };
+
     const slug = `${slugify(nombre)}-${Math.random().toString(36).substring(2, 6)}`;
     let categoria_id: string | null = null;
     let categoriaTipoLabel = "General";
@@ -279,7 +284,7 @@ export async function crearProductoAlVueloAction(
         const baseFileName = crypto.randomUUID();
 
         // 1. Subir Main
-        const mainName = `${baseFileName}.${fileExt}`;
+        const mainName = `${negocioId}/${baseFileName}.${fileExt}`;
         const { error: uploadMainError } = await supabase.storage
           .from("productos")
           .upload(mainName, fileMain, { cacheControl: "31536000" });
@@ -293,7 +298,7 @@ export async function crearProductoAlVueloAction(
 
         // 2. Subir Thumbnail (si existe en el mismo índice)
         if (fileThumb && fileThumb.size > 0) {
-          const thumbName = `thumbs/${baseFileName}-thumb.${fileExt}`;
+          const thumbName = `${negocioId}/thumbs/${baseFileName}-thumb.${fileExt}`;
           const { error: uploadThumbError } = await supabase.storage
             .from("productos")
             .upload(thumbName, fileThumb, { cacheControl: "31536000" });
@@ -308,7 +313,7 @@ export async function crearProductoAlVueloAction(
 
         // 3. Subir Grid (si existe en el mismo índice)
         if (fileGrid && fileGrid.size > 0) {
-          const gridName = `grids/${baseFileName}-grid.${fileExt}`;
+          const gridName = `${negocioId}/grids/${baseFileName}-grid.${fileExt}`;
           const { error: uploadGridError } = await supabase.storage
             .from("productos")
             .upload(gridName, fileGrid, { cacheControl: "31536000" });

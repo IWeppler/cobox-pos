@@ -1,21 +1,41 @@
 import { Navbar } from "@/shared/components/navbar";
 import { CartPanelPublico } from "@/features/store/components/cart-panel-publico";
-import { createClient } from "@/shared/config/supabase/server";
-import { cookies } from "next/headers";
+import { createPublicClient } from "@/shared/config/supabase/server";
+import { headers } from "next/headers";
 import Link from "next/link";
+import { resolveTenant } from "@/shared/lib/tenant";
+import type { Metadata } from "next";
 
-export const metadata = {
-  title: "Tienda Oficial | Emprendimiento Santa Fe",
-  description: "Encontra el producto que buscás.",
-};
+// El título sale del negocio que se está mirando: no hay tienda por defecto
+// ni nombre de comercio fijo.
+export async function generateMetadata({
+  params,
+}: Readonly<{ params: Promise<{ negocio: string }> }>): Promise<Metadata> {
+  const { negocio } = await params;
+  const headersList = await headers();
+  const { negocio: datos } = await resolveTenant({
+    hostname: headersList.get("host"),
+    slug: negocio,
+  });
+
+  return {
+    title: `${datos.nombre} | Tienda online`,
+    description: `Comprá online en ${datos.nombre}.`,
+  };
+}
 
 export default async function PublicLayout({
   children,
+  params,
 }: Readonly<{
   children: React.ReactNode;
+  params: Promise<{ negocio: string }>;
 }>) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const { negocio } = await params;
+  const headersList = await headers();
+  await resolveTenant({ hostname: headersList.get("host"), slug: negocio });
+
+  const supabase = await createPublicClient();
 
   const { data: config } = await supabase
     .from("configuracion_pos")

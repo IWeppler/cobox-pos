@@ -4,12 +4,16 @@ import { Producto } from "@/entities/productos/types";
 import Image from "next/image";
 import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
+import { useSlugNegocio } from "@/shared/lib/use-negocio";
+import { rutaCatalogo } from "@/shared/lib/dominios";
 
 interface RelatedProductsProps {
   productos: Producto[];
 }
 
 export function RelatedProducts({ productos }: Readonly<RelatedProductsProps>) {
+  const slugNegocio = useSlugNegocio();
+
   if (!productos || productos.length === 0) return null;
 
   return (
@@ -33,21 +37,24 @@ export function RelatedProducts({ productos }: Readonly<RelatedProductsProps>) {
           }
 
           let miniaturas: string[] = [];
-          if (Array.isArray(producto.thumbnail_url)) {
-            miniaturas = producto.thumbnail_url;
-          } else if (typeof producto.thumbnail_url === "string") {
+          if (Array.isArray(producto.grid_url)) {
+            miniaturas = producto.grid_url;
+          } else if (typeof producto.grid_url === "string") {
             try {
-              const parsed = JSON.parse(producto.thumbnail_url);
+              const parsed = JSON.parse(producto.grid_url);
               miniaturas = Array.isArray(parsed)
                 ? parsed
-                : [producto.thumbnail_url];
+                : [producto.grid_url];
             } catch {
-              miniaturas = [producto.thumbnail_url];
+              miniaturas = [producto.grid_url];
             }
           }
 
           const primeraImagen = miniaturas[0] || imagenes[0] || null;
-          const linkDestino = producto.slug ? `/store/${producto.slug}` : "#";
+          const linkDestino =
+            producto.slug && slugNegocio
+              ? rutaCatalogo(slugNegocio, producto.slug)
+              : "#";
 
           return (
             <Link

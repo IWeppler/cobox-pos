@@ -94,7 +94,7 @@ export function EditPaymentModal({
 
           <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
             <Label className="flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5 text-amber-600" />
+              <TrendingUp className="w-3.5 h-3.5 text-warning" />
               Recargo al cliente (%)
             </Label>
             <Input

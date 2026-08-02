@@ -19,12 +19,8 @@ export default async function VentasPage() {
   // gatea el orden "Mayor ganancia neta", fuera del alcance de este cableado)
   let userRole = "VENDEDOR";
   if (user) {
-    const { data: perfil } = await supabase
-      .from("perfiles")
-      .select("rol")
-      .eq("id", user.id)
-      .single();
-    if (perfil) userRole = perfil.rol;
+    const { data: rolActual } = await supabase.rpc("rol_actual");
+    if (rolActual) userRole = rolActual;
   }
 
   const [puedeAnularRes, puedeVerTodasRes] = await Promise.all([

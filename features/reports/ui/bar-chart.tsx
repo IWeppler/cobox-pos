@@ -11,7 +11,7 @@ interface BarChartProps {
 
 export function BarChart({
   data,
-  color = "#035dfd",
+  color = "#00b3c2",
   valuePrefix = "$",
 }: Readonly<BarChartProps>) {
   const containerRef = useRef<HTMLDivElement>(null);

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, useMemo, useRef, useTransition } from "react";
+import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import Image from "next/image";
 import { useQueryClient } from "@tanstack/react-query";
 import { ProductoIndice } from "@/entities/productos/types";
@@ -183,7 +184,9 @@ export function StockTable({
 }: Readonly<StockTableProps>) {
   const { isAdmin } = useStockCartActions(userRole);
   const queryClient = useQueryClient();
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  // El link del catálogo necesita el negocio, no solo el origen: cada
+  // comercio tiene su propia tienda.
+  const slugNegocio = useSlugNegocioActivo() ?? "";
   const [variantesAbiertas, setVariantesAbiertas] = useState<
     Record<string, boolean>
   >({});
@@ -453,7 +456,7 @@ export function StockTable({
                   : "productos seleccionados"}
               </span>
               {seleccionSuperaElCap && (
-                <span className="text-[11px] text-amber-600">
+                <span className="text-[11px] text-warning">
                   Se comparten los primeros {MAX_PRODUCTOS_COMPARTIDOS} de{" "}
                   {idsVisiblesParaCompartir.length}
                 </span>
@@ -477,7 +480,7 @@ export function StockTable({
                 : "Seleccionar todo"}
             </Button>
             <ShareButton
-              url={construirUrlSeleccion(baseUrl, idsVisiblesParaCompartir)}
+              url={construirUrlSeleccion(slugNegocio, idsVisiblesParaCompartir)}
               title={`Productos de ${nombreComercio}`}
               text={armarMensajeSeleccion(
                 Math.min(
@@ -708,7 +711,7 @@ export function StockTable({
               const variantesEstanAbiertas = variantesAbiertas[producto.id];
 
               const urlProducto = producto.slug
-                ? construirUrlProducto(baseUrl, producto.slug)
+                ? construirUrlProducto(slugNegocio, producto.slug)
                 : null;
               const compartirDeshabilitado =
                 !urlProducto ||
@@ -749,10 +752,10 @@ export function StockTable({
                 : false;
 
               // 3. Status Dot (Puntito) para el stock
-              let dotColor = "bg-emerald-500"; // Normal
+              let dotColor = "bg-success"; // Normal
               if (totalUnidades === 0)
-                dotColor = "bg-rose-500"; // Agotado
-              else if (totalUnidades < 5) dotColor = "bg-amber-500"; // Stock Bajo
+                dotColor = "bg-danger"; // Agotado
+              else if (totalUnidades < 5) dotColor = "bg-warning"; // Stock Bajo
 
               return (
                 <Fragment key={producto.id}>
@@ -936,7 +939,7 @@ export function StockTable({
                         {isAdmin && !preciosVarian && costo > 0 && (
                           <span
                             title={`Recargo sobre el costo: +${formatearMoneda(gananciaNeta)}`}
-                            className="text-[9px] sm:text-[10px] font-sans font-medium leading-none px-1.5 py-0.5 rounded border bg-emerald-500/10 text-emerald-700 dark:text-emerald-500 border-emerald-500/20"
+                            className="text-[9px] sm:text-[10px] font-sans font-medium leading-none px-1.5 py-0.5 rounded border bg-success/10 text-success border-success/20"
                           >
                             +{recargoPorcentaje}%
                           </span>
@@ -984,7 +987,7 @@ export function StockTable({
                                   className="w-full justify-start h-9 px-2 text-sm font-medium cursor-pointer rounded-lg hover:bg-muted transition-colors"
                                   onClick={() => setProductoEnEdicion(producto)}
                                 >
-                                  <Edit2 className="w-4 h-4 mr-2.5 text-emerald-600" />
+                                  <Edit2 className="w-4 h-4 mr-2.5 text-success" />
                                   Editar producto
                                 </Button>
 
@@ -993,7 +996,7 @@ export function StockTable({
                                     variant="ghost"
                                     className="w-full justify-start h-9 px-2 text-sm font-medium cursor-pointer rounded-lg hover:bg-muted transition-colors"
                                   >
-                                    <MinusCircle className="w-4 h-4 mr-2.5 text-amber-500" />
+                                    <MinusCircle className="w-4 h-4 mr-2.5 text-warning" />
                                     Registrar baja
                                   </Button>
                                 </BajaModal>
@@ -1080,8 +1083,8 @@ export function StockTable({
                                             <div
                                               className={`w-1.5 h-1.5 rounded-full font-mono ${
                                                 varStock === 0
-                                                  ? "bg-rose-500"
-                                                  : "bg-emerald-500"
+                                                  ? "bg-danger"
+                                                  : "bg-success"
                                               }`}
                                             />
                                             <span className="font-semibold text-xs sm:text-sm font-mono text-foreground">

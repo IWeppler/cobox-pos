@@ -88,7 +88,7 @@ export function CajaQuickModal({
           <>
             <DialogHeader className="p-6 pb-2">
               <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-                <Unlock className="h-4 w-4 text-emerald-600" />
+                <Unlock className="h-4 w-4 text-success" />
                 Turno abierto
               </DialogTitle>
               <DialogDescription className="sr-only">

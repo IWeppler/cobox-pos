@@ -114,7 +114,7 @@ export function ProductPriceSection({
                   disabled
                   value={gananciaNeta > 0 ? gananciaNeta : ""}
                   placeholder="0.00"
-                  className="h-10 pl-7 shadow-none rounded-lg bg-muted/30 cursor-not-allowed font-medium text-emerald-600"
+                  className="h-10 pl-7 shadow-none rounded-lg bg-muted/30 cursor-not-allowed font-medium text-success"
                 />
               </div>
             </div>
@@ -128,7 +128,7 @@ export function ProductPriceSection({
                   disabled
                   value={recargoPorcentaje !== "0" ? recargoPorcentaje : ""}
                   placeholder="0.0"
-                  className="h-10 pr-7 shadow-none rounded-lg bg-muted/30 cursor-not-allowed font-medium text-emerald-600"
+                  className="h-10 pr-7 shadow-none rounded-lg bg-muted/30 cursor-not-allowed font-medium text-success"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
                   %

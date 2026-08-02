@@ -65,13 +65,12 @@ async function esUsuarioAdmin(
   } = await supabase.auth.getUser();
   if (!user) return false;
 
-  const { data: perfil } = await supabase
-    .from("perfiles")
-    .select("rol")
-    .eq("id", user.id)
-    .single();
+  // is_admin() resuelve el rol dentro del negocio activo. perfiles.rol quedó
+  // deprecada: es NULL para todo usuario invitado, así que leerla acá dejaba a
+  // una encargada nueva sin poder actualizar precios.
+  const { data: esAdmin } = await supabase.rpc("is_admin");
 
-  return perfil?.rol === "ADMIN";
+  return esAdmin === true;
 }
 
 // ----------------------------------------------------------------------

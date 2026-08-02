@@ -212,26 +212,26 @@ export function CrmTab({
 
         if (c.saldo_vencido > 0) {
           estado = "Riesgo Alto";
-          colorClass = "bg-rose-50 text-rose-700 border-rose-200";
+          colorClass = "bg-danger/10 text-danger border-danger/20";
         } else if (c.saldo_actual > 0 && promedioPago > plazoMora) {
           estado = "Valioso pero Lento";
-          colorClass = "bg-amber-50 text-amber-700 border-amber-200";
+          colorClass = "bg-warning/10 text-warning border border-warning/20";
         } else if (
           diasDesdeUltimaCompra > diasInactivo &&
           c.saldo_actual === 0
         ) {
           estado = "Inactivo";
-          colorClass = "bg-slate-100 text-slate-500 border-slate-200";
+          colorClass = "bg-muted text-muted-foreground border-border";
         } else if (margen < 15) {
           estado = "Poco Rentable";
-          colorClass = "bg-orange-50 text-orange-700 border-orange-200";
+          colorClass = "bg-warning/10 text-warning border-warning/20";
         } else if (
           c.comprado > 20000 &&
           margen >= 25 &&
           c.saldo_vencido === 0
         ) {
           estado = "Excelente";
-          colorClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
+          colorClass = "bg-success/10 text-success border-success/20";
         }
 
         return {
@@ -336,7 +336,7 @@ export function CrmTab({
             <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Ventas a Clientes
             </CardTitle>
-            <Users className="w-4 h-4 text-accent-indigo" />
+            <Users className="w-4 h-4 text-chart-3" />
           </CardHeader>
           <CardContent>
             <div className="text-xl font-semibold text-foreground">
@@ -353,7 +353,7 @@ export function CrmTab({
             <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Ganancia
             </CardTitle>
-            <TrendingUp className="w-4 h-4 text-emerald-500/80" />
+            <TrendingUp className="w-4 h-4 text-success" />
           </CardHeader>
           <CardContent>
             <div className="text-xl font-semibold text-foreground">
@@ -370,7 +370,7 @@ export function CrmTab({
             <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Saldo Pendiente
             </CardTitle>
-            <CreditCard className="w-4 h-4 text-accent-blue" />
+            <CreditCard className="w-4 h-4 text-chart-1" />
           </CardHeader>
           <CardContent>
             <div className="text-xl font-semibold text-foreground">
@@ -404,7 +404,7 @@ export function CrmTab({
             <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Demora Media
             </CardTitle>
-            <Clock className="w-4 h-4 text-accent-orange" />
+            <Clock className="w-4 h-4 text-warning" />
           </CardHeader>
           <CardContent>
             <div className="text-xl font-semibold text-foreground">
@@ -443,7 +443,7 @@ export function CrmTab({
               </div>
               <div className="w-full bg-muted rounded-full h-1.5">
                 <div
-                  className="bg-emerald-400 h-full rounded-full transition-all"
+                  className="bg-success h-full rounded-full transition-all"
                   style={{ width: getWidth(crmMetrics.antiguedad["0_15"]) }}
                 />
               </div>
@@ -478,7 +478,7 @@ export function CrmTab({
               </div>
               <div className="w-full bg-muted rounded-full h-1.5">
                 <div
-                  className="bg-orange-400 h-full rounded-full transition-all"
+                  className="bg-warning h-full rounded-full transition-all"
                   style={{ width: getWidth(crmMetrics.antiguedad["31_60"]) }}
                 />
               </div>
@@ -486,17 +486,17 @@ export function CrmTab({
 
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
-                <span className="font-semibold text-rose-600">
+                <span className="font-semibold text-danger">
                   +60 días{" "}
                   <span className="text-xs ml-1 opacity-70">(Mora)</span>
                 </span>
-                <span className="font-bold text-rose-600">
+                <span className="font-bold text-danger">
                   {formatearMoneda(crmMetrics.antiguedad["mas_60"])}
                 </span>
               </div>
               <div className="w-full bg-muted rounded-full h-1.5">
                 <div
-                  className="bg-rose-500 h-full rounded-full transition-all"
+                  className="bg-danger h-full rounded-full transition-all"
                   style={{ width: getWidth(crmMetrics.antiguedad["mas_60"]) }}
                 />
               </div>
@@ -683,16 +683,16 @@ export function CrmTab({
                         {formatearMoneda(c.comprado)}
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <div className="font-medium text-emerald-600">
+                        <div className="font-medium text-success">
                           {formatearMoneda(c.ganancia)}
                         </div>
                       </td>
-                      <td className="px-5 py-3 text-right font-medium text-amber-700">
+                      <td className="px-5 py-3 text-right font-medium text-warning">
                         {c.saldo_actual > 0
                           ? formatearMoneda(c.saldo_actual)
                           : "-"}
                       </td>
-                      <td className="px-5 py-3 text-right font-semibold text-rose-600 dark:text-rose-500">
+                      <td className="px-5 py-3 text-right font-semibold text-danger">
                         {c.saldo_vencido > 0
                           ? formatearMoneda(c.saldo_vencido)
                           : "-"}

@@ -161,7 +161,7 @@ export function TicketSheet({
             </SheetHeader>
 
             <div className="flex-1 overflow-y-auto min-h-0">
-              <div className="px-2 space-y-2 md:px-5 md:py-5 md:space-y-4">
+              <div className="p-2 space-y-4 md:px-5 md:space-y-6">
                 <div className="rounded-xl border border-border bg-card p-5 text-center">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -169,12 +169,8 @@ export function TicketSheet({
                     </p>
 
                     <Badge
-                      variant="outline"
-                      className={`w-fit border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${
-                        estadoEsFiado
-                          ? "border-accent-orange bg-accent-orange/10 text-amber-700"
-                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      }`}
+                      variant={estadoEsFiado ? "warning" : "success"}
+                      className="px-3 py-1 text-[10px] font-bold uppercase tracking-widest"
                     >
                       {badgeEstadoLabel}
                     </Badge>
@@ -263,7 +259,7 @@ export function TicketSheet({
                       </span>
                       <span
                         className={`text-xs font-semibold ${
-                          estadoEsFiado ? "text-amber-700" : "text-emerald-700"
+                          estadoEsFiado ? "text-warning" : "text-success"
                         }`}
                       >
                         {estadoTexto}
@@ -321,7 +317,7 @@ export function TicketSheet({
                       </div>
 
                       {(ticket?.descuentoMonto ?? 0) > 0 ? (
-                        <div className="flex justify-between font-mono text-xs text-emerald-600 font-bold">
+                        <div className="flex justify-between font-mono text-xs text-success font-bold">
                           <span>DESC. ({ticket?.promocionNombre})</span>
                           <span>
                             -{formatTicketMoney(ticket?.descuentoMonto)}
@@ -335,7 +331,7 @@ export function TicketSheet({
                       )}
 
                       {(ticket?.recargoMetodoMonto ?? 0) > 0 ? (
-                        <div className="flex justify-between font-mono text-xs text-amber-600 font-bold">
+                        <div className="flex justify-between font-mono text-xs text-warning font-bold">
                           <span className="uppercase">
                             {ticket?.recargoMetodoEtiqueta || "Recargo método"}
                           </span>

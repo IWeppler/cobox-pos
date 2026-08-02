@@ -143,7 +143,7 @@ export function CartSidebarFooter({
             </span>
           </div>
           {descuentoDetalle.monto > 0 ? (
-            <div className="flex items-center justify-between font-mono text-sm text-emerald-700 dark:text-emerald-400">
+            <div className="flex items-center justify-between font-mono text-sm text-success">
               <span>PROMOCIÓN: {descuentoDetalle.nombre}</span>
               <span className="font-mono">
                 -{formatCurrency(descuentoDetalle.monto)}
@@ -155,7 +155,7 @@ export function CartSidebarFooter({
               className={`flex items-center justify-between font-mono text-sm ${
                 ccSinRecargo
                   ? "text-muted-foreground"
-                  : "text-amber-700 dark:text-amber-500"
+                  : "text-warning"
               }`}
             >
               <span className="flex items-center gap-2">
@@ -177,7 +177,7 @@ export function CartSidebarFooter({
             </div>
           ) : null}
           {recargoMetodoMonto > 0 ? (
-            <div className="flex items-center justify-between font-mono text-sm text-amber-700 dark:text-amber-500">
+            <div className="flex items-center justify-between font-mono text-sm text-warning">
               <span className="truncate uppercase">
                 {recargoMetodoEtiqueta || "Recargo por método"}
               </span>

@@ -10,10 +10,10 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
-  --color-accent-blue: var(--accent-blue);
-  --color-accent-orange: var(--accent-orange);
-  --color-accent-lime: var(--accent-lime);
-  --color-accent-indigo: var(--accent-indigo);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
 
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -55,16 +55,29 @@
 }
 
 :root {
-  --accent-blue: #2f96fe;
-  --accent-orange: #f97d47;
-  --accent-lime: #c7ea46;
-  --accent-indigo: #4656e4;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.16 0 0);
+
+  --primary: oklch(0.53 0.18 264);
+  --primary-foreground: oklch(0.97 0.014 254.604);
+
+  /* data */
+  --chart-1: #00b3c2; /* Cyan Suave: Más claro que tu primary, fresco y tecnológico */
+  --chart-2: #ef806f; /* Coral/Naranja: Subimos la luz para quitar el efecto "marrón sucio" */
+  --chart-3: #c781cb; /* Rosa/Magenta: Reemplaza al violeta oscuro, no compite con tu botón */
+  --chart-4: #6cc581; /* Esmeralda/Menta: Mucho más limpio y legible que el verde musgo */
+  --chart-5: #e6ac3d;
+
+  /* Status */
+  --success: oklch(0.72 0.16 150);
+  --warning: oklch(0.82 0.16 75);
+  --danger: oklch(0.66 0.19 25);
+  --info: oklch(0.67 0.15 235);
+
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.53 0.18 264);
-  --primary-foreground: oklch(0.97 0.014 254.604);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: rgb(245, 245, 245);
@@ -75,39 +88,48 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.837 0.128 66.29);
-  --chart-2: oklch(0.705 0.213 47.604);
-  --chart-3: oklch(0.646 0.222 41.116);
-  --chart-4: oklch(0.553 0.195 38.402);
-  --chart-5: oklch(0.47 0.157 37.304);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.546 0.245 262.881);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.16 0 0);
+
   --bg-danger: oklch(0.97 0.03 27.325);
 }
 
 .dark {
   --background: oklch(17.808% 0.00205 286.051);
   --foreground: oklch(0.985 0 0);
-  --accent-blue: #2f96fe;
-  --accent-orange: #f97d47;
-  --accent-lime: #c7ea46;
-  --accent-indigo: #4656e4;
+
+  /* Brand */
+  --primary: oklch(0.53 0.18 264);
+  --primary-foreground: oklch(0.97 0.014 254.604);
+
+  /* Data */
+  /* --chart-blue: oklch(0.65 0.16 250);
+  --chart-green: oklch(74.907% 0.1491 145.058);
+  --chart-orange: oklch(0.75 0.16 70);
+  --chart-purple: oklch(0.65 0.15 300);
+  --chart-red: oklch(0.65 0.18 25); */
+
+  --chart-1: #00b3c2; /* Cyan Suave: Más claro que tu primary, fresco y tecnológico */
+  --chart-2: #ef806f; /* Coral/Naranja: Subimos la luz para quitar el efecto "marrón sucio" */
+  --chart-3: #c781cb; /* Rosa/Magenta: Reemplaza al violeta oscuro, no compite con tu botón */
+  --chart-4: #6cc581; /* Esmeralda/Menta: Mucho más limpio y legible que el verde musgo */
+  --chart-5: #e6ac3d;
+
+  /* Status */
+  --success: oklch(0.72 0.16 150);
+  --warning: oklch(0.82 0.16 75);
+  --danger: oklch(0.66 0.19 25);
+  --info: oklch(0.67 0.15 235);
+
   --card: oklab(20.463% 0 -0.00002);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  /* --primary: oklch(0.424 0.199 265.638); */
-  --primary: oklch(0.53 0.18 264);
-  --primary-foreground: oklch(0.97 0.014 254.604);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -118,15 +140,8 @@
   --border: oklch(1 0 0 / 6%);
   --input: oklch(1 0 0 / 10%);
   --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.837 0.128 66.29);
-  --chart-2: oklch(0.705 0.213 47.604);
-  --chart-3: oklch(0.646 0.222 41.116);
-  --chart-4: oklch(0.553 0.195 38.402);
-  --chart-5: oklch(0.47 0.157 37.304);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.623 0.214 259.815);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);

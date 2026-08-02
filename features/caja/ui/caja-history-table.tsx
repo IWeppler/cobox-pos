@@ -301,7 +301,8 @@ function DiaFila({
         </td>
         <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap hidden sm:table-cell text-xs font-medium">
           {dia.turnos.length === 1 ? "1 turno" : `${dia.turnos.length} turnos`}
-          {dia.hayAbiertos && ` · ${cerrados} cerrado${cerrados === 1 ? "" : "s"}`}
+          {dia.hayAbiertos &&
+            ` · ${cerrados} cerrado${cerrados === 1 ? "" : "s"}`}
         </td>
         <td className="px-5 py-3.5 text-right font-mono font-medium text-foreground whitespace-nowrap">
           {dia.totalVendido === null ? (
@@ -336,14 +337,7 @@ function DiferenciaDia({ dia }: Readonly<{ dia: DiaAgrupado }>) {
   // Con algún turno abierto no hay diferencia posible: el monto declarado de
   // ese turno todavía no existe. Mismo criterio que la Vista Gerencial.
   if (dia.hayAbiertos) {
-    return (
-      <Badge
-        variant="outline"
-        className="bg-amber-50/50 dark:bg-amber-300/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-300/30 shadow-none text-[10px] uppercase"
-      >
-        En curso
-      </Badge>
-    );
+    return <Badge variant="warning">En curso</Badge>;
   }
   if (dia.diferenciaIncompleta || dia.diferencia === null) {
     return (
@@ -356,29 +350,14 @@ function DiferenciaDia({ dia }: Readonly<{ dia: DiaAgrupado }>) {
     );
   }
   if (dia.diferencia === 0) {
-    return (
-      <Badge
-        variant="outline"
-        className="bg-emerald-50/50 dark:bg-emerald-800 text-emerald-700 dark:text-white border-emerald-800 shadow-none text-[10px]"
-      >
-        Perfecto
-      </Badge>
-    );
+    return <Badge variant="success">Perfecto</Badge>;
   }
   if (dia.diferencia < 0) {
-    return (
-      <Badge
-        variant="outline"
-        className="bg-rose-50/50 dark:bg-rose-100 text-rose-700 border-rose-200 shadow-none text-[10px]"
-      >
-        {formatearMoneda(dia.diferencia)}
-      </Badge>
-    );
+    return <Badge variant="danger">{formatearMoneda(dia.diferencia)}</Badge>;
   }
   return (
     <Badge
-      variant="outline"
-      className="bg-blue-50/50 dark:bg-blue-200 text-blue-700 border-blue-200 shadow-none text-[10px]"
+      variant="info"
     >
       +{formatearMoneda(dia.diferencia)}
     </Badge>
@@ -428,15 +407,13 @@ function TurnoFila({
           <div className="shrink-0 hidden sm:block">
             {isAbierto ? (
               <Badge
-                variant="outline"
-                className="bg-emerald-50/50 dark:bg-emerald-300/20 text-emerald-700 dark:text-emerald-300 text-[10px] shadow-none uppercase"
+                variant="success"
               >
                 ABIERTO
               </Badge>
             ) : (
               <Badge
                 variant="outline"
-                className="bg-background text-muted-foreground border-border text-[10px] shadow-none uppercase"
               >
                 CERRADO
               </Badge>
@@ -450,8 +427,7 @@ function TurnoFila({
               /* Va antes del chequeo de null: diferenciaTurno() devuelve null
                  para estos turnos, y sin este orden el ⚠ se perdería. */
               <Badge
-                variant="outline"
-                className="bg-rose-50/50 dark:bg-rose-800 text-rose-700 dark:text-white border-rose-800 shadow-none text-[10px]"
+                variant="danger"
                 title="El efectivo esperado calculado dio negativo"
               >
                 ⚠ Esperado negativo
@@ -462,22 +438,19 @@ function TurnoFila({
               </span>
             ) : diferencia === 0 ? (
               <Badge
-                variant="outline"
-                className="bg-emerald-50/50 dark:bg-emerald-800 text-emerald-700 dark:text-white border-emerald-800 shadow-none text-[10px]"
+                variant="success"
               >
                 Perfecto
               </Badge>
             ) : diferencia < 0 ? (
               <Badge
-                variant="outline"
-                className="bg-rose-50/50 dark:bg-rose-100 text-rose-700 border-rose-200 shadow-none text-[10px]"
+                variant="danger"
               >
                 {formatearMoneda(diferencia)}
               </Badge>
             ) : (
               <Badge
-                variant="outline"
-                className="bg-blue-50/50 dark:bg-blue-200 text-blue-700 border-blue-200 shadow-none text-[10px]"
+                variant="info"
               >
                 +{formatearMoneda(diferencia)}
               </Badge>

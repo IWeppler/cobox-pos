@@ -103,7 +103,7 @@ export function ClientSelector({
               variant="outline"
               role="combobox"
               aria-expanded={open}
-              className={`w-full justify-between h-11 border-border shadow-none ${clienteSeleccionado ? "bg-background border-blue-200 text-primary dark:text-blue-500" : "bg-background"}`}
+              className={`w-full justify-between h-11 border-border shadow-none ${clienteSeleccionado ? "bg-background border-info/20 text-info" : "bg-background"}`}
             >
               <span className="truncate font-semibold">
                 {clienteSeleccionado
@@ -137,7 +137,7 @@ export function ClientSelector({
                 }}
               >
                 <Check
-                  className={`mr-2 h-4 w-4 ${!clienteSeleccionado ? "opacity-100 text-emerald-600" : "opacity-0"}`}
+                  className={`mr-2 h-4 w-4 ${!clienteSeleccionado ? "opacity-100 text-success" : "opacity-0"}`}
                 />
                 Consumidor Final
               </div>
@@ -161,7 +161,7 @@ export function ClientSelector({
                     }}
                   >
                     <Check
-                      className={`mr-2 h-4 w-4 ${clienteSeleccionado?.id === cliente.id ? "opacity-100 text-emerald-600" : "opacity-0"}`}
+                      className={`mr-2 h-4 w-4 ${clienteSeleccionado?.id === cliente.id ? "opacity-100 text-success" : "opacity-0"}`}
                     />
                     <div className="flex flex-col">
                       <span>{cliente.nombre}</span>
@@ -179,7 +179,7 @@ export function ClientSelector({
             <div className="p-2 border-t border-border bg-muted/20">
               <Button
                 variant="ghost"
-                className="w-full justify-start text-primary hover:text-primary dark:text-blue-500 hover:bg-primary/10 h-9 font-semibold"
+                className="w-full justify-start text-primary hover:text-info hover:bg-info/10 h-9 font-semibold"
                 onClick={() => {
                   setOpen(false);
                   setIsCreateOpen(true);

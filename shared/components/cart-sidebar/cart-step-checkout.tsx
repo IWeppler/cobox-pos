@@ -90,9 +90,10 @@ export function CartStepCheckout({
     0,
   );
   const diferencia = montoObjetivo - sumaPagos;
-  const recargoPorPago = calcularPagosConRecargo(pagos, metodosPagoDB).pagos.map(
-    (pago) => pago.recargoMonto,
-  );
+  const recargoPorPago = calcularPagosConRecargo(
+    pagos,
+    metodosPagoDB,
+  ).pagos.map((pago) => pago.recargoMonto);
 
   const syncSinglePayment = (monto: number, metodoId?: string) => {
     // Para Cuenta Corriente no autocompletamos ningún método salvo que
@@ -258,7 +259,7 @@ export function CartStepCheckout({
               <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
                 Cliente{" "}
                 {isCuentaCorriente ? (
-                  <span className="text-rose-500">*</span>
+                  <span className="text-danger">*</span>
                 ) : null}
               </h3>
             </div>
@@ -279,7 +280,7 @@ export function CartStepCheckout({
                     type="button"
                     variant="ghost"
                     onClick={handleToggleMixto}
-                    className="h-8 px-2 text-xs font-semibold text-primary dark:text-blue-500"
+                    className="h-8 px-2 text-xs text-primary"
                   >
                     <Split className="mr-1.5 h-3.5 w-3.5" />
                     {modoMixto ? "Pago rapido" : "Pago Mixto"}
@@ -313,7 +314,7 @@ export function CartStepCheckout({
                           {metodo.nombre}
                         </span>
                         {Number(metodo.recargo_porcentaje) > 0 ? (
-                          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500">
+                          <span className="text-[10px] font-bold text-warning">
                             +{metodo.recargo_porcentaje}%
                           </span>
                         ) : null}
@@ -329,66 +330,66 @@ export function CartStepCheckout({
                       className="space-y-1 bg-card p-2 rounded-lg border border-border"
                     >
                       <div className="flex items-center gap-2">
-                      <Select
-                        value={pago.metodoPagoId}
-                        onValueChange={(value) =>
-                          handleUpdatePago(index, "metodoPagoId", value)
-                        }
-                      >
-                        <SelectTrigger className="h-10 w-34 border-0 bg-transparent font-semibold text-xs">
-                          <SelectValue placeholder="Metodo" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-xl">
-                          {metodosPagoDB.map((metodo) => (
-                            <SelectItem
-                              key={metodo.id}
-                              value={metodo.id}
-                              className="text-xs font-semibold"
-                            >
-                              {metodo.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
-                          $
-                        </span>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={pago.montoAsignado || ""}
-                          onChange={(event) =>
-                            handleUpdatePago(
-                              index,
-                              "montoAsignado",
-                              Number(event.target.value || 0),
-                            )
+                        <Select
+                          value={pago.metodoPagoId}
+                          onValueChange={(value) =>
+                            handleUpdatePago(index, "metodoPagoId", value)
                           }
-                          className="h-10 border-0 bg-transparent pl-7 font-bold text-sm"
-                        />
-                      </div>
-
-                      {pagos.length > 1 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemovePago(index)}
-                          className="h-10 w-10 text-muted-foreground hover:text-rose-600 rounded-md"
                         >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      ) : null}
+                          <SelectTrigger className="h-10 w-34 border-0 bg-transparent font-semibold text-xs">
+                            <SelectValue placeholder="Metodo" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl">
+                            {metodosPagoDB.map((metodo) => (
+                              <SelectItem
+                                key={metodo.id}
+                                value={metodo.id}
+                                className="text-xs font-semibold"
+                              >
+                                {metodo.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
+                            $
+                          </span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={pago.montoAsignado || ""}
+                            onChange={(event) =>
+                              handleUpdatePago(
+                                index,
+                                "montoAsignado",
+                                Number(event.target.value || 0),
+                              )
+                            }
+                            className="h-10 border-0 bg-transparent pl-7 font-bold text-sm"
+                          />
+                        </div>
+
+                        {pagos.length > 1 ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemovePago(index)}
+                            className="h-10 w-10 text-muted-foreground rounded-md"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                       </div>
 
                       {/* El monto tipeado es la BASE (lo que cubre del
                           ticket); el recargo se muestra aparte para que
                           quede claro que no descuenta mercadería. */}
                       {recargoPorPago[index] > 0 ? (
-                        <p className="px-2 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
+                        <p className="px-2 text-[11px] font-semibold text-warning">
                           + ${recargoPorPago[index].toLocaleString("es-AR")} de
                           recargo — se cobran $
                           {(
@@ -402,7 +403,7 @@ export function CartStepCheckout({
 
                   {Math.abs(diferencia) > 0.05 ? (
                     <div
-                      className={`border p-2 text-[11px] font-bold uppercase tracking-widest rounded-lg text-center ${diferencia > 0 ? "border-border bg-muted text-foreground" : "border-rose-200 bg-rose-50 text-rose-700"}`}
+                      className={`border p-2 text-[11px] font-bold uppercase tracking-widest rounded-lg text-center ${diferencia > 0 ? "border-border bg-muted text-foreground" : "border-danger/20 bg-danger/10 text-danger"}`}
                     >
                       {diferencia > 0
                         ? `Falta asignar: $${diferencia.toLocaleString("es-AR")}`
@@ -448,7 +449,7 @@ export function CartStepCheckout({
                       <SelectItem
                         key={promo.id}
                         value={promo.id}
-                        className="font-semibold text-emerald-700"
+                        className="font-semibold text-success"
                       >
                         {promo.nombre}
                       </SelectItem>

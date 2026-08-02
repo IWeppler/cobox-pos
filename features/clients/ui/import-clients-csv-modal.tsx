@@ -71,7 +71,9 @@ export function ImportClientsCsvModal({
         const result = await importarClientesCSVAction(formData);
         if (result.success) {
           toast.success(`Se importaron ${result.count} clientes exitosamente.`);
-          queryClient.invalidateQueries({ queryKey: queryKeys.clientes.listado });
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.clientes.listado,
+          });
           setFileName(null); // Reseteamos el archivo
           onOpenChange(false);
         } else {
@@ -93,7 +95,7 @@ export function ImportClientsCsvModal({
       <DialogContent className="sm:max-w-[450px] border-border bg-card">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+            <FileSpreadsheet className="w-5 h-5 text-success" />
             Importar Clientes
           </DialogTitle>
           <DialogDescription>
@@ -107,7 +109,7 @@ export function ImportClientsCsvModal({
           <a
             href="/plantilla-clientes.csv"
             download
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:underline w-fit"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-success hover:text-success/90 hover:underline w-fit"
           >
             <Download className="w-3.5 h-3.5" />
             Descargar plantilla
@@ -123,8 +125,8 @@ export function ImportClientsCsvModal({
             <p className="text-[10px] text-muted-foreground mt-2">
               Nota: Si incluyes la columna &quot;deuda_inicial&quot;, el sistema
               creará automáticamente un registro de deuda en la cuenta corriente
-              del cliente. La columna &quot;vencimiento&quot; (formato DD/MM/AAAA)
-              es opcional.
+              del cliente. La columna &quot;vencimiento&quot; (formato
+              DD/MM/AAAA) es opcional.
             </p>
           </div>
 
@@ -133,27 +135,25 @@ export function ImportClientsCsvModal({
               htmlFor="csv-upload"
               className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
                 fileName
-                  ? "border-emerald-500 bg-background"
-                  : "border-border bg-muted/30 hover:bg-emerald-50 dark:bg-emerald-300/10 hover:border-emerald-200"
+                  ? "border-success bg-background"
+                  : "border-border bg-muted/30 hover:bg-success  hover:border-success/20"
               }`}
             >
               <div className="flex flex-col items-center justify-center text-center px-4">
                 {isPending ? (
-                  <Loader2 className="w-8 h-8 mb-3 text-emerald-600 animate-spin" />
+                  <Loader2 className="w-8 h-8 mb-3 text-success animate-spin" />
                 ) : fileName ? (
-                  <CheckCircle2 className="w-8 h-8 mb-3 text-emerald-600" />
+                  <CheckCircle2 className="w-8 h-8 mb-3 text-success" />
                 ) : (
                   <UploadCloud className="w-8 h-8 mb-3 text-muted-foreground" />
                 )}
 
                 <p className="mb-1 text-sm text-foreground font-medium">
                   {fileName ? (
-                    <span className="text-emerald-700 font-bold">
-                      {fileName}
-                    </span>
+                    <span className="text-success font-bold">{fileName}</span>
                   ) : (
                     <>
-                      <span className="font-semibold text-emerald-600">
+                      <span className="font-semibold text-success">
                         Haz clic para subir
                       </span>{" "}
                       tu archivo CSV
@@ -191,7 +191,7 @@ export function ImportClientsCsvModal({
             </Button>
             <Button
               type="submit"
-              className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-none"
+              className="bg-success text-white hover:bg-success/90"
               disabled={isPending || !fileName}
             >
               {isPending ? "Importando..." : "Comenzar Importación"}

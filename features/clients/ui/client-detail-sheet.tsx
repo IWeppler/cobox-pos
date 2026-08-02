@@ -176,7 +176,7 @@ export function ClientDetailSheet({
               onClick={() => setIsAdjustOpen(true)}
               className="h-8 text-xs font-medium shadow-none border-border"
             >
-              <PlusCircle className="w-3.5 h-3.5 mr-1.5 text-amber-600" />
+              <PlusCircle className="w-3.5 h-3.5 mr-1.5 text-warning" />
               Cargar saldo inicial
             </Button>
             <Button
@@ -254,7 +254,7 @@ export function ClientDetailSheet({
                         <p
                           className={`text-xs order-2 md:order-3 md:basis-full ${
                             mostrarAlertaVencimiento
-                              ? "font-medium text-rose-700 dark:text-destructive"
+                              ? "font-medium text-danger"
                               : "text-muted-foreground"
                           }`}
                         >
@@ -315,7 +315,7 @@ export function ClientDetailSheet({
                                     {formatearFechaHora(venta.fecha_venta)}
                                   </p>
                                 </div>
-                                <span className="font-mono font-medium text-emerald-700 dark:text-emerald-500">
+                                <span className="font-mono font-medium text-success">
                                   {formatearMoneda(Number(venta.total))}
                                 </span>
                               </div>
@@ -390,7 +390,7 @@ export function ClientDetailSheet({
                       </div>
                       <div className="min-w-0 rounded-lg bg-background/70 border border-border/60 p-3">
                         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                          <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500/20" />
+                          <Star className="h-3.5 w-3.5 text-warning fill-warning/20" />
                           Favorito
                         </div>
                         <p className="mt-1 text-base font-semibold text-foreground truncate">

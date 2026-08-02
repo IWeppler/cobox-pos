@@ -82,7 +82,10 @@ export function ProductDetailSheet({
   // (misma fuente que ya usa stock-table.tsx), y si no está seteado (null =
   // hereda) o no hay match, caemos al precio del producto.
   const precioPorVariante = new Map(
-    (producto.producto_variantes ?? []).map((v) => [v.nombre_display, v.precio]),
+    (producto.producto_variantes ?? []).map((v) => [
+      v.nombre_display,
+      v.precio,
+    ]),
   );
 
   const [varianteSeleccionada, setVarianteSeleccionada] = useState<string>(
@@ -139,7 +142,7 @@ export function ProductDetailSheet({
 
         <SheetHeader className="pb-4 border-b border-border/50 text-left mt-0">
           <SheetTitle className="text-xl flex items-center gap-2">
-            <Leaf className="w-5 h-5 text-emerald-600" />
+            <Leaf className="w-5 h-5 text-success" />
             Ficha del Producto
           </SheetTitle>
         </SheetHeader>
@@ -202,7 +205,7 @@ export function ProductDetailSheet({
           {/* SECCIÓN DE ACCIONES MÓVIL (Visible para todos) */}
           <div className="sm:hidden pt-6 mt-4 border-t border-border">
             <h4 className="text-sm font-semibold flex items-center gap-1.5 text-foreground uppercase tracking-wider mb-4">
-              <Zap className="w-4 h-4 text-amber-500" />
+              <Zap className="w-4 h-4 text-warning" />
               Acciones
             </h4>
 

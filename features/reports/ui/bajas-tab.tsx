@@ -36,7 +36,7 @@ export function BajasTab({
             <CardTitle className="text-sm font-medium text-foreground">
               Perdida Total por Bajas
             </CardTitle>
-            <DropletOff className="w-4 h-4 text-amber-600" />
+            <DropletOff className="w-4 h-4 text-warning" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-semibold">
@@ -52,7 +52,7 @@ export function BajasTab({
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Volumen Afectado
             </CardTitle>
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <AlertTriangle className="w-4 h-4 text-warning" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">
@@ -68,20 +68,20 @@ export function BajasTab({
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Impacto sobre Ingresos
             </CardTitle>
-            <Percent className="w-4 h-4 text-rose-500" />
+            <Percent className="w-4 h-4 text-danger" />
           </CardHeader>
           <CardContent>
             <div className="flex items-end justify-between mb-2">
               <span className="text-3xl font-bold text-foreground">
                 {ratioMermas.toFixed(1)}%
               </span>
-              <span className="text-xs font-semibold text-rose-600 mb-1">
+              <span className="text-xs font-semibold text-danger mb-1">
                 Fuga
               </span>
             </div>
             <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
               <div
-                className="bg-rose-500 h-full rounded-full transition-all duration-500"
+                className="bg-danger h-full rounded-full transition-all duration-500"
                 style={{
                   width: `${Math.min(ratioMermas, 100)}%`, // Topamos al 100% por seguridad visual
                 }}
@@ -106,7 +106,7 @@ export function BajasTab({
                       <span className="font-medium text-foreground">
                         {motivo.label}
                       </span>
-                      <span className="font-bold text-amber-600">
+                      <span className="font-bold text-warning">
                         {formatearMoneda(motivo.value)}
                       </span>
                     </div>
@@ -184,7 +184,7 @@ export function BajasTab({
                         <td className="px-5 py-3.5 text-muted-foreground text-xs hidden sm:table-cell">
                           {baja.motivo}
                         </td>
-                        <td className="px-5 py-3.5 font-bold text-amber-600 text-right">
+                        <td className="px-5 py-3.5 font-bold text-warning text-right">
                           -{formatearMoneda(costoFuga)}
                         </td>
                       </tr>

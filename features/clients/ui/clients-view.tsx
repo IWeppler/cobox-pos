@@ -232,7 +232,7 @@ export function ClientsView({
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Dinero en la Calle
             </CardTitle>
-            <Wallet className="w-4 h-4 text-emerald-500" />
+            <Wallet className="w-4 h-4 text-success" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-mono font-medium text-foreground">
@@ -249,7 +249,7 @@ export function ClientsView({
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Cuentas con Deuda
             </CardTitle>
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <AlertTriangle className="w-4 h-4 text-warning" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-mono font-medium text-foreground">
@@ -267,7 +267,7 @@ export function ClientsView({
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Clientes activos
             </CardTitle>
-            <Users className="w-4 h-4 text-blue-500" />
+            <Users className="w-4 h-4 text-info" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-mono font-medium text-foreground">

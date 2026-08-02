@@ -147,14 +147,15 @@ export function ImportProductosModal({
   };
 
   const itemsConProblema =
-    plan?.items.filter((i) => i.errores.length > 0 || i.avisos.length > 0) ?? [];
+    plan?.items.filter((i) => i.errores.length > 0 || i.avisos.length > 0) ??
+    [];
 
   return (
     <Dialog open={open} onOpenChange={cerrar}>
       <DialogContent className="sm:max-w-[720px] border-border bg-card max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+            <FileSpreadsheet className="w-5 h-5 text-success" />
             Importar productos
           </DialogTitle>
           <DialogDescription>
@@ -187,13 +188,13 @@ export function ImportProductosModal({
               htmlFor="planilla-upload"
               className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
                 fileName
-                  ? "border-emerald-500 bg-background"
-                  : "border-border bg-muted/30 hover:border-emerald-200"
+                  ? "border-success bg-background"
+                  : "border-border bg-muted/30 hover:border-success/50"
               }`}
             >
               <div className="flex flex-col items-center justify-center text-center px-4">
                 {leyendo ? (
-                  <Loader2 className="w-8 h-8 mb-3 text-emerald-600 animate-spin" />
+                  <Loader2 className="w-8 h-8 mb-3 text-success animate-spin" />
                 ) : (
                   <UploadCloud className="w-8 h-8 mb-3 text-muted-foreground" />
                 )}
@@ -218,13 +219,16 @@ export function ImportProductosModal({
         {paso === "preview" && plan && (
           <div className="space-y-4 pt-2">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <Resumen label="Productos nuevos" valor={plan.resumen.productosNuevos} />
-              <Resumen label="Variantes nuevas" valor={plan.resumen.variantesNuevas} />
-              <Resumen label="Unidades" valor={plan.resumen.unidadesTotales} />
               <Resumen
-                label="Con IMEI"
-                valor={plan.resumen.unidadesSerie}
+                label="Productos nuevos"
+                valor={plan.resumen.productosNuevos}
               />
+              <Resumen
+                label="Variantes nuevas"
+                valor={plan.resumen.variantesNuevas}
+              />
+              <Resumen label="Unidades" valor={plan.resumen.unidadesTotales} />
+              <Resumen label="Con IMEI" valor={plan.resumen.unidadesSerie} />
             </div>
 
             {plan.resumen.filasConError > 0 && (
@@ -236,8 +240,8 @@ export function ImportProductosModal({
 
             {invalidas.length > 0 && (
               <Aviso tono="warn">
-                {invalidas.length} fila(s) del archivo se descartaron al
-                leerlo (sin nombre de producto o stock inválido).
+                {invalidas.length} fila(s) del archivo se descartaron al leerlo
+                (sin nombre de producto o stock inválido).
               </Aviso>
             )}
 
@@ -249,9 +253,9 @@ export function ImportProductosModal({
             )}
 
             <Aviso tono="warn">
-              Las filas sin IMEI no tienen control de duplicados: si importás
-              el mismo archivo dos veces, el stock se suma de nuevo. Las filas
-              con IMEI sí rebotan.
+              Las filas sin IMEI no tienen control de duplicados: si importás el
+              mismo archivo dos veces, el stock se suma de nuevo. Las filas con
+              IMEI sí rebotan.
             </Aviso>
 
             <div className="border border-border rounded-xl overflow-hidden">
@@ -262,7 +266,9 @@ export function ImportProductosModal({
                       <th className="px-3 py-2 font-semibold">Fila</th>
                       <th className="px-3 py-2 font-semibold">Producto</th>
                       <th className="px-3 py-2 font-semibold">Acción</th>
-                      <th className="px-3 py-2 font-semibold text-right">Un.</th>
+                      <th className="px-3 py-2 font-semibold text-right">
+                        Un.
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -289,19 +295,19 @@ export function ImportProductosModal({
                             </div>
                           )}
                           {item.errores.map((e) => (
-                            <div key={e} className="text-red-600 mt-0.5">
+                            <div key={e} className="text-danger mt-0.5">
                               {e}
                             </div>
                           ))}
                           {item.avisos.map((a) => (
-                            <div key={a} className="text-amber-600 mt-0.5">
+                            <div key={a} className="text-warning mt-0.5">
                               {a}
                             </div>
                           ))}
                         </td>
                         <td className="px-3 py-2">
                           {item.errores.length > 0 ? (
-                            <span className="text-red-600 font-medium">
+                            <span className="text-danger font-medium">
                               No se importa
                             </span>
                           ) : (
@@ -338,10 +344,9 @@ export function ImportProductosModal({
                 type="button"
                 onClick={handleConfirmar}
                 disabled={
-                  isPending ||
-                  plan.items.every((i) => i.errores.length > 0)
+                  isPending || plan.items.every((i) => i.errores.length > 0)
                 }
-                className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-none"
+                className="bg-success text-white hover:bg-success/90 shadow-none"
               >
                 {isPending ? (
                   <>
@@ -378,7 +383,7 @@ export function ImportProductosModal({
                         <td className="px-3 py-2">
                           <span
                             className={`inline-flex items-start gap-1.5 ${
-                              r.ok ? "text-emerald-700" : "text-red-600"
+                              r.ok ? "text-success" : "text-danger"
                             }`}
                           >
                             {r.ok ? (
@@ -408,7 +413,7 @@ export function ImportProductosModal({
               <Button
                 type="button"
                 onClick={cerrar}
-                className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-none"
+                className="bg-success text-white hover:bg-success/90"
               >
                 Listo
               </Button>
@@ -437,8 +442,8 @@ function Aviso({
 }: Readonly<{ tono: "error" | "warn"; children: React.ReactNode }>) {
   const clases =
     tono === "error"
-      ? "border-red-200 bg-red-50 text-red-700 dark:bg-red-950/30 dark:border-red-900 dark:text-red-300"
-      : "border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-300";
+      ? "border-danger/20 bg-danger/10 text-danger"
+      : "border-warning/20 bg-warning/10 text-warning";
 
   return (
     <div

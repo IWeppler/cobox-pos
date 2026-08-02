@@ -88,7 +88,6 @@ export function EgresoModal() {
             <Button
               type="submit"
               disabled={isPending}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
             >
               {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Guardar Egreso

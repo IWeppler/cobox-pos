@@ -199,7 +199,7 @@ export function CategoriesPanel({
         variant="ghost"
         size="icon"
         onClick={() => updateCat(cat.id, { activa: !cat.activa })}
-        className={`h-9 w-9 rounded-md transition-colors ${!cat.activa ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+        className={`h-9 w-9 rounded-md transition-colors ${!cat.activa ? "text-warning hover:text-warning/90" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
         title={cat.activa ? "Ocultar en tienda" : "Mostrar en tienda"}
       >
         {cat.activa ? (
@@ -397,7 +397,7 @@ export function CategoriesPanel({
               onClick={() =>
                 rootPendingDelete && confirmDelete(rootPendingDelete.id)
               }
-              className="bg-rose-600 hover:bg-rose-700 text-white"
+              className="bg-danger hover:bg-danger/90 text-white"
             >
               Eliminar todo
             </AlertDialogAction>

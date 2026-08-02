@@ -26,20 +26,20 @@ const OPTIONS: {
   {
     value: "al_dia",
     label: "Al día",
-    activeClassName: "bg-background text-emerald-600 dark:text-accent-lime",
-    hoverClassName: "hover:text-emerald-600 dark:hover:text-accent-lime",
+    activeClassName: "bg-background text-success",
+    hoverClassName: "hover:text-success/90",
   },
   {
     value: "con_deuda",
     label: "Con deuda",
-    activeClassName: "bg-background text-accent-orange",
-    hoverClassName: "hover:text-accent-orange",
+    activeClassName: "bg-background text-warning",
+    hoverClassName: "hover:text-warning",
   },
   {
     value: "vencido",
     label: "Vencido",
-    activeClassName: "bg-background text-rose-600 dark:text-rose-400",
-    hoverClassName: "hover:text-rose-600 dark:hover:text-rose-400",
+    activeClassName: "bg-background text-danger",
+    hoverClassName: "hover:text-danger/90",
   },
 ];
 

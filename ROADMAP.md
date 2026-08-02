@@ -1,19 +1,25 @@
 Ayudar a vender más, estar organizado y prever qué está pasando en el negocio.
 
+
 ideas:
+- Diccionario de Mapeo (Heurística) en tu función de parseo de variantes.
+- ESTA FUNCIONANDO EL TEMA MARCA Y GENERO PARA EL PRODUCTO. FUNDAMENTAL MEJORAR EL CATALOGO
 - mejorar ux de seleccion multiple dentro del modulo de /stock. Actualmente se abre una barra abajo que no me deja avanzar de pagina y necesito que tenga simplemente para ver cantidad de productos seleccionados y acciones entonces ahi pongo que accion quiero hacer: editar precios, eliminar, cambiar de categoria, subcategoria.
 - ver historial de productos cargadaos a traves de remitos. como agrupaciones y luego detalle de cada remito. Esto va de la mano con la mejora de la creacion de la pagina de movimientos que actualmente ni siquiera me esta leyendo los productos que ingresan a traves de remitos, no tiene paginacion, creo que podria tener mas filtros y podemos poner esto que digo directamente ahi adentro.
-- Badges de stripe. Utilizar tal vez claude design  
 - Atajos con teclado.
 - Agregar mas campos a CLIENTES: Razon social/Nombre, CUIT, Condicion IVA:
 - Login con huella: Entrás con tu huella o Face ID en vez de escribir la contraseña cada vez.
+- Pérdida de conexión (Offline): Es la más crítica. Si el local se queda sin internet, la cajera debe saber de inmediato (con un banner permanente en la parte superior) que el sistema está guardando las ventas localmente y que no cierre la pestaña.
+- Alertas del Cliente (CRM): Si la cajera selecciona a "Juan Pérez" para venderle, ahí mismo debe aparecer una etiqueta roja que diga "Atención: Juan debe $15.000". Es una notificación en tiempo real, pero en contexto.
 - Multi-sucursal: Hasta 5 sucursales bajo la misma cuenta, con stock y caja independientes.
 - UX, caso Evens, 1 dueña, 2 negocios. Switch de negocio tipo github.
 - Exportación contable: Resumen de IVA, libro de ventas y compras, caja X y Z: un Excel listo para tu contador.
-- Conectar mercado pago para que te aparezca el qr y que te avise que se pago. entiendo que no sirve si tenes varias vendedoras en un local. Se puede hacer si tengo muchas vendedoras?
 - Agregar mas Datos de la empresa: nombre comercial +/ razon social, cuit. etiquetas de codigo de barra: a4, 50x30, 40x25, modo de facturacion: AFIP Manual (generar cuando se necesite), AFIP Automatico, Ticket Interno (Sin Afip)
 - Alicuota IVA (creacion de productos): 21% general; 10,5% alimentos básicos, carne, panificados, harinas; 0% exento.
 
+
+- terminar de hacer la conexión para recuperar contraseñas
+- hice la pagina de perfil pero hay que mejorar la UI de los planes
 
 
 # TIER 1 — Plata correcta y operación diaria (2-4 semanas)
@@ -29,7 +35,7 @@ ideas:
 ## EPIC 1 — Datos Fiscales de la Empresa
 Objetivo: poder configurar correctamente un comercio argentino.
 
-### Empresa
+### Empresa                DONE UI
  Nombre comercial
  Razón social
  CUIT
@@ -42,7 +48,7 @@ Objetivo: poder configurar correctamente un comercio argentino.
  Email
  Logo
 
-### Configuración Fiscal
+### Configuración Fiscal    DONE UI
  Tipo de comprobante por defecto
  Ticket interno
  Factura manual
@@ -65,28 +71,34 @@ Falta prácticamente convertir un cliente "comercial" en un cliente "fiscal".
  Email
  Teléfono
 
-### Extras
- Observaciones
- Límite de crédito
- Lista de precios
- Historial de compras
+1. types: listo, modal de crear cliente listo
+- editar y crear actions: features\clients\actions\manage-clients.ts // 4. CREAR CLIENTE NUEVO // 5. EDITAR CLIENTE
+- editar modal: features\clients\ui\edit-client-modal.tsx
 
+3. El "Killer Feature" (Auto-completado con AFIP)
+Si quieres que Cobox sea un sistema Premium que se venda solo, los datos fiscales no se deberían tipear a mano.
+Dado que ya estamos implementando afip.js en tu backend para emitir facturas, puedes usar esa misma librería para consultar el padrón de AFIP.
+El flujo ideal en el POS es:
+La cajera escribe el CUIT (ej: 30712345678) y presiona "Enter" o un botón de búsqueda.
+Tu backend consulta a ARCA.
+Se autocompleta mágicamente la razon_social, condicion_iva y direccion. ¡Cero errores de tipeo y factura generada en segundos!
 
-## EPIC 3 — Productos Fiscales
+## EPIC 3 — Productos Fiscales. PAUSADA
 Falta agregar:
 
  Alícuota IVA
- Código interno
- Unidad de medida
+ Código interno: SKU Listo, Codigo de  barra Listo
+ Unidad de medida: Yo tengo pensado crear una especie de onboarding para la primera cuando se registren o envien su contacto para que seleccionen la industria y en base a eso por ejemplo si es carniceria se le pone peso, si es indumentria es solo unidad, si es quiosco o almacen las dos
  Exento / Gravado
  Código AFIP (si aplica)
+
 
 ## EPIC 4 — Facturación Electrónica (ARCA)
 Esta es una épica enorme.
 
 La dividiría.
 
-### Configuración
+### Configuración (¡UI ya resuelta!)
  Conectar ARCA
  Validar certificados
  Estado conexión
@@ -97,6 +109,24 @@ La dividiría.
  Factura C
  Nota Crédito
  Nota Débito
+
+
+2. Emisión (El próximo gran desafío visual)
+Aquí es donde cambia el flujo de la cajera en el mostrador. Cuando el cliente está por pagar, el POS tiene que tomar una decisión automática basada en los datos que cargamos en la Épica 2:
+- Si el comercio es Monotributista: Siempre emite Factura C (o Ticket no fiscal).
+- Si el comercio es Responsable Inscripto:
+- Si el cliente no dio datos (Consumidor Final) ➔ Emite Factura B.
+- Si el cliente dio un CUIT y es Responsable Inscripto ➔ Emite Factura A.
+- Todo esto debe ocurrir sin que la cajera tenga que elegir el tipo de factura manualmente, reduciendo el error humano a cero.
+
+La Lógica Automática (El Cerebro)
+Basado en las reglas de ARCA, la lógica que programaremos en el front-end (y validaremos en el back-end) es esta:
+1. Si el Comercio es Monotributista: Siempre emite Factura C (no importa quién compre).
+2. Si el Comercio es Responsable Inscripto:
+- Si el cliente no está cargado o es Consumidor Final ➔ Factura B.
+- Si el cliente es Monotributista o Exento ➔ Factura B (o Factura M en casos raros, pero B es el estándar para MVP).
+- Si el cliente es Responsable Inscripto (y tiene CUIT) ➔ Factura A.
+3. El "Botón de Escape": Siempre debe haber un switch rápido para emitir un Ticket Interno (No Fiscal) por si el sistema de ARCA está caído o es una venta en negro/interna.
 
 
 ## EPIC 5 — IVA
@@ -129,18 +159,8 @@ Acá creo que hay mucho valor.
  Libro IVA Ventas
  Libro IVA Compras
  Caja diaria
- Caja X
- Caja Z
+ Caja X y Caja Z: Que es? 
  Excel movimientos
- CSV
-
-### Reportes
- Ventas por día
- Ventas por categoría
- Medios de pago
- Clientes
- Productos
-
 
 
 # TIER 2 — Decisión de arquitectura SaaS (antes del tercer cliente, no después)
@@ -203,3 +223,43 @@ Quiosco — el más fácil de los tres. Productos de SKU único (sin talle/color
 Herboristería — fácil-medio. Mezcla de productos por unidad (empaquetados, con código de barras) y a granel (hierbas sueltas por peso/cucharada). La parte por unidad no pide nada nuevo; la parte a granel necesita lo mismo que carnicería, aunque menos central al negocio.
 
 Carnicería — la que sí exige una feature nueva de verdad: venta por peso. Hoy tu sistema asume cantidad entera (1, 2, 3 unidades). Vender por kg necesita cantidad decimal de punta a punta: línea de venta, descuento de stock, cálculo de precio, reportes — no es un flag, es tocar el camino completo de la venta. La integración con balanza (Bluetooth/USB) es la versión "de lujo" — con carga manual del peso por teclado ya funciona sin hardware. Es la única de las tres que no podés resolver por configuración; es la que corresponde planificar como feature real, tal como ya la tenías anotada." -->
+
+
+
+# Fase 4: Migrar a los otros 2 inquilinos
+Una vez que Evens esté blindado con RLS y funcionando perfecto en su nueva estructura:
+1. Creás los 2 negocios nuevos en la tabla negocios.
+2. Exportás los datos de sus proyectos viejos de Supabase (en formato CSV o SQL).
+3. Les inyectás su respectivo negocio_id a esos datos.
+4. Los importás a la base de datos principal de Evens.
+
+
+
+
+1. El Panel de Super Admin (/admincobox).
+- Dashboard Global: Para ver tu MRR (Ingreso Mensual Recurrente), altas de la semana, bajas (Churn) y negocios activos.
+- Gestión de Comercios (Tenants): Un listado de todos los negocios donde puedas ver qué plan tienen, cuándo vence y quién es el dueño.
+- Impersonation (Modo Dios): Un botón crucial que te permita "Iniciar sesión como este negocio" sin pedirles la contraseña. Es vital para dar soporte técnico cuando un cliente te dice "no me funciona X cosa".
+
+
+2. Sistema de Permisos y Límites (Base de Datos)
+Para lograr esa granularidad sin volverte loco con miles de condicionales en el código, lo ideal es tener una tabla planes en Supabase con una columna JSON que defina las reglas exactas de cada nivel.
+- Estructura sugerida del JSON de un plan: Podrías guardar algo como { "max_usuarios": 1, "max_sucursales": 1, "features": ["caja", "stock", "arca_basico"] }.
+- Límites Cuantitativos: Si el negocio tiene el plan Emprendedor (max_usuarios: 1) y el dueño intenta invitar a un empleado, el backend lee este límite y bloquea la acción devolviendo un error.
+- Permisos Cualitativos (Features): Para restringir vistas parciales (ej: ver el gráfico de rentabilidad en la sección de reportes), tu frontend verificará si el array de features incluye ese permiso específico.
+
+
+3. UI para Funciones Bloqueadas (El Candadito)
+Para implementar tu idea de la mejor manera en Next.js, puedes crear un componente envoltorio (Wrapper) llamado <PaywallGate>.
+- Funcionamiento: Este componente recibe como propiedades el feature que requiere y el plan actual del negocio.
+- Si tiene el plan correcto: Renderiza el contenido normalmente (por ejemplo, el botón de "Agregar Empleado").
+- Si NO tiene el plan: Renderiza el mismo botón, pero deshabilitado, con un filtro grisáceo, el ícono del candado y una estrellita brillante.
+- Llamado a la acción (CTA): Al hacer clic en el componente bloqueado, en lugar de no hacer nada, debe abrir un modal hermoso que diga: "Para usar Multi-Caja necesitas el plan Gestión. [Mejorar mi plan ahora]".
+
+
+4. ¿Qué más falta? (Los 4 Pilares del SaaS)
+- El Flujo de Onboarding (Aprovisionamiento): ¿Qué pasa exactamente cuando un comercio se registra? Tu base de datos debe disparar un proceso automático que cree su "Negocio", le asigne el rol de "Dueño", le asigne un "Plan Trial de 14 días" y cargue categorías o productos de ejemplo para que no vea la pantalla en blanco.
+
+- Estados de Morosidad (Dunning): Si llega el día de cobro y la tarjeta de crédito del cliente rebota, ¿qué pasa? No debes borrar sus datos. El negocio debe pasar a estado "Moroso" (Past Due). Modo Solo Lectura: Cuando un negocio está moroso o cancelado, el SaaS los deja entrar al sistema, pero bloquea las acciones de escritura. Pueden ver sus reportes o productos viejos, pero el botón de "Cobrar en Caja" o "Agregar Producto" desaparece y es reemplazado por un cartel rojo gigante para que paguen.
+
+- Webhooks de la Pasarela de Pago: Tu backend de Supabase tendrá que estar escuchando (mediante Edge Functions o Route Handlers) los avisos de Mercado Pago o Stripe. Cuando la pasarela te avise "Pago exitoso", tu sistema automáticamente extiende la fecha de vencimiento del negocio por un mes más.

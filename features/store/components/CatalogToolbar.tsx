@@ -1,5 +1,13 @@
+"use client";
+
 import { Button } from "@/shared/ui/button";
-import { SlidersHorizontal, ArrowUpDown, X } from "lucide-react";
+import {
+  SlidersHorizontal,
+  ArrowUpDown,
+  X,
+  Check,
+  ChevronDown,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -14,6 +22,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/shared/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/shared/ui/command";
 import { Label } from "@/shared/ui/label";
 import { useState } from "react";
 
@@ -52,7 +69,7 @@ export function CatalogToolbar({
   return (
     <>
       {/* ── TOOLBAR MOBILE ── */}
-      <div className="grid grid-cols-2 sm:hidden w-full border-y border-border bg-white sticky top-16 md:top-29 z-30 divide-x divide-border">
+      <div className="grid grid-cols-2 sm:hidden w-full border-y border-border bg-background sticky top-16 md:top-29 z-30 divide-x divide-border">
         <Dialog
           open={isMobileFiltersOpen}
           onOpenChange={setIsMobileFiltersOpen}
@@ -70,7 +87,7 @@ export function CatalogToolbar({
               )}
             </Button>
           </DialogTrigger>
-          <DialogContent className="fixed inset-0 z-50 w-screen h-dvh max-w-none translate-x-0! translate-y-0! top-0! left-0! m-0 p-0 rounded-none border-none bg-white flex flex-col overflow-hidden [&>button]:hidden">
+          <DialogContent className="fixed inset-0 z-50 w-screen h-dvh max-w-none translate-x-0! translate-y-0! top-0! left-0! m-0 p-0 rounded-none border-none bg-background flex flex-col overflow-hidden [&>button]:hidden">
             <DialogHeader className="p-4 border-b border-border flex flex-row items-center justify-between shadow-none space-y-0">
               <DialogTitle className="uppercase tracking-widest text-sm font-bold m-0">
                 Filtros Avanzados
@@ -91,44 +108,133 @@ export function CatalogToolbar({
                   No hay propiedades configuradas.
                 </p>
               ) : (
-                propiedadesArray.map(([propName, values]) => (
-                  <div key={propName} className="space-y-4">
-                    <Label className="uppercase tracking-widest text-[10px] text-muted-foreground font-bold">
-                      {propName}
-                    </Label>
-                    <Select
-                      value={filtrosVariantes[propName] || "todos"}
-                      onValueChange={(val) =>
-                        onFiltroVarianteChange(propName, val)
-                      }
-                    >
-                      <SelectTrigger className="w-full h-12 rounded-none bg-card border-0 shadow-none uppercase tracking-widest text-xs font-bold focus:ring-0">
-                        <SelectValue placeholder={`Cualquier ${propName}`} />
-                      </SelectTrigger>
-                      <SelectContent className="rounded-none border-border">
-                        <SelectItem
-                          value="todos"
-                          className="rounded-none uppercase tracking-widest text-xs py-3"
-                        >
-                          Todos los {propName.toLowerCase()}s
-                        </SelectItem>
-                        {values.map((opt) => (
-                          <SelectItem
-                            key={opt}
-                            value={opt}
-                            className="rounded-none uppercase tracking-widest text-xs py-3"
+                propiedadesArray.map(([propName, values]) => {
+                  const valorActual = filtrosVariantes[propName];
+                  const isTalle = propName.toLowerCase().includes("talle");
+                  const isColor = propName.toLowerCase().includes("color");
+
+                  return (
+                    <div key={propName} className="space-y-4">
+                      <Label className="uppercase tracking-widest text-[10px] text-muted-foreground font-bold">
+                        {propName}
+                      </Label>
+
+                      {/* 1. MOBILE: GRILLA DE TALLES */}
+                      {isTalle && (
+                        <div className="grid grid-cols-3 gap-2">
+                          <Button
+                            variant={
+                              !valorActual || valorActual === "todos"
+                                ? "default"
+                                : "outline"
+                            }
+                            className="rounded-none uppercase tracking-widest text-[10px] h-10 shadow-none col-span-3"
+                            onClick={() =>
+                              onFiltroVarianteChange(propName, "todos")
+                            }
                           >
-                            {opt}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))
+                            Cualquiera
+                          </Button>
+                          {values.map((opt) => (
+                            <Button
+                              key={opt}
+                              variant={
+                                valorActual === opt ? "default" : "outline"
+                              }
+                              className="rounded-none uppercase tracking-widest text-xs h-10 shadow-none font-bold"
+                              onClick={() =>
+                                onFiltroVarianteChange(propName, opt)
+                              }
+                            >
+                              {opt}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 2. MOBILE: COMBOBOX DE COLORES (INLINE) */}
+                      {isColor && (
+                        <div className="border border-border">
+                          <Command className="rounded-none bg-transparent">
+                            <CommandInput
+                              placeholder={`Buscar ${propName.toLowerCase()}...`}
+                              className="text-xs h-11 border-none focus:ring-0"
+                            />
+                            <CommandList className="max-h-48 overflow-y-auto">
+                              <CommandEmpty className="py-4 text-center text-xs text-muted-foreground">
+                                No se encontró el color.
+                              </CommandEmpty>
+                              <CommandGroup>
+                                <CommandItem
+                                  onSelect={() =>
+                                    onFiltroVarianteChange(propName, "todos")
+                                  }
+                                  className="text-xs uppercase font-semibold cursor-pointer py-3 rounded-none"
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 ${!valorActual || valorActual === "todos" ? "opacity-100" : "opacity-0"}`}
+                                  />
+                                  Cualquier {propName}
+                                </CommandItem>
+                                {values.map((opt) => (
+                                  <CommandItem
+                                    key={opt}
+                                    onSelect={() =>
+                                      onFiltroVarianteChange(propName, opt)
+                                    }
+                                    className="text-xs uppercase font-medium cursor-pointer py-3 rounded-none"
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${valorActual === opt ? "opacity-100" : "opacity-0"}`}
+                                    />
+                                    {opt}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </div>
+                      )}
+
+                      {/* 3. MOBILE: SELECT ESTÁNDAR (Resto de propiedades) */}
+                      {!isTalle && !isColor && (
+                        <Select
+                          value={valorActual || "todos"}
+                          onValueChange={(val) =>
+                            onFiltroVarianteChange(propName, val)
+                          }
+                        >
+                          <SelectTrigger className="w-full h-12 rounded-none bg-card border border-border shadow-none uppercase tracking-widest text-xs font-bold focus:ring-0">
+                            <SelectValue
+                              placeholder={`Cualquier ${propName}`}
+                            />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-none border-border">
+                            <SelectItem
+                              value="todos"
+                              className="rounded-none uppercase tracking-widest text-xs py-3"
+                            >
+                              Todos los {propName.toLowerCase()}s
+                            </SelectItem>
+                            {values.map((opt) => (
+                              <SelectItem
+                                key={opt}
+                                value={opt}
+                                className="rounded-none uppercase tracking-widest text-xs py-3"
+                              >
+                                {opt}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
 
-            <div className="p-4 border-t border-border flex gap-3 bg-white mb-4">
+            <div className="p-4 border-t border-border flex gap-3 bg-background mb-4">
               <Button
                 variant="outline"
                 onClick={onLimpiarFiltros}
@@ -183,41 +289,162 @@ export function CatalogToolbar({
               Sin propiedades extras.
             </span>
           ) : (
-            propiedadesArray.map(([propName, values]) => (
-              <Select
-                key={propName}
-                value={filtrosVariantes[propName] || "todos"}
-                onValueChange={(val) => onFiltroVarianteChange(propName, val)}
-              >
-                <SelectTrigger className="w-40 h-10 rounded-none border-0 bg-card shadow-none uppercase tracking-widest text-[10px] font-bold focus:ring-0 px-3">
-                  <SelectValue placeholder={propName} />
-                </SelectTrigger>
-                <SelectContent className="rounded-none border-border">
-                  <SelectItem
-                    value="todos"
-                    className="rounded-none uppercase tracking-widest text-[11px] py-2.5"
-                  >
-                    Cualquier {propName}
-                  </SelectItem>
-                  {values.map((opt) => (
-                    <SelectItem
-                      key={opt}
-                      value={opt}
-                      className="rounded-none uppercase tracking-widest text-[11px] py-2.5"
+            propiedadesArray.map(([propName, values]) => {
+              const valorActual = filtrosVariantes[propName];
+              const isTalle = propName.toLowerCase().includes("talle");
+              const isColor = propName.toLowerCase().includes("color");
+
+              // 1. DESKTOP: GRILLA DE TALLES EN POPOVER
+              if (isTalle) {
+                return (
+                  <Popover key={propName}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="w-auto min-w-32 h-10 rounded-none border-0 bg-card shadow-none uppercase tracking-widest text-[10px] font-bold px-3 hover:bg-muted flex justify-between items-center gap-2"
+                      >
+                        {valorActual || `Cualquier ${propName}`}
+                        <ChevronDown className="w-3.5 h-3.5 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-72 p-3 shadow-xl rounded-none border-border"
+                      align="start"
                     >
-                      {opt}
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                        Seleccionar {propName}
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        <Button
+                          variant={
+                            !valorActual || valorActual === "todos"
+                              ? "default"
+                              : "outline"
+                          }
+                          className="h-9 text-[10px] uppercase tracking-widest col-span-4 shadow-none rounded-none"
+                          onClick={() =>
+                            onFiltroVarianteChange(propName, "todos")
+                          }
+                        >
+                          Cualquiera
+                        </Button>
+                        {values.map((opt) => (
+                          <Button
+                            key={opt}
+                            variant={
+                              valorActual === opt ? "default" : "outline"
+                            }
+                            className="h-9 text-xs font-bold uppercase shadow-none px-1 rounded-none"
+                            onClick={() =>
+                              onFiltroVarianteChange(propName, opt)
+                            }
+                          >
+                            {opt}
+                          </Button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                );
+              }
+
+              // 2. DESKTOP: COMBOBOX DE COLORES
+              if (isColor) {
+                return (
+                  <Popover key={propName}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="w-auto min-w-32 h-10 rounded-none border-0 bg-card shadow-none uppercase tracking-widest text-[10px] font-bold px-3 hover:bg-muted flex justify-between items-center gap-2"
+                      >
+                        {valorActual || `Cualquier ${propName}`}
+                        <ChevronDown className="w-3.5 h-3.5 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-[240px] p-0 shadow-xl rounded-none border-border"
+                      align="start"
+                    >
+                      <Command className="rounded-none">
+                        <CommandInput
+                          placeholder={`Buscar ${propName.toLowerCase()}...`}
+                          className="text-xs h-10 border-none focus:ring-0"
+                        />
+                        <CommandList className="max-h-[220px]">
+                          <CommandEmpty className="py-4 text-center text-[10px] uppercase tracking-widest text-muted-foreground">
+                            Color no encontrado.
+                          </CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              onSelect={() =>
+                                onFiltroVarianteChange(propName, "todos")
+                              }
+                              className="text-[10px] tracking-widest uppercase font-bold cursor-pointer py-2.5 rounded-none"
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${!valorActual || valorActual === "todos" ? "opacity-100" : "opacity-0"}`}
+                              />
+                              Cualquier {propName}
+                            </CommandItem>
+                            {values.map((opt) => (
+                              <CommandItem
+                                key={opt}
+                                onSelect={() =>
+                                  onFiltroVarianteChange(propName, opt)
+                                }
+                                className="text-[10px] tracking-widest uppercase font-semibold cursor-pointer py-2.5 rounded-none"
+                              >
+                                <Check
+                                  className={`mr-2 h-4 w-4 ${valorActual === opt ? "opacity-100" : "opacity-0"}`}
+                                />
+                                {opt}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                );
+              }
+
+              // 3. DESKTOP: SELECT ESTÁNDAR
+              return (
+                <Select
+                  key={propName}
+                  value={valorActual || "todos"}
+                  onValueChange={(val) => onFiltroVarianteChange(propName, val)}
+                >
+                  <SelectTrigger className="w-auto min-w-32 h-10 rounded-none border-0 bg-card shadow-none uppercase tracking-widest text-[10px] font-bold focus:ring-0 px-3">
+                    <SelectValue placeholder={propName} />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-none border-border">
+                    <SelectItem
+                      value="todos"
+                      className="rounded-none uppercase tracking-widest text-[10px] py-2.5 font-bold"
+                    >
+                      Cualquier {propName}
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ))
+                    {values.map((opt) => (
+                      <SelectItem
+                        key={opt}
+                        value={opt}
+                        className="rounded-none uppercase tracking-widest text-[10px] py-2.5 font-semibold"
+                      >
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            })
           )}
 
           {hayFiltrosActivos && (
             <Button
               variant="ghost"
               onClick={onLimpiarFiltros}
-              className="h-10 rounded-none uppercase tracking-widest text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-card cursor-pointer"
+              className="h-10 rounded-none uppercase tracking-widest text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-card cursor-pointer ml-2"
             >
               Limpiar Todo
             </Button>
@@ -229,15 +456,15 @@ export function CatalogToolbar({
             Ordenar:
           </span>
           <Select value={orden} onValueChange={onOrdenChange}>
-            <SelectTrigger className="w-50 h-10 rounded-none border-0 bg-card shadow-none uppercase tracking-widest text-[10px] font-bold focus:ring-0 px-3">
+            <SelectTrigger className="w-48 h-10 rounded-none border-0 bg-card shadow-none uppercase tracking-widest text-[10px] font-bold focus:ring-0 px-3">
               <SelectValue placeholder="Ordenar por" />
             </SelectTrigger>
-            <SelectContent className="rounded-none border-border">
+            <SelectContent className="rounded-none border-border" align="end">
               {ordenOptions.map((opt) => (
                 <SelectItem
                   key={opt.value}
                   value={opt.value}
-                  className="rounded-none uppercase tracking-widest text-[10px] py-2.5 font-semibold"
+                  className="rounded-none uppercase tracking-widest text-[10px] py-2.5 font-bold"
                 >
                   {opt.label}
                 </SelectItem>

@@ -46,7 +46,7 @@ export function CategoryPills({
     return (
       <div className="flex gap-2 overflow-x-auto bg-background py-1 scrollbar-hide w-full top-16 z-20">
         <Button
-          variant="outline"
+          variant="default"
           className={`${pillBase} sticky left-0 z-10 bg-background gap-1.5 ${pillInactivo}`}
           onClick={onSelectTodos}
         >

@@ -61,7 +61,7 @@ export function CartCheckoutPublico({
           {/* NOMBRE */}
           <section className="space-y-3 rounded-lg border border-border bg-muted p-4">
             <Label htmlFor="nombre_cliente_publico">
-              Nombre <span className="text-rose-500">*</span>
+              Nombre <span className="text-danger">*</span>
             </Label>
             <Input
               id="nombre_cliente_publico"
@@ -102,7 +102,7 @@ export function CartCheckoutPublico({
               <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
                 <div className="space-y-2">
                   <Label htmlFor="localidad_publica">
-                    Localidad <span className="text-rose-500">*</span>
+                    Localidad <span className="text-danger">*</span>
                   </Label>
                   <Input
                     id="localidad_publica"
@@ -115,7 +115,7 @@ export function CartCheckoutPublico({
 
                 <div className="space-y-2">
                   <Label htmlFor="direccion_publica">
-                    Dirección <span className="text-rose-500">*</span>
+                    Dirección <span className="text-danger">*</span>
                   </Label>
                   <Input
                     id="direccion_publica"
@@ -127,13 +127,13 @@ export function CartCheckoutPublico({
                 </div>
 
                 {envioInfo?.tipo === "LOCAL" && (
-                  <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2.5 text-xs font-medium text-emerald-800">
+                  <div className="rounded-md border border-success/20 bg-success/10 p-2.5 text-xs font-medium text-success">
                     Costo de envío: $
                     {(envioInfo.costo || 0).toLocaleString("es-AR")}
                   </div>
                 )}
                 {envioInfo?.tipo === "LEJOS" && (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs font-medium text-amber-800">
+                  <div className="rounded-md border border-warning/20 bg-warning/10 p-2.5 text-xs font-medium text-warning">
                     {envioInfo.mensaje}
                   </div>
                 )}

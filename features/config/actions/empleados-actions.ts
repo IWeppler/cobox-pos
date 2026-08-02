@@ -33,12 +33,14 @@ export async function actualizarRolEmpleadoAction(
     return { error: "Rol inválido.", success: false };
   }
 
-  const { data: perfilActual, error: perfilError } = await supabase
-    .from("perfiles")
-    .select("rol_id")
-    .eq("id", perfilId)
+  // El rol vive en la membresía: el mismo usuario puede ser ADMIN acá y
+  // VENDEDOR en otro negocio, así que se edita la fila de ESTE negocio.
+  const { data: membresiaActual, error: membresiaError } = await supabase
+    .from("usuarios_negocios")
+    .select("id, rol_id")
+    .eq("usuario_id", perfilId)
     .single();
-  if (perfilError || !perfilActual) {
+  if (membresiaError || !membresiaActual) {
     return { error: "No se encontró el empleado a modificar.", success: false };
   }
 
@@ -46,9 +48,9 @@ export async function actualizarRolEmpleadoAction(
   // no lo es, hay que confirmar que quede al menos otro ADMIN activo.
   // Chequeo server-side autoritativo — el disabled del selector en el
   // cliente es solo UX, no seguridad.
-  if (perfilActual.rol_id === rolAdmin.id && nuevoRolId !== rolAdmin.id) {
+  if (membresiaActual.rol_id === rolAdmin.id && nuevoRolId !== rolAdmin.id) {
     const { count: cantidadAdmins } = await supabase
-      .from("perfiles")
+      .from("usuarios_negocios")
       .select("id", { count: "exact", head: true })
       .eq("rol_id", rolAdmin.id);
 
@@ -71,9 +73,9 @@ export async function actualizarRolEmpleadoAction(
   const rolTextoLegacy = nuevoRol.nombre === "ADMIN" ? "ADMIN" : "VENDEDOR";
 
   const { error: updateError } = await supabase
-    .from("perfiles")
+    .from("usuarios_negocios")
     .update({ rol_id: nuevoRolId, rol: rolTextoLegacy })
-    .eq("id", perfilId);
+    .eq("id", membresiaActual.id);
 
   if (updateError) {
     console.error("[ACTUALIZAR ROL EMPLEADO ERROR]", updateError);

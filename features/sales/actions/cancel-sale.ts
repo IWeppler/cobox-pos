@@ -209,6 +209,32 @@ export async function anularVentaAction(
       }
     }
 
+    // 5.b Devolver los aparatos serializados (IMEI/serie) que salieron en
+    // esta venta. Sin esto la unidad queda 'vendido' para siempre: el stock
+    // de la variante se restaura arriba pero ese IMEI no se puede volver a
+    // elegir en el POS, así que el aparato queda contado y no vendible.
+    // Sigue el mismo motivo que el stock: RESTAURAR_STOCK lo devuelve a la
+    // vitrina, BAJA lo saca de circulación.
+    //
+    // No corta la anulación si falla: para cuando llega acá la venta ya está
+    // ANULADA y la plata ya salió de la caja. Devolver un error dejaría a la
+    // vendedora reintentando sobre una venta ya anulada. Se loguea para
+    // poder corregir la unidad a mano.
+    const { error: unidadesError } = await supabase.rpc(
+      "devolver_unidades_venta",
+      {
+        p_venta_id: ventaId,
+        p_a_stock: motivoDevolucion === "RESTAURAR_STOCK",
+      },
+    );
+
+    if (unidadesError) {
+      console.error(
+        `No se pudieron devolver las unidades serializadas de la venta ${ventaId}:`,
+        unidadesError,
+      );
+    }
+
     // 6. Refrescamos todas las vistas
     revalidatePath("/");
     revalidatePath("/reportes");

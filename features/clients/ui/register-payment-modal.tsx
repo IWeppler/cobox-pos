@@ -124,7 +124,7 @@ export function RegisterPaymentModal({
             {recargoMoraEstimado > 0 ? (
               <div className="text-[10px] text-muted-foreground space-y-0.5">
                 <p>Saldo base: ${saldoBase.toLocaleString("es-AR")}</p>
-                <p className="text-rose-600 dark:text-rose-400 font-semibold">
+                <p className="text-danger font-semibold">
                   Recargo por mora: $
                   {recargoMoraEstimado.toLocaleString("es-AR")}
                 </p>
@@ -169,7 +169,7 @@ export function RegisterPaymentModal({
             </Select>
             {recargoMetodo > 0 ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs dark:border-amber-900/50 dark:bg-amber-950/20">
-                <div className="flex justify-between text-amber-800 dark:text-amber-400">
+                <div className="flex justify-between text-warning">
                   <span>
                     Recargo {metodoElegido?.nombre} (
                     {metodoElegido?.recargo_porcentaje}%)

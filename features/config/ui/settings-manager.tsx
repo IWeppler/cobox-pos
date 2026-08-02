@@ -36,6 +36,8 @@ import { CategoriesPanel } from "@/features/categories/ui/categories-panel";
 import { ClientsPanel } from "@/features/clients/ui/clients-panel";
 import { CajaConfigPanel } from "@/features/clients/ui/caja-panel";
 import { EmpleadosPanel } from "./empleados-panel";
+import type { InvitacionPendiente } from "./invitaciones-panel";
+import { TicketPanel } from "@/features/ticket/TicketPanel";
 
 const SECTIONS = [
   {
@@ -75,7 +77,7 @@ const SECTIONS = [
     description: "Efectivo, transferencias, recargos",
   },
   {
-    id: "ticket",
+    id: "ticketConfig",
     label: "Ticket de Venta",
     icon: Receipt,
     description: "Mensajes y formato del recibo",
@@ -110,6 +112,7 @@ interface SettingsManagerProps {
   roles: Rol[];
   permisos: Permiso[];
   rolPermisos: RolPermiso[];
+  invitaciones?: InvitacionPendiente[];
 }
 
 export function SettingsManager({
@@ -122,6 +125,7 @@ export function SettingsManager({
   roles,
   permisos,
   rolPermisos,
+  invitaciones = [],
 }: Readonly<SettingsManagerProps>) {
   const [activeSection, setActiveSection] = useState("comercio");
 
@@ -137,20 +141,20 @@ export function SettingsManager({
     switch (activeSection) {
       case "comercio":
         return <ConfigForm config={config} />;
+      case "catalogo":
+        return <CatalogPanel config={config} />;
+      case "caja":
+        return <CajaConfigPanel config={config} />;
       case "categoria":
         return <CategoriesPanel categorias={categorias || []} />;
       case "promociones":
         return <PromotionsPanel promociones={promociones} />;
-      case "preferencias":
-        return <PreferencesPanel />;
       case "pagos":
         return <PaymentsPanel pagos={pagos} />;
-      case "catalogo":
-        return <CatalogPanel config={config} />;
-      case "clientes":
-        return <ClientsPanel config={config} />;
-      case "caja":
-        return <CajaConfigPanel config={config} />;
+      case "ticketConfig":
+        // El ticket se configura sobre la misma configuracion_pos del
+        // comercio: no hay una fuente de datos aparte que pasarle.
+        return <TicketPanel config={config} />;
       case "empleados":
         return (
           <EmpleadosPanel
@@ -159,8 +163,13 @@ export function SettingsManager({
             roles={roles}
             permisos={permisos}
             rolPermisos={rolPermisos}
+            invitaciones={invitaciones}
           />
         );
+      case "clientes":
+        return <ClientsPanel config={config} />;
+      case "preferencias":
+        return <PreferencesPanel />;
       default:
         return (
           <div className="bg-card text-card-foreground p-6 rounded-2xl border border-border flex flex-col items-center justify-center py-24 text-center">

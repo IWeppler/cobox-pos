@@ -127,8 +127,9 @@ export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
                 type="number"
                 min="1"
                 max={
-                  variantesDisponibles.find((v) => v.nombre_display === variante)
-                    ?.stock || 1
+                  variantesDisponibles.find(
+                    (v) => v.nombre_display === variante,
+                  )?.stock || 1
                 }
                 placeholder="Ej: 1"
                 required
@@ -144,9 +145,7 @@ export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
                   <SelectValue placeholder="Por que se da de baja?" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Producto seco">
-                    Producto Dañado
-                  </SelectItem>
+                  <SelectItem value="Producto seco">Producto Dañado</SelectItem>
                   <SelectItem value="Plaga/Hongos">
                     Enfermo (Plaga/Hongos)
                   </SelectItem>
@@ -173,7 +172,7 @@ export function BajaModal({ producto, children }: Readonly<BajaModalProps>) {
               <Button
                 type="submit"
                 disabled={isPending || !variante || !motivo}
-                className="bg-amber-600 hover:bg-amber-700 text-white"
+                variant="default"
               >
                 {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Reportar Baja

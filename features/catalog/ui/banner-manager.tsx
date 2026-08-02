@@ -16,12 +16,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
+import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 
 interface BannerManagerProps {
   config: ConfiguracionPOS;
 }
 
 export function BannerManager({ config }: Readonly<BannerManagerProps>) {
+  const negocioId = useNegocioActivo()?.id ?? null;
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
@@ -45,9 +47,15 @@ export function BannerManager({ config }: Readonly<BannerManagerProps>) {
       setIsUploading(true);
       const supabase = createClient();
 
-      // Subimos al bucket 'productos' (aprovechamos el que ya existe) en una carpeta 'banners'
+      // Bucket 'productos' (aprovechamos el que ya existe), bajo la carpeta del
+      // negocio: la policy de storage no deja escribir fuera de ella.
+      if (!negocioId) {
+        toast.error("No hay un negocio activo en esta sesión");
+        return;
+      }
+
       const fileExt = file.name.split(".").pop();
-      const fileName = `banners/${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+      const fileName = `${negocioId}/banners/${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("productos")

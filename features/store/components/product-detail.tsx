@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { useCartStore } from "@/shared/store/cart-store";
+import { useRutaCatalogo } from "@/shared/lib/use-negocio";
 import { toast } from "sonner";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { resolverAtributosVariante } from "@/entities/productos/lib/build-propiedades-filtro";
@@ -31,6 +32,7 @@ export function ProductDetail({
   producto,
   config,
 }: Readonly<ProductDetailProps>) {
+  const rutaDelCatalogo = useRutaCatalogo();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [descOpen, setDescOpen] = useState(false);
   const mobileGalleryRef = useRef<HTMLDivElement>(null);
@@ -119,7 +121,7 @@ export function ProductDetail({
   );
   const estaAgotado = stockTotal === 0;
 
-  // 🚀 2. PARSER DE VARIANTES: Puro JSONB Directo
+  // 2. PARSER DE VARIANTES: Puro JSONB Directo
   const parsedVariants = useMemo(() => {
     const props: Record<string, Set<string>> = {};
 
@@ -153,7 +155,7 @@ export function ProductDetail({
 
   const isUnico = Object.keys(parsedVariants.properties).length === 0;
 
-  // 🚀 3. LÓGICA DE DISPONIBILIDAD CRUZADA (JSONB Nativo)
+  //  3. LÓGICA DE DISPONIBILIDAD CRUZADA (JSONB Nativo)
   const isOptionAvailable = (propName: string, val: string) => {
     const testSelections = { ...selecciones, [propName]: val };
 
@@ -248,7 +250,7 @@ export function ProductDetail({
         {/* Breadcrumb Oculto en Mobile, visible en Desktop */}
         <nav className="hidden md:flex items-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-6">
           <Link
-            href="/store"
+            href={rutaDelCatalogo}
             className="hover:text-foreground transition-colors"
           >
             Catálogo
@@ -257,7 +259,7 @@ export function ProductDetail({
           {producto.tipo && (
             <>
               <Link
-                href={`/store?q=${producto.tipo}`}
+                href={`${rutaDelCatalogo}?q=${producto.tipo}`}
                 className="hover:text-foreground transition-colors"
               >
                 {producto.tipo}
@@ -272,7 +274,7 @@ export function ProductDetail({
 
         {/* Breadcrumb visible solo en Mobile */}
         <nav className="flex md:hidden items-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground my-4">
-          <Link href="/store" className="hover:text-foreground">
+          <Link href={rutaDelCatalogo} className="hover:text-foreground">
             Catálogo
           </Link>
           <span className="mx-2 opacity-50">/</span>
@@ -389,7 +391,8 @@ export function ProductDetail({
             </div>
           )}
 
-          <div className="relative aspect-4/5 max-w-90 lg:max-w-140 xl:max-w-180 w-full bg-card flex items-center justify-center group overflow-hidden border border-border/60">
+          <div className="relative aspect-4/5 w-full md:w-[400px] lg:w-[500px] xl:w-[600px] bg-card flex items-center justify-center group overflow-hidden border border-border/60 shrink-0">
+            {" "}
             {imagenes.length > 0 ? (
               <Image
                 src={imagenes[currentImageIndex]}
@@ -456,7 +459,6 @@ export function ProductDetail({
                             <button
                               key={val}
                               type="button"
-                              disabled={!hasStock}
                               onClick={() => {
                                 setSelecciones((prev) => ({
                                   ...prev,
@@ -464,12 +466,12 @@ export function ProductDetail({
                                 }));
                                 setErrorVariante(false);
                               }}
-                              className={`min-w-16 px-4 py-3 text-[10px] sm:text-xs font-semibold uppercase transition-all border ${
+                              className={`min-w-16 px-4 py-3 text-[10px] sm:text-xs font-semibold uppercase transition-all border cursor-pointer ${
                                 isSelected
-                                  ? "border-foreground bg-foreground text-background cursor-pointer"
+                                  ? "border-foreground bg-foreground text-background"
                                   : hasStock
-                                    ? "border-border/60 bg-transparent text-foreground hover:border-foreground cursor-pointer"
-                                    : "border-border/30 bg-transparent text-muted-foreground opacity-40 cursor-not-allowed line-through decoration-muted-foreground/40"
+                                    ? "border-border/60 bg-transparent text-foreground hover:border-foreground"
+                                    : "border-border/30 bg-transparent text-muted-foreground opacity-40 line-through decoration-muted-foreground/40"
                               }`}
                             >
                               {val}
@@ -482,7 +484,7 @@ export function ProductDetail({
                 )}
 
                 {errorVariante && (
-                  <p className="text-rose-600 text-xs font-medium tracking-wide flex items-center animate-in fade-in slide-in-from-top-1">
+                  <p className="text-danger text-xs font-medium tracking-wide flex items-center animate-in fade-in slide-in-from-top-1">
                     <AlertCircle className="w-3.5 h-3.5 mr-1.5" /> Faltan
                     opciones por seleccionar
                   </p>

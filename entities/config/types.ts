@@ -2,7 +2,7 @@ export type RecargoMoraTipo = "NINGUNO" | "MONTO_FIJO" | "PORCENTAJE";
 
 /** Rubro del comercio. Decide qué columnas muestra Inventario: indumentaria
  * razona por talle/color (N variantes), electro por modelo/EAN. */
-export type Rubro = "indumentaria" | "electro";
+export type Rubro = "indumentaria" | "electro" | "alimentos" | "farmacia" | "ferreteria" | "quioscos" | "otros";
 
 export const RUBRO_DEFAULT: Rubro = "indumentaria";
 
@@ -16,6 +16,12 @@ export interface ConfiguracionPOS {
   id: string;
   posName: string;
   posLogo: string;
+  razon_social: string;
+  cuit: string;
+  condicion_iva: string;
+  inicio_actividades: string;
+  provincia: string;
+  localidad: string;
   whatsapp: string;
   direccion: string;
   mensaje_ticket: string;

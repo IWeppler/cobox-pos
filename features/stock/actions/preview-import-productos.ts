@@ -15,18 +15,6 @@ export interface PreviewImportResponse {
   plan: PlanImport | null;
 }
 
-/**
- * Resuelve el archivo contra el catálogo real y devuelve el plan a
- * confirmar. NO escribe nada: es la pantalla previa donde se ven los IMEI
- * repetidos y las categorías que no existen ANTES de tocar stock.
- *
- * El plan que devuelve es informativo para la UI, no un contrato de
- * ejecución: confirmarImportProductosAction vuelve a resolver todo contra
- * la base al momento de escribir. Entre el preview y la confirmación otra
- * pestaña puede haber creado el mismo producto, y el server no puede
- * confiar en lo que le manda el cliente — mismo criterio que create-sale.ts
- * con los precios.
- */
 export async function previewImportProductosAction(
   filas: FilaImport[],
 ): Promise<PreviewImportResponse> {
@@ -43,7 +31,20 @@ export async function previewImportProductosAction(
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const catalogo = await cargarCatalogoActual(supabase, filas);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado", plan: null };
+
+  // Negocio ACTIVO de la sesión: perfiles.negocio_id quedó deprecada y es NULL
+  // para todo usuario invitado.
+  const { data: negocioId } = await supabase.rpc("negocio_actual");
+  if (!negocioId) {
+    return { error: "No hay un negocio activo en esta sesión", plan: null };
+  }
+
+  // Pasamos el negocioId para cargar únicamente el catálogo de este tenant
+  const catalogo = await cargarCatalogoActual(supabase, filas, negocioId);
   if (!catalogo) {
     return {
       error: "No se pudo leer el catálogo para comparar. Probá de nuevo.",

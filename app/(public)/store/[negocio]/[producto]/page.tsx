@@ -6,6 +6,8 @@ import { ProductDetail } from "@/features/store/components/product-detail";
 import { RelatedProducts } from "@/features/store/components/related-products";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
+import { resolveTenant } from "@/shared/lib/tenant";
+import { urlDeCatalogo } from "@/shared/lib/dominios";
 import { getConfiguracionAction } from "@/features/config/actions/config-actions";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { obtenerPrimeraImagen } from "@/features/stock/lib/stock-product-utils";
@@ -14,7 +16,7 @@ import type { Metadata } from "next";
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ negocio: string; producto: string }>;
 }
 
 async function resolverBaseUrl() {
@@ -27,7 +29,10 @@ async function resolverBaseUrl() {
 export async function generateMetadata({
   params,
 }: Readonly<PageProps>): Promise<Metadata> {
-  const { slug } = await params;
+  const { negocio, producto: slug } = await params;
+  const headersList = await headers();
+  // Valida el tenant antes de tocar datos: si la tienda no existe, 404.
+  await resolveTenant({ hostname: headersList.get("host"), slug: negocio });
 
   const [{ data: producto }, { data: config }] = await Promise.all([
     getProductoBySlugAction(slug),
@@ -44,7 +49,7 @@ export async function generateMetadata({
     : `${precioFmt}. Comprá ${producto.nombre} en ${nombreComercio}.`;
 
   const baseUrl = await resolverBaseUrl();
-  const url = `${baseUrl}/store/${producto.slug}`;
+  const url = urlDeCatalogo(negocio, producto.slug ?? undefined);
   // producto.imagen_url viene como JSON.stringify de un array
   // (`["https://.../foo.webp"]`), no un string plano — pasarlo tal cual a
   // openGraph.images rompe la URL: Next no la reconoce como absoluta,
@@ -67,7 +72,9 @@ export async function generateMetadata({
 }
 
 export default async function ProductoPage({ params }: Readonly<PageProps>) {
-  const { slug } = await params;
+  const { negocio, producto: slug } = await params;
+  const headersDelRequest = await headers();
+  await resolveTenant({ hostname: headersDelRequest.get("host"), slug: negocio });
 
   // Hacemos fetch en paralelo del producto actual, TODO el catálogo (para buscar similares) y la configuración.
   const [productoRes, catalogoRes, configRes] = await Promise.all([

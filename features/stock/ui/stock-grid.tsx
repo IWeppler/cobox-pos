@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import type { ProductoIndice } from "@/entities/productos/types";
 import { Image as ImageIcon } from "lucide-react";
 import { formatearMoneda } from "@/shared/utils/formatters";
@@ -42,7 +43,9 @@ export function StockGrid({
   categorias,
   rubro,
 }: Readonly<StockGridProps>) {
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  // El link del catálogo necesita el negocio, no solo el origen: cada
+  // comercio tiene su propia tienda.
+  const slugNegocio = useSlugNegocioActivo() ?? "";
 
   if (productos.length === 0) {
     return (
@@ -67,7 +70,7 @@ export function StockGrid({
           obtenerPrimeraImagen(producto.thumbnail_url) ??
           obtenerPrimeraImagen(producto.imagen_url);
         const urlProducto = producto.slug
-          ? construirUrlProducto(baseUrl, producto.slug)
+          ? construirUrlProducto(slugNegocio, producto.slug)
           : null;
         const compartirDeshabilitado =
           !urlProducto ||

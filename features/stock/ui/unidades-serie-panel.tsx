@@ -79,6 +79,11 @@ export function UnidadesSeriePanel({
       <div className="max-h-48 overflow-y-auto divide-y divide-border/60">
         {unidades.map((unidad) => {
           const vendida = unidad.estado === "vendido";
+          // Fail-closed: cualquier estado que no sea 'disponible' se muestra
+          // como fuera de stock. Si mañana aparece un estado nuevo, el panel
+          // no lo pinta de verde como si se pudiera vender.
+          const fueraDeStock = unidad.estado !== "disponible";
+          const dadaDeBaja = unidad.estado === "baja";
           return (
             <div
               key={unidad.id}
@@ -86,23 +91,27 @@ export function UnidadesSeriePanel({
             >
               <span
                 className={`font-mono text-xs ${
-                  vendida ? "text-muted-foreground line-through" : ""
+                  fueraDeStock ? "text-muted-foreground line-through" : ""
                 }`}
               >
                 {unidad.imei}
               </span>
               <span
                 className={`text-[10px] font-bold uppercase tracking-widest shrink-0 ${
-                  vendida
-                    ? "text-muted-foreground"
-                    : "text-emerald-700 dark:text-emerald-400"
+                  dadaDeBaja
+                    ? "text-danger"
+                    : fueraDeStock
+                      ? "text-muted-foreground"
+                      : "text-success"
                 }`}
               >
-                {vendida
-                  ? unidad.fechaVenta
-                    ? `Vendido ${new Date(unidad.fechaVenta).toLocaleDateString("es-AR")}`
-                    : "Vendido"
-                  : "Disponible"}
+                {dadaDeBaja
+                  ? "De baja"
+                  : vendida
+                    ? unidad.fechaVenta
+                      ? `Vendido ${new Date(unidad.fechaVenta).toLocaleDateString("es-AR")}`
+                      : "Vendido"
+                    : "Disponible"}
               </span>
             </div>
           );

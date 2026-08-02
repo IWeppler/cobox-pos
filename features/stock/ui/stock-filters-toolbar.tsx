@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -100,7 +101,9 @@ export function StockFiltersToolbar({
   nombreComercio = "Tienda",
   resultadosFueraDeCategoria = 0,
 }: Readonly<StockFiltersToolbarProps>) {
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  // El link del catálogo necesita el negocio, no solo el origen: cada
+  // comercio tiene su propia tienda.
+  const slugNegocio = useSlugNegocioActivo() ?? "";
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   // El sheet de carga manual se monta UNA vez y se abre desde dos botones
   // distintos según breakpoint (barra en desktop, dropdown en mobile).
@@ -349,7 +352,7 @@ export function StockFiltersToolbar({
                         variant="ghost"
                         onClick={() => setIsImportModalOpen(true)}
                       >
-                        <PackagePlus className="w-4 h-4 mr-2 text-emerald-600 shrink-0" />
+                        <PackagePlus className="w-4 h-4 mr-2 text-success shrink-0" />
                         <span>Ingresar Remito</span>
                       </Button>
                       <Button
@@ -357,18 +360,18 @@ export function StockFiltersToolbar({
                         variant="ghost"
                         onClick={() => setIsImportProductosOpen(true)}
                       >
-                        <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600 shrink-0" />
+                        <FileSpreadsheet className="w-4 h-4 mr-2 text-success shrink-0" />
                         <span>Importar Planilla</span>
                       </Button>
                       <DropdownMenuSeparator className="my-1 bg-border/60" />
                       <Link href="/stock/bajas" className="w-full block">
-                        <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-amber-50 rounded-md hover:text-amber-800 transition-colors">
-                          <ClipboardList className="w-4 h-4 mr-2 text-amber-600 shrink-0" />
+                        <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium text-foreground hover:bg-warning/10 rounded-md hover:text-warning/90 transition-colors">
+                          <ClipboardList className="w-4 h-4 mr-2 text-warning shrink-0" />
                           Bajas de Inventario
                         </button>
                       </Link>
                       <Link href="/stock/movimientos" className="w-full block">
-                        <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors">
+                        <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium text-foreground hover:bg-muted rounded-md transition-colors">
                           <ArrowRightLeft className="w-4 h-4 mr-2 text-primary shrink-0" />
                           Movimientos Stock
                         </button>
@@ -406,7 +409,7 @@ export function StockFiltersToolbar({
         });
 
         return (
-          <div className="flex w-full min-w-0 items-start gap-2 overflow-hidden mt-4 md:mt-2">
+          <div className="flex w-full min-w-0 items-start gap-2 overflow-hidden mt-4 md:mt-2 px-2">
             <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-2 scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] px-1 sm:px-0">
               {padreEnVista ? (
                 <>
@@ -503,7 +506,7 @@ export function StockFiltersToolbar({
 
             {slugCategoriaActiva && (
               <ShareButton
-                url={construirUrlCategoria(baseUrl, slugCategoriaActiva)}
+                url={construirUrlCategoria(slugNegocio, slugCategoriaActiva)}
                 title={`${nombreCategoriaActiva} | ${nombreComercio}`}
                 text={armarMensajeCategoria(nombreCategoriaActiva || "")}
                 label="Compartir esta categoría"

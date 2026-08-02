@@ -260,7 +260,7 @@ export function CatalogPanel({ config }: Readonly<CatalogPanelProps>) {
 
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-foreground uppercase tracking-widest flex items-center gap-1.5">
-                <FaFacebook className="w-3.5 h-3.5 text-blue-600" />
+                <FaFacebook className="w-3.5 h-3.5 text-info" />
                 Link de Facebook
               </Label>
               <Input

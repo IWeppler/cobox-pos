@@ -1,7 +1,10 @@
 import { Trophy, RotateCcw, X } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
-import type { VendedorResumen, ReporteVendedoresData } from "@/entities/reportes/types";
+import type {
+  VendedorResumen,
+  ReporteVendedoresData,
+} from "@/entities/reportes/types";
 
 interface VendedorDetallePanelProps {
   vendedor: VendedorResumen;
@@ -20,7 +23,12 @@ export function VendedorDetallePanel({
         <h4 className="text-base font-semibold text-foreground">
           Detalle de {vendedor.nombre}
         </h4>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={onClose}
+        >
           <X className="w-4 h-4" />
         </Button>
       </div>
@@ -28,7 +36,7 @@ export function VendedorDetallePanel({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-3">
           <h5 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-amber-500" /> Top 5 productos
+            <Trophy className="w-4 h-4 text-warning" /> Top 5 productos
           </h5>
           {detalle.topProductos.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -58,7 +66,7 @@ export function VendedorDetallePanel({
 
         <div className="space-y-3">
           <h5 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <RotateCcw className="w-4 h-4 text-rose-500" /> Ventas anuladas
+            <RotateCcw className="w-4 h-4 text-danger" /> Ventas anuladas
           </h5>
           {detalle.anuladas.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -77,7 +85,7 @@ export function VendedorDetallePanel({
                       {formatearFechaHora(v.fecha)}
                     </p>
                   </div>
-                  <span className="text-rose-600 font-medium shrink-0 pl-2">
+                  <span className="text-danger font-medium shrink-0 pl-2">
                     {formatearMoneda(v.monto)}
                   </span>
                 </div>

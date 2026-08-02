@@ -64,29 +64,38 @@ export function BarChartVertical({
     >
       {/* Y axis */}
       <div className="relative h-[calc(100%-var(--marginTop)-var(--marginBottom))] w-[var(--marginLeft)] translate-y-[var(--marginTop)] overflow-visible">
-        {yScale
-          .ticks(6)
-          .map((value, i) => (
-            <div
-              key={i}
-              style={{ top: `${yScale(value)}%` }}
-              className="absolute text-xs tabular-nums -translate-y-1/2 text-muted-foreground w-full text-right pr-2"
-            >
-              {formatValue(value)}
-            </div>
-          ))}
+        {yScale.ticks(6).map((value, i) => (
+          <div
+            key={i}
+            style={{ top: `${yScale(value)}%` }}
+            className="absolute text-xs tabular-nums -translate-y-1/2 text-muted-foreground w-full text-right pr-2"
+          >
+            {formatValue(value)}
+          </div>
+        ))}
       </div>
 
       {/* Chart area */}
       <div className="absolute inset-0 h-[calc(100%-var(--marginTop)-var(--marginBottom))] w-[calc(100%-var(--marginLeft)-var(--marginRight))] translate-x-[var(--marginLeft)] translate-y-[var(--marginTop)] overflow-visible">
-        <svg viewBox="0 0 100 100" className="overflow-visible w-full h-full" preserveAspectRatio="none">
+        <svg
+          viewBox="0 0 100 100"
+          className="overflow-visible w-full h-full"
+          preserveAspectRatio="none"
+        >
           {yScale.ticks(6).map((value, i) => (
             <g
               key={i}
               transform={`translate(0,${yScale(value)})`}
               className="text-border"
             >
-              <line x1={0} x2={100} stroke="currentColor" strokeDasharray="6,5" strokeWidth={0.5} vectorEffect="non-scaling-stroke" />
+              <line
+                x1={0}
+                x2={100}
+                stroke="currentColor"
+                strokeDasharray="6,5"
+                strokeWidth={0.5}
+                vectorEffect="non-scaling-stroke"
+              />
             </g>
           ))}
 

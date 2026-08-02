@@ -67,7 +67,7 @@ export function VendedoresTablaResumen({
               </TableCell>
               <TableCell className="text-right">
                 {r.cantidadAnuladas > 0 ? (
-                  <span className="text-rose-600 font-medium">
+                  <span className="text-danger font-medium">
                     {r.cantidadAnuladas}
                   </span>
                 ) : (

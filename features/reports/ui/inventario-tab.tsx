@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
-import { Badge } from "@/shared/ui/badge";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { TabsContent } from "@/shared/ui/tabs";
 import {
@@ -39,7 +38,7 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
         <Card className="border-border shadow-none lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-border/40">
             <CardTitle className="text-lg font-medium flex items-center gap-2">
-              <Package className="w-5 h-5 text-orange-500" />
+              <Package className="w-5 h-5 text-warning" />
               Capital en Inventario
             </CardTitle>
           </CardHeader>
@@ -72,14 +71,14 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
               </div>
 
               {/* Ganancia Potencial */}
-              <div className="bg-card p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/50 flex flex-col justify-center">
-                <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
+              <div className="bg-card p-4 rounded-xl border border-success/20 flex flex-col justify-center">
+                <p className="text-xs text-success font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
                   Ganancia Potencial
                 </p>
-                <p className="text-2xl font-semibold text-emerald-600 dark:text-emerald-500">
+                <p className="text-2xl font-semibold text-success">
                   +{formatearMoneda(metrics.stockGananciaPotencial)}
                 </p>
-                <p className="text-xs text-emerald-700/70 dark:text-emerald-500/70 font-medium mt-1">
+                <p className="text-xs text-success font-medium mt-1">
                   Rentabilidad estipulada
                 </p>
               </div>
@@ -94,7 +93,7 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
               <CardTitle className="text-sm font-semibold text-muted-foreground">
                 Stock Físico
               </CardTitle>
-              <Tags className="w-4 h-4 text-blue-500" />
+              <Tags className="w-4 h-4 text-chart-1" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-semibold text-foreground">
@@ -107,26 +106,26 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
           </Card>
 
           <Card
-            className={`shadow-none flex-1 flex flex-col justify-center ${metrics.productosCriticos > 0 ? "border-rose-200 bg-rose-50 dark:bg-destructive/10" : "border-border"}`}
+            className={`shadow-none flex-1 flex flex-col justify-center ${metrics.productosCriticos > 0 ? "border-danger/20 bg-danger/10" : "border-border"}`}
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle
-                className={`text-sm font-semibold ${metrics.productosCriticos > 0 ? "text-rose-800 dark:text-destructive" : "text-muted-foreground"}`}
+                className={`text-sm font-semibold ${metrics.productosCriticos > 0 ? "text-danger" : "text-muted-foreground"}`}
               >
                 Alertas de Stock
               </CardTitle>
               <AlertTriangle
-                className={`w-4 h-4 ${metrics.productosCriticos > 0 ? "text-rose-600 dark:text-destructive" : "text-muted-foreground"}`}
+                className={`w-4 h-4 ${metrics.productosCriticos > 0 ? "text-danger" : "text-muted-foreground"}`}
               />
             </CardHeader>
             <CardContent>
               <div
-                className={`text-3xl font-semibold ${metrics.productosCriticos > 0 ? "text-rose-700 dark:text-destructive" : "text-foreground"}`}
+                className={`text-3xl font-semibold ${metrics.productosCriticos > 0 ? "text-danger" : "text-foreground"}`}
               >
                 {metrics.productosCriticos}
               </div>
               <p
-                className={`text-xs mt-1 ${metrics.productosCriticos > 0 ? "text-rose-600 font-semibold dark:text-destructive" : "text-muted-foreground"}`}
+                className={`text-xs mt-1 ${metrics.productosCriticos > 0 ? "text-danger font-semibold" : "text-muted-foreground"}`}
               >
                 Productos en nivel crítico
               </p>
@@ -143,7 +142,7 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
         <Card className="border-border shadow-none flex flex-col">
           <CardHeader className="border-b border-border/40 pb-4">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Flame className="w-5 h-5 text-orange-500" /> Mayor Rotación
+              <Flame className="w-5 h-5 text-warning" /> Mayor Rotación
               (Unidades)
             </CardTitle>
           </CardHeader>
@@ -183,7 +182,7 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
         <Card className="border-border shadow-none flex flex-col">
           <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 gap-4 border-b border-border/40">
             <CardTitle className="text-lg flex items-center gap-2 text-slate-600 dark:text-slate-300 shrink-0">
-              <Clock className="w-5 h-5 text-blue-500" /> Stock sin movimiento
+              <Clock className="w-5 h-5 text-chart-1" /> Stock sin movimiento
             </CardTitle>
 
             {/* SELECTOR DE VENTANA DE TIEMPO */}
@@ -216,21 +215,18 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
                       <span className="font-medium text-sm text-foreground truncate max-w-[200px] sm:max-w-xs pr-2">
                         {producto.nombre}
                       </span>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] font-bold text-rose-600 bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900 shrink-0 shadow-none uppercase tracking-wider"
-                      >
+                      <p className="text-[10px] font-semibold text-danger shrink-0 shadow-none uppercase">
                         {producto.diasSinVender === 9999
                           ? "Nunca se vendió"
                           : `Hace ${producto.diasSinVender} días`}
-                      </Badge>
+                      </p>
                     </div>
                   ))}
                 </div>
               </ScrollArea>
             ) : (
               <div className="p-12 text-center flex flex-col items-center justify-center text-sm text-muted-foreground h-full min-h-[280px]">
-                <TrendingUp className="w-8 h-8 text-emerald-500 mb-3 opacity-50" />
+                <TrendingUp className="w-8 h-8 text-success mb-3 opacity-50" />
                 <p className="font-semibold text-foreground text-base">
                   ¡Excelente rotación!
                 </p>
@@ -248,7 +244,7 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
       {/* ======================= */}
       <Card className="border-border shadow-none">
         <CardHeader className="bg-muted/20 border-b border-border py-4">
-          <CardTitle className="text-base text-rose-800 dark:text-destructive flex items-center gap-2">
+          <CardTitle className="text-base text-danger flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" /> Stock Crítico Detallado (≤ 3
             unidades)
           </CardTitle>
@@ -287,7 +283,7 @@ export function InventarioTab({ metrics }: Readonly<InventarioTabProps>) {
                     <td className="px-5 py-3 text-muted-foreground text-xs font-medium">
                       {item.variante}
                     </td>
-                    <td className="px-5 py-3 text-right font-black text-rose-600 dark:text-rose-500">
+                    <td className="px-5 py-3 text-right font-black text-danger">
                       {item.cantidad} u.
                     </td>
                   </tr>

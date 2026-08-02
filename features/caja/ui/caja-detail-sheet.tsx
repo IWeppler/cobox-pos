@@ -82,7 +82,9 @@ export function CajaDetailSheet({
         const egresos = res.data.egresos as EgresoCaja[];
 
         const ventasMapeadas: MovimientoDetalle[] = ventas.flatMap((v) => {
-          const primerProducto = getSupabaseRelation(v.ventas_items?.[0]?.producto);
+          const primerProducto = getSupabaseRelation(
+            v.ventas_items?.[0]?.producto,
+          );
           const itemsExtra = (v.ventas_items?.length || 1) - 1;
           const conceptoNombre = primerProducto?.nombre
             ? `${primerProducto.nombre} ${itemsExtra > 0 ? `+ ${itemsExtra} art.` : ""}`
@@ -224,20 +226,20 @@ export function CajaDetailSheet({
           <div className="bg-card p-5 rounded-2xl border border-border mb-4">
             <div className="flex justify-between items-start mb-4">
               <span className="text-sm text-foreground font-semibold flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-emerald-600" /> Arqueo Físico
+                <Wallet className="w-4 h-4 text-success" /> Arqueo Físico
                 (Cajón)
               </span>
               {isAbierto ? (
                 <Badge
                   variant="outline"
-                  className="bg-emerald-50 text-emerald-700 border-emerald-200"
+                  className="bg-success/10 text-success border-success/20"
                 >
                   En Curso
                 </Badge>
               ) : (
                 <Badge
                   variant="outline"
-                  className="bg-neutral-100 text-neutral-600 border-neutral-200"
+                  className="bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20"
                 >
                   Finalizado
                 </Badge>
@@ -251,15 +253,15 @@ export function CajaDetailSheet({
                     Diferencia de Efectivo
                   </p>
                   {diferencia === 0 ? (
-                    <span className="text-xl font-semibold text-emerald-700 dark:text-emerald-400">
+                    <span className="text-xl font-semibold text-success">
                       Caja OK
                     </span>
                   ) : diferencia < 0 ? (
-                    <span className="text-xl font-semibold text-rose-600">
+                    <span className="text-xl font-semibold text-danger">
                       Faltante: {formatearMoneda(diferencia)}
                     </span>
                   ) : (
-                    <span className="text-xl font-semibold text-accent-blue">
+                    <span className="text-xl font-semibold text-info">
                       Sobrante: +{formatearMoneda(diferencia)}
                     </span>
                   )}
@@ -277,7 +279,7 @@ export function CajaDetailSheet({
               <div className="flex justify-between items-center text-muted-foreground">
                 <span>Efectivo Esperado (Sistema):</span>
                 <span
-                  className={`font-medium ${esperadoNegativo ? "text-rose-600" : "text-foreground"}`}
+                  className={`font-medium ${esperadoNegativo ? "text-danger" : "text-foreground"}`}
                 >
                   {isAbierto ? "-" : formatearMoneda(esperado)}
                 </span>
@@ -289,9 +291,9 @@ export function CajaDetailSheet({
                 </span>
               </div>
               {esperadoNegativo && (
-                <p className="text-xs text-rose-600 font-semibold flex items-center gap-1.5 pt-1">
-                  ⚠ Revisar: el esperado dio negativo. Puede haber egresos
-                  mal atribuidos a este turno.
+                <p className="text-xs text-danger font-semibold flex items-center gap-1.5 pt-1">
+                  ⚠ Revisar: el esperado dio negativo. Puede haber egresos mal
+                  atribuidos a este turno.
                 </p>
               )}
             </div>
@@ -301,7 +303,7 @@ export function CajaDetailSheet({
           <div className="bg-card p-5 rounded-2xl border border-border mb-6">
             <div className="flex justify-between items-start mb-4 border-b border-border/50 pb-3">
               <span className="text-sm text-foreground font-semibold flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-blue-600" />
+                <CreditCard className="w-4 h-4 text-info" />
                 Cobros Digitales
               </span>
             </div>
@@ -351,17 +353,17 @@ export function CajaDetailSheet({
                   >
                     <div className="flex items-center gap-3">
                       {mov.origen === "VENTA" && (
-                        <div className="p-1 bg-emerald-50 text-emerald-600 rounded-sm shrink-0 border border-emerald-100">
-                          <ShoppingBag className="w-3 h-3" />
+                        <div className="text-success shrink-0">
+                          <ShoppingBag className="w-4 h-4" />
                         </div>
                       )}
                       {mov.origen === "COBRO_DEUDA" && (
-                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg shrink-0 border border-indigo-100">
+                        <div className="text-info shrink-0">
                           <BookUser className="w-4 h-4" />
                         </div>
                       )}
                       {mov.origen === "EGRESO" && (
-                        <div className="p-2 bg-rose-50 text-rose-600 rounded-lg shrink-0 border border-rose-100">
+                        <div className="text-danger shrink-0">
                           <TrendingDown className="w-4 h-4" />
                         </div>
                       )}
@@ -386,12 +388,12 @@ export function CajaDetailSheet({
                         {formatearMoneda(mov.monto)}
                       </div>
                       {mov.recargo > 0 && (
-                        <div className="text-xs text-amber-600 font-medium leading-none mt-1">
+                        <div className="text-xs text-warning font-medium leading-none mt-1">
                           incl. {formatearMoneda(mov.recargo)} de recargo
                         </div>
                       )}
                       {mov.comision > 0 && (
-                        <div className="text-xs text-rose-500 font-medium leading-none mt-1">
+                        <div className="text-xs text-danger font-medium leading-none mt-1">
                           -{formatearMoneda(mov.comision)}
                         </div>
                       )}

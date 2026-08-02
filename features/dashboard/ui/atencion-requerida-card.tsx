@@ -66,12 +66,12 @@ export function AtencionRequeridaCard({
               {quiebres.slice(0, 3).map((q) => (
                 <div
                   key={q.productoId}
-                  className="flex items-center justify-between gap-2 text-xs bg-rose-50 border border-rose-200 dark:bg-rose-950/30 dark:border-rose-900 rounded-lg px-2.5 py-1.5"
+                  className="flex items-center justify-between gap-2 text-xs bg-danger/10 border border-danger/20rounded-lg px-2.5 py-1.5"
                 >
                   <span className="truncate text-foreground font-medium" title={q.nombre}>
                     {q.nombre}
                   </span>
-                  <span className="shrink-0 text-[10px] font-semibold uppercase text-rose-700 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/40 px-1.5 py-0.5 rounded">
+                  <span className="shrink-0 text-[10px] font-semibold uppercase text-danger bg-danger/10 px-1.5 py-0.5 rounded">
                     Quiebre · {q.unidadesVendidas} u. vendidas
                   </span>
                 </div>
@@ -84,7 +84,7 @@ export function AtencionRequeridaCard({
                   <span className="truncate text-foreground" title={`${s.nombre} · ${s.variante}`}>
                     {s.nombre} · {s.variante}
                   </span>
-                  <span className="shrink-0 text-amber-700 dark:text-amber-400 font-medium">
+                  <span className="shrink-0 text-warning font-medium">
                     {s.cantidad} u.
                   </span>
                 </div>
@@ -128,7 +128,7 @@ export function AtencionRequeridaCard({
                     </p>
                   </div>
                   {r.vencida && (
-                    <span className="shrink-0 text-amber-700 dark:text-amber-400 font-medium">
+                    <span className="shrink-0 text-warning font-medium">
                       +24h
                     </span>
                   )}

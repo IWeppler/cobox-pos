@@ -19,6 +19,9 @@ interface CartStepItemsProps {
   variantesSerializadas?: Set<string>;
   /** IMEI ya elegido por varianteId, para mostrarlo en la línea. */
   imeiPorVariante?: Record<string, string>;
+  /** Abre el selector de aparato desde la línea. Sin esto el badge es
+   * informativo: en el catálogo público no hay nada que elegir. */
+  onElegirUnidad?: () => void;
 }
 
 export function CartStepItems({
@@ -30,6 +33,7 @@ export function CartStepItems({
   continueLabel = "Continuar al Pago",
   variantesSerializadas,
   imeiPorVariante,
+  onElegirUnidad,
 }: Readonly<CartStepItemsProps>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
@@ -74,20 +78,30 @@ export function CartStepItems({
                           {item.variante}
                         </p>
                         {/* Producto serializado: hasta que no se elija el
-                            aparato, la venta no se puede confirmar. */}
+                            aparato, la venta no se puede confirmar. El badge
+                            es el acceso al selector — sin esto la vendedora
+                            lee "requiere elegir unidad" y no tiene dónde
+                            elegirla hasta el paso de pago. */}
                         {item.varianteId &&
                           variantesSerializadas?.has(item.varianteId) && (
-                            <p
+                            <button
+                              type="button"
+                              onClick={onElegirUnidad}
+                              disabled={!onElegirUnidad}
                               className={`mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest ${
                                 imeiPorVariante?.[item.varianteId]
-                                  ? "text-emerald-700 dark:text-emerald-400"
-                                  : "text-amber-600"
+                                  ? "text-success"
+                                  : "text-warning"
+                              } ${
+                                onElegirUnidad
+                                  ? "underline underline-offset-2 hover:opacity-70"
+                                  : "cursor-default"
                               }`}
                             >
                               <Barcode className="h-3 w-3 shrink-0" />
                               {imeiPorVariante?.[item.varianteId] ??
-                                "Requiere elegir unidad"}
-                            </p>
+                                "Elegir unidad (IMEI)"}
+                            </button>
                           )}
                       </div>
                       <button

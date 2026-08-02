@@ -204,14 +204,14 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
                 className={`bg-card border border-border rounded-2xl p-5 space-y-6 transition-opacity ${!formData.cc_activas ? "opacity-50 pointer-events-none" : ""}`}
               >
                 <h3 className="font-bold text-foreground flex items-center gap-2 border-b border-border/50 pb-3">
-                  <TrendingUp className="w-4 h-4 text-emerald-600" /> Reglas
+                  <TrendingUp className="w-4 h-4 text-success" /> Reglas
                   Financieras
                 </h3>
 
                 <div className="space-y-3">
                   <div className="space-y-0.5">
                     <Label className="text-sm font-semibold flex items-center gap-1.5">
-                      <Percent className="w-3.5 h-3.5 text-rose-500" /> Recargo
+                      <Percent className="w-3.5 h-3.5 text-danger" /> Recargo
                       por Financiación (%)
                     </Label>
                     <p className="text-xs text-muted-foreground">
@@ -247,7 +247,7 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
                 <div className="space-y-3">
                   <div className="space-y-0.5">
                     <Label className="text-sm font-semibold flex items-center gap-1.5">
-                      <Wallet className="w-3.5 h-3.5 text-blue-500" /> Entrega
+                      <Wallet className="w-3.5 h-3.5 text-info" /> Entrega
                       Mínima (%)
                     </Label>
                     <p className="text-xs text-muted-foreground">
@@ -304,7 +304,7 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
                 <div className="space-y-3 pt-2 border-t border-border/50">
                   <div className="space-y-0.5">
                     <Label className="text-sm font-semibold flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-orange-500" /> Plazo de
+                      <Clock className="w-3.5 h-3.5 text-warning" /> Plazo de
                       Vencimiento de Deuda
                     </Label>
                     <p className="text-xs text-muted-foreground">
@@ -331,7 +331,7 @@ export function ClientsPanel({ config }: Readonly<ClientsPanelProps>) {
                 <div className="space-y-3 pt-2 border-t border-border/50">
                   <div className="space-y-0.5">
                     <Label className="text-sm font-semibold flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />{" "}
+                      <AlertTriangle className="w-3.5 h-3.5 text-danger" />{" "}
                       Recargo por Mora
                     </Label>
                     <p className="text-xs text-muted-foreground">

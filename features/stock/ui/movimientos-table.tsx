@@ -119,17 +119,11 @@ export function MovimientosTable({ movimientos }: MovimientosTableProps) {
                     </td>
                     <td className="px-4 py-3">
                       {m.tipo === "INGRESO" ? (
-                        <Badge
-                          variant="outline"
-                          className="bg-emerald-50 text-emerald-700 border-emerald-200"
-                        >
+                        <Badge variant="success">
                           <ArrowUpCircle className="w-3 h-3 mr-1" /> Ingreso
                         </Badge>
                       ) : (
-                        <Badge
-                          variant="outline"
-                          className="bg-rose-50 text-rose-700 border-rose-200"
-                        >
+                        <Badge variant="danger">
                           <ArrowDownCircle className="w-3 h-3 mr-1" /> Egreso
                         </Badge>
                       )}
@@ -138,8 +132,8 @@ export function MovimientosTable({ movimientos }: MovimientosTableProps) {
                       <span
                         className={
                           m.tipo === "INGRESO"
-                            ? "text-emerald-700"
-                            : "text-rose-600"
+                            ? "text-success"
+                            : "text-danger"
                         }
                       >
                         {m.tipo === "INGRESO" ? "+" : "-"}

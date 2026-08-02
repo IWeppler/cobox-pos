@@ -116,7 +116,7 @@ export function ShareButton({
           onClick={handleWhatsApp}
           className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-foreground hover:bg-muted cursor-pointer"
         >
-          <MessageCircle className="h-4 w-4 text-emerald-600" />
+          <MessageCircle className="h-4 w-4 text-success" />
           Enviar por WhatsApp
         </button>
       </PopoverContent>

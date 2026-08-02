@@ -1,7 +1,6 @@
 "use server";
 
-import { createClient } from "@/shared/config/supabase/server";
-import { cookies } from "next/headers";
+import { createPublicClient } from "@/shared/config/supabase/server";
 import { Producto } from "@/entities/productos/types";
 import {
   anotarStockDisponible,
@@ -9,8 +8,7 @@ import {
 } from "@/entities/productos/lib/stock-disponible";
 
 export async function getProductosAction() {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = await createPublicClient();
 
   const [{ data, error }, { data: reservasActivas }] = await Promise.all([
     supabase
@@ -48,8 +46,7 @@ export async function getProductosAction() {
 // Combina productos + categorías + config para la terminal VENDER en un
 // solo fetch client-side (React Query cachea esto con staleTime de 3 min).
 export async function getPosCatalogDataAction() {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = await createPublicClient();
 
   const [productosRes, categoriasRes, configRes] = await Promise.all([
     getProductosAction(),
@@ -82,8 +79,7 @@ export async function getPosCatalogDataAction() {
 
 // 2. Obtener un producto usando su URL amigable (slug)
 export async function getProductoBySlugAction(slug: string) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = await createPublicClient();
 
   const { data, error } = await supabase
     .from("productos")

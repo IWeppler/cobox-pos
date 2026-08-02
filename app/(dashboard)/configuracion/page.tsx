@@ -8,6 +8,7 @@ import type {
   Rol,
   RolPermiso,
 } from "@/entities/roles/types";
+import type { InvitacionPendiente } from "@/features/config/ui/invitaciones-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -28,14 +29,22 @@ export default async function ConfiguracionPage() {
   let roles: Rol[] = [];
   let permisos: Permiso[] = [];
   let rolPermisos: RolPermiso[] = [];
+  let invitaciones: InvitacionPendiente[] = [];
 
   if (isAdmin) {
-    const [empleadosRes, rolesRes, permisosRes, rolPermisosRes] =
-      await Promise.all([
+    const [
+      empleadosRes,
+      rolesRes,
+      permisosRes,
+      rolPermisosRes,
+      invitacionesRes,
+    ] = await Promise.all([
+        // Los empleados del negocio salen de las membresías, no de perfiles:
+        // perfiles es global y un mismo usuario puede estar en otro negocio.
         supabase
-          .from("perfiles")
-          .select("id, nombre, email, rol_id, roles(nombre)")
-          .order("nombre", { ascending: true }),
+          .from("usuarios_negocios")
+          .select("usuario_id, rol_id, perfiles(nombre, email), roles(nombre)")
+          .order("created_at", { ascending: true }),
         supabase.from("roles").select("id, nombre, es_sistema"),
         supabase
           .from("permisos")
@@ -43,12 +52,38 @@ export default async function ConfiguracionPage() {
           .order("modulo", { ascending: true })
           .order("clave", { ascending: true }),
         supabase.from("rol_permisos").select("rol_id, permiso_id"),
+        supabase
+          .from("invitaciones")
+          .select("id, email, expira_en, roles(nombre)")
+          .eq("estado", "PENDIENTE")
+          .order("created_at", { ascending: false }),
       ]);
 
-    empleados = (empleadosRes.data || []) as unknown as PerfilConRol[];
+    // Se aplana a la forma que ya consume el panel de empleados: id es el del
+    // usuario, que es con lo que se edita la membresía.
+    empleados = (empleadosRes.data || []).map((fila) => {
+      const perfil = Array.isArray(fila.perfiles) ? fila.perfiles[0] : fila.perfiles;
+      const rol = Array.isArray(fila.roles) ? fila.roles[0] : fila.roles;
+      return {
+        id: fila.usuario_id,
+        nombre: perfil?.nombre ?? "",
+        email: perfil?.email ?? "",
+        rol_id: fila.rol_id,
+        roles: rol ? { nombre: rol.nombre } : null,
+      };
+    }) as PerfilConRol[];
     roles = rolesRes.data || [];
     permisos = permisosRes.data || [];
     rolPermisos = rolPermisosRes.data || [];
+    invitaciones = (invitacionesRes.data || []).map((inv) => {
+      const rol = Array.isArray(inv.roles) ? inv.roles[0] : inv.roles;
+      return {
+        id: inv.id,
+        email: inv.email,
+        expira_en: inv.expira_en,
+        roles: rol ? { nombre: rol.nombre } : null,
+      };
+    });
   }
 
   const { data: promociones } = await supabase
@@ -91,6 +126,7 @@ export default async function ConfiguracionPage() {
           roles={roles}
           permisos={permisos}
           rolPermisos={rolPermisos}
+          invitaciones={invitaciones}
         />
       )}
     </div>

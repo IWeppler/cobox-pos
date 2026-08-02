@@ -1,9 +1,29 @@
+export type CondicionIVA = 
+  | "Consumidor Final"
+  | "Responsable Inscripto"
+  | "Monotributo"
+  | "Exento"
+  | "Sujeto No Categorizado";
+
 export interface Cliente {
   id: string;
-  nombre: string;
-  dni?: string | null;
+
+  // --- DATOS COMERCIALES ---
+  nombre: string; // Nombre de Pila
   telefono: string;
   email?: string | null;
+  dni?: string | null; // Útil para Facturas B grandes a Consumidor Final
+
+  // --- DATOS FISCALES ---
+  razon_social?: string | null;
+  cuit?: string | null;
+  condicion_iva?: CondicionIVA | null;
+  direccion?: string | null;
+  provincia?: string | null;
+  localidad?: string | null;
+  codigo_postal?: string | null;
+
+// --- DATOS OPERATIVOS ---
   notas?: string | null;
   activo: boolean;
   saldo_pendiente: number;

@@ -40,7 +40,7 @@ export function RentabilidadTab({
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Costo Mercadería Vendida
             </CardTitle>
-            <Package className="w-4 h-4 text-accent-blue" />
+            <Package className="w-4 h-4 text-chart-1" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold text-foreground">
@@ -74,7 +74,7 @@ export function RentabilidadTab({
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Comisiones Digitales
             </CardTitle>
-            <CreditCard className="w-4 h-4 text-accent-indigo" />
+            <CreditCard className="w-4 h-4 text-chart-3" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold text-foreground">
@@ -84,7 +84,7 @@ export function RentabilidadTab({
               Retenciones MP / Tarjetas
             </p>
             {metrics.recargosCobrados > 0 ? (
-              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-2">
+              <p className="text-xs font-medium text-chart-4 mt-2">
                 +{formatearMoneda(metrics.recargosCobrados)} recuperados por
                 recargo al cliente
               </p>
@@ -97,7 +97,7 @@ export function RentabilidadTab({
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Ganancia Neta
             </CardTitle>
-            <Trophy className="w-4 h-4 text-accent-orange" />
+            <Trophy className="w-4 h-4 text-warning" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold text-foreground">
@@ -122,8 +122,8 @@ export function RentabilidadTab({
             </CardHeader>
             <CardContent className="overflow-hidden">
               <BarChart
-                data={metrics.rentabilidadPorCategoria}
-                color="#2f96fe"
+                data={metrics.rentabilidadPorCategoria.slice(0, 10)}
+                color="#00b3c2"
                 valuePrefix="$"
               />
             </CardContent>
@@ -133,8 +133,8 @@ export function RentabilidadTab({
             <Card className="border-border shadow-none">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-emerald-500" /> Mayor
-                  Rentabilidad (Top)
+                  <Trophy className="w-5 h-5 text-success" /> Mayor Rentabilidad
+                  (Top)
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -150,7 +150,7 @@ export function RentabilidadTab({
                           <span className="font-medium text-sm truncate pr-2">
                             {idx + 1}. {producto.nombre}
                           </span>
-                          <span className="font-semibold text-accent-blue shrink-0">
+                          <span className="font-semibold text-chart-1 shrink-0">
                             +{formatearMoneda(producto.ganancia)}
                           </span>
                         </div>
@@ -205,7 +205,7 @@ export function RentabilidadTab({
           <Card className="border-border flex flex-col shadow-none h-full min-h-[480px] justify-center">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <PieChart className="w-5 h-5 text-accent-indigo" />
+                <PieChart className="w-5 h-5 text-chart-3" />
                 Composición Financiera
               </CardTitle>
             </CardHeader>
@@ -265,7 +265,9 @@ export function RentabilidadTab({
                             deuda, que no son ingresos del período y harían
                             pasar la suma del 100%. */}
                         {totalBrutoCobrado > 0
-                          ? ((metodo.bruto / totalBrutoCobrado) * 100).toFixed(1)
+                          ? ((metodo.bruto / totalBrutoCobrado) * 100).toFixed(
+                              1,
+                            )
                           : 0}
                         %
                       </td>

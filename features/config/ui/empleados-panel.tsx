@@ -3,6 +3,10 @@
 import { ShieldAlert } from "lucide-react";
 import { EmpleadosLista } from "./empleados-lista";
 import { PermisosMatriz } from "./permisos-matriz";
+import {
+  InvitacionesPanel,
+  type InvitacionPendiente,
+} from "./invitaciones-panel";
 import type { Permiso, PerfilConRol, Rol, RolPermiso } from "@/entities/roles/types";
 
 interface EmpleadosPanelProps {
@@ -11,6 +15,7 @@ interface EmpleadosPanelProps {
   roles: Rol[];
   permisos: Permiso[];
   rolPermisos: RolPermiso[];
+  invitaciones?: InvitacionPendiente[];
 }
 
 export function EmpleadosPanel({
@@ -19,6 +24,7 @@ export function EmpleadosPanel({
   roles,
   permisos,
   rolPermisos,
+  invitaciones = [],
 }: Readonly<EmpleadosPanelProps>) {
   if (!isAdmin) {
     return (
@@ -35,6 +41,7 @@ export function EmpleadosPanel({
   return (
     <div className="space-y-10 animate-in fade-in-50 duration-300">
       <EmpleadosLista empleados={empleados} roles={roles} />
+      <InvitacionesPanel roles={roles} invitaciones={invitaciones} />
       <PermisosMatriz
         roles={roles}
         permisos={permisos}

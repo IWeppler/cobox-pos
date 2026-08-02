@@ -14,10 +14,10 @@ const ICONO_POR_TIPO: Record<Insight["type"], typeof Lightbulb> = {
 };
 
 const COLOR_POR_TIPO: Record<Insight["type"], string> = {
-  danger: "text-rose-600 dark:text-rose-400",
-  warning: "text-amber-600 dark:text-amber-400",
-  success: "text-emerald-600 dark:text-emerald-400",
-  info: "text-blue-600 dark:text-blue-400",
+  danger: "text-danger",
+  warning: "text-warning",
+  success: "text-success",
+  info: "text-info",
 };
 
 /**

@@ -338,15 +338,15 @@ export function CajaDashboard({
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card p-4 sm:p-5 rounded-2xl border border-border">
             <div className="flex items-center gap-4">
-              <div className="hidden sm:flex w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full items-center justify-center border border-emerald-100">
+              <div className="hidden sm:flex w-10 h-10 bg-success/10 text-success rounded-full items-center justify-center border border-success/20">
                 <Unlock className="w-4 h-4" />
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="relative flex h-2 w-2">
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
                   </span>
-                  <span className="text-sm font-semibold uppercase text-foreogrund">
+                  <span className="text-sm font-semibold uppercase text-foreground">
                     Turno Abierto
                   </span>
                 </div>
@@ -390,7 +390,7 @@ export function CajaDashboard({
                         <span className="text-muted-foreground font-medium">
                           Cobros
                         </span>
-                        <span className="font-mono font-medium text-emerald-700 dark:text-emerald-400">
+                        <span className="font-mono font-medium text-success">
                           +{formatearMoneda(totales.ingresosEfectivo)}
                         </span>
                       </div>
@@ -398,7 +398,7 @@ export function CajaDashboard({
                         <span className="text-muted-foreground font-medium">
                           Gastos
                         </span>
-                        <span className="font-mono font-medium text-rose-600">
+                        <span className="font-mono font-medium text-danger">
                           -{formatearMoneda(totales.totalEgresos)}
                         </span>
                       </div>
@@ -409,15 +409,15 @@ export function CajaDashboard({
                         <span
                           className={
                             totales.efectivoEsperado < 0
-                              ? "font-mono font-medium text-rose-600"
-                              : "font-mono font-medium text-emerald-700 dark:text-emerald-400"
+                              ? "font-mono font-medium text-danger"
+                              : "font-mono font-medium text-success"
                           }
                         >
                           {formatearMoneda(totales.efectivoEsperado)}
                         </span>
                       </div>
                       {totales.efectivoEsperado < 0 && (
-                        <p className="text-xs text-rose-600 font-semibold flex items-center gap-1.5 pt-1">
+                        <p className="text-xs text-danger font-semibold flex items-center gap-1.5 pt-1">
                           <Info className="w-3.5 h-3.5 shrink-0" />
                           Revisar: el efectivo esperado dio negativo. Puede
                           haber egresos mal atribuidos a este turno.
@@ -469,20 +469,20 @@ export function CajaDashboard({
             <div className="p-4 rounded-2xl border border-border bg-muted flex flex-col justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
-                  <Banknote className="w-4 h-4 text-emerald-500" />
+                  <Banknote className="w-4 h-4 text-success" />
                   Efectivo en Cajon
                 </h3>
                 <div
                   className={`text-3xl font-mono font-semibold mb-2 ${
                     totales.efectivoEsperado < 0
-                      ? "text-rose-600"
+                      ? "text-danger"
                       : "text-foreground"
                   }`}
                 >
                   {formatearMoneda(totales.efectivoEsperado)}
                 </div>
                 {totales.efectivoEsperado < 0 ? (
-                  <p className="text-sm text-rose-700 dark:text-rose-500">
+                  <p className="text-sm text-danger">
                     Revisar: efectivo esperado negativo
                   </p>
                 ) : (
@@ -502,13 +502,13 @@ export function CajaDashboard({
                   <span className="text-muted-foreground">
                     Cobros en efectivo
                   </span>
-                  <span className="font-mono font-medium text-emerald-600">
+                  <span className="font-mono font-medium text-success">
                     +{formatearMoneda(totales.ingresosEfectivo)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm font-medium">
                   <span className="text-muted-foreground">Gastos fisicos</span>
-                  <span className="font-mono font-medium text-rose-600">
+                  <span className="font-mono font-medium text-danger">
                     -{formatearMoneda(totales.totalEgresos)}
                   </span>
                 </div>
@@ -518,7 +518,7 @@ export function CajaDashboard({
             <div className="p-4 rounded-2xl border border-border bg-muted flex flex-col justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
-                  <CreditCard className="w-4 h-4 text-accent-blue" />
+                  <CreditCard className="w-4 h-4 text-chart-1" />
                   Cobros Digitales
                 </h3>
                 <div className="text-3xl font-mono font-semibold text-foreground mb-2">
@@ -539,7 +539,7 @@ export function CajaDashboard({
                   <span className="text-muted-foreground">
                     Comisiones retenidas
                   </span>
-                  <span className="font-mono font-medium text-rose-600">
+                  <span className="font-mono font-medium text-danger">
                     -{formatearMoneda(totales.comisionesRetenidas)}
                   </span>
                 </div>
@@ -596,17 +596,17 @@ export function CajaDashboard({
                         <td className="px-6 py-4 font-medium text-foreground">
                           <div className="flex items-center gap-3">
                             {mov.origen === "VENTA" && (
-                              <div className="p-1.5 bg-emerald-50 dark:bg-emerald-300/20 text-emerald-700 dark:text-emerald-300 rounded-md shrink-0 border">
+                              <div className="p-1.5 bg-success/10 text-success rounded-md shrink-0 border">
                                 <ShoppingBag className="w-3.5 h-3.5" />
                               </div>
                             )}
                             {mov.origen === "COBRO_DEUDA" && (
-                              <div className="p-1.5 bg-indigo-50 dark:bg-indigo-300/20 text-indigo-700 dark:text-indigo-300 rounded-md shrink-0 border">
+                              <div className="p-1.5 bg-info/10 text-info rounded-md shrink-0 border">
                                 <BookUser className="w-3.5 h-3.5" />
                               </div>
                             )}
                             {mov.origen === "EGRESO" && (
-                              <div className="p-1.5 bg-rose-50 dark:bg-rose-300/20 text-rose-700 dark:text-rose-300 rounded-md shrink-0 border">
+                              <div className="p-1.5 bg-danger/10 text-danger rounded-md shrink-0 border">
                                 <TrendingDown className="w-3.5 h-3.5" />
                               </div>
                             )}
@@ -627,8 +627,8 @@ export function CajaDashboard({
                           <div
                             className={
                               mov.tipo === "INGRESO"
-                                ? "text-emerald-700 dark:text-emerald-500"
-                                : "text-rose-700 dark:text-rose-500"
+                                ? "text-success"
+                                : "text-danger"
                             }
                           >
                             {mov.tipo === "INGRESO" ? "+" : "-"}

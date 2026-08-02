@@ -155,7 +155,7 @@ export function AdjustClientBalanceModal({
       <DialogContent className="sm:max-w-[460px] border-border bg-card">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <PlusCircle className="w-5 h-5 text-accent-orange" /> Cargar Saldo
+            <PlusCircle className="w-5 h-5 text-warning" /> Cargar Saldo
             Inicial
           </DialogTitle>
           <DialogDescription>
@@ -295,7 +295,7 @@ export function AdjustClientBalanceModal({
           <Button
             type="button"
             onClick={handleSubmit}
-            className="bg-accent-orange text-white hover:bg-accent-orange/80"
+            className="bg-warning text-white hover:bg-warning/80"
             disabled={isPending}
           >
             {isPending ? (

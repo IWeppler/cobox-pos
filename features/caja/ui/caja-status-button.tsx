@@ -42,15 +42,15 @@ export function CajaStatusButton({
           ? `Caja abierta — efectivo esperado ${formatearMoneda(turno?.montoActual ?? 0)}`
           : "Abrir turno"
       }
-      className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition-colors ${
+      className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border px-3 text-xs font-medium transition-colors ${
         isCajaAbierta
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400"
+          ? "border-success/20 bg-success/10 text-success hover:bg-success/20"
           : "border-border bg-muted text-muted-foreground hover:bg-muted/70"
       } ${className}`}
     >
       <span
         className={`h-2 w-2 shrink-0 rounded-full ${
-          isCajaAbierta ? "bg-emerald-500" : "bg-muted-foreground/40"
+          isCajaAbierta ? "bg-success" : "bg-muted-foreground/40"
         }`}
       />
       <Wallet className="h-3.5 w-3.5 shrink-0" />

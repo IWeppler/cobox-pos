@@ -1,15 +1,58 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { HEADER_NEGOCIO_SLUG, slugDesdeHost } from "@/shared/lib/negocio-slug";
+import {
+  COOKIE_NEGOCIO_ACTIVO,
+  HEADER_NEGOCIO_ACTIVO,
+} from "@/shared/lib/negocio-activo";
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  // Qué negocio sirve el catálogo. Dos formas, misma resolución dinámica:
+  // el subdominio (evens.cobox.app) o el primer segmento del path
+  // (/store/evens). Si llegan las dos, gana el subdominio.
+  const slugDelHost = slugDesdeHost(request.headers.get("host"));
+  const slugDelPath = pathname.startsWith("/store/")
+    ? (pathname.split("/")[2] || null)
+    : null;
+  const slugNegocio = slugDelHost ?? slugDelPath;
+
+  // El header se reescribe siempre: nunca se confía en el que vino de afuera.
+  // Sin slug se borra, y sin slug la RLS no devuelve catálogo alguno — ya no
+  // existe el negocio por defecto.
+  const conNegocio = () => {
+    const headers = new Headers(request.headers);
+    if (slugNegocio) {
+      headers.set(HEADER_NEGOCIO_SLUG, slugNegocio);
+    } else {
+      headers.delete(HEADER_NEGOCIO_SLUG);
+    }
+    return { headers };
+  };
+
+  // En un subdominio de tienda, la raíz y /store son el catálogo de ESE
+  // negocio. Se reescribe a la ruta canónica por path, que es la única que
+  // existe: así hay un solo juego de páginas para los dos modos.
+  if (slugDelHost && (pathname === "/" || pathname === "/store")) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/store/${slugDelHost}`;
+    return NextResponse.rewrite(url, { request: conNegocio() });
+  }
+
   let supabaseResponse = NextResponse.next({
-    request,
+    request: conNegocio(),
   });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 
+  const negocioActivo = request.cookies.get(COOKIE_NEGOCIO_ACTIVO)?.value;
+
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    global: negocioActivo
+      ? { headers: { [HEADER_NEGOCIO_ACTIVO]: negocioActivo } }
+      : undefined,
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -19,7 +62,7 @@ export async function middleware(request: NextRequest) {
           request.cookies.set(name, value),
         );
         supabaseResponse = NextResponse.next({
-          request,
+          request: conNegocio(),
         });
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options),
@@ -32,29 +75,37 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
-
   const isAuthRoute = pathname.startsWith("/auth");
-  const isPublicRoute = pathname.startsWith("/store");
+  const isPublicRoute =
+    pathname.startsWith("/store") ||
+    pathname.startsWith("/recuperar") ||
+    pathname.startsWith("/bienvenida");
+  // Rutas donde todavía no hay negocio elegido: son justamente las que sirven
+  // para elegirlo o crear el primero.
+  const isRutaSinNegocio =
+    pathname.startsWith("/seleccionar-negocio") ||
+    pathname.startsWith("/crear-negocio") ||
+    pathname.startsWith("/invitacion");
 
-  // 1. Obtenemos el Rol del usuario (solo si está logueado)
+  // 1. Rol del usuario EN EL NEGOCIO ACTIVO (ya no es un dato del perfil: el
+  // mismo usuario puede ser ADMIN en un negocio y VENDEDOR en otro).
+  let rolActual: string | null = null;
   let rol = null;
   if (user) {
-    const { data: perfil } = await supabase
-      .from("perfiles")
-      .select("rol")
-      .eq("id", user.id)
-      .single();
+    const { data } = await supabase.rpc("rol_actual");
+    rolActual = data ?? null;
 
     // Si por algún motivo falla, asumimos el rol más restrictivo (VENDEDOR)
-    rol = perfil?.rol || "VENDEDOR";
+    rol = rolActual || "VENDEDOR";
   }
 
   // 2. Control de usuarios NO autenticados
   if (!user) {
     if (pathname === "/") {
+      // La raíz sin sesión y sin subdominio de tienda es la landing de Cobox,
+      // no el catálogo de un comercio: no hay tenant por defecto.
       const url = request.nextUrl.clone();
-      url.pathname = "/store";
+      url.pathname = "/bienvenida";
       return NextResponse.redirect(url);
     }
     if (!isAuthRoute && !isPublicRoute) {
@@ -65,15 +116,49 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // 3. Control de usuarios SI autenticados yendo al Login
-  if (user && isAuthRoute) {
+  // 3. Super admin de Cobox: no pertenece a ningún negocio, así que queda
+  // fuera de todo el control por rol y negocio activo. Su lugar es /admincobox.
+  const { data: esSuperAdmin } = await supabase.rpc("is_super_admin");
+  if (esSuperAdmin) {
+    if (isAuthRoute || pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admincobox";
+      return NextResponse.redirect(url);
+    }
+    return supabaseResponse;
+  }
+
+  // 4. Logueado con negocios pero sin uno elegido: al selector.
+  // Sin NINGÚN negocio no se lo manda a crear uno —crear negocio es un flujo
+  // explícito, no la salida de un login incompleto—: se lo devuelve al login,
+  // que le explica que le falta una invitación.
+  if (user && !rolActual && !isRutaSinNegocio && !isPublicRoute && !isAuthRoute) {
+    const { count } = await supabase
+      .from("usuarios_negocios")
+      .select("negocio_id", { count: "exact", head: true })
+      .eq("usuario_id", user.id);
+
+    const url = request.nextUrl.clone();
+    if ((count ?? 0) > 0) {
+      url.pathname = "/seleccionar-negocio";
+    } else {
+      url.pathname = "/auth";
+      url.searchParams.set("error", "sin-negocio");
+    }
+    return NextResponse.redirect(url);
+  }
+
+  // 5. Control de usuarios SI autenticados yendo al Login. Solo si ya tienen
+  // negocio resuelto: si no, quedarían rebotando entre /auth y el gate de
+  // arriba.
+  if (user && isAuthRoute && rolActual) {
     const url = request.nextUrl.clone();
     // Admin va al dashboard, vendedor va al stock
     url.pathname = rol === "ADMIN" ? "/" : "/pos";
     return NextResponse.redirect(url);
   }
 
-  // 4. Bloqueos específicos para el VENDEDOR
+  // 6. Bloqueos específicos para el VENDEDOR
   if (rol === "VENDEDOR") {
     const isDashboard = pathname === "/";
     const isConfig = pathname.startsWith("/configuracion");

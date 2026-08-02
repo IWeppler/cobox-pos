@@ -51,7 +51,7 @@ export function ResumenTab({
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <DollarSign className="w-4 h-4 text-primary" />
+              <DollarSign className="w-4 h-4 text-chart-1" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold">
@@ -83,7 +83,7 @@ export function ResumenTab({
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <TrendingUp className="w-4 h-4 text-emerald-500" />
+              <TrendingUp className="w-4 h-4 text-success" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold">
@@ -120,14 +120,14 @@ export function ResumenTab({
           <Card className="shadow-none bg-muted/10 border-border">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <div className="flex items-center gap-1.5">
-                <CardTitle className="text-sm font-medium text-primary">
+                <CardTitle className="text-sm font-medium text-chart-1">
                   Margen operativo
                 </CardTitle>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Info className="w-3.5 h-3.5 text-primary/50 cursor-pointer hover:text-primary transition-colors" />
+                    <Info className="w-3.5 h-3.5 text-chart-1 cursor-pointer hover:text-chart-1 transition-colors" />
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-[250px] text-xs bg-primary text-primary-foreground border-primary">
+                  <TooltipContent className="max-w-[250px] text-xs bg-foreground text-background border-border">
                     <p>
                       Ganancia Bruta menos los Egresos cargados en la caja
                       (fletes, insumos, etc). Es tu ganancia neta estimada en
@@ -136,11 +136,11 @@ export function ResumenTab({
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <Percent className="w-4 h-4 text-primary" />
+              <Percent className="w-4 h-4 text-chart-1" />
             </CardHeader>
             <CardContent>
               <div
-                className={`text-2xl font-semibold ${metrics.margenPorcentaje < 0 ? "text-destructive" : "text-primary"}`}
+                className={`text-2xl font-semibold ${metrics.margenPorcentaje < 0 ? "text-destructive" : "text-chart-1"}`}
               >
                 {metrics.margenPorcentaje.toFixed(1)}%
               </div>
@@ -173,7 +173,7 @@ export function ResumenTab({
           <CardContent className="overflow-hidden">
             <BarChart
               data={metrics.ventasPorDia}
-              color="#10b981"
+              color="#c781cb"
               valuePrefix="$"
             />
           </CardContent>

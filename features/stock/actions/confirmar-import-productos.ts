@@ -23,7 +23,6 @@ export interface ResultadoFilaImport {
   fila: number;
   producto: string;
   ok: boolean;
-  /** Qué se hizo, para el reporte final ("Producto creado", "+3 unidades"...). */
   detalle: string;
 }
 
@@ -36,25 +35,6 @@ export interface ConfirmarImportResponse {
 
 type SupabaseDb = ReturnType<typeof createClient>;
 
-/**
- * Escribe el import.
- *
- * Recibe las FILAS crudas, no el plan que se le mostró al usuario: el plan
- * se vuelve a construir acá contra la base. Entre el preview y el
- * Confirmar, otra pestaña pudo crear el mismo producto o cargar el mismo
- * IMEI, y un `varianteId` que mande el cliente no es confiable — mismo
- * criterio que create-sale.ts con los precios.
- *
- * Cada fila es independiente: si una falla, las demás NO se revierten
- * (mismo criterio explícito que confirmarCargaAction). El reporte final
- * dice fila por fila qué pasó.
- *
- * IMPORTANTE — no envolver esta acción en `withTimeout` desde el cliente.
- * El timeout solo rechaza la promesa del lado del navegador; el server
- * sigue escribiendo hasta el final, y un reintento suma el stock de nuevo.
- * Es exactamente el incidente del 27/7 en Estilo Bonito (8 reintentos =
- * stock ×8). Ver comentario en features/purchases/ui/merge-table.tsx.
- */
 export async function confirmarImportProductosAction(
   filas: FilaImport[],
 ): Promise<ConfirmarImportResponse> {
@@ -78,7 +58,30 @@ export async function confirmarImportProductosAction(
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const catalogo = await cargarCatalogoActual(supabase, filas);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      error: "No autorizado",
+      resultados: [],
+      totalOk: 0,
+      totalError: 0,
+    };
+  }
+
+  // Negocio ACTIVO de la sesión: perfiles.negocio_id quedó deprecada y es NULL
+  // para todo usuario invitado.
+  const { data: negocioId } = await supabase.rpc("negocio_actual");
+
+  if (!negocioId) {
+    return {
+      error: "No hay un negocio activo en esta sesión",
+      resultados: [],
+      totalOk: 0,
+      totalError: 0,
+    };
+  }
+
+  const catalogo = await cargarCatalogoActual(supabase, filas, negocioId);
   if (!catalogo) {
     return {
       error: "No se pudo leer el catálogo. No se importó nada.",
@@ -89,10 +92,8 @@ export async function confirmarImportProductosAction(
   }
 
   const plan = construirPlanImport(filas, catalogo);
-
   const resultados: ResultadoFilaImport[] = [];
 
-  // Las filas bloqueadas no se tocan: entran directo al reporte.
   for (const item of plan.items) {
     if (item.errores.length > 0) {
       resultados.push({
@@ -114,15 +115,11 @@ export async function confirmarImportProductosAction(
     };
   }
 
-  // Una sola pasada de normalización de atributos para todo el archivo: sin
-  // esto, cada fila repetiría el lookup de "Color"/"Negro" contra la base.
   const atributoCache = await construirCacheAtributosDelArchivo(
     supabase,
     items,
   );
 
-  // Estado que se va llenando a medida que se crean cosas. Arranca con lo
-  // que ya existe en la base para no volver a consultar por cada fila.
   const productoIdPorClave = new Map<string, string>(
     catalogo.productos.map((p) => [claveProducto(p.nombre), p.id]),
   );
@@ -141,9 +138,7 @@ export async function confirmarImportProductosAction(
     catalogo.variantes.map((v) => [v.id, v.productoId]),
   );
 
-  /** Stock final por variante tocada, para sincronizar el espejo legacy una vez al final. */
   const stockFinalPorVariante = new Map<string, number>();
-  /** Productos creados en esta corrida — se despublican si quedan sin ninguna variante. */
   const productosCreados = new Set<string>();
 
   for (const item of items) {
@@ -151,6 +146,7 @@ export async function confirmarImportProductosAction(
       const productoId = await asegurarProducto(
         supabase,
         item,
+        negocioId,
         productoIdPorClave,
         productosCreados,
       );
@@ -159,6 +155,7 @@ export async function confirmarImportProductosAction(
         supabase,
         item,
         productoId,
+        negocioId,
         atributoCache,
         varianteIdPorClave,
         nombreDisplayPorVariante,
@@ -205,7 +202,7 @@ export async function confirmarImportProductosAction(
   await limpiarProductosHuerfanos(supabase, productosCreados);
 
   revalidatePath("/stock");
-  revalidatePath("/store");
+  revalidatePath("/store", "layout");
 
   const ordenados = ordenarPorFila(resultados);
   const totalOk = ordenados.filter((r) => r.ok).length;
@@ -230,12 +227,6 @@ function mensajeDeError(err: unknown): string {
   return pg?.message || "Error inesperado al procesar la fila.";
 }
 
-/**
- * Normaliza de una sola vez todas las (propiedad, valor) del archivo
- * contra atributos/atributo_valores, para que el import no introduzca otra
- * variante de casing de una propiedad que ya existe ("color" cuando ya
- * existe "Color").
- */
 async function construirCacheAtributosDelArchivo(
   supabase: SupabaseDb,
   items: ItemPlan[],
@@ -260,30 +251,24 @@ async function construirCacheAtributosDelArchivo(
 async function asegurarProducto(
   supabase: SupabaseDb,
   item: ItemPlan,
+  negocioId: string,
   productoIdPorClave: Map<string, string>,
   productosCreados: Set<string>,
 ): Promise<string> {
-  // Si la fila resolvió contra una variante concreta (match por código de
-  // barras), el producto es el de esa variante, no el del nombre.
   if (item.varianteId && item.productoId) return item.productoId;
 
   const clave = claveProducto(item.producto);
   const yaResuelto = productoIdPorClave.get(clave);
   if (yaResuelto) return yaResuelto;
 
-  // "tipo" es la columna legacy que sigue siendo NOT NULL en la práctica:
-  // se llena con el nombre de la categoría, igual que crearProductoAction.
   const tipo = item.categoriaNombre || "General";
-
-  // Mismo esquema de slug que crearProductoAction: sufijo aleatorio para no
-  // chocar con el UNIQUE de productos.slug cuando entran dos productos de
-  // nombre parecido (o el mismo nombre en dos categorías).
   const sufijo = Math.random().toString(36).substring(2, 6);
   const slug = `${slugify(`${item.producto}-${tipo}`)}-${sufijo}`;
 
   const { data, error } = await supabase
     .from("productos")
     .insert({
+      negocio_id: negocioId, // <- INYECTANDO EL NEGOCIO_ID
       nombre: item.producto,
       tipo,
       categoria_id: item.categoriaId,
@@ -308,6 +293,7 @@ async function asegurarVariante(
   supabase: SupabaseDb,
   item: ItemPlan,
   productoId: string,
+  negocioId: string,
   atributoCache: AtributoCache,
   varianteIdPorClave: Map<string, string>,
   nombreDisplayPorVariante: Map<string, string>,
@@ -324,20 +310,13 @@ async function asegurarVariante(
   const nombreDisplay =
     Object.values(valoresCanonicos).join(" / ") || "Único";
 
-  // La variante nace SIEMPRE en 0 y el stock entra después por
-  // ajustar_stock_variante, incluso cuando la crea esta misma fila. Nacer
-  // con el stock ya puesto haría que un IMEI rechazado por duplicado
-  // dejara igual la unidad sumada: la escritura del stock tiene que ser
-  // consecuencia del INSERT del IMEI, nunca ir antes.
   const { data, error } = await supabase
     .from("producto_variantes")
     .insert({
+      negocio_id: negocioId, // <- INYECTANDO EL NEGOCIO_ID
       producto_id: productoId,
       nombre_display: nombreDisplay,
       atributos: valoresCanonicos,
-      // null = hereda del producto padre. Un precio por variante solo
-      // tendría sentido si la planilla trajera precios distintos por
-      // color/memoria, y hoy el precio del archivo ya fue al producto.
       precio: null,
       costo: null,
       stock: 0,
@@ -350,9 +329,6 @@ async function asegurarVariante(
 
   const varianteId = data.id as string;
 
-  // Relación normalizada variante <-> atributo/valor, igual que
-  // crearProductoAction. Sin esto la variante existe pero no aparece en el
-  // facetado del catálogo.
   const relaciones = Object.entries(item.atributos).flatMap(
     ([nombreOriginal, valorOriginal]) => {
       const entry = atributoCache[nombreOriginal];
@@ -388,20 +364,6 @@ interface ResultadoStock {
   stockFinal: number;
 }
 
-/**
- * Aplica el stock de UNA fila.
- *
- * Con IMEI el orden es deliberado y no se puede invertir: primero el
- * INSERT en unidades_serie, que tiene UNIQUE sobre imei, y recién si ese
- * insert entró se suma la unidad. El UNIQUE hace de guard de idempotencia
- * — importar dos veces el mismo archivo de equipos serializados rebota en
- * el segundo intento en vez de duplicar stock. Es el mismo patrón de
- * "escritura condicional + chequeo ANTES de la escritura derivada" que
- * aprobar_orden_compra y cancel-sale.ts.
- *
- * Sin IMEI no existe ese guard: un import repetido SÍ vuelve a sumar. Es
- * una limitación conocida y está avisada en la UI.
- */
 async function aplicarStock(
   supabase: SupabaseDb,
   item: ItemPlan,
@@ -415,8 +377,6 @@ async function aplicarStock(
     });
 
     if (imeiError) {
-      // 23505 = unique_violation. Otra corrida (o esta misma, repetida) ya
-      // cargó este aparato: no se suma stock.
       if ((imeiError as { code?: string }).code === "23505") {
         return {
           ok: false,
@@ -436,8 +396,6 @@ async function aplicarStock(
   if (error) throw error;
 
   if (!data || data.length === 0) {
-    // La RPC no afectó ninguna fila: la variante desapareció en el medio, o
-    // el delta dejaría el stock en negativo.
     return {
       ok: false,
       detalle:
@@ -457,14 +415,6 @@ async function aplicarStock(
   };
 }
 
-/**
- * Borra las cabeceras de producto que se crearon en esta corrida pero
- * quedaron sin ninguna variante (la fila creó el producto y después falló
- * al insertar la variante). Un producto publicado sin filas en
- * producto_variantes no se puede vender y no muestra ningún error que lo
- * explique — mismo huérfano que crearProductoAction deshace cuando la
- * grilla de variantes viene vacía.
- */
 async function limpiarProductosHuerfanos(
   supabase: SupabaseDb,
   productosCreados: Set<string>,
@@ -498,16 +448,6 @@ async function limpiarProductosHuerfanos(
   }
 }
 
-/**
- * Sincroniza el espejo legacy productos_stock, que se relaciona por
- * (producto_id, nombre de variante) y no por variante_id. Se hace una sola
- * vez al final por variante tocada, con el stock que devolvió la RPC — no
- * por fila, que serían N round-trips por el mismo dato.
- *
- * Un fallo acá es drift del espejo, no motivo para marcar filas como
- * fallidas: el stock canónico (producto_variantes.stock) ya quedó bien.
- * Mismo criterio que sincronizarStockLegacy en confirmar-carga.ts.
- */
 async function sincronizarEspejoLegacy(
   supabase: SupabaseDb,
   stockFinalPorVariante: Map<string, number>,

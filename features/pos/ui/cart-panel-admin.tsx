@@ -90,7 +90,12 @@ export function CartPanelAdmin({
   const [unidadesElegidasRaw, setUnidadesElegidasRaw] = useState<
     UnidadSeleccionada[]
   >([]);
-  const [modalUnidadesAbierto, setModalUnidadesAbierto] = useState(false);
+  // Dos formas de llegar al selector, y no hacen lo mismo: desde el carrito
+  // se elige y se vuelve al carrito; desde "Confirmar venta" se elige y se
+  // retoma el cobro donde había quedado. Por eso es modo y no un booleano.
+  const [modalUnidades, setModalUnidades] = useState<
+    "SOLO_ELEGIR" | "CONFIRMAR" | null
+  >(null);
   /** El anticipo tipeado en el modal de CC se guarda mientras el vendedor
    * elige los aparatos, para retomar la confirmación con el mismo monto. */
   const [anticipoPendiente, setAnticipoPendiente] = useState<
@@ -506,7 +511,7 @@ export function CartPanelAdmin({
     // el mismo chequeo (esto es solo la UX; la regla vive en create-sale).
     if (lineasSerializadas.some((l) => !imeisParaVenta[l.varianteId])) {
       setAnticipoPendiente(montoAnticipoModal);
-      setModalUnidadesAbierto(true);
+      setModalUnidades("CONFIRMAR");
       return;
     }
 
@@ -698,6 +703,7 @@ export function CartPanelAdmin({
           onContinueToPayment={handleContinueToPayment}
           variantesSerializadas={variantesSerializadas}
           imeiPorVariante={imeiPorVariante}
+          onElegirUnidad={() => setModalUnidades("SOLO_ELEGIR")}
         />
       ) : (
         <CartStepCheckout
@@ -804,13 +810,17 @@ export function CartPanelAdmin({
 
       {/* Montado solo cuando está abierto: así arranca con estado limpio y
           la carga de unidades ocurre en el montaje, sin resets por efecto. */}
-      {modalUnidadesAbierto && (
+      {modalUnidades && (
         <SeleccionarUnidadesModal
-          onCerrar={() => setModalUnidadesAbierto(false)}
+          onCerrar={() => setModalUnidades(null)}
           lineas={lineasSerializadas}
           onConfirmar={(seleccion) => {
+            const modo = modalUnidades;
             setUnidadesElegidasRaw(seleccion);
-            setModalUnidadesAbierto(false);
+            setModalUnidades(null);
+            // Abierto desde el carrito: se guarda el aparato y listo, nadie
+            // pidió cobrar todavía.
+            if (modo !== "CONFIRMAR") return;
             // La selección va por argumento: el estado de arriba todavía no
             // se aplicó en este closure.
             handleConfirmarVentaPOS(anticipoPendiente, seleccion);

@@ -223,16 +223,14 @@ export function PromotionsPanel({
                       <td className="px-5 py-4">
                         {promo.tipo_descuento === "PORCENTAJE" ? (
                           <Badge
-                            variant="outline"
-                            className="bg-blue-50 text-primary border-blue-200 text-xs font-bold px-2 py-0.5 dark:bg-primary/30 dark:text-blue-300 dark:border-primary"
+                            variant="info"
                           >
                             <Percent className="w-3 h-3 mr-0.5 inline-block" />
                             {promo.valor_descuento} OFF
                           </Badge>
                         ) : (
                           <Badge
-                            variant="outline"
-                            className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs font-bold px-2 py-0.5 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800"
+                            variant="success"
                           >
                             <DollarSign className="w-3 h-3 inline-block" />
                             {promo.valor_descuento}
@@ -243,7 +241,7 @@ export function PromotionsPanel({
                       {/* ESTADO */}
                       <td className="px-5 py-4 text-center">
                         {promo.activa ? (
-                          <div className="flex items-center justify-center gap-1.5 text-emerald-600 dark:text-emerald-500 font-semibold text-xs">
+                          <div className="flex items-center justify-center gap-1.5 text-success font-semibold text-xs">
                             <CheckCircle2 className="w-4 h-4" /> Activa
                           </div>
                         ) : (
@@ -282,7 +280,7 @@ export function PromotionsPanel({
                               className="cursor-pointer text-sm font-medium rounded-lg h-9"
                               onClick={() => setEditingPromo(promo)}
                             >
-                              <Edit2 className="w-4 h-4 mr-2 text-emerald-600" />
+                              <Edit2 className="w-4 h-4 mr-2 text-success" />
                               Editar promo
                             </DropdownMenuItem>
                             <DropdownMenuSeparator className="my-1 bg-border/60" />

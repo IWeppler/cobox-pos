@@ -543,8 +543,8 @@ export function UpdatePricesModal() {
                 (advertencias.productosPrecioCero > 0 ||
                   advertencias.variantesPrecioCero > 0) && (
                   <div className="flex items-start gap-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-amber-900 leading-tight font-medium text-xs">
+                    <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+                    <p className="text-warning leading-tight font-medium text-xs">
                       {advertencias.productosPrecioCero > 0 && (
                         <>
                           {advertencias.productosPrecioCero} producto
@@ -606,17 +606,17 @@ export function UpdatePricesModal() {
                 </div>
               )}
 
-              <div className="flex items-center space-x-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
+              <div className="flex items-center space-x-2 bg-warning/10 p-3 rounded-lg border border-warning/20">
                 <input
                   type="checkbox"
                   id="confirm_check"
                   checked={confirmado}
                   onChange={(e) => setConfirmado(e.target.checked)}
-                  className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                  className="w-4 h-4 rounded border-amber-300 text-warning focus:ring-warning accent-warning cursor-pointer"
                 />
                 <Label
                   htmlFor="confirm_check"
-                  className="text-amber-900 cursor-pointer leading-tight font-medium text-xs"
+                  className="text-warning/10 cursor-pointer leading-tight font-medium text-xs"
                 >
                   Entiendo que esta acción modificará irreversiblemente los
                   precios seleccionados.

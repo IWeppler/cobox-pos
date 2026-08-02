@@ -1,7 +1,11 @@
+"use client";
+
 import { Producto } from "@/entities/productos/types";
 import { ShoppingBag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSlugNegocio } from "@/shared/lib/use-negocio";
+import { rutaCatalogo } from "@/shared/lib/dominios";
 
 interface ProductCardProps {
   producto: Producto;
@@ -28,7 +32,13 @@ export function ProductCard({
     getImagenesProducto(producto.grid_url)[0] ||
     getImagenesProducto(producto.imagen_url)[0] ||
     null;
-  const linkDestino = producto.slug ? `/store/${producto.slug}` : "#";
+  // El link es al catálogo del negocio que se está viendo: fuera de un
+  // catálogo no hay tienda a la que ir.
+  const slugNegocio = useSlugNegocio();
+  const linkDestino =
+    producto.slug && slugNegocio
+      ? rutaCatalogo(slugNegocio, producto.slug)
+      : "#";
 
   return (
     <div
@@ -37,7 +47,7 @@ export function ProductCard({
     >
       <Link
         href={linkDestino}
-        className="aspect-[4/5] bg-card relative overflow-hidden flex items-center justify-center w-full shadow-none border border-border/40"
+        className="aspect-[4/5] bg-card relative overflow-hidden flex items-center justify-center w-full border border-border/40"
       >
         {primeraImagen ? (
           <div className="relative w-full h-full overflow-hidden">
@@ -45,7 +55,7 @@ export function ProductCard({
               src={primeraImagen}
               alt={producto.nombre || "Producto"}
               fill
-              className="object-cover transition-transform duration-500"
+              className="object-cover hover:scale-105 transition-transform duration-500"
               sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
               priority={priority}
             />
@@ -59,10 +69,7 @@ export function ProductCard({
       </Link>
 
       <div className="pt-4 flex flex-col">
-        <Link
-          href={linkDestino}
-          className="hover:underline decoration-1 underline-offset-4"
-        >
+        <Link href={linkDestino}>
           <h3 className="font-semibold text-foreground text-sm uppercase tracking-wide truncate">
             {producto.nombre || "Sin nombre"}
           </h3>

@@ -32,18 +32,6 @@ interface SeleccionarUnidadesModalProps {
   onConfirmar: (seleccion: UnidadSeleccionada[]) => void;
 }
 
-/**
- * Selección del aparato físico para las líneas serializadas del carrito.
- *
- * Solo lista unidades `estado = 'disponible'`, ordenadas por fecha_ingreso
- * ascendente (FIFO: primero sale el que primero entró, que es lo que evita
- * que queden equipos viejos muertos en el fondo del stock).
- *
- * Elegir acá no reserva nada: la unidad se marca recién al confirmar la
- * venta, con un UPDATE condicional que rebota si otra caja la vendió en el
- * medio. Por eso el modal puede mostrar una unidad que para cuando se
- * confirme ya no esté — el error de esa carrera se ve al confirmar, no acá.
- */
 export function SeleccionarUnidadesModal({
   onCerrar,
   lineas,
@@ -125,12 +113,12 @@ export function SeleccionarUnidadesModal({
       <DialogContent className="sm:max-w-[600px] border-border bg-card max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Barcode className="w-5 h-5 text-emerald-600" />
+            <Barcode className="w-5 h-5 text-success" />
             Elegí el aparato
           </DialogTitle>
           <DialogDescription>
-            Estos productos se venden por número de serie. Seleccioná qué
-            unidad se lleva el cliente.
+            Estos productos se venden por número de serie. Seleccioná qué unidad
+            se lleva el cliente.
           </DialogDescription>
         </DialogHeader>
 
@@ -142,7 +130,7 @@ export function SeleccionarUnidadesModal({
         ) : (
           <div className="space-y-4 pt-2">
             {error && (
-              <p className="text-xs text-red-600 border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 rounded-lg px-3 py-2">
+              <p className="text-xs text-danger border border-danger/20 bg-danger/10 rounded-lg px-3 py-2">
                 {error}
               </p>
             )}
@@ -178,7 +166,7 @@ export function SeleccionarUnidadesModal({
                   </div>
 
                   {unidades.length === 0 ? (
-                    <p className="px-3 py-4 text-xs text-red-600">
+                    <p className="px-3 py-4 text-xs text-danger">
                       No quedan unidades disponibles de este producto. Sacalo
                       del carrito para poder cobrar.
                     </p>
@@ -203,9 +191,7 @@ export function SeleccionarUnidadesModal({
                               }))
                             }
                             className={`w-full text-left px-3 py-2 flex items-center justify-between gap-3 transition-colors ${
-                              elegida
-                                ? "bg-emerald-50 dark:bg-emerald-950/30"
-                                : "hover:bg-muted/50"
+                              elegida ? "bg-success/10" : "hover:bg-muted/50"
                             }`}
                           >
                             <span className="font-mono text-xs">
@@ -221,9 +207,7 @@ export function SeleccionarUnidadesModal({
                               )}
                               <span
                                 className={`text-[10px] font-bold uppercase tracking-widest ${
-                                  elegida
-                                    ? "text-emerald-700 dark:text-emerald-400"
-                                    : "text-transparent"
+                                  elegida ? "text-success" : "text-transparent"
                                 }`}
                               >
                                 Elegido
@@ -251,7 +235,6 @@ export function SeleccionarUnidadesModal({
                 type="button"
                 onClick={handleConfirmar}
                 disabled={!todasElegidas}
-                className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-none"
               >
                 Confirmar unidades
               </Button>

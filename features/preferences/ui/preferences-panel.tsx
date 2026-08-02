@@ -148,7 +148,7 @@ export function PreferencesPanel() {
           <div className="flex bg-muted/50 p-1 rounded-xl border border-border/50">
             <button
               onClick={() => setTheme("light")}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
                 theme === "light"
                   ? "bg-background text-foreground ring-1 ring-black/5 dark:ring-white/10"
                   : "text-muted-foreground hover:text-foreground"
@@ -158,7 +158,7 @@ export function PreferencesPanel() {
             </button>
             <button
               onClick={() => setTheme("dark")}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
                 theme === "dark"
                   ? "bg-background text-foreground ring-1 ring-black/5 dark:ring-white/10"
                   : "text-muted-foreground hover:text-foreground"
@@ -168,7 +168,7 @@ export function PreferencesPanel() {
             </button>
             <button
               onClick={() => setTheme("system")}
-              className={`flex-1 items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all hidden sm:flex ${
+              className={`flex-1 items-center justify-center gap-2 py-2.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all hidden sm:flex ${
                 theme === "system"
                   ? "bg-background text-foreground ring-1 ring-black/5 dark:ring-white/10"
                   : "text-muted-foreground hover:text-foreground"
@@ -180,9 +180,9 @@ export function PreferencesPanel() {
         </div>
 
         {/* INSTALACIÓN PWA */}
-        <div className="bg-card p-6 rounded-xl border border-border flex flex-col justify-between">
+        <div className="bg-card p-6 rounded-lg border border-border flex flex-col justify-between">
           <div>
-            <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center mb-4">
+            <div className="w-10 h-10 bg-success/10 text-success rounded-xl flex items-center justify-center mb-4">
               <Download className="w-5 h-5" />
             </div>
             <h3 className="text-lg font-bold text-foreground mb-2">
@@ -197,9 +197,9 @@ export function PreferencesPanel() {
           <Button
             onClick={handleInstallClick}
             disabled={isInstalled}
-            className={`w-full font-semibold h-11 rounded-xl shadow-none uppercase tracking-widest text-xs transition-all ${
+            className={`w-full font-semibold h-12 uppercase transition-all ${
               isInstalled
-                ? "bg-emerald-50 text-emerald-700"
+                ? "bg-success/10 text-success"
                 : deferredPrompt
                   ? "bg-primary hover:bg-primary/90 text-white"
                   : "bg-muted text-muted-foreground"

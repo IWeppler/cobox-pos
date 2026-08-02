@@ -13,6 +13,7 @@ import { obtenerAtributosRequeridosFaltantes } from "@/features/stock/lib/valida
 type SupabaseServerClient = ReturnType<typeof createClient>;
 
 type AuditoriaVarianteRow = {
+  negocio_id: string;
   producto_id: string;
   variante_id_anterior: string | null;
   variante_id_nueva: string | null;
@@ -94,14 +95,39 @@ export async function editarProductoAction(
 
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
+  
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (!user) {
+    const error = "No se pudo verificar la sesión del usuario.";
+    return {
+      imagenes: { success: false, error },
+      variantes: { success: false, error },
+    };
+  }
+
+  // MULTI-TENANT: NEGOCIO ACTIVO DE LA SESIÓN
+  // No sale de perfiles.negocio_id: esa columna quedó deprecada, es NULL para
+  // todo usuario invitado y apunta al negocio viejo de quien trabaja en dos.
+  // =========================================================================
+  const { data: negocioId, error: negocioError } =
+    await supabase.rpc("negocio_actual");
+
+  if (negocioError || !negocioId) {
+    const error = "No hay un negocio activo en esta sesión.";
+    return {
+      imagenes: { success: false, error },
+      variantes: { success: false, error },
+    };
+  }
 
   // (a) Imágenes + cabecera del producto — corre siempre, sin importar lo
   // que pase con las variantes.
   const imagenes = await actualizarImagenesYCabecera(supabase, {
     id,
+    negocioId,
     nombre,
     categoria_id,
     descripcion,
@@ -118,6 +144,7 @@ export async function editarProductoAction(
   // no revierte ni condiciona lo que (a) ya haya guardado.
   const variantes = await procesarVariantes(supabase, {
     id,
+    negocioId,
     categoria_id: categoria_id || null,
     tieneVariantes,
     stockBase,
@@ -126,7 +153,7 @@ export async function editarProductoAction(
   });
 
   revalidatePath("/stock");
-  revalidatePath("/store");
+  revalidatePath("/store", "layout");
 
   return { imagenes, variantes };
 }
@@ -135,6 +162,7 @@ async function actualizarImagenesYCabecera(
   supabase: SupabaseServerClient,
   params: {
     id: string;
+    negocioId: string;
     nombre: string;
     categoria_id: string;
     descripcion: string;
@@ -149,6 +177,7 @@ async function actualizarImagenesYCabecera(
 ): Promise<ImagenesResult> {
   const {
     id,
+    negocioId,
     nombre,
     categoria_id,
     descripcion,
@@ -192,7 +221,8 @@ async function actualizarImagenesYCabecera(
       const file = validFiles[i];
       const fileExt = file.name.split(".").pop();
       const baseFileName = crypto.randomUUID();
-      const fileName = `${baseFileName}.${fileExt}`;
+      
+      const fileName = `${negocioId}/${baseFileName}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("productos")
@@ -211,7 +241,7 @@ async function actualizarImagenesYCabecera(
       const thumb = thumbnails[i];
       if (thumb && thumb.size > 0) {
         const thumbExt = thumb.name.split(".").pop();
-        const thumbName = `thumbs/${baseFileName}-thumb.${thumbExt}`;
+        const thumbName = `${negocioId}/thumbs/${baseFileName}-thumb.${thumbExt}`;
         const { error: uploadThumbError } = await supabase.storage
           .from("productos")
           .upload(thumbName, thumb, { cacheControl: "31536000" });
@@ -232,7 +262,7 @@ async function actualizarImagenesYCabecera(
       const grid = grids[i];
       if (grid && grid.size > 0) {
         const gridExt = grid.name.split(".").pop();
-        const gridName = `grids/${baseFileName}-grid.${gridExt}`;
+        const gridName = `${negocioId}/grids/${baseFileName}-grid.${gridExt}`;
         const { error: uploadGridError } = await supabase.storage
           .from("productos")
           .upload(gridName, grid, { cacheControl: "31536000" });
@@ -316,6 +346,7 @@ async function procesarVariantes(
   supabase: SupabaseServerClient,
   params: {
     id: string;
+    negocioId: string;
     categoria_id: string | null;
     tieneVariantes: boolean;
     stockBase: number;
@@ -323,7 +354,7 @@ async function procesarVariantes(
     userId: string | null;
   },
 ): Promise<VariantesResult> {
-  const { id, categoria_id, tieneVariantes, stockBase, formData, userId } =
+  const { id, negocioId, categoria_id, tieneVariantes, stockBase, formData, userId } =
     params;
 
   try {
@@ -343,6 +374,7 @@ async function procesarVariantes(
       const { data: unicoNuevo, error: insVarError } = await supabase
         .from("producto_variantes")
         .insert({
+          negocio_id: negocioId,
           producto_id: id,
           nombre_display: "Único",
           stock: stockBase,
@@ -360,12 +392,13 @@ async function procesarVariantes(
 
       const { error: insStockError } = await supabase
         .from("productos_stock")
-        .insert({ producto_id: id, variante: "Único", cantidad: stockBase });
+        .insert({ producto_id: id, variante: "Único", cantidad: stockBase, negocio_id: negocioId });
       if (insStockError) throw insStockError;
 
       const { error: auditError } = await supabase
         .from("producto_variantes_auditoria")
         .insert({
+          negocio_id: negocioId,
           producto_id: id,
           variante_id_anterior: unicoAnterior?.id ?? null,
           variante_id_nueva: unicoNuevo?.id ?? null,
@@ -564,6 +597,7 @@ async function procesarVariantes(
       "guardar_variantes_producto",
       {
         p_producto_id: id,
+        p_negocio_id: negocioId,
         p_variantes: rpcPayload,
         p_editado_por: userId,
         p_confirmadas_eliminar: confirmadasEliminar,

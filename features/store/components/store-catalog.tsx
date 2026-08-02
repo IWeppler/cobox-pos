@@ -148,13 +148,50 @@ function CatalogContent({
   const orden =
     ordenParam && ORDEN_VALIDOS.has(ordenParam) ? ordenParam : DEFAULT_ORDEN;
 
+  // 🚀 NUEVO: Filtramos los productos por la categoría activa y la búsqueda
+  // ANTES de extraer las variantes, para que los filtros sean contextuales.
+  const productosContextuales = useMemo(() => {
+    if (modoSeleccion) return productosBase;
+
+    return productosBase.filter((p) => {
+      // 1. Filtro por Búsqueda de texto
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const matchBuscador =
+          p.nombre?.toLowerCase().includes(q) ||
+          p.tipo?.toLowerCase().includes(q) ||
+          p.descripcion?.toLowerCase().includes(q);
+        if (!matchBuscador) return false;
+      }
+
+      // 2. Filtro por Categoría activa
+      if (tipo !== DEFAULT_TIPO) {
+        // NOTA: Ajusta `p.categoria_id` si en tu interfaz Producto la propiedad se llama distinto
+        // (por ejemplo: p.tipo_id, p.categoria, etc.)
+        const catId = (p as any).categoria_id; 
+        if (!catId) return false;
+
+        // Match exacto (Ej: Seleccionó Hombre y el producto es Hombre)
+        if (catId === tipo) return true;
+
+        // Match por subcategoría (Ej: Seleccionó Hombre y el producto es Remeras Hombre)
+        const catDelProducto = categoriasBase.find(c => c.id === catId);
+        if (catDelProducto?.parent_id === tipo) return true;
+
+        return false;
+      }
+
+      return true;
+    });
+  }, [productosBase, modoSeleccion, searchQuery, tipo, categoriasBase]);
+
   const propiedadesGlobales = useMemo(
     () =>
-      buildPropiedadesFiltro(productosBase, {
+      buildPropiedadesFiltro(productosContextuales, {
         ocultarSinStock: config?.mostrar_sin_stock === false,
         incluirStockLegacy: false,
       }),
-    [productosBase, config],
+    [productosContextuales, config],
   );
 
   const filtrosVariantes = useMemo(() => {
@@ -354,7 +391,7 @@ function CatalogContent({
                 onClick={() =>
                   setVisibleCount((prev) => prev + ITEMS_POR_PAGINA)
                 }
-                className="w-full sm:w-auto font-bold rounded-none border-border shadow-none text-foreground hover:bg-neutral-900 hover:text-white px-12 uppercase tracking-widest text-xs transition-colors h-14 cursor-pointer"
+                className="w-full sm:w-auto font-bold rounded-none border-border shadow-none text-foreground px-12 uppercase tracking-widest text-xs transition-colors h-14 cursor-pointer"
               >
                 <Plus className="mr-2 h-4 w-4" /> Cargar más
               </Button>

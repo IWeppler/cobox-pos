@@ -6,6 +6,9 @@ import { DashboardNavbar } from "@/shared/components/dashboard-navbar";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { QueryProvider } from "@/shared/components/query-provider";
+import { listarMisNegociosAction } from "@/features/auth/actions/negocios";
+import { COOKIE_NEGOCIO_ACTIVO } from "@/shared/lib/negocio-activo";
+import { NegocioActivoProvider } from "@/shared/components/negocio-activo-provider";
 
 export default async function DashboardLayout({
   children,
@@ -24,13 +27,15 @@ export default async function DashboardLayout({
     redirect("/auth");
   }
 
-  const { data: perfil } = await supabase
-    .from("perfiles")
-    .select("rol")
-    .eq("id", user.id)
-    .single();
+  // El rol es por negocio (usuarios_negocios), el nombre es del perfil global.
+  const [{ data: perfil }, { data: rolActual }, negocios] = await Promise.all([
+    supabase.from("perfiles").select("nombre").eq("id", user.id).single(),
+    supabase.rpc("rol_actual"),
+    listarMisNegociosAction(),
+  ]);
 
-  const userRole = perfil?.rol || "VENDEDOR";
+  const userRole = rolActual || "VENDEDOR";
+  const negocioActivoId = cookieStore.get(COOKIE_NEGOCIO_ACTIVO)?.value;
 
   const { data: settings } = await supabase
     .from("configuracion_pos")
@@ -41,6 +46,12 @@ export default async function DashboardLayout({
   const systemBranding: ConfiguracionPOS = {
     id: settings?.id || "1",
     posName: settings?.posName || "Sistema POS",
+    razon_social: settings?.posName || "Sistema POS",
+    cuit: "",
+    condicion_iva: "",
+    inicio_actividades: "",
+    localidad: "",
+    provincia: "",
     posLogo: settings?.posLogo || "",
     whatsapp: "",
     direccion: "",
@@ -48,9 +59,30 @@ export default async function DashboardLayout({
     modo_caja: settings?.modo_caja || "UNICA",
   };
 
+  // Con una sola membresía no hace falta cookie: ese es el negocio activo.
+  const membresiaActiva =
+    negocios.find((n) => n.negocio_id === negocioActivoId) ??
+    (negocios.length === 1 ? negocios[0] : null);
+
+  const negocioActivo = membresiaActiva
+    ? {
+        id: membresiaActiva.negocio_id,
+        slug: membresiaActiva.slug,
+        nombre: membresiaActiva.nombre,
+      }
+    : null;
+
   return (
+    <NegocioActivoProvider negocio={negocioActivo}>
     <div className="min-h-screen bg-sidebar flex flex-col md:flex-row">
-      <Sidebar branding={systemBranding} userRole={userRole} userId={user.id} />
+      <Sidebar
+        branding={systemBranding}
+        userRole={userRole}
+        userId={user.id}
+        userName={perfil?.nombre || undefined}
+        negocios={negocios}
+        negocioActivoId={negocioActivoId}
+      />
 
       {/* Contenedor principal de la derecha */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden md:p-2 md:pl-0 h-screen">
@@ -69,5 +101,6 @@ export default async function DashboardLayout({
         </div>
       </div>
     </div>
+    </NegocioActivoProvider>
   );
 }

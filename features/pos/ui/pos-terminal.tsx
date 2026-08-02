@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { Producto } from "@/entities/productos/types";
 import { ShoppingBag } from "lucide-react";
 import { useCartStore } from "@/shared/store/cart-store";
@@ -64,7 +65,9 @@ export function PosTerminal({
   nombreComercio = "Tienda",
   mostrarSinStock = true,
 }: Readonly<PosTerminalProps>) {
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  // El link del catálogo necesita el negocio, no solo el origen: cada
+  // comercio tiene su propia tienda.
+  const slugNegocio = useSlugNegocioActivo() ?? "";
   const [searchQuery, setSearchQuery] = useState("");
   const [tipo, setTipo] = useState("todos");
   const [filtrosVariantes, setFiltrosVariantes] = useState<
@@ -322,7 +325,7 @@ export function PosTerminal({
                 const bloqueado = sinStock && !permitirVentaSinStock;
 
                 const urlProducto = producto.slug
-                  ? construirUrlProducto(baseUrl, producto.slug)
+                  ? construirUrlProducto(slugNegocio, producto.slug)
                   : null;
                 const compartirDeshabilitado =
                   !urlProducto ||
@@ -365,8 +368,8 @@ export function PosTerminal({
                           </div>
                         )}
                         {sinStock && (
-                          <div className="absolute inset-0 bg-background/55 backdrop-blur-[1px]" > 
-                            <span className="px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-rose-100 text-rose-800 border border-rose-200">
+                          <div className="absolute inset-0 bg-background/55 backdrop-blur-[1px]">
+                            <span className="px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-danger/10 text-danger border border-danger/20">
                               Agotado
                             </span>
                           </div>

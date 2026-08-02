@@ -95,7 +95,7 @@ export function PaymentModal({
           </DialogHeader>
 
           {isSobrePagoError ? (
-            <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-800 text-sm leading-relaxed">
+            <div className="bg-danger/10 border border-danger/20 p-4 rounded-xl text-danger text-sm leading-relaxed">
               Has asignado <strong>${sumaPagos.toLocaleString("es-AR")}</strong>
               , superando el total del ticket de{" "}
               <strong>${totalFinal.toLocaleString("es-AR")}</strong>. Revisa los
@@ -117,9 +117,10 @@ export function PaymentModal({
                   />
                 </div>
                 {montoACobrar > totalFinal ? (
-                  <p className="text-[11px] font-medium text-amber-700 dark:text-amber-500">
-                    Incluye ${(montoACobrar - totalFinal).toLocaleString("es-AR")}{" "}
-                    de recargo por el método de pago.
+                  <p className="text-[11px] font-medium text-warning">
+                    Incluye $
+                    {(montoACobrar - totalFinal).toLocaleString("es-AR")} de
+                    recargo por el método de pago.
                   </p>
                 ) : null}
               </div>
@@ -159,7 +160,7 @@ export function PaymentModal({
                   </div>
                 </>
               ) : (
-                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl text-blue-800 text-sm">
+                <div className="bg-info/10 border border-info/20 p-4 rounded-xl text-info text-sm">
                   Procesa el cobro en tu terminal o cuenta digital y presiona
                   confirmar para asentar la venta.
                 </div>
@@ -200,7 +201,7 @@ export function PaymentModal({
       <DialogContent className="sm:max-w-[420px] bg-card p-6 rounded-2xl border-border shadow-xl">
         <DialogHeader className="mb-2">
           <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
-            <BookUser className="w-5 h-5 text-amber-600" />
+            <BookUser className="w-5 h-5 text-warning" />
             Resumen de Fiado
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -245,7 +246,7 @@ export function PaymentModal({
           </div>
 
           {recargoAnticipo > 0 ? (
-            <div className="flex justify-between items-center text-xs font-medium text-amber-700 dark:text-amber-500">
+            <div className="flex justify-between items-center text-xs font-medium text-warning">
               <span>
                 Recargo del método ({recargoPorcentajeSeleccionado}%) sobre el
                 anticipo
@@ -279,7 +280,7 @@ export function PaymentModal({
 
             {/* Advertencia suave si entrega poco dinero */}
             {isAnticipoInsuficiente && anticipoLocalNum >= 0 && (
-              <div className="mt-3 pt-3 border-t border-border flex items-start gap-2 text-amber-800 dark:text-accent-orange text-xs font-medium">
+              <div className="mt-3 pt-3 border-t border-border flex items-start gap-2 text-warning text-xs font-medium">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 <p>
                   El cliente está dejando un anticipo menor al mínimo sugerido
@@ -290,7 +291,7 @@ export function PaymentModal({
           </div>
 
           {!clienteSeleccionado ? (
-            <div className="flex items-center gap-3 text-rose-700 bg-rose-50 p-3 rounded-lg border border-rose-200">
+            <div className="flex items-center gap-3 text-danger bg-danger/10 p-3 rounded-lg border border-danger/20">
               <UserX className="w-6 h-6 shrink-0" />
               <p className="text-xs font-semibold leading-tight">
                 Debes seleccionar un cliente en el paso anterior para poder
@@ -298,7 +299,7 @@ export function PaymentModal({
               </p>
             </div>
           ) : (
-            <div className="flex items-center gap-3 text-emerald-800 bg-emerald-50 dark:bg-emerald-300/20 dark:text-emerald-300 p-3 rounded-lg border border-emerald-300">
+            <div className="flex items-center gap-3 text-success bg-success/10 p-3 rounded-lg border border-success/20">
               <CheckCircle2 className="w-6 h-6 shrink-0" />
               <p className="text-xs font-medium leading-tight">
                 La deuda se registrará en la cuenta de{" "}
@@ -312,7 +313,7 @@ export function PaymentModal({
           <Button
             onClick={() => onConfirm(anticipoLocalNum)}
             disabled={isPending || !clienteSeleccionado || deudaGenerada < 0}
-            className="bg-accent-orange hover:bg-accent-orange/80 text-white h-12 w-full"
+            className="bg-warning hover:bg-warning/80 text-white h-12 w-full"
           >
             {isPending ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />

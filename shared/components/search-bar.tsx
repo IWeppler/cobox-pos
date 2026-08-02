@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Search, X } from "lucide-react";
 import { Input } from "@/shared/ui/input";
+import { useRutaCatalogo } from "@/shared/lib/use-negocio";
 
 export function SearchBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const rutaDelCatalogo = useRutaCatalogo();
   const currentQuery = searchParams.get("q") || "";
 
   const [term, setTerm] = useState(currentQuery);
@@ -49,15 +51,21 @@ export function SearchBar() {
         params.delete("q");
       }
 
+      // Siempre dentro del catálogo actual: sin negocio en la ruta no hay
+      // búsqueda a la que ir.
+      if (rutaDelCatalogo === "#") return;
+
       if (pathname.includes("/store")) {
-        router.replace(`/store?${params.toString()}`, { scroll: false });
+        router.replace(`${rutaDelCatalogo}?${params.toString()}`, {
+          scroll: false,
+        });
       } else {
-        router.push(`/store?${params.toString()}`);
+        router.push(`${rutaDelCatalogo}?${params.toString()}`);
       }
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [currentQuery, term, pathname, router, searchParams]);
+  }, [currentQuery, term, pathname, router, searchParams, rutaDelCatalogo]);
 
   return (
     <>

@@ -25,7 +25,6 @@ import { AnularVentaModal } from "./cancel-sale-modal";
 import { Button } from "@/shared/ui/button";
 import { TicketSheet } from "./ticket-sheet";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
-import { getMetodoPagoColor } from "@/shared/utils/payment-methods";
 import { SaleTableHeader } from "./sale-table-header";
 
 const ITEMS_POR_PAGINA = 10;
@@ -390,10 +389,10 @@ export function VentasTable({
                               <span
                                 className={`mt-1 text-xs uppercase font-semibold ${
                                   estadoPago.variant === "anulada"
-                                    ? "text-destructive"
+                                    ? "text-danger"
                                     : estadoPago.estaPagado
-                                      ? "text-emerald-600 dark:text-emerald-400"
-                                      : "text-amber-600"
+                                      ? "text-success"
+                                      : "text-warning"
                                 }`}
                               >
                                 {estadoPago.label}
@@ -402,12 +401,11 @@ export function VentasTable({
                           </TableCell>
 
                           <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] uppercase font-bold tracking-widest ${getMetodoPagoColor(metodoPago)}`}
+                            <p
+                              className="text-[10px] uppercase font-semibold text-muted-foreground"
                             >
                               {metodoPago}
-                            </Badge>
+                            </p>
                           </TableCell>
 
                           <TableCell className="text-right">
@@ -503,9 +501,6 @@ export function VentasTable({
                   >
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex flex-col pr-3">
-                        <span className="font-bold text-muted-foreground text-xs uppercase tracking-widest">
-                          #{venta.id.split("-")[0].toUpperCase()}
-                        </span>
                         <span className="font-bold text-foreground text-sm mt-1 leading-tight line-clamp-2">
                           {nombrePrincipal}
                         </span>
@@ -522,10 +517,7 @@ export function VentasTable({
                         {getSupabaseRelation(primerItem.unidad_serie)?.imei && (
                           <span className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                             IMEI{" "}
-                            {
-                              getSupabaseRelation(primerItem.unidad_serie)
-                                ?.imei
-                            }
+                            {getSupabaseRelation(primerItem.unidad_serie)?.imei}
                           </span>
                         )}
                       </div>
@@ -537,20 +529,19 @@ export function VentasTable({
                     </div>
 
                     <div className="flex items-center justify-between gap-2 mb-3">
-                      <Badge
-                        variant="outline"
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-tight ${getMetodoPagoColor(metodoPago)}`}
+                      <p
+                        className={`inline-flex items-center text-[11px] font-semibold text-muted-foreground`}
                       >
                         {metodoPago}
-                      </Badge>
+                      </p>
                       <Badge
                         variant="outline"
                         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-tight ${
                           estadoPago.variant === "anulada"
                             ? "border-destructive/20 bg-destructive/10 text-destructive"
                             : estadoPago.estaPagado
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-amber-200 bg-amber-50 text-amber-700"
+                              ? "border-success/20 bg-success/10 text-success"
+                              : "border-warning/20 bg-warning/10 text-warning"
                         }`}
                       >
                         {estadoPago.label}
@@ -587,7 +578,7 @@ export function VentasTable({
                           <Eye className="w-4 h-4 text-muted-foreground" />
                         </Button>
                         {puedeAnular && !isAnulada && (
-                          <div className="[&>button]:h-8 [&>button]:w-8 [&>button]:rounded-lg [&>button]:border [&>button]:border-transparent [&>button:hover]:border-rose-200">
+                          <div className="[&>button]:h-8 [&>button]:w-8 [&>button]:rounded-lg [&>button]:border [&>button]:border-transparent [&>button:hover]:border-danger/10">
                             <AnularVentaModal
                               id={venta.id}
                               productoNombre={

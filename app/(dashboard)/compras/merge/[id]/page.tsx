@@ -25,7 +25,7 @@ export default async function MergePage({ params }: Readonly<PageProps>) {
 
   if (orden.estado === "APROBADA") {
     return (
-      <div className="p-8 text-center bg-emerald-50 dark:bg-emerald-700/20 text-emerald-700 dark:text-emerald-200 rounded-xl font-bold m-2 md:m-4">
+      <div className="p-8 text-center bg-success/10 text-success rounded-xl font-bold m-2 md:m-4">
         Esta orden de compra ya fue procesada e impactada en el stock.
       </div>
     );

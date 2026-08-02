@@ -1,33 +1,33 @@
 const PALETTE = [
   {
-    stroke: "text-accent-blue",
-    dot: "text-accent-blue",
-    fill: "fill-accent-blue",
-    legend: "bg-accent-blue",
+    stroke: "text-[#c5fa69]",
+    dot: "text-[#c5fa69]",
+    fill: "fill-[#c5fa69]",
+    legend: "bg-[#c5fa69]",
   },
   {
-    stroke: "text-accent-orange",
-    dot: "text-accent-orange",
-    fill: "fill-accent-orange",
-    legend: "bg-accent-orange",
+    stroke: "text-[#d2fee3]",
+    dot: "text-[#d2fee3]",
+    fill: "fill-[#d2fee3]",
+    legend: "bg-[#d2fee3]",
   },
   {
-    stroke: "text-emerald-700 dark:text-accent-lime",
-    dot: "text-emerald-700 dark:text-accent-lime",
-    fill: "fill-emerald-700 dark:fill-accent-lime",
-    legend: "bg-emerald-700 dark:bg-accent-lime",
+    stroke: "text-[#ea714f]",
+    dot: "text-[#ea714f]",
+    fill: "fill-[#ea714f]",
+    legend: "bg-[#ea714f]",
   },
   {
-    stroke: "text-amber-500",
-    dot: "text-amber-600",
-    fill: "fill-amber-500",
-    legend: "bg-amber-500",
+    stroke: "text-[#2a80fc]",
+    dot: "text-[#2a80fc]",
+    fill: "fill-[#2a80fc]",
+    legend: "bg-[#2a80fc]",
   },
   {
-    stroke: "text-teal-500",
-    dot: "text-teal-600",
-    fill: "fill-teal-500/80",
-    legend: "bg-teal-500",
+    stroke: "text-[#feb7d6]",
+    dot: "text-[#feb7d6]",
+    fill: "fill-[#feb7d6]",
+    legend: "bg-[#feb7d6]",
   },
   {
     stroke: "text-orange-500",
@@ -54,19 +54,19 @@ export function colorVendedor(index: number) {
 }
 
 const METODO_COLOR: Record<string, string> = {
-  EFECTIVO: "fill-[#c7ea46]",
-  TARJETA: "fill-[#f97d47]",
-  TRANSFERENCIA: "fill-[#a8a1f2]",
-  CUENTA_CORRIENTE: "fill-[#ffc107]",
-  BILLETERA_VIRTUAL: "fill-[#2f96fe]",
+  EFECTIVO: "fill-[#c5fa69]",
+  TARJETA: "fill-[#d2fee3]",
+  TRANSFERENCIA: "fill-[#2a80fc]",
+  CUENTA_CORRIENTE: "fill-[#ea714f]",
+  BILLETERA_VIRTUAL: "fill-[#c5fa69]",
 };
 
 const METODO_LEGEND: Record<string, string> = {
-  EFECTIVO: "bg-[#c7ea46]",
-  TARJETA: "bg-[#f97d47]",
-  TRANSFERENCIA: "bg-[#a8a1f2]",
-  CUENTA_CORRIENTE: "bg-[#ffc107]",
-  BILLETERA_VIRTUAL: "bg-[#2f96fe]",
+  EFECTIVO: "bg-[#c5fa69]",
+  TARJETA: "bg-[#d2fee3]",
+  TRANSFERENCIA: "bg-[#2a80fc]",
+  CUENTA_CORRIENTE: "bg-[#ea714f]",
+  BILLETERA_VIRTUAL: "bg-[#c5fa69]",
 };
 
 export function colorMetodo(metodo: string) {

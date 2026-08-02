@@ -78,7 +78,7 @@ export function CargaRapidaMaestroPicker({
                   ) : (
                     <span
                       title={`Coincidencia ${Math.round(candidato.score * 100)}%`}
-                      className="text-[10px] font-medium shrink-0 mt-0.5 px-1.5 py-0.5 rounded border bg-emerald-500/10 text-emerald-700 dark:text-emerald-500 border-emerald-500/20"
+                      className="text-[10px] font-medium shrink-0 mt-0.5 px-1.5 py-0.5 rounded border bg-success/10 text-success border-success/20"
                     >
                       {Math.round(candidato.score * 100)}%
                     </span>

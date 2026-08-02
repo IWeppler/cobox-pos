@@ -266,10 +266,10 @@ export function PriceHistoryModal() {
                     )}
                   </ScrollArea>
 
-                  <div className="flex items-start gap-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2 bg-warning/10 p-3 rounded-lg border border-warning/20">
+                    <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <p className="text-amber-900 leading-tight font-medium text-xs mb-2">
+                      <p className="text-warning leading-tight font-medium text-xs mb-2">
                         Esto va a sobreescribir el precio y costo actuales de{" "}
                         {itemsQueCambian.length} fila
                         {itemsQueCambian.length === 1 ? "" : "s"} con los
@@ -285,11 +285,11 @@ export function PriceHistoryModal() {
                           onChange={(e) =>
                             setConfirmadoRevertir(e.target.checked)
                           }
-                          className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                          className="w-4 h-4 rounded border-warning/20 text-warning focus:ring-warning accent-warning cursor-pointer"
                         />
                         <Label
                           htmlFor="confirm_revert"
-                          className="text-amber-900 cursor-pointer leading-tight font-medium text-xs"
+                          className="text-warning cursor-pointer leading-tight font-medium text-xs"
                         >
                           Entiendo, revertir de todas formas.
                         </Label>

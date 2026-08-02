@@ -80,9 +80,9 @@ export function VistaGerencial({
   };
 
   return (
-    <div className="space-y-6 flex flex-col-reverse lg:flex-row lg:items-start lg:gap-6">
+    <div className="space-y-6 flex flex-col-reverse lg:flex-row lg:items-start gap-2 lg:gap-6">
       {/* ===================== CARD "HOY" ===================== */}
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="rounded-2xl border border-border bg-card overflow-hidden mt-2 md:mt-0">
         <div className="px-6 pt-5 pb-4 flex items-center justify-between gap-3">
           <div>
             <h3 className={LABEL}>Hoy</h3>
@@ -176,8 +176,8 @@ export function VistaGerencial({
                 <span
                   className={`font-mono font-semibold ${
                     (caja.diferencia ?? 0) === 0
-                      ? "text-emerald-700 dark:text-emerald-400"
-                      : "text-rose-600"
+                      ? "text-success"
+                      : "text-danger"
                   }`}
                 >
                   {/* El signo se escribe a mano: formatearMoneda ya trae el "-"
@@ -266,7 +266,9 @@ export function VistaGerencial({
                     <table className="w-full text-sm text-left">
                       <thead className="text-muted-foreground text-[10px] uppercase font-bold tracking-widest">
                         <tr>
-                          <th className="px-4 sm:px-6 py-2.5 font-bold">Hora</th>
+                          <th className="px-4 sm:px-6 py-2.5 font-bold">
+                            Hora
+                          </th>
                           <th className="px-2 py-2.5 font-bold">Concepto</th>
                           <th className="px-2 py-2.5 font-bold hidden sm:table-cell">
                             Vendedora
@@ -280,10 +282,13 @@ export function VistaGerencial({
                         {filas.map((fila) => (
                           <tr key={fila.pago_id}>
                             <td className="px-4 sm:px-6 py-2.5 text-muted-foreground text-xs font-mono whitespace-nowrap">
-                              {new Date(fila.fecha).toLocaleTimeString("es-AR", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                              {new Date(fila.fecha).toLocaleTimeString(
+                                "es-AR",
+                                {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
                             </td>
                             <td className="px-2 py-2.5 text-foreground">
                               <span className="truncate block max-w-[140px] sm:max-w-xs text-xs sm:text-sm">

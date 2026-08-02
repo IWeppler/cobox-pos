@@ -1,162 +1,108 @@
+// app/auth/page.tsx
 import { LoginForm } from "@/features/auth/ui/login-form";
 import Image from "next/image";
-import { LayoutDashboard, Leaf, Package, ShoppingCart } from "lucide-react";
+import { Suspense } from "react";
 
 export default function AuthPage() {
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-background">
-      {/* PANEL IZQUIERDO — BRANDING SAAS (Oculto en móvil) */}
-      <div className="hidden lg:flex relative bg-primary flex-col justify-between p-12 overflow-hidden">
-        {/* Decoraciones de fondo abstracto (Estilo Hexágonos/Blur de la referencia) */}
-        <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-white/10 rounded-full mix-blend-overlay filter blur-3xl opacity-50" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-primary rounded-full filter blur-3xl opacity-50" />
-
+      {/* PANEL IZQUIERDO — FORMULARIO (Se mantiene intacto) */}
+      <div className="flex flex-col relative px-8 sm:px-16 py-12 lg:py-8 bg-card border-r border-border/50">
+        
         {/* Logo Superior Izquierdo */}
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg">
+        <div className="absolute top-8 left-8 sm:top-12 sm:left-12 flex items-center gap-3">
+          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
             <Image
               src="/logow.png"
               alt="Logo"
-              width={56}
-              height={56}
-              className="object-contain rounded-lg"
+              width={36}
+              height={36}
+              className="object-contain rounded"
             />
           </div>
-          <span className="text-white font-bold text-2xl tracking-tight">
-            Cobox POS
+          <span className="font-bold text-lg tracking-tight text-foreground">
+            Cobox
           </span>
         </div>
 
-        {/* Mockup Central (Simulado 100% con CSS/Tailwind) */}
-        <div className="relative z-10 w-full max-w-lg mx-auto mt-12 select-none">
-          {/* Ventana principal oscura */}
-          <div className="bg-[#0f172a] rounded-2xl shadow-2xl border border-white/10 overflow-hidden transform transition-transform duration-500">
-            {/* Header del Mockup (Botones tipo Mac) */}
-            <div className="h-12 border-b border-white/10 flex items-center px-4 gap-4 bg-white/5">
-              <div className="flex gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-rose-500" />
-                <div className="w-3 h-3 rounded-full bg-amber-500" />
-                <div className="w-3 h-3 rounded-full bg-emerald-500" />
-              </div>
-              <div className="h-3 w-24 bg-white/10 rounded-full" />
-            </div>
-
-            {/* Body del Mockup */}
-            <div className="p-6 flex gap-6">
-              {/* Sidebar Mockup */}
-              <div className="w-10 space-y-4">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
-                  <LayoutDashboard size={18} />
-                </div>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white/30">
-                  <Package size={18} />
-                </div>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white/30">
-                  <ShoppingCart size={18} />
-                </div>
-              </div>
-              {/* Content Mockup */}
-              <div className="flex-1 space-y-4">
-                <div className="flex gap-4">
-                  <div className="h-24 flex-1 bg-white/5 rounded-xl border border-white/5 p-4 flex flex-col justify-between">
-                    <div className="h-2 w-16 bg-white/20 rounded-full" />
-                    <div className="h-8 w-24 bg-white/80 rounded-full" />
-                  </div>
-                  <div className="h-24 flex-1 bg-white/5 rounded-xl border border-white/5 p-4 flex flex-col justify-between">
-                    <div className="h-2 w-16 bg-white/20 rounded-full" />
-                    <div className="h-8 w-20 bg-white/80 rounded-full" />
-                  </div>
-                </div>
-                <div className="h-32 w-full bg-white/5 rounded-xl border border-white/5 p-5 space-y-4">
-                  <div className="h-2.5 w-full bg-white/10 rounded-full" />
-                  <div className="h-2.5 w-5/6 bg-white/10 rounded-full" />
-                  <div className="h-2.5 w-4/6 bg-white/10 rounded-full" />
-                </div>
-              </div>
-            </div>
+        {/* Contenedor del Formulario Centrado */}
+        <div className="flex-1 flex flex-col justify-center w-full max-w-sm mx-auto space-y-8 mt-16 lg:mt-0">
+          <div className="flex flex-col space-y-2 text-center lg:text-left">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
+              Iniciar sesión
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Ingresá tus credenciales para acceder a tu panel.
+            </p>
           </div>
 
-          {/* Pop-up flotante blanco (Tarjeta de notificación) */}
-          <div className="absolute -bottom-8 -right-8 bg-white p-5 rounded-2xl shadow-2xl border border-border w-72 animate-in slide-in-from-bottom-4 duration-1000">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
-                <Leaf size={18} />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-[#0f172a] mb-0.5">
-                  Nueva venta registrada
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Hace 2 segundos
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <div className="h-10 flex-1 bg-muted/50 rounded-lg border border-border/50" />
-              <div className="h-10 w-16 bg-emerald-50 rounded-lg border border-emerald-100" />
-            </div>
-          </div>
-        </div>
-
-        {/* Copy Inferior & Paginación */}
-        <div className="relative z-10 text-center mt-20 max-w-xl mx-auto space-y-4">
-          <h2 className="text-2xl font-bold text-white leading-tight">
-            Gestión comercial inteligente en tiempo real.
-          </h2>
-          <p className="text-blue-100/90 text-sm font-medium">
-            Controla tu inventario, registra ventas y analiza tus márgenes de
-            ganancia desde un solo lugar.
-          </p>
-
-          {/* Dots de Paginación */}
-          <div className="flex items-center justify-center gap-2 pt-4">
-            <div className="w-6 h-1.5 rounded-full bg-white" />
-            <div className="w-1.5 h-1.5 rounded-full bg-white/40 hover:bg-white transition-colors cursor-pointer" />
-            <div className="w-1.5 h-1.5 rounded-full bg-white/40 hover:bg-white transition-colors cursor-pointer" />
-          </div>
-        </div>
-      </div>
-
-      {/* PANEL DERECHO — FORMULARIO */}
-      <div className="flex flex-col justify-center px-8 sm:px-16 py-12 lg:py-24 bg-card relative">
-        <div className="w-full max-w-sm mx-auto space-y-8">
-          {/* Cabecera */}
-          <div className="flex flex-col gap-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-card rounded-xl flex items-center justify-center">
-                <Image
-                  src="/logow.png"
-                  alt="Logo"
-                  width={56}
-                  height={56}
-                  className="object-contain rounded-lg"
-                />
-              </div>
-              <span className="font-bold text-xl tracking-tight text-foreground">
-                Cobox POS
-              </span>
-            </div>
-
-            <div className="space-y-1.5">
-              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
-                Iniciar sesión
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Ingresá tus credenciales de administrador o vendedor.
-              </p>
-            </div>
-          </div>
-
-          <div className="h-px bg-border" />
-
-          {/* Componente del formulario existente */}
-          <LoginForm />
+          {/* El form lee ?error= de la URL, así que necesita Suspense. */}
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
         </div>
 
         {/* Footer */}
         <p className="absolute bottom-8 left-0 right-0 text-xs font-medium text-muted-foreground text-center">
-          © {new Date().getFullYear()} Cobox POS
+          © {new Date().getFullYear()} Cobox POS. Todos los derechos reservados.
         </p>
+      </div>
+
+      {/* PANEL DERECHO — BRANDING VISUAL (Actualizado) */}
+      <div className="hidden lg:flex relative flex-col overflow-hidden">
+        {/* Imagen de Fondo Original */}
+        <Image
+          src="/splash-backdrop.webp"
+          alt="Background"
+          fill
+          className="object-cover z-0 opacity-90"
+          priority
+        />
+        
+        {/* Capa de oscurecimiento */}
+        <div className="absolute inset-0 bg-[#0a2342]/40 z-0" />
+
+        {/* Nueva Capa de Ruido (Noise overlay) */}
+        <div 
+          className="absolute inset-0 z-0 opacity-30 mix-blend-overlay pointer-events-none"
+          style={{ backgroundImage: 'url("/noise.svg")', backgroundRepeat: 'repeat' }}
+        />
+
+        {/* Contenido */}
+        <div className="relative z-10 w-full h-full flex flex-col pt-24 pl-16">
+          
+          {/* Título Estilo Sanity */}
+          <h2 className="text-5xl font-medium text-white tracking-tight leading-[1.1] max-w-xl">
+            Gestión comercial inteligente en tiempo real
+          </h2>
+
+          {/* Contenedor de Mockups (Tamaños masivos para tapar el fondo) */}
+          <div className="relative flex-1 mt-16 w-full">
+            
+            {/* Mockup de Atrás (auth.png) - Tamaño 140% para desbordar la pantalla */}
+            <div className="absolute left-0 top-8 w-[140%] rounded-xl shadow-2xl border border-white/10 overflow-hidden transform transition-transform duration-700 hover:-translate-y-2 z-10">
+              <Image
+                src="/auth.png"
+                alt="Dashboard Principal"
+                width={1600}
+                height={1000}
+                className="w-full h-auto object-cover"
+              />
+            </div>
+
+            {/* Mockup de Adelante (auth1.png) - Tamaño 130% desplazado hacia abajo */}
+            <div className="absolute left-[15%] top-[40%] w-[130%] rounded-xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] border border-white/10 overflow-hidden transform transition-transform duration-700 hover:-translate-y-2 z-20">
+              <Image
+                src="/auth1.png"
+                alt="Detalle Dashboard"
+                width={1600}
+                height={1000}
+                className="w-full h-auto object-cover"
+              />
+            </div>
+            
+          </div>
+        </div>
       </div>
     </div>
   );

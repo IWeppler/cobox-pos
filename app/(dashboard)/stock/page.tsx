@@ -14,12 +14,8 @@ export default async function StockPage() {
 
   let userRole = "VENDEDOR";
   if (user) {
-    const { data: perfil } = await supabase
-      .from("perfiles")
-      .select("rol")
-      .eq("id", user.id)
-      .single();
-    if (perfil) userRole = perfil.rol;
+    const { data: rolActual } = await supabase.rpc("rol_actual");
+    if (rolActual) userRole = rolActual;
   }
 
   return <StockPageClient userRole={userRole} />;

@@ -61,7 +61,7 @@ export function CartFooterPublico({
           {calculablesAplicadas.map((promo) => (
             <div
               key={promo.id}
-              className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 dark:bg-emerald-500/20 dark:text-emerald-100 px-2.5 py-1.5 text-xs font-medium text-emerald-800"
+              className="flex items-center gap-2 rounded-md border border-success/20 bg-success/10 px-2.5 py-1.5 text-xs font-medium text-success"
             >
               <Tag className="h-3.5 w-3.5 shrink-0" />
               <span>{formatearPromoPublica(promo)}</span>
@@ -78,7 +78,7 @@ export function CartFooterPublico({
           {informativasCondicionales.map((promo) => (
             <div
               key={promo.id}
-              className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-500/20 dark:text-amber-100 px-2.5 py-1.5 text-xs font-medium text-amber-800"
+              className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-500/20 dark:text-amber-100 px-2.5 py-1.5 text-xs font-medium text-warning"
             >
               <Tag className="h-3.5 w-3.5 shrink-0" />
               <span>{formatearPromoPublica(promo)}</span>
@@ -96,7 +96,7 @@ export function CartFooterPublico({
           {metodosConRecargo.map((metodo) => (
             <div
               key={metodo.id}
-              className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-500/20 dark:text-amber-100 px-2.5 py-1.5 text-xs font-medium text-amber-800"
+              className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-500/20 dark:text-amber-100 px-2.5 py-1.5 text-xs font-medium text-warning"
             >
               <CreditCard className="h-3.5 w-3.5 shrink-0" />
               <span>
@@ -138,7 +138,7 @@ export function CartFooterPublico({
               Total
             </span>
             <span
-              className={`text-2xl font-bold ${hayDescuento ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}
+              className={`text-2xl font-bold ${hayDescuento ? "text-success" : "text-foreground"}`}
             >
               {formatCurrency(totalFinal)}
             </span>

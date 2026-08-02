@@ -93,13 +93,9 @@ export default async function BajasPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
 
-  const { data: perfil } = await supabase
-    .from("perfiles")
-    .select("rol")
-    .eq("id", user.id)
-    .single();
+  const { data: rolActual } = await supabase.rpc("rol_actual");
 
-  if (perfil?.rol !== "ADMIN") {
+  if (rolActual !== "ADMIN") {
     redirect("/stock"); // Si un vendedor se cuela por URL, lo pateamos al inventario
   }
 
@@ -163,7 +159,7 @@ export default async function BajasPage({
 
       <div className="space-y-4">
         <h2 className="text-lg font-semibold flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5 text-amber-500" />
+          <AlertTriangle className="w-5 h-5 text-warning" />
           Pendientes de Revisión ({pendientes.length})
         </h2>
 
@@ -189,12 +185,7 @@ export default async function BajasPage({
                       Variante: {baja.variante}
                     </p>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className="bg-amber-50 text-amber-700 border-amber-200"
-                  >
-                    -{baja.cantidad}
-                  </Badge>
+                  <Badge variant="warning">-{baja.cantidad}</Badge>
                 </div>
 
                 <div className="bg-muted/50 p-3 rounded-lg text-sm mb-4">
@@ -219,8 +210,7 @@ export default async function BajasPage({
                   >
                     <Button
                       type="submit"
-                      variant="outline"
-                      className="w-full text-rose-600 hover:bg-rose-50 hover:text-rose-700 border-rose-200"
+                      variant="destructive"
                     >
                       Rechazar
                     </Button>
@@ -237,7 +227,8 @@ export default async function BajasPage({
                   >
                     <Button
                       type="submit"
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                      variant="default"
+                      className="w-full"
                     >
                       Aprobar
                     </Button>
@@ -276,7 +267,7 @@ export default async function BajasPage({
                       <span className="text-muted-foreground font-normal">
                         ({baja.variante})
                       </span>
-                      <span className="ml-2 text-rose-500 font-bold">
+                      <span className="ml-2 text-danger font-bold">
                         -{baja.cantidad}
                       </span>
                     </td>
@@ -286,15 +277,13 @@ export default async function BajasPage({
                     <td className="px-4 py-3">
                       {baja.estado === "APROBADA" ? (
                         <Badge
-                          variant="outline"
-                          className="bg-emerald-50 text-emerald-700 border-emerald-200"
+                          variant="success"
                         >
                           <CheckCircle2 className="w-3 h-3 mr-1" /> Aprobada
                         </Badge>
                       ) : (
                         <Badge
-                          variant="outline"
-                          className="bg-rose-50 text-rose-700 border-rose-200"
+                          variant="danger"
                         >
                           <XCircle className="w-3 h-3 mr-1" /> Rechazada
                         </Badge>

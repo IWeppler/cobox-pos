@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { FormEvent } from "react";
+import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -82,9 +83,11 @@ export function ProductEditDetailSheet({
   onOpenChange,
   hideTrigger = false,
 }: Readonly<ProductEditDetailSheetProps>) {
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  // El link del catálogo necesita el negocio, no solo el origen: cada
+  // comercio tiene su propia tienda.
+  const slugNegocio = useSlugNegocioActivo() ?? "";
   const urlProducto = producto.slug
-    ? construirUrlProducto(baseUrl, producto.slug)
+    ? construirUrlProducto(slugNegocio, producto.slug)
     : null;
   const compartirDeshabilitado =
     !urlProducto ||

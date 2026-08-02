@@ -1,20 +1,34 @@
+import { urlDeCatalogo } from "@/shared/lib/dominios";
+
 // Mismo cap que MAX_PRODUCTOS_SELECCIONADOS en
 // features/store/components/store-catalog.tsx — si cambia uno, cambia el
 // otro (no hay una sola fuente porque un lado es "cuántos ids acepta la
 // URL" y el otro "cuántos ids ofrecemos compartir", pero deben coincidir).
 export const MAX_PRODUCTOS_COMPARTIDOS = 30;
 
-export function construirUrlProducto(baseUrl: string, slug: string): string {
-  return `${baseUrl}/store/${slug}`;
+// Los links de catálogo se arman SIEMPRE con el slug del negocio: no existe
+// una tienda por defecto a la que apuntar. urlDeCatalogo decide solo si sale
+// por subdominio o por path según haya wildcard configurado.
+export function construirUrlProducto(
+  slugNegocio: string,
+  slug: string,
+): string {
+  return urlDeCatalogo(slugNegocio, slug);
 }
 
-export function construirUrlSeleccion(baseUrl: string, ids: string[]): string {
+export function construirUrlSeleccion(
+  slugNegocio: string,
+  ids: string[],
+): string {
   const capeados = ids.slice(0, MAX_PRODUCTOS_COMPARTIDOS);
-  return `${baseUrl}/store?productos=${capeados.join(",")}`;
+  return `${urlDeCatalogo(slugNegocio)}?productos=${capeados.join(",")}`;
 }
 
-export function construirUrlCategoria(baseUrl: string, slug: string): string {
-  return `${baseUrl}/store?categoria=${slug}`;
+export function construirUrlCategoria(
+  slugNegocio: string,
+  slug: string,
+): string {
+  return `${urlDeCatalogo(slugNegocio)}?categoria=${slug}`;
 }
 
 export interface ProductoVisibilidad {

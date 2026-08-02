@@ -274,16 +274,16 @@ export function CartSidebarBody({
                       if (isSelected) {
                         if (metodo.tipo === "EFECTIVO")
                           selectedClass =
-                            "bg-background text-emerald-600 ring-1 ring-black/5 dark:text-emerald-400 dark:ring-white/10";
+                            "bg-background text-chart-4 ring-1 ring-black/5 dark:ring-white/10";
                         else if (metodo.tipo === "TRANSFERENCIA")
                           selectedClass =
-                            "bg-background text-blue-600 ring-1 ring-black/5 dark:text-blue-400 dark:ring-white/10";
+                            "bg-background text-chart-1 ring-1 ring-black/5 dark:ring-white/10";
                         else if (metodo.tipo === "BILLETERA_VIRTUAL")
                           selectedClass =
-                            "bg-background text-indigo-600 ring-1 ring-black/5 dark:text-indigo-400 dark:ring-white/10";
+                            "bg-background text-chart-3 ring-1 ring-black/5 dark:ring-white/10";
                         else if (metodo.tipo === "TARJETA")
                           selectedClass =
-                            "bg-background text-purple-600 ring-1 ring-black/5 dark:text-purple-400 dark:ring-white/10";
+                            "bg-background text-chart-2 ring-1 ring-black/5 dark:ring-white/10";
                         else
                           selectedClass =
                             "bg-background text-foreground ring-1 ring-black/5 dark:ring-white/10";
@@ -370,8 +370,8 @@ export function CartSidebarBody({
                       <div
                         className={`text-[11px] font-bold uppercase tracking-wider p-2 rounded-lg ${
                           diferencia > 0
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : "bg-rose-50 text-rose-700 border border-rose-200"
+                            ? "bg-warning/10 text-warning border border-warning/20"
+                            : "bg-danger/10 text-danger border border-danger/20"
                         }`}
                       >
                         {diferencia > 0

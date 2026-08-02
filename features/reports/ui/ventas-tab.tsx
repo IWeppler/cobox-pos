@@ -38,15 +38,16 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
       label: c.label,
       value: c[metricaCat],
     }))
-    .sort((a: any, b: any) => b.value - a.value);
+    .sort((a: any, b: any) => b.value - a.value)
+    .slice(0, 10);
 
   // Asignamos colores y prefijos dinámicos
   const colorCategoria =
     metricaCat === "ingresos"
-      ? "#3b82f6"
+      ? "#ef806f"
       : metricaCat === "unidades"
-        ? "#f59e0b"
-        : "#10b981";
+        ? "#00b3c2"
+        : "#e6ac3d";
 
   const prefixCategoria = metricaCat === "ingresos" ? "$" : "";
 
@@ -62,7 +63,7 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Ingresos Brutos
             </CardTitle>
-            <DollarSign className="w-4 h-4 text-blue-500" />
+            <DollarSign className="w-4 h-4 text-info" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">
@@ -75,7 +76,7 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Cantidad de Ventas
             </CardTitle>
-            <ShoppingCart className="w-4 h-4 text-emerald-500" />
+            <ShoppingCart className="w-4 h-4 text-success" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">
@@ -91,7 +92,7 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Unidades Vendidas
             </CardTitle>
-            <Package className="w-4 h-4 text-orange-500" />
+            <Package className="w-4 h-4 text-warning" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">
@@ -123,7 +124,7 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
         <Card className="lg:col-span-3 border-border shadow-none">
           <CardHeader className=" border-b border-border/50 pb-4 mb-2">
             <CardTitle className="text-lg flex items-center gap-2">
-              <CalendarDays className="w-5 h-5 text-emerald-500" />
+              <CalendarDays className="w-5 h-5 text-success" />
               Densidad Operativa
             </CardTitle>
           </CardHeader>
@@ -136,7 +137,7 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
             {/* Derecha: Top 3 Mejores Franjas */}
             <div className="w-full lg:w-72 shrink-0 flex flex-col gap-4 border-t lg:border-t-0 lg:border-l border-border pt-6 lg:pt-0 lg:pl-6">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Trophy className="w-4 h-4 text-amber-500" /> Mejores franjas
+                <Trophy className="w-4 h-4 text-warning" /> Mejores franjas
               </h3>
 
               {metrics.topFranjas && metrics.topFranjas.length > 0 ? (
@@ -169,8 +170,8 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
         <Card className="lg:col-span-2 border-border shadow-none">
           <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 gap-4">
             <CardTitle className="text-lg flex items-center gap-2">
-              <ListFilter className="w-5 h-5 text-blue-500" /> Ventas por
-              Categoría
+              <ListFilter className="w-5 h-5 text-chart-1" />
+              Ventas por Categoría
             </CardTitle>
 
             {/* Selector de Métricas */}
@@ -208,7 +209,7 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
         <Card className="lg:col-span-1 border-border flex flex-col shadow-none">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-indigo-500" /> Métodos de Pago
+              <CreditCard className="w-5 h-5 text-chart-3" /> Métodos de Pago
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col justify-center">
@@ -234,7 +235,7 @@ export function VentasTab({ metrics }: Readonly<VentasTabProps>) {
                       </div>
                       <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
                         <div
-                          className="bg-indigo-500 h-full rounded-full transition-all duration-500"
+                          className="bg-chart-3 h-full rounded-full transition-all duration-500"
                           style={{ width: `${porcentaje}%` }}
                         />
                       </div>

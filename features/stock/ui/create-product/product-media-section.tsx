@@ -218,7 +218,7 @@ export function ProductMediaSection({
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmarRemoverExistente}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
+              className="bg-danger hover:bg-danger/90 text-white"
             >
               Quitar imagen
             </AlertDialogAction>

@@ -191,7 +191,7 @@ export async function confirmarCargaAction(
   }
 
   revalidatePath("/stock");
-  revalidatePath("/store");
+  revalidatePath("/store", "layout");
 
   const totalOk = resultados.filter((r) => r.ok).length;
   const totalError = resultados.length - totalOk;

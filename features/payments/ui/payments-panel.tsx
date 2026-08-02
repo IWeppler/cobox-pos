@@ -40,30 +40,15 @@ export function PaymentsPanel({ pagos }: Readonly<{ pagos: MetodoPago[] }>) {
   const getIconForType = (tipo: TipoMetodo) => {
     switch (tipo) {
       case "EFECTIVO":
-        return <Banknote className="w-4 h-4 text-neutral-900" />;
+        return <Banknote className="w-4 h-4 text-foreground" />;
       case "TRANSFERENCIA":
-        return <Smartphone className="w-4 h-4 text-white" />;
+        return <Smartphone className="w-4 h-4 text-foreground" />;
       case "BILLETERA_VIRTUAL":
-        return <Wallet className="w-4 h-4 text-white" />;
+        return <Wallet className="w-4 h-4 text-foreground" />;
       case "TARJETA":
-        return <CreditCard className="w-4 h-4 text-white" />;
+        return <CreditCard className="w-4 h-4 text-foreground" />;
       default:
-        return <CreditCard className="w-4 h-4 text-muted-foreground" />;
-    }
-  };
-
-  const getMetodoPagoColor = (tipo: TipoMetodo) => {
-    switch (tipo) {
-      case "EFECTIVO":
-        return "bg-[#c7ea46] border-[#c7ea46] text-neutral-900";
-      case "TRANSFERENCIA":
-        return "bg-[#a8a1f2] border-[#a8a1f2] text-white";
-      case "BILLETERA_VIRTUAL":
-        return "bg-[#2f96fe] border-[#2f96fe] text-white";
-      case "TARJETA":
-        return "bg-[#f97d47] border-[#f97d47] text-white";
-      default:
-        return "bg-muted text-muted-foreground border-border";
+        return <CreditCard className="w-4 h-4 text-foreground" />;
     }
   };
 
@@ -133,9 +118,7 @@ export function PaymentsPanel({ pagos }: Readonly<{ pagos: MetodoPago[] }>) {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <div
-                          className={`p-2 rounded-lg border ${getMetodoPagoColor(
-                            pago.tipo,
-                          )}`}
+                          className={`p-2 rounded-lg border text-muted-foreground`}
                         >
                           {getIconForType(pago.tipo)}
                         </div>
@@ -153,7 +136,7 @@ export function PaymentsPanel({ pagos }: Readonly<{ pagos: MetodoPago[] }>) {
                     {/* RECARGO AL CLIENTE — lo que se le suma al ticket */}
                     <td className="px-5 py-4 text-right">
                       {Number(pago.recargo_porcentaje) > 0 ? (
-                        <Badge className="font-bold rounded-lg border-amber-300 bg-amber-100 text-amber-800 shadow-none px-2 py-1 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
+                        <Badge className="font-bold rounded-lg border-warning/20 bg-warning/10 text-warning shadow-none px-2 py-1">
                           +{pago.recargo_porcentaje}%
                         </Badge>
                       ) : (
@@ -191,7 +174,7 @@ export function PaymentsPanel({ pagos }: Readonly<{ pagos: MetodoPago[] }>) {
                     {/* ESTADO */}
                     <td className="px-5 py-4 text-center">
                       {pago.activo ? (
-                        <div className="flex items-center justify-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs">
+                        <div className="flex items-center justify-center gap-1.5 text-success text-xs">
                           <CheckCircle2 className="w-4 h-4" /> Activo
                         </div>
                       ) : (
@@ -228,7 +211,7 @@ export function PaymentsPanel({ pagos }: Readonly<{ pagos: MetodoPago[] }>) {
                             onClick={() => setEditingPayment(pago)}
                             className="cursor-pointer text-sm font-medium rounded-lg h-9"
                           >
-                            <Edit2 className="w-4 h-4 mr-2 text-blue-600" />
+                            <Edit2 className="w-4 h-4 mr-2 text-info" />
                             Editar
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="my-1 bg-border/60" />

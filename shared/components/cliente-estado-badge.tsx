@@ -8,17 +8,17 @@ export const ESTADO_CLIENTE_CONFIG: Record<
   al_dia: {
     label: "Al día",
     icon: CheckCircle2,
-    className: "text-emerald-700 dark:text-accent-lime",
+    className: "text-success",
   },
   con_deuda: {
     label: "Con deuda",
     icon: Clock,
-    className: "text-accent-orange",
+    className: "text-warning",
   },
   vencido: {
     label: "Vencido",
     icon: AlertTriangle,
-    className: "text-rose-600 dark:text-rose-400",
+    className: "text-danger",
   },
 };
 

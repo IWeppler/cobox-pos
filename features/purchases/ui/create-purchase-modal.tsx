@@ -350,7 +350,7 @@ export function ImportarPedidoModal({
       {!hideTrigger && (
         <DialogTrigger asChild>
           <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer rounded-md hover:bg-muted transition-colors text-foreground">
-            <PackagePlus className="w-4 h-4 mr-2 shrink-0 text-emerald-600" />
+            <PackagePlus className="w-4 h-4 mr-2 shrink-0 text-success" />
             Ingresar Remito
           </button>
         </DialogTrigger>
@@ -373,7 +373,7 @@ export function ImportarPedidoModal({
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
-            <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+            <FileSpreadsheet className="w-5 h-5 text-success" />
             Importar Remito / Pedido
           </DialogTitle>
           <DialogDescription>
@@ -385,7 +385,7 @@ export function ImportarPedidoModal({
           <a
             href="/plantilla-productos.csv"
             download
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:underline w-fit"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-success hover:text-success/80 hover:underline w-fit"
           >
             <Download className="w-3.5 h-3.5" />
             Descargar plantilla
@@ -439,27 +439,27 @@ export function ImportarPedidoModal({
                 isLoading
                   ? "border-border bg-muted/50 cursor-not-allowed opacity-70"
                   : file
-                    ? "border-emerald-500 bg-emerald-300/10 cursor-pointer"
-                    : "border-border bg-muted/20 hover:bg-emerald-300/10 hover:border-emerald-200 cursor-pointer"
+                    ? "border-success bg-success/10 cursor-pointer"
+                    : "border-border bg-muted/20 hover:bg-success/10 hover:border-success cursor-pointer"
               }`}
             >
               <div className="flex flex-col items-center justify-center text-center px-4 pointer-events-none">
                 {isLoading ? (
-                  <Loader2 className="w-8 h-8 mb-3 text-emerald-600 animate-spin" />
+                  <Loader2 className="w-8 h-8 mb-3 text-success animate-spin" />
                 ) : file ? (
-                  <CheckCircle2 className="w-8 h-8 mb-3 text-emerald-500" />
+                  <CheckCircle2 className="w-8 h-8 mb-3 text-success" />
                 ) : (
                   <UploadCloud className="w-8 h-8 mb-3 text-muted-foreground" />
                 )}
 
                 <p className="mb-1 text-sm text-foreground font-medium">
                   {file ? (
-                    <span className="text-emerald-700 dark:text-emerald-500 font-bold">
+                    <span className="text-success font-bold">
                       {file.name}
                     </span>
                   ) : (
                     <>
-                      <span className="font-semibold text-emerald-600">
+                      <span className="font-semibold text-success">
                         Haz clic para subir
                       </span>{" "}
                       o arrastra tu archivo

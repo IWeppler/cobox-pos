@@ -16,13 +16,15 @@ type SupabaseDb = ReturnType<typeof createClient>;
 export async function cargarCatalogoActual(
   supabase: SupabaseDb,
   filas: FilaImport[],
+  negocioId: string,
 ): Promise<CatalogoActual | null> {
   const [productosRes, variantesRes, categoriasRes] = await Promise.all([
-    supabase.from("productos").select("id, nombre"),
+    supabase.from("productos").select("id, nombre").eq("negocio_id", negocioId),
     supabase
       .from("producto_variantes")
-      .select("id, producto_id, sku, atributos, nombre_display"),
-    supabase.from("categorias").select("id, nombre, slug"),
+      .select("id, producto_id, sku, atributos, nombre_display")
+      .eq("negocio_id", negocioId),
+    supabase.from("categorias").select("id, nombre, slug").eq("negocio_id", negocioId),
   ]);
 
   if (productosRes.error || variantesRes.error || categoriasRes.error) {

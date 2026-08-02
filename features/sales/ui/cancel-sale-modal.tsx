@@ -72,7 +72,7 @@ export function AnularVentaModal({
         <Button
           variant="ghost"
           size="icon"
-          className="text-rose-500 hover:text-rose-700 h-8 w-8 sm:h-9 sm:w-9 cursor-pointer shrink-0"
+          className="text-danger hover:text-danger h-8 w-8 sm:h-9 sm:w-9 cursor-pointer shrink-0"
           title="Anular Venta"
         >
           <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -104,7 +104,7 @@ export function AnularVentaModal({
                 onValueChange={(v) => setMotivo(v as any)}
               >
                 <div
-                  className={`flex items-start space-x-3 p-3 rounded-lg border-2 transition-colors cursor-pointer ${motivo === "RESTAURAR_STOCK" ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-200/10" : "border-border"}`}
+                  className={`flex items-start space-x-3 p-3 rounded-lg border-2 transition-colors cursor-pointer ${motivo === "RESTAURAR_STOCK" ? "border-success bg-success/10" : "border-border"}`}
                   onClick={() => setMotivo("RESTAURAR_STOCK")}
                 >
                   <RadioGroupItem
@@ -115,13 +115,13 @@ export function AnularVentaModal({
                   <div className="space-y-1">
                     <Label
                       htmlFor="r1"
-                      className="font-bold text-emerald-800 dark:text-emerald-500 cursor-pointer flex items-center gap-1.5"
+                      className="font-bold text-success cursor-pointer flex items-center gap-1.5"
                     >
                       <PackagePlus className="w-4 h-4" /> Devolver al inventario
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      El cliente se arrepintió. El producto está sano y se sumará
-                      al inventario (+{cantidad}).
+                      El cliente se arrepintió. El producto está sano y se
+                      sumará al inventario (+{cantidad}).
                     </p>
                   </div>
                 </div>
@@ -134,12 +134,13 @@ export function AnularVentaModal({
                   <div className="space-y-1">
                     <Label
                       htmlFor="r2"
-                      className="font-bold text-amber-800 dark:text-amber-500 cursor-pointer flex items-center gap-1.5"
+                      className="font-bold text-warning cursor-pointer flex items-center gap-1.5"
                     >
                       <AlertTriangle className="w-4 h-4" /> Descartar
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      El producto se rompió. Se registrará como Baja y no volverá al stock.
+                      El producto se rompió. Se registrará como Baja y no
+                      volverá al stock.
                     </p>
                   </div>
                 </div>
@@ -148,9 +149,9 @@ export function AnularVentaModal({
           )}
 
           {isProductoEliminado && (
-            <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
-              <p className="text-sm text-rose-800">
+            <div className="bg-danger/10 border border-danger/20 p-4 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-danger shrink-0" />
+              <p className="text-sm text-danger">
                 El producto original fue eliminado del catálogo maestro. La
                 devolución restará el dinero de la caja, pero no es posible
                 restaurar el stock.

@@ -1020,7 +1020,7 @@ export function MergeTable({
                 : "Confirmar e Impactar Stock"}
           </Button>
           {aprobarError && (
-            <p className="text-xs text-rose-600 font-medium max-w-sm text-right">
+            <p className="text-xs text-danger font-medium max-w-sm text-right">
               {aprobarError}
             </p>
           )}
@@ -1057,7 +1057,7 @@ export function MergeTable({
           <Button
             variant="secondary"
             size="sm"
-            className="bg-accent-indigo/10 text-accent-indigo hover:bg-accent-indigo/20 w-full sm:w-auto"
+            className="bg-chart-3/10 text-chart-3 hover:bg-chart-3/20 w-full sm:w-auto"
             onClick={handleCrearTodosSugeridos}
             disabled={bulkCrearLoading}
           >
@@ -1071,8 +1071,8 @@ export function MergeTable({
 
       {/* Barra de selección múltiple (solo Ambiguo) */}
       {gruposSeleccionados.size > 0 && (
-        <div className="flex flex-col sm:flex-row items-center gap-3 bg-rose-50 border border-rose-200 p-3 rounded-xl">
-          <span className="text-sm font-semibold text-rose-800 whitespace-nowrap">
+        <div className="flex flex-col sm:flex-row items-center gap-3 bg-danger/10 border border-danger/20 p-3 rounded-xl">
+          <span className="text-sm font-semibold text-danger whitespace-nowrap">
             {gruposSeleccionados.size} agrupaciones seleccionadas
           </span>
           <CategoriaPadreHijoSelect
@@ -1085,7 +1085,8 @@ export function MergeTable({
           />
           <Button
             size="sm"
-            className="bg-rose-600 hover:bg-rose-700 text-white w-full sm:w-auto"
+            variant="destructive"
+            className="w-full sm:w-auto"
             disabled={!categoriaIdParaSeleccion}
             onClick={handleAsignarCategoriaASeleccion}
           >
@@ -1104,34 +1105,22 @@ export function MergeTable({
 
       {/* Leyenda Visual */}
       <div className="flex flex-wrap gap-4 px-2">
-        <Badge
-          variant="outline"
-          className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1"
-        >
+        <Badge variant="success">
           <CheckCircle2 className="w-4 h-4 mr-2" /> Match Perfecto
         </Badge>
-        <Badge
-          variant="outline"
-          className="bg-amber-50 text-amber-700 border-amber-200 px-3 py-1"
-        >
+        <Badge variant="warning">
           <AlertTriangle className="w-4 h-4 mr-2" /> Aumento de Costo
         </Badge>
-        <Badge
-          variant="outline"
-          className="bg-sky-50 text-sky-700 border-sky-200 px-3 py-1"
-        >
+        <Badge variant="outline">
           <Search className="w-4 h-4 mr-2" /> Posible Match Existente
         </Badge>
         <Badge
           variant="outline"
-          className="bg-accent-indigo/10 text-accent-indigo border-accent-indigo px-3 py-1"
+          className="bg-chart-3/10 text-chart-3 border-chart-3 px-3 py-1"
         >
           <Sparkles className="w-4 h-4 mr-2" /> Nuevo (Categoría Sugerida)
         </Badge>
-        <Badge
-          variant="outline"
-          className="bg-rose-50 text-rose-700 border-rose-200 px-3 py-1"
-        >
+        <Badge variant="danger">
           <HelpCircle className="w-4 h-4 mr-2" /> Ambiguo / Sin Sugerencia
         </Badge>
       </div>
@@ -1185,14 +1174,13 @@ export function MergeTable({
 
                 let rowClassName = "hover:bg-muted/30";
                 if (isInflacion)
-                  rowClassName = "bg-accent-orange/10 hover:bg-accent-orange/20";
+                  rowClassName = "bg-warning/10 hover:bg-warning/20";
                 else if (posibleMatch)
-                  rowClassName = "bg-accent-blue/10 hover:bg-accent-blue/20";
+                  rowClassName = "bg-info/10 hover:bg-info/20";
                 else if (nuevoSugerido)
-                  rowClassName =
-                    "bg-accent-indigo/10 hover:bg-accent-indigo/20";
+                  rowClassName = "bg-chart-3/10 hover:bg-chart-3/20";
                 else if (isAmbiguo)
-                  rowClassName = "bg-destructive/10 hover:bg-destructive/20";
+                  rowClassName = "bg-danger/10 hover:bg-danger/20";
 
                 return (
                   <tr
@@ -1204,26 +1192,26 @@ export function MergeTable({
                       {isAmbiguo && (
                         <input
                           type="checkbox"
-                          className="mb-1.5 w-4 h-4 accent-rose-600 cursor-pointer"
+                          className="mb-1.5 w-4 h-4 accent-danger cursor-pointer"
                           checked={gruposSeleccionados.has(rawNombre)}
                           onChange={() => toggleGrupoSeleccionado(rawNombre)}
                           title="Seleccionar para asignar categoría en lote"
                         />
                       )}
                       {isPerfecto && (
-                        <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
+                        <CheckCircle2 className="w-6 h-6 text-chart-4 mx-auto" />
                       )}
                       {isInflacion && (
-                        <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto" />
+                        <AlertTriangle className="w-6 h-6 text-chart-5 mx-auto" />
                       )}
                       {posibleMatch && (
-                        <Search className="w-6 h-6 text-sky-500 mx-auto" />
+                        <Search className="w-6 h-6 text-chart-1 mx-auto" />
                       )}
                       {nuevoSugerido && (
-                        <Sparkles className="w-6 h-6 text-violet-500 mx-auto" />
+                        <Sparkles className="w-6 h-6 text-chart-3 mx-auto" />
                       )}
                       {isAmbiguo && (
-                        <HelpCircle className="w-6 h-6 text-rose-500 mx-auto" />
+                        <HelpCircle className="w-6 h-6 text-chart-2 mx-auto" />
                       )}
                     </td>
 
@@ -1285,7 +1273,7 @@ export function MergeTable({
                                 <span className="truncate max-w-37">
                                   {item.raw_variante}
                                 </span>
-                                <span className="font-semibold text-emerald-600 ">
+                                <span className="font-semibold text-success ">
                                   +{item.cantidad}
                                 </span>
                                 {expandible &&
@@ -1475,7 +1463,7 @@ export function MergeTable({
                             );
                           return (
                             <div className="flex flex-col gap-2">
-                              <div className="flex items-start justify-between gap-2 p-2 bg-accent-indigo/10 border border-accent-indigo rounded-md">
+                              <div className="flex items-start justify-between gap-2 p-2 bg-chart-3/10 border border-chart-3 rounded-md">
                                 <div className="min-w-0">
                                   <p className="font-semibold text-foreground flex items-center gap-1.5 truncate">
                                     <Sparkles className="w-3.5 h-3.5 shrink-0" />
@@ -1492,7 +1480,7 @@ export function MergeTable({
                                 </div>
                                 <Button
                                   size="sm"
-                                  className="h-8 text-xs bg-accent-indigo hover:bg-accent-indigo/80 text-white shrink-0"
+                                  className="h-8 text-xs bg-chart-3 hover:bg-chart-3/80 text-white shrink-0"
                                   disabled={loadingPorGrupo[rawNombre]}
                                   onClick={() =>
                                     handleCrearSugerido(
@@ -1515,7 +1503,7 @@ export function MergeTable({
                                 </Button>
                               </div>
                               {errorPorGrupo[rawNombre] && (
-                                <p className="text-[11px] text-rose-600 font-medium">
+                                <p className="text-[11px] text-danger font-medium">
                                   {errorPorGrupo[rawNombre]}
                                 </p>
                               )}
@@ -1574,7 +1562,7 @@ export function MergeTable({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50 shrink-0"
+                            className="h-8 w-8 text-danger hover:text-danger hover:bg-danger/10 shrink-0"
                             onClick={() => handleUndo(rawNombre)}
                             title="Deshacer asignación para todo el grupo"
                           >
@@ -1592,7 +1580,7 @@ export function MergeTable({
                       </p>
                       {isInflacion && pReal && (
                         <p
-                          className="text-xs text-amber-600 font-semibold line-through mt-0.5"
+                          className="text-xs text-warning font-semibold line-through mt-0.5"
                           title="Costo anterior en sistema"
                         >
                           Era $
@@ -1639,7 +1627,7 @@ export function MergeTable({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-rose-600 hover:bg-rose-50"
+                        className="h-8 w-8 text-muted-foreground hover:text-danger hover:bg-danger/10"
                         onClick={() => setGroupToRemoveName(rawNombre)}
                         title="Descartar todo este grupo"
                       >
@@ -1748,9 +1736,9 @@ export function MergeTable({
                 </p>
               )}
               {grupoTieneCostoDisperso && (
-                <div className="flex items-start gap-2 bg-accent-orange/10 border border-accent-orange rounded-md p-2.5 mt-2">
-                  <AlertTriangle className="w-4 h-4 text-accent-orange shrink-0 mt-0.5" />
-                  <p className="text-xs text-accent-orange font-medium leading-tight">
+                <div className="flex items-start gap-2 bg-warning/10 border border-warning rounded-md p-2.5 mt-2">
+                  <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+                  <p className="text-xs text-warning font-medium leading-tight">
                     Este grupo tiene variantes con distinto costo — se va a
                     aplicar el precio calculado por variante, no un valor único.
                   </p>
@@ -1759,9 +1747,9 @@ export function MergeTable({
             </div>
 
             {crearError && (
-              <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-md p-2.5">
-                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-rose-900 font-medium leading-tight">
+              <div className="flex items-start gap-2 bg-danger/10 border border-danger/20 rounded-md p-2.5">
+                <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+                <p className="text-xs text-danger font-medium leading-tight">
                   {crearError}
                 </p>
               </div>
@@ -1820,7 +1808,7 @@ export function MergeTable({
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmRemoveGroup}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
+              className="bg-danger hover:bg-danger text-white"
             >
               Descartar
             </AlertDialogAction>

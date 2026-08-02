@@ -61,7 +61,7 @@ export function CajaConfigPanel({ config }: Readonly<CajaConfigPanelProps>) {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border pb-4">
         <div>
           <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <Calculator className="w-5 h-5 text-emerald-600" /> Caja y Turnos
+            <Calculator className="w-5 h-5 text-success" /> Caja y Turnos
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
             Configura cómo se maneja el flujo de efectivo y la apertura de
@@ -106,7 +106,7 @@ export function CajaConfigPanel({ config }: Readonly<CajaConfigPanelProps>) {
                 <SelectContent className="rounded-xl border-border">
                   <SelectItem value="UNICA" className="py-3">
                     <div className="flex items-center gap-3">
-                      <div className="p-1.5 bg-blue-50 text-primary rounded-md">
+                      <div className="p-1.5 bg-info/10 text-info rounded-md">
                         <Store className="w-4 h-4" />
                       </div>
                       <div className="flex flex-col text-left">
@@ -121,7 +121,7 @@ export function CajaConfigPanel({ config }: Readonly<CajaConfigPanelProps>) {
                   </SelectItem>
                   <SelectItem value="POR_USUARIO" className="py-3">
                     <div className="flex items-center gap-3">
-                      <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-md">
+                      <div className="p-1.5 bg-emerald-50 text-success rounded-md">
                         <Users className="w-4 h-4" />
                       </div>
                       <div className="flex flex-col text-left">

@@ -345,8 +345,8 @@ export function SalesChart({
       <svg width={width} height={height} className="overflow-visible">
         <defs>
           <linearGradient id="gradient-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
-            <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+            <stop offset="0%" stopColor="#6cc581" stopOpacity={0.3} />
+            <stop offset="100%" stopColor="#6cc58185" stopOpacity={0} />
           </linearGradient>
         </defs>
 
@@ -413,8 +413,8 @@ export function SalesChart({
           <path
             d={lineCurr(data.points) || ""}
             fill="none"
-            stroke="#10b981" // Esmeralda
-            strokeWidth={3}
+            stroke="#6cc581" // Esmeralda
+            strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
             className="transition-all duration-300 drop-shadow-sm"
@@ -435,7 +435,7 @@ export function SalesChart({
                 x2={hoveredData.x}
                 y1={0}
                 y2={innerHeight}
-                stroke="#10b981"
+                stroke="#6cc581"
                 strokeWidth={1.5}
                 strokeDasharray="4 4"
                 className="opacity-70 pointer-events-none"
@@ -446,7 +446,7 @@ export function SalesChart({
                   cy={yScale(hoveredData.data.current)}
                   r={5}
                   fill="#ffffff"
-                  stroke="#10b981"
+                  stroke="#6cc581"
                   strokeWidth={3}
                   className="pointer-events-none"
                 />
@@ -483,8 +483,8 @@ export function SalesChart({
           <div className="flex flex-col gap-1.5">
             {hoveredData.data.current !== null && (
               <div className="flex items-center justify-between gap-4">
-                <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="flex items-center gap-1.5 text-xs font-medium text-success">
+                  <div className="w-2 h-2 rounded-full bg-success" />
                   Actual
                 </span>
                 <span className="font-bold text-sm text-neutral-900">

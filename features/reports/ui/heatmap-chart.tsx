@@ -33,12 +33,12 @@ function getHeatmapColor(value: number, max: number) {
 
   const ratio = max > 0 ? value / max : 0;
 
-  if (ratio < 0.2) return "bg-emerald-200 dark:bg-emerald-950";
-  if (ratio < 0.4) return "bg-emerald-300 dark:bg-emerald-900";
-  if (ratio < 0.6) return "bg-emerald-400 dark:bg-emerald-700";
-  if (ratio < 0.8) return "bg-emerald-500 dark:bg-emerald-600";
+  if (ratio < 0.2) return "bg-chart-4/10";
+  if (ratio < 0.4) return "bg-chart-4/20 dark:bg-chart-4/40";
+  if (ratio < 0.6) return "bg-chart-4/30 dark:bg-chart-4/50";
+  if (ratio < 0.8) return "bg-chart-4/40 dark:bg-success/60";
 
-  return "bg-emerald-700 dark:bg-emerald-400";
+  return "bg-chart-4";
 }
 
 export function HeatmapChart({ data }: Readonly<HeatmapProps>) {
@@ -151,7 +151,7 @@ export function HeatmapChart({ data }: Readonly<HeatmapProps>) {
           <div className="space-y-1.5">
             <div className="flex justify-between items-center text-sm gap-4">
               <span className="text-muted-foreground">Ingresos:</span>
-              <span className="font-semibold text-emerald-600">
+              <span className="font-semibold text-success">
                 {formatearMoneda(hoveredData.ingresos)}
               </span>
             </div>

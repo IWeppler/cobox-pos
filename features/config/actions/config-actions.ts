@@ -36,6 +36,12 @@ export async function updateConfiguracionAction(
 ) {
   const id = formData.get("id") as string;
   const posName = formData.get("posName") as string;
+  const razon_social = formData.get("razon_social") as string;
+  const cuit = formData.get("cuit") as string;
+  const condicion_iva = formData.get("condicion_iva") as string;
+  const inicio_actividades = formData.get("inicio_actividades") as string;
+  const provincia = formData.get("provincia") as string;
+  const localidad = formData.get("localidad") as string;
   const whatsapp = formData.get("whatsapp") as string;
   const direccion = formData.get("direccion") as string;
   const mensaje_ticket = formData.get("mensaje_ticket") as string;
@@ -55,8 +61,15 @@ export async function updateConfiguracionAction(
 
   // 1. Si el usuario subió un nuevo logo, lo subimos al bucket "logos"
   if (logoFile && logoFile.size > 0) {
+    // Bajo la carpeta del negocio: la policy de storage no deja escribir
+    // fuera de ella, y así el logo de un comercio no pisa el de otro.
+    const { data: negocioId } = await supabase.rpc("negocio_actual");
+    if (!negocioId) {
+      return { error: "No hay un negocio activo en esta sesión.", success: false };
+    }
+
     const fileExt = logoFile.name.split(".").pop();
-    const fileName = `logo-${crypto.randomUUID()}.${fileExt}`;
+    const fileName = `${negocioId}/logo-${crypto.randomUUID()}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
       .from("logos")
@@ -79,6 +92,12 @@ export async function updateConfiguracionAction(
     posName,
     whatsapp,
     direccion,
+    razon_social,
+    cuit,
+    condicion_iva,
+    inicio_actividades,
+    provincia,
+    localidad,
     mensaje_ticket,
     updated_at: new Date().toISOString(),
   };

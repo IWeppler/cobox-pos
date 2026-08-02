@@ -87,12 +87,12 @@ export function MovimientoCCCard({
       >
         <div className="flex items-center gap-2 min-w-0">
           <div
-            className={`p-1 rounded-full shrink-0 ${mov.tipo === "DEBITO" ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}
+            className={`shrink-0 ${mov.tipo === "DEBITO" ? "text-danger" : "text-success"}`}
           >
             {mov.tipo === "DEBITO" ? (
-              <ArrowUpRight className="w-2 h-2" />
+              <ArrowUpRight className="w-3 h-3" />
             ) : (
-              <ArrowDownRight className="w-2 h-2" />
+              <ArrowDownRight className="w-3 h-3" />
             )}
           </div>
           <div className="min-w-0">
@@ -123,8 +123,8 @@ export function MovimientoCCCard({
                   mov.anulado
                     ? "line-through text-muted-foreground"
                     : mov.tipo === "DEBITO"
-                      ? "text-rose-600"
-                      : "text-emerald-600"
+                      ? "text-danger"
+                      : "text-success"
                 }`}
               >
                 {mov.tipo === "DEBITO" ? "+" : "-"}
@@ -149,7 +149,7 @@ export function MovimientoCCCard({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-44">
                 <DropdownMenuItem onClick={() => setIsEditOpen(true)}>
-                  <Edit2 className="w-3.5 h-3.5 mr-2 text-blue-600" />
+                  <Edit2 className="w-3.5 h-3.5 mr-2 text-info" />
                   Editar
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />

@@ -287,18 +287,40 @@ export async function crearClienteAction(
   prevState: ClientActionState | null,
   formData: FormData,
 ) {
+  // Datos comerciales básicos
   const nombre = formData.get("nombre") as string;
   const telefono = formData.get("whatsapp") as string;
-  const notas = formData.get("notas") as string;
+  const email = formData.get("email") as string;
   const dni = formData.get("dni") as string;
+  const notas = formData.get("notas") as string;
+  
+  // Datos operativos
   const fechaVencimientoDeuda =
     (formData.get("fecha_vencimiento_deuda") as string) || null;
   const exceptuadoEntregaMinima =
     formData.get("exceptuado_entrega_minima") === "on";
 
+  // Datos Fiscales
+  const esFiscal = formData.get("es_fiscal") === "true";
+  const cuit = formData.get("cuit") as string;
+  const razonSocial = formData.get("razon_social") as string;
+  const condicionIva = formData.get("condicion_iva") as string;
+  const direccion = formData.get("direccion") as string;
+  const localidad = formData.get("localidad") as string;
+  const provincia = formData.get("provincia") as string;
+  const codigoPostal = formData.get("codigo_postal") as string;
+
   if (!nombre || !telefono) {
     return {
       error: "El nombre y el teléfono son obligatorios.",
+      success: false,
+    };
+  }
+
+  // Validación backend extra por seguridad
+  if (esFiscal && (!cuit || !razonSocial || !condicionIva)) {
+    return {
+      error: "El CUIT, la Razón Social y la Condición de IVA son obligatorios para clientes fiscales.",
       success: false,
     };
   }
@@ -309,11 +331,20 @@ export async function crearClienteAction(
   const { error } = await supabase.from("clientes").insert({
     nombre,
     telefono,
+    email: email || null,
     dni: dni || null,
     notas: notas || null,
     activo: true,
     exceptuado_entrega_minima: exceptuadoEntregaMinima,
     fecha_vencimiento_deuda: fechaVencimientoDeuda,
+    // Insertamos los fiscales solo si aplica, sino forzamos null
+    cuit: esFiscal ? cuit : null,
+    razon_social: esFiscal ? razonSocial : null,
+    condicion_iva: esFiscal ? condicionIva : null,
+    direccion: esFiscal ? direccion || null : null,
+    localidad: esFiscal ? localidad || null : null,
+    provincia: esFiscal ? provincia || null : null,
+    codigo_postal: esFiscal ? codigoPostal || null : null,
   });
 
   if (error) {
@@ -327,6 +358,7 @@ export async function crearClienteAction(
 
 // 5. EDITAR CLIENTE
 export async function editClienteAction(clienteId: string, formData: FormData) {
+  // Datos comerciales básicos
   const nombre = formData.get("nombre") as string;
   const telefono =
     (formData.get("telefono") as string | null) ||
@@ -335,17 +367,32 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
   const dni = formData.get("dni") as string;
   const email = formData.get("email") as string;
   const notas = formData.get("notas") as string;
+  
+  // Datos operativos
   const fechaVencimientoDeuda =
     (formData.get("fecha_vencimiento_deuda") as string) || null;
-  // El checkbox solo se renderiza (y por lo tanto solo viaja en el
-  // FormData) cuando la entrega mínima está activa a nivel negocio. Sin
-  // este marcador, un guardado con la feature apagada pisaría en silencio
-  // la excepción ya guardada de un cliente con `false`.
   const exceptuadoEditable =
     formData.get("exceptuado_entrega_minima_editable") === "1";
 
+  // Datos Fiscales
+  const esFiscal = formData.get("es_fiscal") === "true";
+  const cuit = formData.get("cuit") as string;
+  const razonSocial = formData.get("razon_social") as string;
+  const condicionIva = formData.get("condicion_iva") as string;
+  const direccion = formData.get("direccion") as string;
+  const localidad = formData.get("localidad") as string;
+  const provincia = formData.get("provincia") as string;
+  const codigoPostal = formData.get("codigo_postal") as string;
+
   if (!nombre || !clienteId) {
     return { error: "El nombre es obligatorio.", success: false };
+  }
+
+  if (esFiscal && (!cuit || !razonSocial || !condicionIva)) {
+    return {
+      error: "El CUIT, la Razón Social y la Condición de IVA son obligatorios para clientes fiscales.",
+      success: false,
+    };
   }
 
   const cookieStore = await cookies();
@@ -358,7 +405,16 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
     email: email || null,
     notas: notas || null,
     fecha_vencimiento_deuda: fechaVencimientoDeuda,
+    // Actualizamos campos fiscales
+    cuit: esFiscal ? cuit : null,
+    razon_social: esFiscal ? razonSocial : null,
+    condicion_iva: esFiscal ? condicionIva : null,
+    direccion: esFiscal ? direccion || null : null,
+    localidad: esFiscal ? localidad || null : null,
+    provincia: esFiscal ? provincia || null : null,
+    codigo_postal: esFiscal ? codigoPostal || null : null,
   };
+
   if (exceptuadoEditable) {
     updatePayload.exceptuado_entrega_minima =
       formData.get("exceptuado_entrega_minima") === "on";
@@ -369,8 +425,10 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
     .update(updatePayload)
     .eq("id", clienteId);
 
-  if (error)
+  if (error) {
+    console.error("Error actualizando cliente:", error);
     return { error: "Error al actualizar el cliente.", success: false };
+  }
 
   revalidatePath("/clientes");
   return { error: null, success: true };
@@ -611,13 +669,10 @@ async function esUsuarioAdmin(
   } = await supabase.auth.getUser();
   if (!user) return { esAdmin: false, userId: null };
 
-  const { data: perfil } = await supabase
-    .from("perfiles")
-    .select("rol")
-    .eq("id", user.id)
-    .single();
+  // is_admin() ya resuelve el rol dentro del negocio activo.
+  const { data: esAdmin } = await supabase.rpc("is_admin");
 
-  return { esAdmin: perfil?.rol === "ADMIN", userId: user.id };
+  return { esAdmin: esAdmin === true, userId: user.id };
 }
 
 /**

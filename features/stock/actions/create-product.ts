@@ -14,6 +14,33 @@ export async function crearProductoAction(
   prevState: { error: string | null; success: boolean },
   formData: FormData,
 ) {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return {
+      error: "No se pudo verificar la sesión del usuario.",
+      success: false,
+    };
+  }
+
+  // El negocio sale del negocio ACTIVO de la sesión, no de perfiles.negocio_id:
+  // esa columna quedó deprecada, es NULL para todo usuario invitado y apunta al
+  // negocio viejo de quien trabaja en dos.
+  const { data: negocioId, error: negocioError } =
+    await supabase.rpc("negocio_actual");
+
+  if (negocioError || !negocioId) {
+    return {
+      error: "No hay un negocio activo en esta sesión.",
+      success: false,
+    };
+  }
+
   const nombre = formData.get("nombre") as string;
   const categoria_id = formData.get("categoria_id") as string;
   const descripcion = formData.get("descripcion") as string;
@@ -52,11 +79,8 @@ export async function crearProductoAction(
     };
   }
 
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
   // Fallback temporal para la columna "tipo" vieja
-  let tipo = "Interior";
+  let tipo = "Categoria desconocida";
   if (categoria_id) {
     const { data: cat } = await supabase
       .from("categorias")
@@ -71,6 +95,7 @@ export async function crearProductoAction(
   let thumbnail_url = null;
   let grid_url = null;
   const validFiles = archivos.filter((f) => f.size > 0);
+  
   if (validFiles.length > 0) {
     const urls: string[] = [];
     const urlsThumb: string[] = [];
@@ -80,30 +105,29 @@ export async function crearProductoAction(
       const file = validFiles[i];
       const fileExt = file.name.split(".").pop();
       const baseFileName = crypto.randomUUID();
-      const fileName = `${baseFileName}.${fileExt}`;
+      
+      const fileName = `${negocioId}/${baseFileName}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("productos")
         .upload(fileName, file, { cacheControl: "31536000" });
-      if (!uploadError) {
+     
+        if (!uploadError) {
         const {
           data: { publicUrl },
         } = supabase.storage.from("productos").getPublicUrl(fileName);
         urls.push(publicUrl);
       }
 
-      // El thumbnail y el grid viajan en el mismo índice que su main (ver
-      // optimizarImagenProducto en use-create-product-form.ts). Si por
-      // algún motivo alguno de los arrays vino más corto, no bloqueamos
-      // la creación del producto por eso — el main ya se subió arriba.
       const thumb = thumbnails[i];
       if (thumb && thumb.size > 0) {
         const thumbExt = thumb.name.split(".").pop();
-        const thumbName = `thumbs/${baseFileName}-thumb.${thumbExt}`;
+        const thumbName = `${negocioId}/thumbs/${baseFileName}-thumb.${thumbExt}`;
         const { error: uploadThumbError } = await supabase.storage
           .from("productos")
           .upload(thumbName, thumb, { cacheControl: "31536000" });
-        if (!uploadThumbError) {
+        
+          if (!uploadThumbError) {
           const {
             data: { publicUrl: thumbUrl },
           } = supabase.storage.from("productos").getPublicUrl(thumbName);
@@ -120,7 +144,7 @@ export async function crearProductoAction(
       const grid = grids[i];
       if (grid && grid.size > 0) {
         const gridExt = grid.name.split(".").pop();
-        const gridName = `grids/${baseFileName}-grid.${gridExt}`;
+        const gridName = `${negocioId}/grids/${baseFileName}-grid.${gridExt}`;
         const { error: uploadGridError } = await supabase.storage
           .from("productos")
           .upload(gridName, grid, { cacheControl: "31536000" });
@@ -152,16 +176,12 @@ export async function crearProductoAction(
   const { data: nuevoProducto, error: errorProducto } = await supabase
     .from("productos")
     .insert({
+      negocio_id: negocioId,
       nombre,
-      tipo, // Fallback legacy
+      tipo,
       categoria_id: categoria_id || null,
       descripcion,
       marca,
-      // Sin valor, la clave NO viaja: se omite entera en vez de mandar null.
-      // Omitir deja que la columna aplique su DEFAULT; un null explícito lo
-      // pisa. Hoy ambas son nullable sin default, así que el resultado es el
-      // mismo — pero si mañana alguna gana un default, este insert no lo
-      // rompe en silencio.
       ...(modelo ? { modelo } : {}),
       ...(id_master ? { id_master } : {}),
       precio,
@@ -186,8 +206,8 @@ export async function crearProductoAction(
 
   // 3. Procesar Opciones y Variantes
   if (!tieneVariantes) {
-    // Si es un producto simple, creamos una variante "Única" invisible
     await supabase.from("producto_variantes").insert({
+      negocio_id: negocioId,
       producto_id: nuevoProducto.id,
       nombre_display: "Único",
       atributos: {},
@@ -199,13 +219,14 @@ export async function crearProductoAction(
 
     // Mantenemos legacy stock table para no romper la app vieja
     await supabase.from("productos_stock").insert({
+      negocio_id: negocioId,
       producto_id: nuevoProducto.id,
       variante: "Único",
       cantidad: stockBase,
     });
 
     revalidatePath("/stock");
-    revalidatePath("/store");
+    revalidatePath("/store", "layout");
     return { error: null, success: true };
   }
 
@@ -215,12 +236,6 @@ export async function crearProductoAction(
     const variantesStr = formData.get("variantes") as string;
 
     if (!opcionesStr || !variantesStr) {
-      // "Tiene variantes" quedó tildado pero la grilla nunca se completó
-      // — si dejamos pasar esto como éxito, el producto queda publicado
-      // sin ninguna fila en producto_variantes ni productos_stock: no se
-      // puede vender y no hay ningún error visible que lo explique.
-      // Deshacemos la cabecera ya insertada arriba para no dejar el mismo
-      // tipo de huérfano que acabamos de corregir en la base.
       await supabase.from("productos").delete().eq("id", nuevoProducto.id);
       return {
         error:
@@ -326,6 +341,7 @@ export async function crearProductoAction(
       const vStock = Number.parseInt(v.stock || "0");
 
       variantesToInsert.push({
+        negocio_id: negocioId,
         producto_id: nuevoProducto.id,
         nombre_display: nombreDisplay,
         atributos: valoresCanonicos,
@@ -336,6 +352,7 @@ export async function crearProductoAction(
       });
 
       stockLegacyToInsert.push({
+        negocio_id: negocioId,
         producto_id: nuevoProducto.id,
         variante: nombreDisplay,
         cantidad: vStock,
@@ -344,11 +361,10 @@ export async function crearProductoAction(
       relacionesPorIndice.push({ valoresOriginales: v.valores });
     }
 
-    const { data: variantesInsertadas, error: varInsertError } =
-      await supabase
-        .from("producto_variantes")
-        .insert(variantesToInsert)
-        .select("id");
+    const { data: variantesInsertadas, error: varInsertError } = await supabase
+      .from("producto_variantes")
+      .insert(variantesToInsert)
+      .select("id");
     if (varInsertError) throw varInsertError;
 
     const { error: stockInsertError } = await supabase
@@ -407,7 +423,7 @@ export async function crearProductoAction(
   }
 
   revalidatePath("/stock");
-  revalidatePath("/store");
+  revalidatePath("/store", "layout");
 
   return { error: null, success: true };
 }

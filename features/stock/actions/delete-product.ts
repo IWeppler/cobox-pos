@@ -60,7 +60,7 @@ export async function bulkDeleteProductsAction(productIds: string[]) {
   }
 
   revalidatePath("/stock");
-  revalidatePath("/store");
+  revalidatePath("/store", "layout");
   return { error: null, success: true };
 }
 
@@ -108,6 +108,6 @@ export async function bulkUpdateCategoryAction(
   }
 
   revalidatePath("/stock");
-  revalidatePath("/store");
+  revalidatePath("/store", "layout");
   return { error: null, success: true };
 }
