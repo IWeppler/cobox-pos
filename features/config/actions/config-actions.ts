@@ -34,17 +34,27 @@ export async function updateConfiguracionAction(
   prevState: { error: string | null; success: boolean },
   formData: FormData,
 ) {
+  /**
+   * Un campo vacío es "sin dato", no cadena vacía. Importa de verdad en dos
+   * columnas: `inicio_actividades` es `date` (un "" revienta con 22007) y
+   * `condicion_iva` tiene CHECK (un "" no está en la lista permitida).
+   */
+  const textoOpcional = (clave: string): string | null => {
+    const valor = ((formData.get(clave) as string | null) ?? "").trim();
+    return valor === "" ? null : valor;
+  };
+
   const id = formData.get("id") as string;
   const posName = ((formData.get("posName") as string) ?? "").trim();
-  const razon_social = formData.get("razon_social") as string;
-  const cuit = formData.get("cuit") as string;
-  const condicion_iva = formData.get("condicion_iva") as string;
-  const inicio_actividades = formData.get("inicio_actividades") as string;
-  const provincia = formData.get("provincia") as string;
-  const localidad = formData.get("localidad") as string;
+  const razon_social = textoOpcional("razon_social");
+  const cuit = textoOpcional("cuit");
+  const condicion_iva = textoOpcional("condicion_iva");
+  const inicio_actividades = textoOpcional("inicio_actividades");
+  const provincia = textoOpcional("provincia");
+  const localidad = textoOpcional("localidad");
   const whatsapp = ((formData.get("whatsapp") as string) ?? "").trim();
-  const direccion = formData.get("direccion") as string;
-  const mensaje_ticket = formData.get("mensaje_ticket") as string;
+  const direccion = textoOpcional("direccion");
+  const mensaje_ticket = textoOpcional("mensaje_ticket");
   const logoFile = formData.get("logo") as File | null;
 
   // El id sale de un input hidden: si falta no es que el usuario olvidó algo,
