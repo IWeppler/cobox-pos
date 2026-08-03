@@ -1,14 +1,10 @@
 Ayudar a vender más, estar organizado y prever qué está pasando en el negocio.
 
-
 ideas:
 - Diccionario de Mapeo (Heurística) en tu función de parseo de variantes.
 - ESTA FUNCIONANDO EL TEMA MARCA Y GENERO PARA EL PRODUCTO. FUNDAMENTAL MEJORAR EL CATALOGO
-- mejorar ux de seleccion multiple dentro del modulo de /stock. Actualmente se abre una barra abajo que no me deja avanzar de pagina y necesito que tenga simplemente para ver cantidad de productos seleccionados y acciones entonces ahi pongo que accion quiero hacer: editar precios, eliminar, cambiar de categoria, subcategoria.
-- ver historial de productos cargadaos a traves de remitos. como agrupaciones y luego detalle de cada remito. Esto va de la mano con la mejora de la creacion de la pagina de movimientos que actualmente ni siquiera me esta leyendo los productos que ingresan a traves de remitos, no tiene paginacion, creo que podria tener mas filtros y podemos poner esto que digo directamente ahi adentro.
-- Atajos con teclado.
-- Agregar mas campos a CLIENTES: Razon social/Nombre, CUIT, Condicion IVA:
-- Login con huella: Entrás con tu huella o Face ID en vez de escribir la contraseña cada vez.
+- Mejorar ux de seleccion multiple dentro del modulo de /stock. Actualmente se abre una barra abajo que no me deja avanzar de pagina y necesito que tenga simplemente para ver cantidad de productos seleccionados y acciones entonces ahi pongo que accion quiero hacer: editar precios, eliminar, cambiar de categoria, subcategoria.
+- ver historial de productos cargados a traves de remitos. como agrupaciones y luego detalle de cada remito. Esto va de la mano con la mejora de la creacion de la pagina de movimientos que actualmente ni siquiera me esta leyendo los productos que ingresan a traves de remitos, no tiene paginacion, creo que podria tener mas filtros y podemos poner esto que digo directamente ahi adentro.
 - Pérdida de conexión (Offline): Es la más crítica. Si el local se queda sin internet, la cajera debe saber de inmediato (con un banner permanente en la parte superior) que el sistema está guardando las ventas localmente y que no cierre la pestaña.
 - Alertas del Cliente (CRM): Si la cajera selecciona a "Juan Pérez" para venderle, ahí mismo debe aparecer una etiqueta roja que diga "Atención: Juan debe $15.000". Es una notificación en tiempo real, pero en contexto.
 - Multi-sucursal: Hasta 5 sucursales bajo la misma cuenta, con stock y caja independientes.
@@ -16,7 +12,8 @@ ideas:
 - Exportación contable: Resumen de IVA, libro de ventas y compras, caja X y Z: un Excel listo para tu contador.
 - Agregar mas Datos de la empresa: nombre comercial +/ razon social, cuit. etiquetas de codigo de barra: a4, 50x30, 40x25, modo de facturacion: AFIP Manual (generar cuando se necesite), AFIP Automatico, Ticket Interno (Sin Afip)
 - Alicuota IVA (creacion de productos): 21% general; 10,5% alimentos básicos, carne, panificados, harinas; 0% exento.
-
+- Atajos con teclado.
+- Login con huella: Entrás con tu huella o Face ID en vez de escribir la contraseña cada vez.
 
 - terminar de hacer la conexión para recuperar contraseñas
 - hice la pagina de perfil pero hay que mejorar la UI de los planes

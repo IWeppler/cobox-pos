@@ -35,21 +35,38 @@ export async function updateConfiguracionAction(
   formData: FormData,
 ) {
   const id = formData.get("id") as string;
-  const posName = formData.get("posName") as string;
+  const posName = ((formData.get("posName") as string) ?? "").trim();
   const razon_social = formData.get("razon_social") as string;
   const cuit = formData.get("cuit") as string;
   const condicion_iva = formData.get("condicion_iva") as string;
   const inicio_actividades = formData.get("inicio_actividades") as string;
   const provincia = formData.get("provincia") as string;
   const localidad = formData.get("localidad") as string;
-  const whatsapp = formData.get("whatsapp") as string;
+  const whatsapp = ((formData.get("whatsapp") as string) ?? "").trim();
   const direccion = formData.get("direccion") as string;
   const mensaje_ticket = formData.get("mensaje_ticket") as string;
   const logoFile = formData.get("logo") as File | null;
 
-  if (!id || !posName || !whatsapp) {
+  // El id sale de un input hidden: si falta no es que el usuario olvidó algo,
+  // es que el formulario se cargó mal. Merece su propio mensaje, en vez de
+  // mandarlo a revisar campos que ya completó.
+  if (!id) {
     return {
-      error: "El nombre y el WhatsApp son obligatorios.",
+      error: "No se pudo identificar la configuración. Recargá la página.",
+      success: false,
+    };
+  }
+
+  // Los mensajes nombran el campo tal cual figura en pantalla: "el nombre" a
+  // secas mandaba a buscar entre Nombre Comercial y Razón Social.
+  if (!posName || !whatsapp) {
+    const faltantes = [
+      !posName ? "Nombre Comercial" : null,
+      !whatsapp ? "Teléfono / WhatsApp" : null,
+    ].filter(Boolean);
+
+    return {
+      error: `Falta completar: ${faltantes.join(" y ")}.`,
       success: false,
     };
   }

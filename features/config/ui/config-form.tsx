@@ -158,7 +158,9 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="posName">Nombre Comercial</Label>
+                <Label htmlFor="posName">
+                  Nombre Comercial<span className="text-danger">*</span>
+                </Label>
                 <Input
                   id="posName"
                   name="posName"
@@ -287,12 +289,18 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="telefono">Teléfono / WhatsApp</Label>
+                <Label htmlFor="whatsapp">
+                  Teléfono / WhatsApp<span className="text-danger">*</span>
+                </Label>
+                {/* El name TIENE que ser "whatsapp": es lo que lee la action y
+                    el nombre de la columna. Con name="telefono" el campo no
+                    llegaba nunca y el guardado fallaba siempre. */}
                 <Input
-                  id="telefono"
-                  name="telefono"
+                  id="whatsapp"
+                  name="whatsapp"
                   defaultValue={config.whatsapp || ""}
                   placeholder="Ej: 5491137920744"
+                  required
                 />
                 <p className="text-[10px] text-muted-foreground">
                   Incluye el código de país (549) sin el signo +
