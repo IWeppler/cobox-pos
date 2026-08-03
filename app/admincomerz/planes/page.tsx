@@ -11,7 +11,7 @@ import { formatearMoneda } from "@/shared/utils/formatters";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Planes | Cobox" };
+export const metadata = { title: "Planes | Comerz" };
 
 export default async function AdminPlanesPage() {
   const [planes, { negocios }] = await Promise.all([

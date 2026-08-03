@@ -14,9 +14,9 @@ import { formatearMoneda } from "@/shared/utils/formatters";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Panel Cobox" };
+export const metadata = { title: "Panel Comerz" };
 
-export default async function AdminCoboxPage() {
+export default async function AdminComerzPage() {
   const [{ negocios, metricas }, solicitudes] = await Promise.all([
     getPanelComerzAction(),
     getSolicitudesAction(),
@@ -37,7 +37,7 @@ export default async function AdminCoboxPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Panel Cobox</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Panel Comerz</h1>
         <p className="text-sm text-muted-foreground">
           Cómo viene el negocio, de un vistazo.
         </p>

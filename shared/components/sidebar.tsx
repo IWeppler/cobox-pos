@@ -72,6 +72,11 @@ interface SidebarProps {
   userRole: string;
   userId: string;
   userName?: string;
+  /**
+   * Plan del negocio ACTIVO, ya formateado (ver etiquetaPlan). Antes tenía un
+   * default hardcodeado "Pro Trial" y el layout nunca lo mandaba: los tres
+   * comercios mostraban el mismo plan inventado.
+   */
   planName?: string;
   /** Negocios a los que pertenece el usuario. Con uno solo no hay switcher. */
   negocios?: MembresiaNegocio[];
@@ -93,7 +98,7 @@ export function Sidebar({
   userRole,
   userId,
   userName = "Usuario",
-  planName = "Pro Trial",
+  planName = "Sin plan",
   negocios = [],
   negocioActivoId,
 }: Readonly<SidebarProps>) {

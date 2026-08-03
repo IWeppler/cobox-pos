@@ -16,6 +16,18 @@ interface ClientActionState {
   success: boolean;
 }
 
+/** Lo mínimo que necesita el selector del POS para dejar el cliente elegido. */
+export interface ClienteCreado {
+  id: string;
+  nombre: string;
+  telefono: string | null;
+  exceptuado_entrega_minima: boolean;
+}
+
+export interface CrearClienteState extends ClientActionState {
+  cliente?: ClienteCreado;
+}
+
 // 1. OBTENER TODOS LOS CLIENTES (Para la tabla principal)
 export async function getClientesAction() {
   const cookieStore = await cookies();
@@ -286,7 +298,7 @@ export async function registrarPagoDeudaAction(
 export async function crearClienteAction(
   prevState: ClientActionState | null,
   formData: FormData,
-) {
+): Promise<CrearClienteState> {
   // Datos comerciales básicos
   const nombre = formData.get("nombre") as string;
   const telefono = formData.get("whatsapp") as string;
@@ -328,32 +340,45 @@ export async function crearClienteAction(
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const { error } = await supabase.from("clientes").insert({
-    nombre,
-    telefono,
-    email: email || null,
-    dni: dni || null,
-    notas: notas || null,
-    activo: true,
-    exceptuado_entrega_minima: exceptuadoEntregaMinima,
-    fecha_vencimiento_deuda: fechaVencimientoDeuda,
-    // Insertamos los fiscales solo si aplica, sino forzamos null
-    cuit: esFiscal ? cuit : null,
-    razon_social: esFiscal ? razonSocial : null,
-    condicion_iva: esFiscal ? condicionIva : null,
-    direccion: esFiscal ? direccion || null : null,
-    localidad: esFiscal ? localidad || null : null,
-    provincia: esFiscal ? provincia || null : null,
-    codigo_postal: esFiscal ? codigoPostal || null : null,
-  });
+  const { data: cliente, error } = await supabase
+    .from("clientes")
+    .insert({
+      nombre,
+      telefono,
+      email: email || null,
+      dni: dni || null,
+      notas: notas || null,
+      activo: true,
+      exceptuado_entrega_minima: exceptuadoEntregaMinima,
+      fecha_vencimiento_deuda: fechaVencimientoDeuda,
+      // Insertamos los fiscales solo si aplica, sino forzamos null
+      cuit: esFiscal ? cuit : null,
+      razon_social: esFiscal ? razonSocial : null,
+      condicion_iva: esFiscal ? condicionIva : null,
+      direccion: esFiscal ? direccion || null : null,
+      localidad: esFiscal ? localidad || null : null,
+      provincia: esFiscal ? provincia || null : null,
+      codigo_postal: esFiscal ? codigoPostal || null : null,
+    })
+    // El POS necesita el cliente recién creado para dejarlo seleccionado en el
+    // ticket sin volver a consultar la lista entera.
+    .select("id, nombre, telefono, exceptuado_entrega_minima")
+    .single();
 
-  if (error) {
+  if (error || !cliente) {
     console.error("Error creando cliente:", error);
+    // 23505 = DNI/CUIT repetido. El resto se resume: el detalle queda en el log.
+    if (error?.code === "23505") {
+      return {
+        error: "Ya existe un cliente con ese DNI o CUIT.",
+        success: false,
+      };
+    }
     return { error: "No se pudo crear el cliente.", success: false };
   }
 
   revalidatePath("/clientes");
-  return { error: null, success: true };
+  return { error: null, success: true, cliente: cliente as ClienteCreado };
 }
 
 // 5. EDITAR CLIENTE

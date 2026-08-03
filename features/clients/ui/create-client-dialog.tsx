@@ -35,7 +35,8 @@ interface CreateClientDialogProps {
   action?: FormHTMLAttributes<HTMLFormElement>["action"];
   onSubmit?: FormEventHandler<HTMLFormElement>;
   isPending?: boolean;
-  includeDni?: boolean;
+  /** Vencimiento de deuda: solo tiene sentido en la ficha de clientes, no en el POS. */
+  includeVencimientoDeuda?: boolean;
   showExceptuadoEntregaMinima?: boolean;
 }
 
@@ -46,7 +47,7 @@ export function CreateClientDialog({
   action,
   onSubmit,
   isPending = false,
-  includeDni = false,
+  includeVencimientoDeuda = false,
   showExceptuadoEntregaMinima = false,
 }: Readonly<CreateClientDialogProps>) {
   // Estado para la revelación progresiva de los datos fiscales
@@ -125,19 +126,20 @@ export function CreateClientDialog({
               />
             </div>
 
-            {includeDni && (
-              <div className="space-y-2">
-                <Label htmlFor="dni" className="text-sm font-medium">
-                  DNI (Consumidor Final)
-                </Label>
-                <Input
-                  id="dni"
-                  name="dni"
-                  placeholder="Opcional"
-                  className="h-10 shadow-none"
-                />
-              </div>
-            )}
+            {/* Siempre visible: es el dato que pide la factura B a consumidor
+                final, y en el POS también hace falta. */}
+            <div className="space-y-2">
+              <Label htmlFor="dni" className="text-sm font-medium">
+                DNI (Opcional)
+              </Label>
+              <Input
+                id="dni"
+                name="dni"
+                inputMode="numeric"
+                placeholder="Ej: 30123456"
+                className="h-10 shadow-none"
+              />
+            </div>
           </div>
 
           {/* ==========================================
@@ -301,7 +303,7 @@ export function CreateClientDialog({
               DATOS OPERATIVOS Y OPCIONALES
           ========================================== */}
           <div className="pt-2 space-y-4">
-            {includeDni && (
+            {includeVencimientoDeuda && (
               <div className="space-y-2">
                 <Label
                   htmlFor="fecha_vencimiento_deuda"

@@ -7,7 +7,7 @@ import { formatearMoneda } from "@/shared/utils/formatters";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Comercios | Cobox" };
+export const metadata = { title: "Comercios | Comerz" };
 
 export default async function AdminNegociosPage() {
   const [{ negocios, metricas }, planes] = await Promise.all([
@@ -21,7 +21,7 @@ export default async function AdminNegociosPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Comercios</h1>
           <p className="text-sm text-muted-foreground">
-            Gestión centralizada de todos los clientes de Cobox.
+            Gestión centralizada de todos los clientes de Comerz.
           </p>
         </div>
         <p className="text-sm text-muted-foreground">

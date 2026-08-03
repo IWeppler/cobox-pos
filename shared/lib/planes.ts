@@ -51,6 +51,19 @@ export function tieneFeature(
   return reglas.features?.includes(clave) ?? false;
 }
 
+/**
+ * Cómo se muestra el plan del negocio activo (sidebar, banners de paywall).
+ *
+ * El nombre sale de `planes.nombre` y NO se hardcodea en ningún lado: si mañana
+ * se renombra un plan o se agrega uno nuevo, la UI lo sigue sola. El prefijo
+ * "Plan " se agrega acá para no repetirlo en cada fila de la tabla.
+ */
+export function etiquetaPlan(nombre: string | null | undefined): string {
+  const limpio = (nombre ?? "").trim();
+  if (!limpio) return "Sin plan";
+  return /^plan\b/i.test(limpio) ? limpio : `Plan ${limpio}`;
+}
+
 /** Etiquetas para mostrar; las claves son las que viajan en `features`. */
 export const NOMBRE_FEATURE: Record<string, string> = {
   pos: "Punto de venta",

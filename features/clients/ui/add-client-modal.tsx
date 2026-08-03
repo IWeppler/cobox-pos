@@ -49,7 +49,7 @@ export function CreateClientModal({
       onOpenChange={setIsOpen}
       action={formAction}
       isPending={isPending}
-      includeDni
+      includeVencimientoDeuda
       showExceptuadoEntregaMinima={entregaMinimaActiva}
       trigger={
         <Button title="Nuevo Cliente" className={buttonClassName}>

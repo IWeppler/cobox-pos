@@ -15,6 +15,7 @@ import { BannerImpersonation } from "@/features/admin/ui/banner-impersonation";
 import { NegocioActivoProvider } from "@/shared/components/negocio-activo-provider";
 import { PlanProvider } from "@/features/planes/ui/plan-provider";
 import { getContextoPlanAction } from "@/features/planes/actions/contexto-plan";
+import { etiquetaPlan } from "@/shared/lib/planes";
 
 export default async function DashboardLayout({
   children,
@@ -91,6 +92,9 @@ export default async function DashboardLayout({
         userRole={userRole}
         userId={user.id}
         userName={perfil?.nombre || undefined}
+        // El plan es del NEGOCIO ACTIVO, no del usuario: el mismo usuario ve
+        // "Plan Gestión" en un negocio y otro plan en el que tiene al lado.
+        planName={etiquetaPlan(contextoPlan.planActual)}
         negocios={negocios}
         negocioActivoId={negocioActivoId}
       />

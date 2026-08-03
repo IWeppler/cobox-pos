@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { createClient } from "@/shared/config/supabase/client";
 import { Button } from "@/shared/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
@@ -8,6 +8,10 @@ import { CreateClientDialog } from "@/features/clients/ui/create-client-dialog";
 import { Check, ChevronDown, Loader2, Search, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/shared/ui/input";
+import {
+  crearClienteAction,
+  type ClienteCreado,
+} from "@/features/clients/actions/manage-clients";
 
 export interface ClienteBasico {
   id: string;
@@ -21,6 +25,12 @@ interface ClientSelectorProps {
   onClienteChange: (cliente: ClienteBasico | null) => void;
 }
 
+interface EstadoCrearCliente {
+  error: string | null;
+  success: boolean;
+  cliente?: ClienteCreado;
+}
+
 export function ClientSelector({
   clienteSeleccionado,
   onClienteChange,
@@ -30,7 +40,6 @@ export function ClientSelector({
   const [clientes, setClientes] = useState<ClienteBasico[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -38,13 +47,21 @@ export function ClientSelector({
     const fetchClientes = async () => {
       setIsLoading(true);
       const supabase = createClient();
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("clientes")
         .select("id, nombre, telefono, exceptuado_entrega_minima")
         .eq("activo", true)
         .order("nombre");
 
-      if (data) setClientes(data);
+      // El error NO se puede tragar: una lista vacía por RLS (negocio activo
+      // sin resolver) se ve igual que un comercio sin clientes, y el vendedor
+      // termina cargando la venta a consumidor final sin enterarse.
+      if (error) {
+        console.error("[ClientSelector] error cargando clientes:", error);
+        toast.error("No se pudieron cargar los clientes.");
+      }
+
+      setClientes(data ?? []);
       setIsLoading(false);
     };
 
@@ -57,42 +74,31 @@ export function ClientSelector({
       (cliente.telefono && cliente.telefono.includes(search)),
   );
 
-  const handleCreateCliente = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    const nombre = String(formData.get("nombre") || "").trim();
-    const whatsapp = String(formData.get("whatsapp") || "").trim();
-    const notas = String(formData.get("notas") || "").trim();
+  // El alta pasa por la misma server action que la ficha de clientes: así el
+  // POS guarda TODOS los campos del formulario (DNI, email, datos fiscales) y
+  // con la misma validación server-side, en vez de un insert propio que solo
+  // mandaba nombre, teléfono y notas.
+  const [, crearCliente, isCreating] = useActionState(
+    async (prevState: EstadoCrearCliente, formData: FormData) => {
+      const result = await crearClienteAction(prevState, formData);
 
-    setIsCreating(true);
+      if (!result.success || !result.cliente) {
+        toast.error(result.error || "Ocurrió un error al crear el cliente.");
+        return result;
+      }
 
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("clientes")
-      .insert({
-        nombre,
-        telefono: whatsapp,
-        notas: notas || null,
-        activo: true,
-      })
-      .select("id, nombre, telefono, exceptuado_entrega_minima")
-      .single();
-
-    setIsCreating(false);
-
-    if (error || !data) {
-      toast.error("Ocurrio un error al crear el cliente.");
-      return;
-    }
-
-    toast.success("Cliente creado correctamente.");
-    setClientes((prev) => [...prev, data]);
-    onClienteChange(data);
-    setIsCreateOpen(false);
-    setOpen(false);
-    form.reset();
-  };
+      const nuevo = result.cliente;
+      toast.success("Cliente creado correctamente.");
+      setClientes((prev) =>
+        [...prev, nuevo].sort((a, b) => a.nombre.localeCompare(b.nombre)),
+      );
+      onClienteChange(nuevo);
+      setIsCreateOpen(false);
+      setOpen(false);
+      return result;
+    },
+    { error: null, success: false },
+  );
 
   return (
     <>
@@ -196,7 +202,7 @@ export function ClientSelector({
       <CreateClientDialog
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
-        onSubmit={handleCreateCliente}
+        action={crearCliente}
         isPending={isCreating}
       />
     </>
