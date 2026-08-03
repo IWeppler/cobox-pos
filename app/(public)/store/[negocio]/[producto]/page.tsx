@@ -10,7 +10,7 @@ import { resolveTenant } from "@/shared/lib/tenant";
 import { urlDeCatalogo } from "@/shared/lib/dominios";
 import { createPublicClient } from "@/shared/config/supabase/server";
 import { formatearMoneda } from "@/shared/utils/formatters";
-import { obtenerPrimeraImagen } from "@/features/stock/lib/stock-product-utils";
+import { elegirImagenOg, imagenOgConMime } from "@/shared/lib/og-imagen";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -70,7 +70,11 @@ export async function generateMetadata({
   // openGraph.images rompe la URL: Next no la reconoce como absoluta,
   // cae al fallback de metadataBase (localhost:3000 en prod) y el string
   // stringificado termina resuelto como path relativo.
-  const imagenOg = obtenerPrimeraImagen(producto.imagen_url);
+  //
+  // Entre las fotos del producto se prefiere una jpg/png: WhatsApp no dibuja
+  // webp y el preview salía en blanco aunque el og:image fuera el correcto.
+  // El logo es el último recurso, solo si el producto no tiene ninguna foto.
+  const imagenOg = elegirImagenOg([producto.imagen_url, config?.posLogo]);
 
   return {
     title,
@@ -79,9 +83,16 @@ export async function generateMetadata({
     openGraph: {
       title,
       description,
+      siteName: nombreComercio,
       type: "website",
       url,
-      images: imagenOg ? [{ url: imagenOg }] : undefined,
+      images: imagenOgConMime(imagenOg, producto.nombre),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: imagenOg ? [imagenOg] : undefined,
     },
   };
 }

@@ -17,6 +17,7 @@ import {
 import { buildPropiedadesFiltro } from "@/entities/productos/lib/build-propiedades-filtro";
 import { slugify } from "@/shared/utils/slugify";
 import { resolverCategoriaPorSlug } from "@/shared/utils/category-tree";
+import { parsearIdsSeleccion } from "@/shared/utils/compartir-catalogo";
 import { ConfiguracionPOS } from "@/entities/config/types";
 
 interface CategoriaProp {
@@ -41,10 +42,6 @@ const ordenOptions: OrdenOption[] = [
 const ORDEN_VALIDOS = new Set(ordenOptions.map((o) => o.value));
 
 const PARAMS_RESERVADOS = new Set(["q", "categoria", "sub", "orden", "productos"]);
-
-// Cap defensivo para ?productos=id1,id2,... — un link con de más no debe
-// poder forzar una consulta arbitrariamente grande.
-const MAX_PRODUCTOS_SELECCIONADOS = 30;
 
 export function StoreCatalog({
   productos,
@@ -79,17 +76,10 @@ function CatalogContent({
   const searchQuery = searchParams.get("q") || "";
 
   // --- ?productos=id1,id2,... — selección curada, gana sobre el resto ---
+  // El parseo es el mismo que usa generateMetadata para armar el preview del
+  // link: si divergen, la imagen compartida no coincide con lo que se abre.
   const idsSeleccionados = useMemo(() => {
-    const raw = searchParams.get("productos");
-    if (!raw) return null;
-    const ids = [
-      ...new Set(
-        raw
-          .split(",")
-          .map((id) => id.trim())
-          .filter(Boolean),
-      ),
-    ].slice(0, MAX_PRODUCTOS_SELECCIONADOS);
+    const ids = parsearIdsSeleccion(searchParams.get("productos"));
     return ids.length > 0 ? new Set(ids) : null;
   }, [searchParams]);
   const modoSeleccion = idsSeleccionados !== null;

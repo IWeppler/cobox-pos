@@ -4,7 +4,13 @@ import { createPublicClient } from "@/shared/config/supabase/server";
 import { headers } from "next/headers";
 import { resolveTenant } from "@/shared/lib/tenant";
 import { urlDeCatalogo } from "@/shared/lib/dominios";
-import { obtenerPrimeraImagen } from "@/features/stock/lib/stock-product-utils";
+import {
+  elegirImagenOg,
+  elegirImagenOgConEtiqueta,
+  imagenOgConMime,
+} from "@/shared/lib/og-imagen";
+import { parsearIdsSeleccion } from "@/shared/utils/compartir-catalogo";
+import { describirSeleccion } from "@/features/store/lib/describir-seleccion";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -21,13 +27,64 @@ async function resolverBaseUrl() {
   return `${protocol}://${host}`;
 }
 
+type ClientePublico = Awaited<ReturnType<typeof createPublicClient>>;
+
+/**
+ * Preview de la portada de la tienda (link sin parámetros).
+ *
+ * Acá manda la marca: si el logo está en un formato que los scrapers dibujan,
+ * va el logo. El catálogo entra solo como rescate cuando el logo es webp o
+ * transparente — que es justamente el caso de Evens, donde la tarjeta salía
+ * como un cuadro en blanco.
+ */
+async function metadataPortada(
+  supabase: ClientePublico,
+  nombreComercio: string,
+  posLogo: string | null | undefined,
+  baseUrl: string,
+  negocio: string,
+): Promise<Metadata> {
+  const { data: candidatos } = await supabase
+    .from("productos")
+    .select("imagen_url")
+    .eq("publicado", true)
+    .not("imagen_url", "is", null)
+    .limit(10);
+
+  const imagen = elegirImagenOg([
+    posLogo,
+    ...(candidatos ?? []).map((p) => p.imagen_url),
+  ]);
+  const title = `${nombreComercio} | Tienda online`;
+  const description = `Mirá el catálogo de ${nombreComercio} y hacé tu pedido online.`;
+
+  return {
+    title,
+    description,
+    metadataBase: new URL(baseUrl),
+    openGraph: {
+      title,
+      description,
+      siteName: nombreComercio,
+      type: "website",
+      url: urlDeCatalogo(negocio),
+      images: imagenOgConMime(imagen, nombreComercio),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: imagen ? [imagen] : undefined,
+    },
+  };
+}
+
 export async function generateMetadata({
   params,
   searchParams,
 }: Readonly<StorePageProps>): Promise<Metadata> {
   const { negocio } = await params;
   const { categoria, sub, productos } = await searchParams;
-  if (!categoria && !productos) return {};
 
   const supabase = await createPublicClient();
   const { data: config } = await supabase
@@ -39,33 +96,85 @@ export async function generateMetadata({
   const baseUrl = await resolverBaseUrl();
 
   if (productos) {
-    const title = `Productos seleccionados | ${nombreComercio}`;
+    // Los productos del link se leen ACÁ, en el server: el scraper de WhatsApp
+    // no ejecuta JS, así que lo que no esté en el HTML de la respuesta no
+    // existe para el preview. Antes esta rama no consultaba nada y mandaba
+    // siempre el logo: la selección compartida NUNCA mostraba el producto.
+    const ids = parsearIdsSeleccion(productos);
+
+    const { data: filas } = ids.length
+      ? await supabase
+          .from("productos")
+          .select("id, nombre, precio, imagen_url, thumbnail_url")
+          .in("id", ids)
+          .eq("publicado", true)
+      : { data: [] };
+
+    // .in() no garantiza orden; el del link es el que eligió quien comparte,
+    // y su primer producto es el que manda en el preview.
+    const porId = new Map((filas ?? []).map((p) => [p.id, p]));
+    const seleccionados = ids
+      .map((id) => porId.get(id))
+      .filter((p): p is NonNullable<typeof p> => Boolean(p));
+
+    // Fallback en cascada: fotos de los productos en el orden del link y,
+    // solo si ninguno tiene imagen (ids borrados o despublicados), el logo.
+    // config.posLogo se guarda como string plano, no como array
+    // stringificado — listarImagenes tolera las dos formas.
+    const elegida = elegirImagenOgConEtiqueta([
+      ...seleccionados.map((p) => ({ valor: p.imagen_url, alt: p.nombre })),
+      { valor: config?.posLogo, alt: nombreComercio },
+    ]);
+
+    const { title, description } = describirSeleccion(
+      seleccionados,
+      nombreComercio,
+    );
+
     return {
       title,
-      description: `Mirá esta selección de productos de ${nombreComercio}.`,
+      description,
       metadataBase: new URL(baseUrl),
       openGraph: {
         title,
+        description,
+        siteName: nombreComercio,
         type: "website",
         url: `${urlDeCatalogo(negocio)}?productos=${productos}`,
-        // config.posLogo se guarda como string plano (no como array
-        // stringificado), a diferencia de imagen_url de productos — no
-        // necesita obtenerPrimeraImagen acá.
-        images: config?.posLogo ? [{ url: config.posLogo }] : undefined,
+        images: imagenOgConMime(elegida?.url ?? null, elegida?.alt),
+      },
+      twitter: {
+        card: "summary_large_image",
+        title,
+        description,
+        images: elegida ? [elegida.url] : undefined,
       },
     };
   }
 
   // Preferimos `sub` si vino — es la categoría más específica (un link a
   // "Ropa Hombre > Boxer" debe mostrar "Boxer" en el preview, no el padre).
-  const { data: cat } = await supabase
-    .from("categorias")
-    .select("id, nombre")
-    .eq("slug", sub || categoria)
-    .eq("activa", true)
-    .maybeSingle();
+  const { data: cat } = categoria
+    ? await supabase
+        .from("categorias")
+        .select("id, nombre")
+        .eq("slug", sub || categoria)
+        .eq("activa", true)
+        .maybeSingle()
+    : { data: null };
 
-  if (!cat) return {};
+  // Link pelado al catálogo (o categoría que ya no existe): igual merece
+  // preview. Antes devolvía {} y WhatsApp mostraba la tarjeta sin imagen —
+  // el mismo agujero que tenía la selección, en la portada de la tienda.
+  if (!cat) {
+    return metadataPortada(
+      supabase,
+      nombreComercio,
+      config?.posLogo,
+      baseUrl,
+      negocio,
+    );
+  }
 
   // Un padre no tiene productos con categoria_id propio (viven en sus
   // hijos) — sumamos los ids de sus hijos para no perder la imagen de
@@ -77,31 +186,40 @@ export async function generateMetadata({
 
   const idsParaImagen = [cat.id, ...(hijos || []).map((h) => h.id)];
 
-  const { data: primerProducto } = await supabase
+  // Varios candidatos, no uno: elegirImagenOg prefiere un jpg/png sobre un
+  // webp, que WhatsApp no dibuja. Con `limit(1)` no había nada para elegir.
+  const { data: candidatos } = await supabase
     .from("productos")
     .select("imagen_url")
     .in("categoria_id", idsParaImagen)
     .eq("publicado", true)
     .not("imagen_url", "is", null)
-    .limit(1)
-    .maybeSingle();
+    .limit(10);
 
-  // primerProducto.imagen_url viene como JSON.stringify de un array —
-  // mismo bug que en [slug]/page.tsx, hay que extraer el string plano
-  // antes de mandarlo a openGraph.images.
-  const imagen =
-    obtenerPrimeraImagen(primerProducto?.imagen_url) || config?.posLogo || null;
+  const imagen = elegirImagenOg([
+    ...(candidatos ?? []).map((p) => p.imagen_url),
+    config?.posLogo,
+  ]);
   const title = `${cat.nombre} | ${nombreComercio}`;
+  const description = `Descubrí ${cat.nombre} en ${nombreComercio}.`;
 
   return {
     title,
-    description: `Descubrí ${cat.nombre} en ${nombreComercio}.`,
+    description,
     metadataBase: new URL(baseUrl),
     openGraph: {
       title,
+      description,
+      siteName: nombreComercio,
       type: "website",
       url: `${urlDeCatalogo(negocio)}?categoria=${categoria}${sub ? `&sub=${sub}` : ""}`,
-      images: imagen ? [{ url: imagen }] : undefined,
+      images: imagenOgConMime(imagen, cat.nombre),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: imagen ? [imagen] : undefined,
     },
   };
 }

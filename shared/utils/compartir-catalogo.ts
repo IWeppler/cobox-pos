@@ -24,6 +24,30 @@ export function construirUrlSeleccion(
   return `${urlDeCatalogo(slugNegocio)}?productos=${capeados.join(",")}`;
 }
 
+/**
+ * Lee `?productos=id1,id2,...` — el espejo de construirUrlSeleccion.
+ *
+ * Lo usan el catálogo (para filtrar la grilla) y generateMetadata (para armar
+ * el preview del link). Tiene que ser UNA sola función: si el preview
+ * interpreta el link distinto que la página, el usuario comparte una imagen
+ * que no corresponde a lo que después ve al abrirlo.
+ *
+ * Mantiene el orden del link (el primero manda para la imagen del preview),
+ * saca duplicados y aplica el mismo cap que el armado.
+ */
+export function parsearIdsSeleccion(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+
+  return [
+    ...new Set(
+      raw
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, MAX_PRODUCTOS_COMPARTIDOS);
+}
+
 export function construirUrlCategoria(
   slugNegocio: string,
   slug: string,

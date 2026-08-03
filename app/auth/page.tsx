@@ -72,7 +72,7 @@ export default function AuthPage() {
             {/* Mockup de Atrás (auth.png) - Tamaño 140% para desbordar la pantalla */}
             <div className="absolute left-0 top-8 w-[140%] rounded-xl shadow-2xl border border-white/10 overflow-hidden transform transition-transform duration-700 hover:-translate-y-2 z-10">
               <Image
-                src="/auth.png"
+                src="/Auth2.webp"
                 alt="Dashboard Principal"
                 width={1600}
                 height={1000}
@@ -83,7 +83,7 @@ export default function AuthPage() {
             {/* Mockup de Adelante (auth1.png) - Tamaño 130% desplazado hacia abajo */}
             <div className="absolute left-[15%] top-[40%] w-[130%] rounded-xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] border border-white/10 overflow-hidden transform transition-transform duration-700 hover:-translate-y-2 z-20">
               <Image
-                src="/auth1.png"
+                src="/auth1.webp"
                 alt="Detalle Dashboard"
                 width={1600}
                 height={1000}

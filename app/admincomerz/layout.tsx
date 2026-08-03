@@ -11,6 +11,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { logoutAction } from "@/features/auth/actions/logout";
+import Image from "next/image";
 
 export default async function AdminComerzLayout({
   children,
@@ -18,7 +19,9 @@ export default async function AdminComerzLayout({
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
 
   // Validamos si es el super admin usando la función de base de datos
@@ -33,9 +36,20 @@ export default async function AdminComerzLayout({
       {/* Sidebar de Super Admin */}
       <aside className="w-full md:w-64 border-r border-border bg-card p-6 flex flex-col justify-between">
         <div className="space-y-6">
-          <div className="flex items-center gap-2 px-2">
-            <ShieldAlert className="w-6 h-6 text-primary" />
-            <span className="font-bold text-lg tracking-wider">COMERZ ADMIN</span>
+          {/* Logo Superior Izquierdo */}
+          <div className="top-8 left-8 flex items-center gap-3">
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+              <Image
+                src="/logow.png"
+                alt="Logo"
+                width={36}
+                height={36}
+                className="object-contain rounded"
+              />
+            </div>
+            <span className="font-bold text-lg tracking-tight text-foreground">
+              Comerz
+            </span>
           </div>
 
           <nav className="space-y-1">
@@ -77,7 +91,7 @@ export default async function AdminComerzLayout({
           <form action={logoutAction}>
             <button
               type="submit"
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-danger hover:bg-danger/10 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-danger hover:bg-danger/10 transition-colors cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               Cerrar sesión
