@@ -11,102 +11,46 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
-
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{
-    outcome: "accepted" | "dismissed";
-    platform: string;
-  }>;
-  prompt(): Promise<void>;
-}
-
-declare global {
-  interface Window {
-    deferredPwaPrompt?: BeforeInstallPromptEvent;
-  }
-  interface Navigator {
-    standalone?: boolean;
-  }
-}
-
-if (typeof window !== "undefined") {
-  window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault();
-    window.deferredPwaPrompt = e as BeforeInstallPromptEvent;
-  });
-}
-
-const isPwaInstalled = () => {
-  if (typeof window === "undefined") return false;
-
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    ("standalone" in navigator && navigator.standalone === true)
-  );
-};
-
-const getDeferredPwaPrompt = () => {
-  if (typeof window === "undefined") return null;
-  return window.deferredPwaPrompt ?? null;
-};
+import { useInstalacionPwa } from "@/shared/lib/use-instalacion-pwa";
+import { InstruccionesInstalacion } from "@/shared/components/instrucciones-instalacion";
 
 export function PreferencesPanel() {
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
-
-  const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(getDeferredPwaPrompt);
-  const [isInstalled, setIsInstalled] = useState(isPwaInstalled);
+  const { metodo, instalar } = useInstalacionPwa();
+  const [instruccionesAbiertas, setInstruccionesAbiertas] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setMounted(true);
-      setDeferredPrompt(getDeferredPwaPrompt());
-    }, 0);
-
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      const pwaEvent = e as BeforeInstallPromptEvent;
-      setDeferredPrompt(pwaEvent);
-      window.deferredPwaPrompt = pwaEvent;
-    };
-
-    const handleAppInstalled = () => {
-      setDeferredPrompt(null);
-      setIsInstalled(true);
-    };
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    window.addEventListener("appinstalled", handleAppInstalled);
-
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener(
-        "beforeinstallprompt",
-        handleBeforeInstallPrompt,
-      );
-      window.removeEventListener("appinstalled", handleAppInstalled);
-    };
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
   }, []);
 
-  const handleInstallClick = async () => {
-    if (isInstalled) return;
+  const estaInstalada = metodo?.tipo === "instalada";
+  const hayPromptNativo = metodo?.tipo === "prompt";
 
-    if (!deferredPrompt) {
-      toast.info("Instalación manual requerida", {
+  const handleInstallClick = async () => {
+    if (!metodo || estaInstalada) return;
+
+    // Sin prompt nativo el botón no puede instalar nada por su cuenta. En vez
+    // del toast viejo —que mandaba al "menú de tres puntos", inexistente en
+    // Safari— se abre el instructivo que corresponde a este navegador.
+    if (metodo.tipo === "ios-manual" || metodo.tipo === "abrir-en-navegador") {
+      setInstruccionesAbiertas(true);
+      return;
+    }
+
+    // Queda el caso sin instructivo propio: escritorio, o Chromium que todavía
+    // no ofreció el prompt. Ahí el menú del navegador sí es la respuesta.
+    if (!hayPromptNativo) {
+      toast.info("Instalación manual", {
         description:
-          "En tu navegador actual debes ir al menú (tres puntos) y seleccionar 'Instalar aplicación' / 'Añadir a pantalla de inicio'.",
+          "Abrí el menú de tu navegador y elegí 'Instalar aplicación' o 'Agregar a pantalla de inicio'.",
       });
       return;
     }
 
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-
-    if (outcome === "accepted") {
-      setDeferredPrompt(null);
-      setIsInstalled(true);
+    const resultado = await instalar();
+    if (resultado === "accepted") {
       toast.success("¡Aplicación instalada con éxito!");
     }
   };
@@ -196,27 +140,35 @@ export function PreferencesPanel() {
 
           <Button
             onClick={handleInstallClick}
-            disabled={isInstalled}
+            disabled={estaInstalada}
             className={`w-full font-semibold h-12 uppercase transition-all ${
-              isInstalled
+              estaInstalada
                 ? "bg-success/10 text-success"
-                : deferredPrompt
+                : hayPromptNativo
                   ? "bg-primary hover:bg-primary/90 text-white"
                   : "bg-muted text-muted-foreground"
             }`}
           >
-            {isInstalled ? (
+            {estaInstalada ? (
               <>
                 <CheckCircle2 className="w-4 h-4 mr-2" /> App ya instalada
               </>
-            ) : deferredPrompt ? (
+            ) : hayPromptNativo ? (
               "Instalar App ahora"
             ) : (
-              "Instalación Manual / iOS"
+              "Cómo instalar en este dispositivo"
             )}
           </Button>
         </div>
       </div>
+
+      {metodo && (
+        <InstruccionesInstalacion
+          metodo={metodo}
+          abierto={instruccionesAbiertas}
+          onAbiertoChange={setInstruccionesAbiertas}
+        />
+      )}
     </div>
   );
 }

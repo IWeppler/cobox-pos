@@ -45,6 +45,18 @@ const db = createClient(URL_DESTINO, KEY_DESTINO, {
   auth: { persistSession: false },
 });
 
+/**
+ * Buckets del origen que en este proyecto se llaman distinto.
+ *
+ * Ninja Camisetas guardaba las fotos en un bucket `camisetas`. Acá las
+ * imágenes de producto viven todas en `productos`: es el único bucket (junto
+ * con `logos`) cubierto por las policies de storage por negocio. Traerlas a un
+ * bucket `camisetas` nuevo las dejaría sin ninguna policy.
+ */
+const BUCKET_DESTINO: Record<string, string> = {
+  camisetas: "productos",
+};
+
 /** Columnas con URLs. `lista` = el valor es un array JSON stringificado. */
 const CAMPOS: { tabla: string; columnas: { nombre: string; lista: boolean }[] }[] =
   [
@@ -67,7 +79,10 @@ const CAMPOS: { tabla: string; columnas: { nombre: string; lista: boolean }[] }[
   ];
 
 interface Movimiento {
+  /** Bucket en el origen. */
   bucket: string;
+  /** Bucket acá. Casi siempre el mismo; ver BUCKET_DESTINO. */
+  bucketDestino: string;
   desde: string;
   hasta: string;
   externo: boolean;
@@ -156,7 +171,7 @@ async function main() {
   if (!APLICAR) {
     console.log("\nEjemplos:");
     for (const m of lista.slice(0, 3)) {
-      console.log(`  ${m.bucket}: ${m.desde}\n    -> ${m.hasta}`);
+      console.log(`  ${m.bucket}: ${m.desde}\n    -> ${m.bucketDestino}: ${m.hasta}`);
     }
     console.log("\nDry-run: no se tocó nada. Repetí con --aplicar.\n");
     return;
@@ -175,7 +190,7 @@ async function main() {
         if (!respuesta.ok) throw new Error(`descarga HTTP ${respuesta.status}`);
         const bytes = new Uint8Array(await respuesta.arrayBuffer());
         const { error: errUp } = await db.storage
-          .from(m.bucket)
+          .from(m.bucketDestino)
           .upload(m.hasta, bytes, {
             cacheControl: "31536000",
             contentType:
@@ -186,9 +201,9 @@ async function main() {
       } else {
         const { error: errCopy } = await db.storage
           .from(m.bucket)
-          .copy(m.desde, m.hasta);
+          .copy(m.desde, m.hasta, { destinationBucket: m.bucketDestino });
         // Si ya estaba copiado de una corrida anterior, no es un error.
-        if (errCopy && !(await existe(m.bucket, m.hasta))) throw errCopy;
+        if (errCopy && !(await existe(m.bucketDestino, m.hasta))) throw errCopy;
       }
       copiados++;
       copiadosOk.push(m);
@@ -287,9 +302,11 @@ function planificar(url: string, negocioId: string): Movimiento | null {
   if (barra === -1) return null;
 
   const bucket = resto.slice(0, barra);
+  const bucketDestino = BUCKET_DESTINO[bucket] ?? bucket;
   const desde = decodeURIComponent(resto.slice(barra + 1).split("?")[0]);
 
-  if (desde.startsWith(`${negocioId}/`)) return null;
+  // Ya está en su lugar sólo si además no hay que cambiarlo de bucket.
+  if (bucketDestino === bucket && desde.startsWith(`${negocioId}/`)) return null;
 
   // Se conserva la subcarpeta original (thumbs/, grids/, optimized/) para no
   // perder la convención que ya usa el código al leerlas.
@@ -297,11 +314,12 @@ function planificar(url: string, negocioId: string): Movimiento | null {
 
   return {
     bucket,
+    bucketDestino,
     desde,
     hasta,
     externo: base !== URL_DESTINO,
     urlOrigen: url,
-    urlNueva: `${URL_DESTINO}${marca}${bucket}/${hasta}`,
+    urlNueva: `${URL_DESTINO}${marca}${bucketDestino}/${hasta}`,
   };
 }
 

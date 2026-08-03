@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import { InstalacionPwaListener } from "@/shared/components/instalacion-pwa-listener";
 
 
 const geistMono = Geist_Mono({
@@ -91,6 +92,7 @@ export default async function RootLayout({
           {children}
           <Toaster />
         </ThemeProvider>
+        <InstalacionPwaListener />
         <Analytics/>
         <SpeedInsights/>
         <Script
