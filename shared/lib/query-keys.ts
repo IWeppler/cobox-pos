@@ -1,3 +1,20 @@
+/**
+ * El negocio activo va SIEMPRE al final de la clave de las listas que dependen
+ * de él. Al final y no al principio para que la invalidación por prefijo
+ * (`["pos","productos"]`) siga alcanzando a todas las variantes.
+ *
+ * Sin esto, cambiar de negocio dejaba a Vender/Inventario/Clientes mostrando el
+ * catálogo del negocio anterior hasta recargar a mano: `router.refresh()`
+ * re-renderiza el server, pero no toca el cache de React Query, que vive en el
+ * cliente y sobrevive al refresh.
+ */
+export function conNegocio<T extends readonly unknown[]>(
+  clave: T,
+  negocioId: string | null | undefined,
+) {
+  return [...clave, negocioId ?? "sin-negocio"] as const;
+}
+
 export const queryKeys = {
   pos: {
     productos: ["pos", "productos"] as const,

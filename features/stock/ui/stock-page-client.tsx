@@ -2,7 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { getStockPageDataAction } from "@/features/stock/actions/get-product";
-import { queryKeys } from "@/shared/lib/query-keys";
+import { conNegocio, queryKeys } from "@/shared/lib/query-keys";
+import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { StockView } from "@/features/stock/ui/stock-view";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { RUBRO_DEFAULT } from "@/entities/config/types";
@@ -10,8 +11,9 @@ import { RUBRO_DEFAULT } from "@/entities/config/types";
 const CATALOG_STALE_TIME_MS = 3 * 60 * 1000;
 
 export function StockPageClient({ userRole }: { userRole: string }) {
+  const negocioActivo = useNegocioActivo();
   const { data, isLoading, error } = useQuery({
-    queryKey: queryKeys.stock.index,
+    queryKey: conNegocio(queryKeys.stock.index, negocioActivo?.id),
     queryFn: getStockPageDataAction,
     staleTime: CATALOG_STALE_TIME_MS,
   });

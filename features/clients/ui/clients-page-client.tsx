@@ -2,15 +2,17 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { getClientesPageDataAction } from "@/features/clients/actions/manage-clients";
-import { queryKeys } from "@/shared/lib/query-keys";
+import { conNegocio, queryKeys } from "@/shared/lib/query-keys";
+import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { ClientsView } from "@/features/clients/ui/clients-view";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 const CATALOG_STALE_TIME_MS = 3 * 60 * 1000;
 
 export function ClientsPageClient({ isAdmin }: { isAdmin: boolean }) {
+  const negocioActivo = useNegocioActivo();
   const { data, isLoading, error } = useQuery({
-    queryKey: queryKeys.clientes.listado,
+    queryKey: conNegocio(queryKeys.clientes.listado, negocioActivo?.id),
     queryFn: getClientesPageDataAction,
     staleTime: CATALOG_STALE_TIME_MS,
   });

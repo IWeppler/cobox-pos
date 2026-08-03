@@ -2,7 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { getPosCatalogDataAction } from "@/shared/actions/store-actions";
-import { queryKeys } from "@/shared/lib/query-keys";
+import { conNegocio, queryKeys } from "@/shared/lib/query-keys";
+import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { PosTerminal } from "@/features/pos/ui/pos-terminal";
 import { CartPanelAdmin } from "@/features/pos/ui/cart-panel-admin";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -10,8 +11,9 @@ import { Skeleton } from "@/shared/ui/skeleton";
 const CATALOG_STALE_TIME_MS = 3 * 60 * 1000;
 
 export function PosPageClient() {
+  const negocioActivo = useNegocioActivo();
   const { data, isLoading, error } = useQuery({
-    queryKey: queryKeys.pos.productos,
+    queryKey: conNegocio(queryKeys.pos.productos, negocioActivo?.id),
     queryFn: getPosCatalogDataAction,
     staleTime: CATALOG_STALE_TIME_MS,
   });
