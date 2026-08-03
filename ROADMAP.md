@@ -1,8 +1,10 @@
 Ayudar a vender más, estar organizado y prever qué está pasando en el negocio.
 
 ideas:
+- Para crear usuarios tengo que pedirle a claude code que lo haga. Debo poder crearlo desde el dashboard.
+- En el dashboard hay dos lugares para seleccionar fechas: en general y dentro del chart de tendencias. Quisiera que todo se maneje con el general y borrar, el selector del chart 7d y 30d. Pero hay algo que no me cuadra y nose cual es la mejor opción. Por un lado el chart muestra 7 o 30 dias para atras desde donde estamos, mientras que el selector general del panel muestra, esta semana o este mes, pero no 7 dias para atras, sino que desde lo generado desde el lunes, o en el caso del mes. Desde el 1 de agosto, no los 30 dias para atras.
 - Diccionario de Mapeo (Heurística) en tu función de parseo de variantes.
-- ESTA FUNCIONANDO EL TEMA MARCA Y GENERO PARA EL PRODUCTO. FUNDAMENTAL MEJORAR EL CATALOGO
+- NO ESTA FUNCIONANDO EL TEMA MARCA Y GENERO PARA EL PRODUCTO. FUNDAMENTAL MEJORAR EL CATALOGO
 - Mejorar ux de seleccion multiple dentro del modulo de /stock. Actualmente se abre una barra abajo que no me deja avanzar de pagina y necesito que tenga simplemente para ver cantidad de productos seleccionados y acciones entonces ahi pongo que accion quiero hacer: editar precios, eliminar, cambiar de categoria, subcategoria.
 - ver historial de productos cargados a traves de remitos. como agrupaciones y luego detalle de cada remito. Esto va de la mano con la mejora de la creacion de la pagina de movimientos que actualmente ni siquiera me esta leyendo los productos que ingresan a traves de remitos, no tiene paginacion, creo que podria tener mas filtros y podemos poner esto que digo directamente ahi adentro.
 - Pérdida de conexión (Offline): Es la más crítica. Si el local se queda sin internet, la cajera debe saber de inmediato (con un banner permanente en la parte superior) que el sistema está guardando las ventas localmente y que no cierre la pestaña.
