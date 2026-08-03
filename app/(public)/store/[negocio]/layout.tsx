@@ -40,7 +40,7 @@ export default async function PublicLayout({
   const { data: config } = await supabase
     .from("configuracion_pos")
     .select("*")
-    .single();
+    .maybeSingle();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

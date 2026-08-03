@@ -8,12 +8,27 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { resolveTenant } from "@/shared/lib/tenant";
 import { urlDeCatalogo } from "@/shared/lib/dominios";
-import { getConfiguracionAction } from "@/features/config/actions/config-actions";
+import { createPublicClient } from "@/shared/config/supabase/server";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { obtenerPrimeraImagen } from "@/features/stock/lib/stock-product-utils";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * La config de la tienda se lee con el cliente público (anon + x-negocio-slug).
+ * No sirve getConfiguracionAction(): ese usa el cliente con sesión, que no
+ * manda el slug, y en el catálogo devolvía siempre 0 filas (PGRST116) — de ahí
+ * el "Tienda Online" en vez del nombre del comercio y el WhatsApp vacío.
+ */
+async function getConfigPublica() {
+  const supabase = await createPublicClient();
+  const { data } = await supabase
+    .from("configuracion_pos")
+    .select("*")
+    .maybeSingle();
+  return data;
+}
 
 interface PageProps {
   params: Promise<{ negocio: string; producto: string }>;
@@ -34,9 +49,9 @@ export async function generateMetadata({
   // Valida el tenant antes de tocar datos: si la tienda no existe, 404.
   await resolveTenant({ hostname: headersList.get("host"), slug: negocio });
 
-  const [{ data: producto }, { data: config }] = await Promise.all([
+  const [{ data: producto }, config] = await Promise.all([
     getProductoBySlugAction(slug),
-    getConfiguracionAction(),
+    getConfigPublica(),
   ]);
 
   if (!producto) return {};
@@ -77,15 +92,14 @@ export default async function ProductoPage({ params }: Readonly<PageProps>) {
   await resolveTenant({ hostname: headersDelRequest.get("host"), slug: negocio });
 
   // Hacemos fetch en paralelo del producto actual, TODO el catálogo (para buscar similares) y la configuración.
-  const [productoRes, catalogoRes, configRes] = await Promise.all([
+  const [productoRes, catalogoRes, config] = await Promise.all([
     getProductoBySlugAction(slug),
     getProductosAction(),
-    getConfiguracionAction(),
+    getConfigPublica(),
   ]);
 
   const { data: producto, error } = productoRes;
   const { data: todosLosProductos } = catalogoRes;
-  const { data: config } = configRes;
 
   //  Bloquear acceso si la tienda está desactivada
   if (config && config.catalogo_activo === false) {

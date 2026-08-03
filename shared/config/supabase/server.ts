@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies, headers } from "next/headers";
 import { HEADER_NEGOCIO_SLUG } from "@/shared/lib/negocio-slug";
 import {
@@ -49,34 +50,35 @@ export const createClient = (
 };
 
 /**
- * Cliente para las páginas del catálogo público, donde no hay sesión y el
- * negocio lo define el subdominio. Reenvía el header x-negocio-slug que puso
- * el middleware: sin él, la policy de anon no sabe qué tienda servir y
- * (con más de un negocio dado de alta) no devuelve nada.
+ * Cliente para las páginas del catálogo público, donde el negocio lo define el
+ * subdominio o el path. Reenvía el header x-negocio-slug que puso el
+ * middleware: sin él, la policy de anon no sabe qué tienda servir y no
+ * devuelve nada.
+ *
+ * En el catálogo NO se manda la sesión a propósito. Si se mandaba, el visitante
+ * logueado dejaba de ser `anon` y la RLS pasaba a evaluar la restrictive de
+ * `authenticated` (negocio activo del usuario), no la del slug: un super admin
+ * o alguien con más de un negocio recibía CERO filas y la tienda reventaba con
+ * `config === null` (incidente 2/8, catálogo de Evens en 500). El catálogo
+ * público se sirve igual para todos: siempre anon, siempre por slug.
+ *
+ * Sin header no hay tienda que resolver: la llamada viene del POS (mismas
+ * consultas de catálogo dentro del dashboard) y ahí sí manda la sesión, que es
+ * lo que la restrictive de `authenticated` necesita.
  */
 export const createPublicClient = async () => {
-  const cookieStore = await cookies();
   const headerStore = await headers();
   const negocioSlug = headerStore.get(HEADER_NEGOCIO_SLUG);
 
-  return createServerClient(supabaseUrl!, supabaseKey!, {
-    global: negocioSlug
-      ? { headers: { [HEADER_NEGOCIO_SLUG]: negocioSlug } }
-      : undefined,
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options),
-          );
-        } catch {
-          // Igual que en createClient: desde un Server Component no se puede
-          // escribir cookies y el refresh de sesión lo hace el middleware.
-        }
-      },
-    },
-  });
+  if (negocioSlug) {
+    return createSupabaseClient(supabaseUrl!, supabaseKey!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { [HEADER_NEGOCIO_SLUG]: negocioSlug } },
+    });
+  }
+
+  // Mismo cliente que el dashboard: además de la sesión reenvía el negocio
+  // activo, que es lo que resuelve la restrictive de `authenticated` cuando el
+  // usuario pertenece a más de un negocio.
+  return createClient(await cookies());
 };

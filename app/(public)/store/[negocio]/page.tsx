@@ -33,7 +33,7 @@ export async function generateMetadata({
   const { data: config } = await supabase
     .from("configuracion_pos")
     .select("posName, posLogo")
-    .single();
+    .maybeSingle();
 
   const nombreComercio = config?.posName || "Tienda Online";
   const baseUrl = await resolverBaseUrl();
@@ -116,7 +116,7 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
 
   const [productosRes, configRes, categoriasRes] = await Promise.all([
     getProductosAction(),
-    supabase.from("configuracion_pos").select("*").single(),
+    supabase.from("configuracion_pos").select("*").maybeSingle(),
     supabase
       .from("categorias")
       .select("*")
