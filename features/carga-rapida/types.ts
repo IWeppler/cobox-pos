@@ -1,4 +1,8 @@
-import type { Opcion, VarianteInput } from "@/features/stock/types";
+import type {
+  Opcion,
+  ProductoCreado,
+  VarianteInput,
+} from "@/features/stock/types";
 
 export type LineaCargaExistente = {
   kind: "EXISTENTE";
@@ -67,10 +71,24 @@ export type LineaCargaNueva =
 
 export type LineaCarga = LineaCargaExistente | LineaCargaNueva;
 
+/**
+ * Lo que una línea dejó efectivamente cargado, con la forma mínima para
+ * poder usarlo sin releer el catálogo.
+ *
+ * Existe para el contexto de retorno: cuando la Carga rápida se abre desde
+ * el POS, la venta tiene que poder seguir con el producto recién cargado sin
+ * esperar a que React Query refresque. Es la MISMA forma para una línea
+ * NUEVA (producto recién creado) que para una EXISTENTE (producto que ya
+ * estaba y solo recibió stock): quien invoca no necesita distinguirlas.
+ */
+export type ProductoCargado = ProductoCreado;
+
 export type ResultadoLineaCarga = {
   clienteLineaId: string;
   ok: boolean;
   error?: string;
+  /** Presente solo si la línea se procesó OK. */
+  cargado?: ProductoCargado;
 };
 
 export type ConfirmarCargaResponse = {

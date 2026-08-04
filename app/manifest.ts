@@ -3,8 +3,8 @@ import { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Comerz POS",
-    short_name: "Comerz POS",
+    name: "Comerz",
+    short_name: "Comerz",
     description: "Sistema de gestión y punto de venta web",
     start_url: "/",
     scope: "/",

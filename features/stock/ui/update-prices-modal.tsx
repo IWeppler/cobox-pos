@@ -51,15 +51,40 @@ import {
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { useActiveCategories } from "../hooks/use-active-categories";
 
-export function UpdatePricesModal() {
+interface UpdatePricesModalProps {
+  /** Controlado desde afuera (modo selección). Sin esto el modal maneja su
+   * propio estado y muestra su trigger, como siempre. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+  /** Presente = el alcance queda fijado en "los seleccionados" y el paso 1
+   * deja de ofrecer TODOS/CATEGORIA. */
+  seleccion?: { ids: string[] };
+  onAplicado?: () => void;
+}
+
+export function UpdatePricesModal({
+  open,
+  onOpenChange,
+  hideTrigger = false,
+  seleccion,
+  onAplicado,
+}: Readonly<UpdatePricesModalProps> = {}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const categorias = useActiveCategories();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpenInterno, setIsOpenInterno] = useState(false);
+  const esControlado = open !== undefined;
+  const isOpen = esControlado ? open : isOpenInterno;
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
+  const esModoSeleccion = seleccion !== undefined;
+  const alcanceInicial: AlcancePrecio = esModoSeleccion
+    ? "SELECCION"
+    : "TODOS";
+
   // --- ESTADO DEL FORMULARIO ---
-  const [alcance, setAlcance] = useState<AlcancePrecio>("TODOS");
+  const [alcance, setAlcance] = useState<AlcancePrecio>(alcanceInicial);
   const [categoria, setCategoria] = useState<string>("todos");
 
   const [campo, setCampo] = useState<CampoObjetivo>("PRECIO");
@@ -84,14 +109,15 @@ export function UpdatePricesModal() {
   const [ordenPreview, setOrdenPreview] = useState<"cambio" | "az">("cambio");
 
   // --- HANDLERS ---
-  const handleOpenChange = (open: boolean) => {
-    setIsOpen(open);
-    if (!open) resetForm();
+  const handleOpenChange = (abierto: boolean) => {
+    if (!esControlado) setIsOpenInterno(abierto);
+    onOpenChange?.(abierto);
+    if (!abierto) resetForm();
   };
 
   const resetForm = () => {
     setStep(1);
-    setAlcance("TODOS");
+    setAlcance(alcanceInicial);
     setCategoria("todos");
     setCampo("PRECIO");
     setOperacion("AUMENTAR_PORCENTAJE");
@@ -120,6 +146,7 @@ export function UpdatePricesModal() {
       operacion,
       Number(valor),
       redondeo,
+      seleccion?.ids,
     );
 
     setIsSimulating(false);
@@ -170,22 +197,25 @@ export function UpdatePricesModal() {
       queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
       queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
       router.refresh();
+      onAplicado?.();
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-10 bg-background border-border/60 hover:bg-muted text-foreground"
-          title="Actualizar Precios Masivamente"
-        >
-          <TrendingUp className="w-4 h-4 sm:mr-1.5 text-primary" />
-          <span className="hidden sm:inline">Precios</span>
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-10 bg-background border-border/60 hover:bg-muted text-foreground"
+            title="Actualizar Precios Masivamente"
+          >
+            <TrendingUp className="w-4 h-4 sm:mr-1.5 text-primary" />
+            <span className="hidden sm:inline">Precios</span>
+          </Button>
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden bg-card border-border">
         <DialogHeader className="p-6 pb-4 border-b border-border bg-muted/20">
@@ -221,6 +251,20 @@ export function UpdatePricesModal() {
                 </p>
               </div>
 
+              {esModoSeleccion ? (
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                  <p className="text-sm font-semibold text-foreground">
+                    {seleccion.ids.length}{" "}
+                    {seleccion.ids.length === 1
+                      ? "producto seleccionado"
+                      : "productos seleccionados"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    La regla se aplica solo a estos productos. Vas a poder ver
+                    el detalle producto por producto antes de confirmar.
+                  </p>
+                </div>
+              ) : (
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Seleccionar Alcance</Label>
@@ -260,6 +304,7 @@ export function UpdatePricesModal() {
                   </div>
                 )}
               </div>
+              )}
 
               <div className="flex justify-end pt-4 border-t border-border">
                 <Button

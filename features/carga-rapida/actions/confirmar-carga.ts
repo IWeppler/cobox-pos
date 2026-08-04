@@ -22,8 +22,12 @@ function validarLinea(linea: LineaCarga): string | null {
   }
 
   if (!linea.nombre.trim()) return "Falta el nombre del producto.";
-  if (!Number.isFinite(linea.precioCompra) || linea.precioCompra <= 0) {
-    return "El precio de compra tiene que ser mayor a 0.";
+  // El costo es OPCIONAL: se puede cargar un producto para poder cobrarlo ya
+  // y completarlo después. Sin costo el margen reportado de esa venta sale
+  // 100% hasta que se cargue, y por eso la fila queda marcada en la lista.
+  // Lo que no puede faltar es el precio de venta: sin eso no hay qué cobrar.
+  if (!Number.isFinite(linea.precioCompra) || linea.precioCompra < 0) {
+    return "El precio de compra no puede ser negativo.";
   }
   if (!Number.isFinite(linea.precioVenta) || linea.precioVenta <= 0) {
     return "El precio de venta tiene que ser mayor a 0.";
@@ -103,7 +107,27 @@ async function procesarLineaExistente(
 
   await sincronizarStockLegacy(supabase, linea);
 
-  return { clienteLineaId: linea.clienteLineaId, ok: true };
+  return {
+    clienteLineaId: linea.clienteLineaId,
+    ok: true,
+    // El stock sale de lo que devolvió la RPC (el valor YA ajustado), no de
+    // sumar en el cliente: es el único número que refleja lo que quedó en la
+    // base si otra caja tocó la misma variante en el medio.
+    cargado: {
+      id: linea.productoId,
+      nombre: linea.nombreProducto,
+      tipo: "",
+      precio: linea.precioVenta,
+      variantes: [
+        {
+          id: linea.varianteId,
+          nombre_display: linea.nombreDisplay,
+          precio: linea.precioVenta,
+          stock: Number(ajustado[0]?.stock ?? linea.cantidad),
+        },
+      ],
+    },
+  };
 }
 
 async function procesarLineaNueva(
@@ -142,7 +166,11 @@ async function procesarLineaNueva(
     };
   }
 
-  return { clienteLineaId: linea.clienteLineaId, ok: true };
+  return {
+    clienteLineaId: linea.clienteLineaId,
+    ok: true,
+    cargado: res.producto,
+  };
 }
 
 // Confirma toda la carga de Carga Rápida. Cada línea es independiente a

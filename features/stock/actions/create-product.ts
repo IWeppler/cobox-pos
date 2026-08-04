@@ -206,16 +206,20 @@ export async function crearProductoAction(
 
   // 3. Procesar Opciones y Variantes
   if (!tieneVariantes) {
-    await supabase.from("producto_variantes").insert({
-      negocio_id: negocioId,
-      producto_id: nuevoProducto.id,
-      nombre_display: "Único",
-      atributos: {},
-      precio: null, // Hereda del padre
-      costo: null, // Hereda del padre
-      stock: stockBase,
-      sku,
-    });
+    const { data: varianteUnica } = await supabase
+      .from("producto_variantes")
+      .insert({
+        negocio_id: negocioId,
+        producto_id: nuevoProducto.id,
+        nombre_display: "Único",
+        atributos: {},
+        precio: null, // Hereda del padre
+        costo: null, // Hereda del padre
+        stock: stockBase,
+        sku,
+      })
+      .select("id, nombre_display, precio, stock")
+      .single();
 
     // Mantenemos legacy stock table para no romper la app vieja
     await supabase.from("productos_stock").insert({
@@ -227,10 +231,35 @@ export async function crearProductoAction(
 
     revalidatePath("/stock");
     revalidatePath("/store", "layout");
-    return { error: null, success: true };
+    return {
+      error: null,
+      success: true,
+      producto: {
+        id: nuevoProducto.id,
+        nombre,
+        tipo,
+        precio,
+        variantes: varianteUnica
+          ? [
+              {
+                id: varianteUnica.id,
+                nombre_display: varianteUnica.nombre_display,
+                precio: varianteUnica.precio,
+                stock: varianteUnica.stock,
+              },
+            ]
+          : [],
+      },
+    };
   }
 
   // Producto con opciones dinámicas
+  let variantesCreadas: {
+    id: string;
+    nombre_display: string;
+    precio: number | null;
+    stock: number;
+  }[] = [];
   try {
     const opcionesStr = formData.get("opciones") as string;
     const variantesStr = formData.get("variantes") as string;
@@ -364,8 +393,11 @@ export async function crearProductoAction(
     const { data: variantesInsertadas, error: varInsertError } = await supabase
       .from("producto_variantes")
       .insert(variantesToInsert)
-      .select("id");
+      // nombre_display/precio/stock además del id: el alta desde el POS mete
+      // el producto al carrito sin volver a leerlo de la base.
+      .select("id, nombre_display, precio, stock");
     if (varInsertError) throw varInsertError;
+    variantesCreadas = variantesInsertadas ?? [];
 
     const { error: stockInsertError } = await supabase
       .from("productos_stock")
@@ -425,5 +457,15 @@ export async function crearProductoAction(
   revalidatePath("/stock");
   revalidatePath("/store", "layout");
 
-  return { error: null, success: true };
+  return {
+    error: null,
+    success: true,
+    producto: {
+      id: nuevoProducto.id,
+      nombre,
+      tipo,
+      precio,
+      variantes: variantesCreadas,
+    },
+  };
 }

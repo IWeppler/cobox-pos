@@ -20,6 +20,14 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
 
+  // Los campos son controlados a propósito: React resetea el form cuando la
+  // action termina, así que con inputs no controlados el mail y la contraseña
+  // se borraban solos mientras el botón todavía decía "Ingresando..." y
+  // parecía que el formulario se había roto. Con estado propio el contenido
+  // queda, se deshabilita, y si vuelve un error no hay que reescribir nada.
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
   // Errores que llegan por URL: la sesión que quedó sin negocio (la corta el
   // middleware) y los enlaces de mail vencidos, que hasta ahora se descartaban
   // en silencio.
@@ -52,9 +60,12 @@ export function LoginForm() {
             type="email"
             required
             autoComplete="email"
+            inputMode="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             disabled={isLoading}
             placeholder="correo@ejemplo.com"
-            className="h-11 shadow-none bg-background"
+            className="h-12 sm:h-11 shadow-none bg-background"
           />
         </div>
 
@@ -75,15 +86,20 @@ export function LoginForm() {
               type={showPassword ? "text" : "password"}
               required
               autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               disabled={isLoading}
               placeholder="••••••••"
-              className="h-11 shadow-none bg-background pr-10"
+              className="h-12 sm:h-11 shadow-none bg-background pr-11"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               disabled={isLoading}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
+              aria-label={
+                showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+              }
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
               tabIndex={-1}
             >
               {showPassword ? (
@@ -100,7 +116,7 @@ export function LoginForm() {
         <div
           role="alert"
           aria-live="polite"
-          className="text-sm text-destructive font-medium"
+          className="rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-sm font-medium text-destructive"
         >
           {state?.error || mensajeUrl}
         </div>

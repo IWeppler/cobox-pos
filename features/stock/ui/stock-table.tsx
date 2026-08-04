@@ -1,11 +1,9 @@
 "use client";
 
-import { Fragment, useState, useMemo, useRef, useTransition } from "react";
+import { Fragment, useState } from "react";
 import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import Image from "next/image";
-import { useQueryClient } from "@tanstack/react-query";
 import { ProductoIndice } from "@/entities/productos/types";
-import { queryKeys } from "@/shared/lib/query-keys";
 import {
   Table,
   TableBody,
@@ -27,19 +25,12 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
-  FolderInput,
-  ListChecks,
-  Loader2,
-  X,
 } from "lucide-react";
 import { ShareButton } from "@/shared/components/share-button";
 import {
   armarMensajeProducto,
-  armarMensajeSeleccion,
   construirUrlProducto,
-  construirUrlSeleccion,
   esVisibleEnCatalogo,
-  MAX_PRODUCTOS_COMPARTIDOS,
 } from "@/shared/utils/compartir-catalogo";
 import { ProductEditDetailSheet } from "./edit-sheet";
 import { EliminarProductoModal } from "./delete-modal";
@@ -58,34 +49,12 @@ import {
   obtenerPrimeraImagen as getPrimeraImagen,
 } from "../lib/stock-product-utils";
 import {
-  bulkDeleteProductsAction,
-  bulkUpdateCategoryAction,
-} from "../actions/delete-product";
-import {
-  construirArbolCategorias,
   resolverCategoriaDisplayPartes,
   type CategoriaBase,
 } from "@/shared/utils/category-tree";
 import { badgesIdentidad } from "../lib/identidad-por-rubro";
 import type { Rubro } from "@/entities/config/types";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/ui/select";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/shared/ui/alert-dialog";
-import { toast } from "sonner";
+import type { SeleccionProductos } from "../hooks/use-seleccion-productos";
 
 interface StockTableProps {
   productos: ProductoIndice[];
@@ -104,6 +73,10 @@ interface StockTableProps {
   categoriasArbol: CategoriaBase[];
   /** indumentaria -> badge "N var."; electro -> Modelo + EAN. */
   rubro: Rubro;
+  /** La selección vive en stock-view (sobrevive a paginar y a cambiar de
+   * vista). Acá solo se pinta y se togglea — las acciones masivas viven en
+   * la barra de selección, no en la tabla. */
+  seleccion: SeleccionProductos;
 }
 
 const obtenerPrimeraImagen = (imagenUrl: unknown): string | null => {
@@ -137,12 +110,6 @@ function AbrirDetalle({
     </ProductEditDetailSheet>
   );
 }
-
-/** Long press que entra en "modo selección" (mobile). 420ms es el punto donde
- * ya no se confunde con un tap pero todavía no se siente trabado. */
-const LONG_PRESS_MS = 420;
-/** Si el dedo se movió más que esto, era scroll, no long press. */
-const LONG_PRESS_TOLERANCIA_PX = 10;
 
 type StockTableVariant = {
   id?: string;
@@ -181,207 +148,17 @@ export function StockTable({
   onSort,
   categoriasArbol,
   rubro,
+  seleccion,
 }: Readonly<StockTableProps>) {
   const { isAdmin } = useStockCartActions(userRole);
-  const queryClient = useQueryClient();
   // El link del catálogo necesita el negocio, no solo el origen: cada
   // comercio tiene su propia tienda.
   const slugNegocio = useSlugNegocioActivo() ?? "";
   const [variantesAbiertas, setVariantesAbiertas] = useState<
     Record<string, boolean>
   >({});
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  // En mobile no hay columna de checkbox (comía demasiado ancho): la selección
-  // se activa con long press y, mientras el modo está activo, el tap sobre la
-  // fila selecciona/deselecciona en vez de abrir el detalle. En desktop el
-  // modo nunca se enciende: ahí sigue mandando el checkbox.
-  const [modoSeleccion, setModoSeleccion] = useState(false);
-  // bulkPadreId maneja el primer select (padre o categoría suelta);
-  // bulkCategoryId es el destino FINAL que se manda al server — igual al
-  // padre elegido si no tiene hijos, o a la subcategoría/"todo el padre"
-  // elegida en el segundo select cuando sí los tiene.
-  const [bulkPadreId, setBulkPadreId] = useState("");
-  const [bulkCategoryId, setBulkCategoryId] = useState("");
-  const [isPending, startTransition] = useTransition();
   const [productoEnEdicion, setProductoEnEdicion] =
     useState<ProductoIndice | null>(null);
-
-  // Reusa la MISMA lógica de armado de árbol que el toolbar de chips
-  // (construirArbolCategorias) — acá los counts no importan para decidir
-  // destino de "mover" (una categoría vacía hoy sigue siendo un destino
-  // válido), por eso se le pasa un mapa de "existencia" siempre en 1: nunca
-  // filtra un padre/hijo por falta de stock actual.
-  const arbolMover = useMemo(() => {
-    const existenciaSiempreUno = Object.fromEntries(
-      categoriasArbol.map((c) => [c.id, 1]),
-    );
-    return construirArbolCategorias(categoriasArbol, existenciaSiempreUno);
-  }, [categoriasArbol]);
-
-  const padreSeleccionadoParaMover = useMemo(
-    () => arbolMover.padres.find((p) => p.id === bulkPadreId) ?? null,
-    [arbolMover, bulkPadreId],
-  );
-
-  const handleBulkPadreChange = (val: string) => {
-    setBulkPadreId(val);
-    const esPadreConHijos = arbolMover.padres.some(
-      (p) => p.id === val && p.hijos.length > 0,
-    );
-    // Padre sin hijos (o categoría suelta): el destino final ya se conoce
-    // con este solo click. Padre con hijos: esperamos la elección del
-    // segundo select antes de habilitar "Mover".
-    setBulkCategoryId(esPadreConHijos ? "" : val);
-  };
-  const selectedIdsArray = useMemo(
-    () => Array.from(selectedIds),
-    [selectedIds],
-  );
-
-  // Solo se comparten los productos seleccionados que realmente van a
-  // aparecer al abrir el link (el catálogo público ya omite ids inválidos
-  // o inexistentes, esto evita el caso "comparto 5 y no se ve ninguno").
-  const idsVisiblesParaCompartir = useMemo(() => {
-    const productosPorId = new Map(productos.map((p) => [p.id, p]));
-    return selectedIdsArray.filter((id) => {
-      const producto = productosPorId.get(id);
-      if (!producto) return false;
-      return esVisibleEnCatalogo(
-        { publicado: producto.publicado, stockTotal: getTotalStock(producto) },
-        { mostrarSinStock },
-      );
-    });
-  }, [productos, selectedIdsArray, mostrarSinStock]);
-  const seleccionSuperaElCap =
-    idsVisiblesParaCompartir.length > MAX_PRODUCTOS_COMPARTIDOS;
-
-  // --- LÓGICA DE SELECCIÓN MASIVA ---
-  const toggleAll = () => {
-    if (selectedIds.size === productos.length) {
-      setSelectedIds(new Set());
-      setModoSeleccion(false);
-    } else {
-      setSelectedIds(new Set(productos.map((p) => p.id)));
-    }
-  };
-
-  const toggleSelect = (id: string) => {
-    const newSet = new Set(selectedIds);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setSelectedIds(newSet);
-    // Deseleccionar el último producto sale del modo selección: si no, la
-    // fila queda "muerta" (ni abre el detalle ni se ve seleccionada).
-    if (newSet.size === 0) setModoSeleccion(false);
-  };
-
-  const clearSelection = () => {
-    setSelectedIds(new Set());
-    setModoSeleccion(false);
-    setBulkCategoryId("");
-    setBulkPadreId("");
-  };
-
-  // --- LONG PRESS (solo touch) ---
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressDisparado = useRef(false);
-  const puntoInicial = useRef<{ x: number; y: number } | null>(null);
-
-  const cancelarLongPress = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-    puntoInicial.current = null;
-  };
-
-  const handlePointerDown = (
-    e: React.PointerEvent<HTMLTableRowElement>,
-    id: string,
-  ) => {
-    // Con mouse el long press no aplica: en desktop está el checkbox.
-    if (e.pointerType === "mouse") return;
-    cancelarLongPress();
-    longPressDisparado.current = false;
-    puntoInicial.current = { x: e.clientX, y: e.clientY };
-    longPressTimer.current = setTimeout(() => {
-      longPressTimer.current = null;
-      longPressDisparado.current = true;
-      setModoSeleccion(true);
-      setSelectedIds((prev) => new Set(prev).add(id));
-      navigator.vibrate?.(25);
-    }, LONG_PRESS_MS);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLTableRowElement>) => {
-    if (!longPressTimer.current || !puntoInicial.current) return;
-    const dx = Math.abs(e.clientX - puntoInicial.current.x);
-    const dy = Math.abs(e.clientY - puntoInicial.current.y);
-    if (dx > LONG_PRESS_TOLERANCIA_PX || dy > LONG_PRESS_TOLERANCIA_PX) {
-      cancelarLongPress();
-    }
-  };
-
-  const handleRowClick = (id: string) => {
-    // El click sintético que sigue al long press no debe deseleccionar lo que
-    // el long press acaba de seleccionar.
-    if (longPressDisparado.current) {
-      longPressDisparado.current = false;
-      return;
-    }
-    if (!modoSeleccion) return;
-    toggleSelect(id);
-  };
-
-  const handleBulkMove = () => {
-    if (!bulkCategoryId) {
-      toast.error("Selecciona una categoria para mover los productos.");
-      return;
-    }
-
-    startTransition(async () => {
-      const result = await bulkUpdateCategoryAction(
-        selectedIdsArray,
-        bulkCategoryId,
-      );
-
-      if (result.success) {
-        toast.success(
-          `${selectedIdsArray.length} ${
-            selectedIdsArray.length === 1
-              ? "producto movido"
-              : "productos movidos"
-          } de categoria.`,
-        );
-        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
-        clearSelection();
-      } else {
-        toast.error(result.error || "No se pudo cambiar la categoria.");
-      }
-    });
-  };
-
-  const handleBulkDelete = () => {
-    startTransition(async () => {
-      const result = await bulkDeleteProductsAction(selectedIdsArray);
-
-      if (result.success) {
-        toast.success(
-          `${selectedIdsArray.length} ${
-            selectedIdsArray.length === 1
-              ? "producto eliminado"
-              : "productos eliminados"
-          }.`,
-        );
-        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
-        clearSelection();
-      } else {
-        toast.error(result.error || "No se pudieron eliminar los productos.");
-      }
-    });
-  };
 
   const toggleVariantes = (id: string) => {
     setVariantesAbiertas((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -433,187 +210,6 @@ export function StockTable({
         />
       )}
 
-      {/* ACCIONES MASIVAS: Barra flotante contextual */}
-      {selectedIds.size > 0 && (
-        <div className="fixed inset-x-3 bottom-4 z-50 mx-auto flex max-w-4xl flex-col gap-3 rounded-xl border border-border bg-background/95 p-3 shadow-lg ring-1 ring-foreground/5 backdrop-blur animate-in fade-in slide-in-from-bottom-4 sm:inset-x-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 shrink-0"
-              onClick={clearSelection}
-              disabled={isPending}
-              aria-label="Limpiar seleccion"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold text-foreground">
-                {selectedIds.size}{" "}
-                {selectedIds.size === 1
-                  ? "producto seleccionado"
-                  : "productos seleccionados"}
-              </span>
-              {seleccionSuperaElCap && (
-                <span className="text-[11px] text-warning">
-                  Se comparten los primeros {MAX_PRODUCTOS_COMPARTIDOS} de{" "}
-                  {idsVisiblesParaCompartir.length}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            {/* Reemplaza al checkbox "seleccionar todo" del header, que en
-                mobile ya no existe. */}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 shrink-0 text-xs bg-background sm:hidden"
-              onClick={toggleAll}
-              disabled={isPending}
-            >
-              <ListChecks className="w-3.5 h-3.5 mr-1.5" />
-              {selectedIds.size === productos.length
-                ? "Ninguno"
-                : "Seleccionar todo"}
-            </Button>
-            <ShareButton
-              url={construirUrlSeleccion(slugNegocio, idsVisiblesParaCompartir)}
-              title={`Productos de ${nombreComercio}`}
-              text={armarMensajeSeleccion(
-                Math.min(
-                  idsVisiblesParaCompartir.length,
-                  MAX_PRODUCTOS_COMPARTIDOS,
-                ),
-                nombreComercio,
-              )}
-              disabled={idsVisiblesParaCompartir.length === 0}
-              disabledReason="Ninguno de los productos seleccionados está visible en el catálogo"
-              label={`Compartir (${selectedIds.size})`}
-              variant="outline"
-              size="sm"
-              className="h-8 shrink-0 text-xs bg-background"
-            />
-            <div className="flex min-w-0 items-center gap-2">
-              <Select
-                value={bulkPadreId}
-                onValueChange={handleBulkPadreChange}
-                disabled={isPending}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="h-8 w-full min-w-0 bg-background sm:w-52"
-                >
-                  <SelectValue placeholder="Categoria destino" />
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {arbolMover.padres.map((padre) => (
-                    <SelectItem key={padre.id} value={padre.id}>
-                      {padre.nombre}
-                    </SelectItem>
-                  ))}
-                  {arbolMover.sinPadre.map((categoria) => (
-                    <SelectItem key={categoria.id} value={categoria.id}>
-                      {categoria.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {padreSeleccionadoParaMover &&
-                padreSeleccionadoParaMover.hijos.length > 0 && (
-                  <Select
-                    value={bulkCategoryId}
-                    onValueChange={setBulkCategoryId}
-                    disabled={isPending}
-                  >
-                    <SelectTrigger
-                      size="sm"
-                      className="h-8 w-full min-w-0 bg-background sm:w-52"
-                    >
-                      <SelectValue placeholder="Subcategoría" />
-                    </SelectTrigger>
-                    <SelectContent align="end">
-                      {padreSeleccionadoParaMover.hijos.map((hijo) => (
-                        <SelectItem key={hijo.id} value={hijo.id}>
-                          {hijo.nombre}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value={padreSeleccionadoParaMover.id}>
-                        Todo {padreSeleccionadoParaMover.nombre}, sin
-                        subcategoría específica
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 shrink-0 text-xs bg-background"
-                onClick={handleBulkMove}
-                disabled={isPending || !bulkCategoryId}
-              >
-                {isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <FolderInput className="w-3.5 h-3.5 mr-1.5" />
-                )}
-                Mover
-              </Button>
-            </div>
-            {isAdmin && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs bg-background text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
-                    disabled={isPending}
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Eliminar
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      Eliminar productos seleccionados
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Vas a eliminar {selectedIds.size}{" "}
-                      {selectedIds.size === 1 ? "producto" : "productos"} y su
-                      stock asociado. Esta accion no se puede deshacer.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isPending}>
-                      Cancelar
-                    </AlertDialogCancel>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      onClick={handleBulkDelete}
-                      disabled={isPending}
-                    >
-                      {isPending ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-4 h-4 mr-2" />
-                      )}
-                      Eliminar
-                    </Button>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* --- CONTENEDOR DE LA TABLA --- */}
       <div className="overflow-hidden">
         <Table className="w-full sm:min-w-200 bg-card">
@@ -624,11 +220,9 @@ export function StockTable({
               <TableHead className="w-12 pl-2 md:pl-4 pr-0 hidden sm:table-cell">
                 <input
                   type="checkbox"
-                  checked={
-                    selectedIds.size === productos.length &&
-                    productos.length > 0
-                  }
-                  onChange={toggleAll}
+                  checked={seleccion.paginaCompleta}
+                  onChange={seleccion.seleccionarPagina}
+                  aria-label="Seleccionar todos los de esta página"
                   className="w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
                 />
               </TableHead>
@@ -706,7 +300,7 @@ export function StockTable({
                 : undefined;
               const variantesVisibles = getVariantesVisibles(producto, isAdmin);
 
-              const isSelected = selectedIds.has(producto.id);
+              const isSelected = seleccion.estaSeleccionado(producto.id);
               const hasVariantes = variantesVisibles.length > 1;
               const variantesEstanAbiertas = variantesAbiertas[producto.id];
 
@@ -760,15 +354,7 @@ export function StockTable({
               return (
                 <Fragment key={producto.id}>
                   <TableRow
-                    onPointerDown={(e) => handlePointerDown(e, producto.id)}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={cancelarLongPress}
-                    onPointerCancel={cancelarLongPress}
-                    onPointerLeave={cancelarLongPress}
-                    onClick={() => handleRowClick(producto.id)}
-                    // Sin esto, mantener el dedo sobre el nombre/imagen abre el
-                    // menú nativo de iOS/Android justo cuando entra el modo.
-                    onContextMenu={(e) => e.preventDefault()}
+                    {...seleccion.propsSeleccionables(producto.id)}
                     className={`group transition-colors border-b border-border/40 select-none sm:select-auto [-webkit-touch-callout:none] ${
                       isSelected
                         ? "bg-primary/10 hover:bg-primary/15"
@@ -782,7 +368,17 @@ export function StockTable({
                       <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={() => toggleSelect(producto.id)}
+                        aria-label={`Seleccionar ${producto.nombre}`}
+                        // onClick y no onChange: el evento de change no trae
+                        // shiftKey, y shift-click es lo que permite marcar un
+                        // rango entero sin 40 clicks.
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          seleccion.toggle(producto.id, {
+                            extenderRango: e.shiftKey,
+                          });
+                        }}
+                        onChange={() => {}}
                         className="w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
                       />
                     </TableCell>
@@ -810,7 +406,7 @@ export function StockTable({
                         </button>
 
                         <AbrirDetalle
-                          activo={!modoSeleccion}
+                          activo={!seleccion.modoSeleccion}
                           producto={producto}
                           nombreComercio={nombreComercio}
                           mostrarSinStock={mostrarSinStock}
@@ -831,7 +427,7 @@ export function StockTable({
                             {/* Marca de selección sobre la miniatura: en mobile
                                 es el único indicador además del fondo, porque
                                 ya no hay columna de checkbox. */}
-                            {modoSeleccion && isSelected && (
+                            {seleccion.modoSeleccion && isSelected && (
                               <span className="absolute inset-0 flex items-center justify-center bg-primary/85 text-primary-foreground">
                                 <Check className="w-4 h-4" strokeWidth={3} />
                               </span>
@@ -841,7 +437,7 @@ export function StockTable({
 
                         <div className="flex flex-col min-w-0 flex-1">
                           <AbrirDetalle
-                            activo={!modoSeleccion}
+                            activo={!seleccion.modoSeleccion}
                             producto={producto}
                             nombreComercio={nombreComercio}
                             mostrarSinStock={mostrarSinStock}

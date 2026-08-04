@@ -1,0 +1,92 @@
+"use client";
+
+import { QuickAddModal } from "@/features/pos/ui/quick-add-modal";
+import type { useCargaRapida } from "../hooks/use-carga-rapida";
+import { CargaRapidaLista } from "./carga-rapida-lista";
+import { CargaRapidaProductoPicker } from "./carga-rapida-producto-picker";
+import { CargaRapidaMaestroPicker } from "./carga-rapida-maestro-picker";
+import { CargaRapidaQuickCreateModal } from "./carga-rapida-quick-create-modal";
+
+export type EstadoCargaRapida = ReturnType<typeof useCargaRapida>;
+
+/**
+ * El cuerpo de la Carga rápida: la lista de líneas y todos sus modales.
+ *
+ * NO trae el campo de texto. Quién escribe cambia según dónde vive la Carga
+ * rápida — en Inventario es su propio input, en el POS es el mismo buscador
+ * de la barra superior — pero el flujo y la lógica son los mismos en los dos
+ * lados, porque los dos consumen `useCargaRapida`.
+ */
+export function CargaRapidaPanel({
+  carga,
+}: Readonly<{ carga: EstadoCargaRapida }>) {
+  return (
+    <>
+      <CargaRapidaLista
+        lineas={carga.lineas}
+        onUpdateCantidad={carga.updateCantidad}
+        onUpdatePrecio={carga.updatePrecioLinea}
+        onRemove={carga.removeLinea}
+        onEditarNueva={carga.onEditarLineaNueva}
+        onConfirmar={carga.confirmar}
+        isConfirming={carga.isConfirming}
+      />
+
+      <CargaRapidaProductoPicker
+        candidatos={carga.pickerCandidatos}
+        onCancelar={carga.onCancelarPicker}
+        onSeleccionar={carga.onSeleccionarProducto}
+      />
+
+      <QuickAddModal
+        producto={carga.variantSelectorProducto}
+        isOpen={carga.variantSelectorProducto !== null}
+        onClose={carga.onCerrarVariantSelector}
+        permitirVentaSinStock
+        onSelectVariante={carga.onSeleccionarVariante}
+      />
+
+      <CargaRapidaMaestroPicker
+        candidatos={carga.maestroCandidatos?.lista ?? null}
+        query={carga.maestroCandidatos?.query ?? ""}
+        resolviendoId={carga.resolviendoCandidato}
+        onElegir={carga.onElegirCandidatoMaestro}
+        onCargarManual={carga.onCargarManualDesdeMaestro}
+      />
+
+      <CargaRapidaQuickCreateModal
+        altaRapida={carga.altaRapida}
+        recargoGlobal={carga.recargoGlobal}
+        onCancelar={carga.onCancelarAltaRapida}
+        onGuardar={carga.onGuardarAltaRapida}
+      />
+    </>
+  );
+}
+
+/** Control de recargo global. Vive aparte porque cada contexto lo ubica en un
+ * lugar distinto: en Inventario va en el header, en el POS ocupa la fila de
+ * las pills. */
+export function CargaRapidaRecargo({
+  carga,
+}: Readonly<{ carga: EstadoCargaRapida }>) {
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        Recargo
+      </span>
+      <input
+        type="number"
+        min={0}
+        step="1"
+        placeholder="%"
+        value={carga.recargoGlobal}
+        onChange={(e) =>
+          carga.setRecargoGlobal(e.target.value ? Number(e.target.value) : "")
+        }
+        className="w-20 h-8 rounded-md border border-border bg-background px-2 text-xs"
+        title="Recargo global para calcular el precio de venta de productos nuevos sin precio cargado. No se guarda, es solo para esta sesión."
+      />
+    </div>
+  );
+}

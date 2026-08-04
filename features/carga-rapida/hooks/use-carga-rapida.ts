@@ -13,7 +13,30 @@ import {
   obtenerPrefillMaestroAction,
 } from "../actions/buscar-en-maestro";
 import type { CandidatoMaestro, PrefillMaestro } from "../lib/maestro-prefill";
-import type { LineaCarga, LineaCargaExistente, LineaCargaNueva } from "../types";
+import type {
+  LineaCarga,
+  LineaCargaExistente,
+  LineaCargaNueva,
+  ProductoCargado,
+} from "../types";
+
+export type OpcionesCargaRapida = {
+  /**
+   * Campo de texto controlado desde afuera. En Inventario la Carga rápida
+   * tiene su propio input y no hace falta; en el POS el que escribe es el
+   * buscador de la barra superior, el MISMO en las dos vistas, así que el
+   * texto tiene que vivir allá arriba y no acá adentro.
+   */
+  query?: string;
+  onQueryChange?: (query: string) => void;
+  /**
+   * Contexto de retorno. La Carga rápida es la misma en todos lados; lo
+   * ÚNICO que cambia según desde dónde se abrió es qué pasa al terminar.
+   * Sin esto (Inventario), la lista se limpia y se sigue cargando. Con
+   * esto (POS), el que invoca decide — cerrar y seguir la venta.
+   */
+  onFinalizar?: (cargados: ProductoCargado[]) => void;
+};
 
 type AltaRapidaPendiente = {
   nombrePrefill: string;
@@ -43,9 +66,15 @@ function pareceCodigo(q: string): boolean {
   return !/\s/.test(q);
 }
 
-export function useCargaRapida(productos: Producto[], rubro: Rubro) {
+export function useCargaRapida(
+  productos: Producto[],
+  rubro: Rubro,
+  opciones?: OpcionesCargaRapida,
+) {
   const [lineas, setLineas] = useState<LineaCarga[]>([]);
-  const [query, setQuery] = useState("");
+  const [queryInterna, setQueryInterna] = useState("");
+  const query = opciones?.query ?? queryInterna;
+  const setQuery = opciones?.onQueryChange ?? setQueryInterna;
   const [pickerCandidatos, setPickerCandidatos] = useState<Producto[] | null>(
     null,
   );
@@ -136,6 +165,53 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
         return { ...l, cantidad: l.cantidad + 1 };
       }),
     );
+  }
+
+  /**
+   * Agrega una línea nueva SIN pasar por el modal de alta: nombre y nada más,
+   * precio y cantidad se completan inline en la fila.
+   *
+   * Es el camino de la card "crear" de la grilla del POS: ahí la persona ya
+   * decidió que el producto no existe, así que preguntarle de nuevo en un
+   * modal sobra. Si ya hay una línea para ese texto, suma en vez de duplicar
+   * — mismo criterio de dedupe que `procesarEnter`.
+   */
+  function agregarLineaNueva(nombreCrudo: string) {
+    const nombre = nombreCrudo.trim();
+    if (!nombre) return;
+
+    const normalizado = normalizarQuery(nombre);
+    const yaEsta = lineas.find(
+      (l): l is LineaCargaNueva =>
+        l.kind === "NUEVA" &&
+        (l.queryOriginal === normalizado ||
+          normalizarQuery(l.nombre) === normalizado),
+    );
+    if (yaEsta) {
+      if (!yaEsta.tieneVariantes) incrementarLinea(yaEsta.clienteLineaId);
+      setQuery("");
+      return;
+    }
+
+    setLineas((prev) => [
+      ...prev,
+      {
+        kind: "NUEVA",
+        clienteLineaId: crypto.randomUUID(),
+        queryOriginal: normalizado,
+        nombre,
+        codigo: null,
+        marca: null,
+        modelo: null,
+        categoriaId: null,
+        precioCompra: 0,
+        precioVenta: 0,
+        idMaster: null,
+        tieneVariantes: false,
+        cantidad: 1,
+      },
+    ]);
+    setQuery("");
   }
 
   function abrirEdicionLineaNueva(linea: LineaCargaNueva) {
@@ -507,22 +583,25 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
   async function confirmar() {
     if (!lineas.length || isConfirming) return;
 
-    // Las líneas de variante fija se completan inline, así que pueden llegar
-    // acá sin precio o sin cantidad. Se frena en el cliente para poder decir
-    // CUÁL falta: la validación del server devuelve un error global que no
+    // Las líneas que se completan inline pueden llegar acá sin precio de
+    // venta o sin cantidad. Se frena en el cliente para poder decir CUÁL
+    // falta: la validación del server devuelve un error global que no
     // identifica la línea.
-    const incompleta = lineas.find(
-      (l) =>
-        l.kind === "NUEVA" &&
-        l.tieneVariantes &&
-        l.varianteFijaLabel &&
-        (l.precioCompra <= 0 ||
-          l.precioVenta <= 0 ||
-          (Number.parseInt(l.variantes[0]?.stock ?? "0", 10) || 0) <= 0),
-    );
-    if (incompleta && incompleta.kind === "NUEVA") {
+    //
+    // El COSTO no se exige: se puede cargar un producto para poder cobrarlo
+    // ya y completar el costo después (ver validarLinea en confirmar-carga).
+    const incompleta = lineas.find((l): l is LineaCargaNueva => {
+      if (l.kind !== "NUEVA") return false;
+      if (l.precioVenta <= 0) return true;
+      if (l.tieneVariantes) {
+        if (!l.varianteFijaLabel) return false;
+        return (Number.parseInt(l.variantes[0]?.stock ?? "0", 10) || 0) <= 0;
+      }
+      return l.cantidad <= 0;
+    });
+    if (incompleta) {
       toast.error(
-        `Completá costo, venta y cantidad de "${incompleta.nombre}" antes de confirmar.`,
+        `Completá precio de venta y cantidad de "${incompleta.nombre}" antes de confirmar.`,
       );
       return;
     }
@@ -548,6 +627,14 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
         );
       }
       setLineas([]);
+
+      // Se avisa con lo que SÍ se cargó, aunque alguna línea haya fallado:
+      // las que salieron bien ya están en la base y quien invocó tiene que
+      // poder seguir con ellas.
+      const cargados = res.resultados
+        .map((r) => r.cargado)
+        .filter((c): c is ProductoCargado => c !== undefined);
+      opciones?.onFinalizar?.(cargados);
     } finally {
       setIsConfirming(false);
     }
@@ -590,6 +677,7 @@ export function useCargaRapida(productos: Producto[], rubro: Rubro) {
     onCancelarAltaRapida: () => setAltaRapida(null),
     onGuardarAltaRapida: guardarAltaRapida,
     onEditarLineaNueva: abrirEdicionLineaNueva,
+    agregarLineaNueva,
     updateCantidad,
     updatePrecioLinea,
     removeLinea,

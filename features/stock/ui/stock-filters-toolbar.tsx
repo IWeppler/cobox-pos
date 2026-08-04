@@ -78,6 +78,20 @@ interface StockFiltersToolbarProps {
   /** Búsqueda transversal: cuántos resultados matchean búsqueda/variante
    * FUERA de la categoría activa — "ver N más en todo el stock/catálogo". */
   resultadosFueraDeCategoria?: number;
+  /** Si viene, "Carga rápida" deja de navegar a /stock/carga-rapida y llama
+   * a esto — el POS la abre como cambio de vista, sin salir de la venta. */
+  onCargaRapida?: () => void;
+  /** Marca visualmente el botón cuando esa vista está activa. */
+  cargaRapidaActiva?: boolean;
+  searchPlaceholder?: string;
+  /** Enter en el buscador. En Vender no hace nada (el filtrado es en vivo);
+   * en Cargar es lo que agrega la línea a la lista. */
+  onSearchEnter?: (value: string) => void;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
+  searchDisabled?: boolean;
+  /** Reemplaza la fila de pills de categoría. Lo usa el POS en la vista de
+   * Carga rápida, donde filtrar por categoría no significa nada. */
+  filaSecundaria?: React.ReactNode;
 }
 
 export function StockFiltersToolbar({
@@ -100,6 +114,13 @@ export function StockFiltersToolbar({
   nombreCategoriaActiva,
   nombreComercio = "Tienda",
   resultadosFueraDeCategoria = 0,
+  onCargaRapida,
+  cargaRapidaActiva = false,
+  searchPlaceholder = "Buscar producto...",
+  onSearchEnter,
+  searchInputRef,
+  searchDisabled = false,
+  filaSecundaria,
 }: Readonly<StockFiltersToolbarProps>) {
   // El link del catálogo necesita el negocio, no solo el origen: cada
   // comercio tiene su propia tienda.
@@ -160,10 +181,17 @@ export function StockFiltersToolbar({
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar producto..."
+              ref={searchInputRef}
+              placeholder={searchPlaceholder}
+              disabled={searchDisabled}
               className="pl-9 h-10 text-sm rounded-lg border-border bg-muted w-full"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || !onSearchEnter) return;
+                e.preventDefault();
+                onSearchEnter(searchQuery);
+              }}
             />
           </div>
 
@@ -253,19 +281,43 @@ export function StockFiltersToolbar({
           {/* Carga rápida — visible para todos los roles, no solo Admin. En
               mobile no vive acá sino dentro del dropdown de acciones: al lado
               del buscador no entraba sin comerle ancho. */}
-          <Link href="/stock/carga-rapida" className="hidden sm:block">
+          {/* Mismo botón de siempre; lo que cambia es el destino. Con
+              onCargaRapida (POS) alterna la vista sin salir de la venta; sin
+              él (Inventario) sigue navegando a su página. */}
+          {onCargaRapida ? (
             <Button
-              variant="outline"
+              variant={cargaRapidaActiva ? "default" : "outline"}
               size="sm"
-              className="h-10 w-10 sm:w-auto p-0 sm:px-3 shrink-0 border-border/60 bg-background"
-              title="Carga rápida de mercadería"
+              onClick={onCargaRapida}
+              className={`hidden sm:flex h-10 w-10 sm:w-auto p-0 sm:px-3 shrink-0 ${
+                cargaRapidaActiva
+                  ? ""
+                  : "border-border/60 bg-background"
+              }`}
+              title="Cargar mercadería sin salir de la venta"
             >
-              <ScanBarcode className="h-4 w-4 sm:mr-2 text-muted-foreground" />
+              <ScanBarcode
+                className={`h-4 w-4 sm:mr-2 ${cargaRapidaActiva ? "" : "text-muted-foreground"}`}
+              />
               <span className="hidden sm:inline font-semibold">
-                Carga rápida
+                {cargaRapidaActiva ? "Volver a vender" : "Carga rápida"}
               </span>
             </Button>
-          </Link>
+          ) : (
+            <Link href="/stock/carga-rapida" className="hidden sm:block">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-10 w-10 sm:w-auto p-0 sm:px-3 shrink-0 border-border/60 bg-background"
+                title="Carga rápida de mercadería"
+              >
+                <ScanBarcode className="h-4 w-4 sm:mr-2 text-muted-foreground" />
+                <span className="hidden sm:inline font-semibold">
+                  Carga rápida
+                </span>
+              </Button>
+            </Link>
+          )}
 
           {/* Toggle View (Oculto en celular para ahorrar valioso espacio) */}
           {showViewToggle && (
@@ -318,15 +370,26 @@ export function StockFiltersToolbar({
                 <div className="flex flex-col gap-0.5 [&_button]:w-full [&_button]:justify-start [&_button]:h-9 [&_button]:px-2 [&_button]:bg-transparent [&_button]:border-0 [&_button]:shadow-none [&_button]:font-medium [&_button]:text-sm [&_button:hover]:bg-muted [&_button]:rounded-md [&_button_span.hidden]:!inline-block [&_button_svg]:mr-2 [&_button_svg]:w-4 [&_button_svg]:h-4 [&_button_svg]:shrink-0">
                   {/* Las dos cargas solo aparecen acá en mobile: en desktop
                       siguen siendo botones sueltos de la barra. */}
-                  <Link
-                    href="/stock/carga-rapida"
-                    className="w-full block sm:hidden"
-                  >
-                    <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors">
+                  {onCargaRapida ? (
+                    <button
+                      type="button"
+                      onClick={onCargaRapida}
+                      className="w-full flex sm:hidden items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors"
+                    >
                       <ScanBarcode className="w-4 h-4 mr-2 text-muted-foreground shrink-0" />
-                      Carga rápida
+                      {cargaRapidaActiva ? "Volver a vender" : "Carga rápida"}
                     </button>
-                  </Link>
+                  ) : (
+                    <Link
+                      href="/stock/carga-rapida"
+                      className="w-full block sm:hidden"
+                    >
+                      <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors">
+                        <ScanBarcode className="w-4 h-4 mr-2 text-muted-foreground shrink-0" />
+                        Carga rápida
+                      </button>
+                    </Link>
+                  )}
 
                   {isAdmin && (
                     <>
@@ -401,7 +464,12 @@ export function StockFiltersToolbar({
       {/* 2. BARRA DE CATEGORÍAS DINÁMICAS Y LIMPIEZA — tolerante a árbol
       mixto: si ningún elemento de categoriasDisponibles trae `hijos`, esto
       degrada exactamente a la fila plana de siempre. */}
-      {(() => {
+      {filaSecundaria !== undefined ? (
+        <div className="flex w-full min-w-0 items-center gap-2 mt-4 md:mt-2 px-2 pb-2">
+          {filaSecundaria}
+        </div>
+      ) : (
+      (() => {
         const padreEnVista = categoriasDisponibles.find((c) => {
           if (!c.hijos || c.hijos.length === 0) return false;
           if (c.value === categoriaActiva) return true;
@@ -529,7 +597,8 @@ export function StockFiltersToolbar({
             )}
           </div>
         );
-      })()}
+      })()
+      )}
     </>
   );
 }

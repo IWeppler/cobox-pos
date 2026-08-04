@@ -15,6 +15,13 @@ import { getTotalStock } from "../lib/stock-product-utils";
 import { createClient } from "@/shared/config/supabase/client";
 import { construirArbolCategorias } from "@/shared/utils/category-tree";
 import type { Rubro } from "@/entities/config/types";
+import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
+import { useSeleccionProductos } from "../hooks/use-seleccion-productos";
+import { BarraSeleccion } from "./seleccion/barra-seleccion";
+import {
+  useFinalizarSeleccion,
+  type CtxSeleccion,
+} from "./seleccion/acciones-masivas";
 
 interface StockViewProps {
   productosIndice: ProductoIndice[];
@@ -274,6 +281,51 @@ export function StockView({
     [productosOrdenados, paginaActual],
   );
 
+  // --- SELECCIÓN MÚLTIPLE ---
+  // Vive acá y no en la tabla a propósito: así sobrevive a cambiar de página
+  // y de vista, y "seleccionar todo lo filtrado" puede abarcar el set entero
+  // (productosOrdenados), no solo la página visible.
+  const idsFiltrados = useMemo(
+    () => productosOrdenados.map((p) => p.id),
+    [productosOrdenados],
+  );
+  const idsPagina = useMemo(
+    () => productosPagina.map((p) => p.id),
+    [productosPagina],
+  );
+  const seleccion = useSeleccionProductos({ idsFiltrados, idsPagina });
+
+  const productosSeleccionados = useMemo(
+    () => productosOrdenados.filter((p) => seleccion.ids.has(p.id)),
+    [productosOrdenados, seleccion.ids],
+  );
+
+  const slugNegocio = useSlugNegocioActivo() ?? "";
+  const finalizarSeleccion = useFinalizarSeleccion(seleccion.limpiar);
+
+  const ctxSeleccion: CtxSeleccion = useMemo(
+    () => ({
+      ids: seleccion.idsArray,
+      productos: productosSeleccionados,
+      isAdmin,
+      nombreComercio,
+      mostrarSinStock,
+      slugNegocio,
+      categoriasArbol: categoriasDB,
+      finalizar: finalizarSeleccion,
+    }),
+    [
+      seleccion.idsArray,
+      productosSeleccionados,
+      isAdmin,
+      nombreComercio,
+      mostrarSinStock,
+      slugNegocio,
+      categoriasDB,
+      finalizarSeleccion,
+    ],
+  );
+
   const hayFiltrosActivos =
     searchQuery !== "" ||
     categoriaActiva !== "todos" ||
@@ -342,6 +394,11 @@ export function StockView({
 
   return (
     <div className="space-y-4 px-2 md:px-4 p-2">
+      {/* El toolbar NO se apila con la barra de selección: se reemplaza. Misma
+          posición, misma altura, cero reflow al entrar y salir del modo. */}
+      {seleccion.cantidad > 0 ? (
+        <BarraSeleccion seleccion={seleccion} ctx={ctxSeleccion} />
+      ) : (
       <StockFiltersToolbar
         view={view}
         onViewChange={setView}
@@ -362,6 +419,7 @@ export function StockView({
         nombreCategoriaActiva={nombreCategoriaActiva}
         nombreComercio={nombreComercio}
       />
+      )}
 
       {/* 3. VISTAS */}
       <div className="bg-background rounded-xl border border-border overflow-hidden min-h-100 relative">
@@ -375,6 +433,7 @@ export function StockView({
             onSort={handleSort}
             categoriasArbol={categoriasDB}
             rubro={rubro}
+            seleccion={seleccion}
           />
         ) : (
           <StockGrid
@@ -384,6 +443,7 @@ export function StockView({
             mostrarSinStock={mostrarSinStock}
             categorias={categoriasDB}
             rubro={rubro}
+            seleccion={seleccion}
           />
         )}
       </div>

@@ -1,10 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { Producto } from "@/entities/productos/types";
-import { ShoppingBag } from "lucide-react";
+import type { Rubro } from "@/entities/config/types";
+import { PackagePlus, ShoppingBag } from "lucide-react";
 import { useCartStore } from "@/shared/store/cart-store";
+import { queryKeys } from "@/shared/lib/query-keys";
 import { toast } from "sonner";
 import { useCatalogFilters } from "@/features/store/hooks/use-catalog-filters";
 import { QuickAddModal } from "@/features/pos/ui/quick-add-modal";
@@ -17,6 +20,22 @@ import {
   construirUrlProducto,
   esVisibleEnCatalogo,
 } from "@/shared/utils/compartir-catalogo";
+import {
+  productoCargadoAProducto,
+  resolverImagenPrincipal,
+  resolverVariantesVendibles,
+  type VarianteVendible,
+} from "../lib/producto-a-carrito";
+import { useCargaRapida } from "@/features/carga-rapida/hooks/use-carga-rapida";
+import {
+  CargaRapidaPanel,
+  CargaRapidaRecargo,
+} from "@/features/carga-rapida/ui/carga-rapida-panel";
+import type { ProductoCargado } from "@/features/carga-rapida/types";
+
+/** Con menos resultados que esto, la grilla ofrece cargar lo que se buscó:
+ * no hay que esperar a que la búsqueda quede en cero para poder crearlo. */
+const RESULTADOS_PARA_OFRECER_CARGA = 6;
 
 interface PosTerminalProps {
   productos: Producto[];
@@ -29,14 +48,9 @@ interface PosTerminalProps {
   permitirVentaSinStock?: boolean;
   nombreComercio?: string;
   mostrarSinStock?: boolean;
-}
-
-interface VarianteDisponible {
-  variante: string;
-  cantidad: number;
-  precio: number | null;
-  /** producto_variantes.id real; undefined en el fallback legacy (productos_stock). */
-  varianteId: string | undefined;
+  /** Lo necesita la Carga rápida: en electro consulta el Catálogo Maestro,
+   * en indumentaria ni lo intenta. */
+  rubro: Rubro;
 }
 
 const getStockTotal = (producto: Producto) => {
@@ -64,10 +78,12 @@ export function PosTerminal({
   permitirVentaSinStock = false,
   nombreComercio = "Tienda",
   mostrarSinStock = true,
+  rubro,
 }: Readonly<PosTerminalProps>) {
   // El link del catálogo necesita el negocio, no solo el origen: cada
   // comercio tiene su propia tienda.
   const slugNegocio = useSlugNegocioActivo() ?? "";
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [tipo, setTipo] = useState("todos");
   const [filtrosVariantes, setFiltrosVariantes] = useState<
@@ -77,6 +93,10 @@ export function PosTerminal({
   // Estados para el Modal Rápido
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // Carga rápida NO es otra pantalla: es una vista del mismo POS. Cambian la
+  // grilla y la fila de pills; el buscador, el ticket y el sidebar quedan
+  // donde están.
+  const [vista, setVista] = useState<"vender" | "cargar">("vender");
 
   const addItem = useCartStore((state) => state.addItem);
   const setIsOpenCart = useCartStore((state) => state.setIsOpen);
@@ -155,98 +175,114 @@ export function PosTerminal({
     });
   };
 
-  const handleProductClick = (producto: Producto) => {
-    // 1. Calculamos stock real unificado. Solo se recurre al stock legacy
-    // si el producto no tiene producto_variantes — si no, se duplica el
-    // conteo porque ambas fuentes describen el mismo stock.
-    const variantesArray: VarianteDisponible[] = [];
-    producto.producto_variantes?.forEach((v) =>
-      variantesArray.push({
-        variante: v.nombre_display,
-        cantidad: v.stock_disponible ?? v.stock,
-        precio: v.precio,
-        varianteId: v.id,
-      }),
-    );
-    const tieneVariantesMigradas =
-      (producto.producto_variantes?.length ?? 0) > 0;
-    if (!tieneVariantesMigradas) {
-      // productos_stock, no producto_variantes: varianteId indefinido a
-      // propósito, nunca el id de la fila de stock legacy.
-      producto.stock?.forEach((s) =>
-        variantesArray.push({
-          variante: s.variante,
-          cantidad: s.cantidad,
-          precio: null,
-          varianteId: undefined,
-        }),
-      );
-    }
+  const agregarVarianteAlCarrito = (
+    producto: Producto,
+    variante: VarianteVendible,
+  ) => {
+    addItem({
+      productoId: producto.id,
+      nombre: producto.nombre || "Sin nombre",
+      tipo: producto.tipo || "",
+      variante: variante.variante,
+      varianteId: variante.varianteId,
+      precio: variante.precio ?? producto.precio,
+      cantidad: 1,
+      imagenUrl: resolverImagenPrincipal(producto),
+      stockMaximo: variante.cantidad,
+    });
+  };
 
-    const variantesParaVender = permitirVentaSinStock
-      ? variantesArray
-      : variantesArray.filter((v) => v.cantidad > 0);
+  const handleProductClick = (producto: Producto) => {
+    const variantesParaVender = resolverVariantesVendibles(
+      producto,
+      permitirVentaSinStock,
+    );
 
     if (variantesParaVender.length === 0) {
       toast.error("Producto agotado.");
       return;
     }
 
-    // 2. Si es variante única, se agrega como un rayo
+    // Variante única: se agrega como un rayo.
     if (variantesParaVender.length === 1) {
-      let imagenes: string[] = [];
-      if (typeof producto.imagen_url === "string") {
-        try {
-          imagenes = JSON.parse(producto.imagen_url);
-        } catch {
-          imagenes = [producto.imagen_url];
-        }
-      } else if (Array.isArray(producto.imagen_url)) {
-        imagenes = producto.imagen_url;
-      }
-
-      let miniaturas: string[] = [];
-      if (typeof producto.thumbnail_url === "string") {
-        try {
-          miniaturas = JSON.parse(producto.thumbnail_url);
-        } catch {
-          miniaturas = [producto.thumbnail_url];
-        }
-      } else if (Array.isArray(producto.thumbnail_url)) {
-        miniaturas = producto.thumbnail_url;
-      }
-
-      let grids: string[] = [];
-      if (typeof producto.grid_url === "string") {
-        try {
-          grids = JSON.parse(producto.grid_url);
-        } catch {
-          grids = [producto.grid_url];
-        }
-      } else if (Array.isArray(producto.grid_url)) {
-        grids = producto.grid_url;
-      }
-
-      addItem({
-        productoId: producto.id,
-        nombre: producto.nombre || "Sin nombre",
-        tipo: producto.tipo || "",
-        variante: variantesParaVender[0].variante,
-        varianteId: variantesParaVender[0].varianteId,
-        precio: variantesParaVender[0].precio ?? producto.precio,
-        cantidad: 1,
-        imagenUrl: grids[0] || miniaturas[0] || imagenes[0] || null,
-        stockMaximo: variantesParaVender[0].cantidad,
-      });
-
-      // toast.success("Agregado a la cuenta");
+      agregarVarianteAlCarrito(producto, variantesParaVender[0]);
       setIsOpenCart(true);
     } else {
-      // 3. Si tiene múltiples variantes, abrimos el QuickAddModal
+      // Varias variantes: abrimos el selector.
       setSelectedProduct(producto);
       setIsModalOpen(true);
     }
   };
+
+  /**
+   * Contexto de retorno de la Carga rápida dentro del POS: volver a Vender,
+   * refrescar el catálogo y seguir la venta con lo cargado.
+   *
+   * Lo cargado entra por el MISMO camino que un producto tocado en la grilla
+   * (`handleProductClick`): variante única va derecho al carrito, y con
+   * talles/colores se abre el selector de siempre.
+   */
+  const handleCargaRapidaFinalizada = (cargados: ProductoCargado[]) => {
+    setVista("vender");
+    setSearchQuery("");
+    queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+    queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+
+    if (cargados.length === 0) return;
+
+    // El selector de variante es uno solo y modal, así que no se pueden
+    // encadenar: se agregan directo los de variante única y el selector se
+    // abre para el primero que lo necesite. El resto ya quedó en el catálogo
+    // y se toca desde la grilla.
+    let pendienteDeSelector: Producto | null = null;
+
+    for (const cargado of cargados) {
+      const producto = productoCargadoAProducto(cargado);
+      const vendibles = resolverVariantesVendibles(
+        producto,
+        permitirVentaSinStock,
+      );
+      if (vendibles.length === 1) {
+        agregarVarianteAlCarrito(producto, vendibles[0]);
+      } else if (vendibles.length > 1 && !pendienteDeSelector) {
+        pendienteDeSelector = producto;
+      }
+    }
+
+    if (pendienteDeSelector) {
+      setSelectedProduct(pendienteDeSelector);
+      setIsModalOpen(true);
+    } else {
+      setIsOpenCart(true);
+    }
+  };
+
+  // LA Carga rápida, la misma de Inventario: mismo hook, mismo panel. Lo
+  // único propio del POS es el contexto de retorno y que el texto lo maneja
+  // el buscador de arriba en vez de un input propio.
+  const carga = useCargaRapida(productos, rubro, {
+    query: searchQuery,
+    onQueryChange: setSearchQuery,
+    onFinalizar: handleCargaRapidaFinalizada,
+  });
+
+  /** La card "cargar" de la grilla: la persona ya vio que no está, así que
+   * la línea entra directo y la vista cambia a Cargar para completar precio
+   * y cantidad. Sin modal de por medio. */
+  const cargarLoBuscado = () => {
+    const texto = searchQuery.trim();
+    if (!texto) {
+      setVista("cargar");
+      return;
+    }
+    carga.agregarLineaNueva(texto);
+    setVista("cargar");
+  };
+
+  const ofrecerCarga =
+    vista === "vender" &&
+    searchQuery.trim().length > 0 &&
+    productosOrdenados.length < RESULTADOS_PARA_OFRECER_CARGA;
 
   return (
     <div className="flex h-full min-w-0 flex-1 overflow-hidden">
@@ -270,11 +306,41 @@ export function PosTerminal({
           onFiltroVarianteChange={handleFiltroVarianteChange}
           isAdmin={false}
           onLimpiarFiltros={limpiarFiltros}
+          onCargaRapida={() =>
+            setVista((v) => (v === "cargar" ? "vender" : "cargar"))
+          }
+          cargaRapidaActiva={vista === "cargar"}
+          searchPlaceholder={
+            vista === "cargar"
+              ? "Escaneá o escribí y Enter…"
+              : "Buscar producto..."
+          }
+          onSearchEnter={vista === "cargar" ? carga.procesarEnter : undefined}
+          searchInputRef={vista === "cargar" ? carga.inputRef : undefined}
+          searchDisabled={
+            vista === "cargar" && (carga.modalAbierto || carga.buscandoEnMaestro)
+          }
+          filaSecundaria={
+            vista === "cargar" ? (
+              <>
+                <p className="text-xs text-muted-foreground flex-1 min-w-0 truncate">
+                  {carga.buscandoEnMaestro
+                    ? "Buscando en el Catálogo Maestro…"
+                    : "Enter agrega a la lista. Al confirmar volvés a la venta con lo cargado."}
+                </p>
+                <CargaRapidaRecargo carga={carga} />
+              </>
+            ) : undefined
+          }
         />
 
-        {/* Grilla de Productos */}
+        {/* Área de productos: es lo único que cambia entre Vender y Cargar. */}
         <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] p-2 min-h-0">
-          {productosOrdenados.length === 0 ? (
+          {vista === "cargar" ? (
+            <div className="pb-20 lg:pb-0">
+              <CargaRapidaPanel carga={carga} />
+            </div>
+          ) : productosOrdenados.length === 0 && !ofrecerCarga ? (
             <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
               <ShoppingBag className="w-12 h-12 mb-4 opacity-20" />
               <p className="font-medium text-lg">No se encontraron productos</p>
@@ -285,40 +351,7 @@ export function PosTerminal({
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-20 lg:pb-0">
               {productosOrdenados.map((producto, index) => {
-                let imagenes: string[] = [];
-                if (typeof producto.imagen_url === "string") {
-                  try {
-                    imagenes = JSON.parse(producto.imagen_url);
-                  } catch {
-                    imagenes = [producto.imagen_url];
-                  }
-                } else if (Array.isArray(producto.imagen_url)) {
-                  imagenes = producto.imagen_url;
-                }
-
-                let miniaturas: string[] = [];
-                if (typeof producto.thumbnail_url === "string") {
-                  try {
-                    miniaturas = JSON.parse(producto.thumbnail_url);
-                  } catch {
-                    miniaturas = [producto.thumbnail_url];
-                  }
-                } else if (Array.isArray(producto.thumbnail_url)) {
-                  miniaturas = producto.thumbnail_url;
-                }
-
-                let grids: string[] = [];
-                if (typeof producto.grid_url === "string") {
-                  try {
-                    grids = JSON.parse(producto.grid_url);
-                  } catch {
-                    grids = [producto.grid_url];
-                  }
-                } else if (Array.isArray(producto.grid_url)) {
-                  grids = producto.grid_url;
-                }
-                const primeraImagen =
-                  grids[0] || miniaturas[0] || imagenes[0] || null;
+                const primeraImagen = resolverImagenPrincipal(producto);
 
                 const stockTotal = getStockTotal(producto);
                 const sinStock = stockTotal <= 0;
@@ -401,6 +434,28 @@ export function PosTerminal({
                   </div>
                 );
               })}
+
+              {/* Card de carga: aparece con la búsqueda todavía dando
+                  resultados, para no tener que llegar a cero antes de poder
+                  cargar lo que no está. Punteada y sin foto — se lee como
+                  acción, no como un producto más. */}
+              {ofrecerCarga && (
+                <button
+                  type="button"
+                  onClick={cargarLoBuscado}
+                  className="flex flex-col items-center justify-center text-center gap-2 rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors h-full min-h-44 p-3 cursor-pointer"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                    <PackagePlus className="w-5 h-5 text-primary" />
+                  </span>
+                  <span className="text-xs sm:text-sm font-semibold text-foreground line-clamp-2">
+                    Cargar &quot;{searchQuery.trim()}&quot;
+                  </span>
+                  <span className="text-[11px] text-muted-foreground leading-tight">
+                    Lo creás y seguís cobrando
+                  </span>
+                </button>
+              )}
             </div>
           )}
         </div>

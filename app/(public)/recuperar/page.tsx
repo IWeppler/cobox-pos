@@ -4,7 +4,7 @@ import { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Recuperar Contraseña | Comerz",
-  description: "Restablece el acceso a tu cuenta de Comerz POS.",
+  description: "Restablece el acceso a tu cuenta de Comerz.",
 };
 
 export default function RecoverPage() {
@@ -44,7 +44,7 @@ export default function RecoverPage() {
         </div>
 
         <p className="absolute bottom-8 left-0 right-0 text-xs font-medium text-muted-foreground text-center">
-          © {new Date().getFullYear()} Comerz POS. Todos los derechos reservados.
+          © {new Date().getFullYear()} Comerz. Todos los derechos reservados.
         </p>
       </div>
 

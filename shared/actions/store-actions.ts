@@ -2,6 +2,7 @@
 
 import { createPublicClient } from "@/shared/config/supabase/server";
 import { Producto } from "@/entities/productos/types";
+import { RUBRO_DEFAULT, type Rubro } from "@/entities/config/types";
 import {
   anotarStockDisponible,
   contarReservasActivasPorVariante,
@@ -57,7 +58,7 @@ export async function getPosCatalogDataAction() {
       .order("orden", { ascending: true }),
     supabase
       .from("configuracion_pos")
-      .select("permitir_venta_sin_stock, posName, mostrar_sin_stock")
+      .select("permitir_venta_sin_stock, posName, mostrar_sin_stock, rubro")
       .single(),
   ]);
 
@@ -72,6 +73,8 @@ export async function getPosCatalogDataAction() {
       permitirVentaSinStock: configRes.data?.permitir_venta_sin_stock ?? false,
       nombreComercio: configRes.data?.posName || "Tienda Online",
       mostrarSinStock: configRes.data?.mostrar_sin_stock ?? true,
+      // Lo consume la Carga rápida invocada desde el POS.
+      rubro: (configRes.data?.rubro as Rubro) ?? RUBRO_DEFAULT,
     },
     error: null,
   };

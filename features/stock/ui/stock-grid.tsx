@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import type { ProductoIndice } from "@/entities/productos/types";
-import { Image as ImageIcon } from "lucide-react";
+import { Check, Image as ImageIcon } from "lucide-react";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import {
   getTotalStock,
@@ -22,6 +22,37 @@ import {
 } from "@/shared/utils/category-tree";
 import { badgesIdentidad } from "../lib/identidad-por-rubro";
 import type { Rubro } from "@/entities/config/types";
+import type { SeleccionProductos } from "../hooks/use-seleccion-productos";
+
+/** En modo selección el tap sobre la card selecciona, así que el detalle NO
+ * debe abrirse: en vez de interceptar el click, directamente no se monta el
+ * trigger del sheet (mismo criterio que AbrirDetalle en stock-table.tsx).
+ * Vive a nivel de módulo, no adentro del map: definirlo inline haría que cada
+ * render sea un tipo de componente nuevo y remonte la card entera. */
+function AbrirDetalleCard({
+  activo,
+  producto,
+  nombreComercio,
+  mostrarSinStock,
+  children,
+}: Readonly<{
+  activo: boolean;
+  producto: ProductoIndice;
+  nombreComercio: string;
+  mostrarSinStock: boolean;
+  children: React.ReactNode;
+}>) {
+  if (!activo) return <>{children}</>;
+  return (
+    <ProductEditDetailSheet
+      producto={producto}
+      nombreComercio={nombreComercio}
+      mostrarSinStock={mostrarSinStock}
+    >
+      {children}
+    </ProductEditDetailSheet>
+  );
+}
 
 interface StockGridProps {
   productos: ProductoIndice[];
@@ -34,6 +65,8 @@ interface StockGridProps {
   categorias: CategoriaBase[];
   /** indumentaria -> badge "N var."; electro -> Modelo + EAN. */
   rubro: Rubro;
+  /** Misma selección que la tabla: cambiar de vista no la pierde. */
+  seleccion: SeleccionProductos;
 }
 
 export function StockGrid({
@@ -42,6 +75,7 @@ export function StockGrid({
   mostrarSinStock,
   categorias,
   rubro,
+  seleccion,
 }: Readonly<StockGridProps>) {
   // El link del catálogo necesita el negocio, no solo el origen: cada
   // comercio tiene su propia tienda.
@@ -89,10 +123,53 @@ export function StockGrid({
           producto.categoria_id,
         );
 
+        const isSelected = seleccion.estaSeleccionado(producto.id);
+
         return (
-          <div key={producto.id} className="flex flex-col group relative">
-            <div className="relative aspect-4/5 bg-muted/30 rounded-xl overflow-hidden mb-3 border border-border/40 transition-all group-hover:border-border">
-              <ProductEditDetailSheet
+          <div
+            key={producto.id}
+            {...seleccion.propsSeleccionables(producto.id)}
+            className="flex flex-col group relative select-none sm:select-auto [-webkit-touch-callout:none]"
+          >
+            <div
+              className={`relative aspect-4/5 bg-muted/30 rounded-xl overflow-hidden mb-3 border transition-all ${
+                isSelected
+                  ? "border-primary ring-2 ring-primary/40"
+                  : "border-border/40 group-hover:border-border"
+              }`}
+            >
+              {/* Checkbox de la card: en desktop aparece al hover o si ya
+                  está marcada; en mobile no se muestra (ahí manda el long
+                  press) para no tapar la foto. */}
+              <label
+                className={`absolute top-2 left-2 z-10 hidden sm:flex h-6 w-6 items-center justify-center rounded-md bg-background/90 backdrop-blur-sm shadow-sm transition-opacity ${
+                  isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                }`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  aria-label={`Seleccionar ${producto.nombre}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    seleccion.toggle(producto.id, {
+                      extenderRango: e.shiftKey,
+                    });
+                  }}
+                  onChange={() => {}}
+                  className="w-4 h-4 rounded border-border cursor-pointer accent-primary"
+                />
+              </label>
+
+              {isSelected && seleccion.modoSeleccion && (
+                <span className="absolute top-2 left-2 z-10 sm:hidden flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                </span>
+              )}
+
+              <AbrirDetalleCard
+                activo={!seleccion.modoSeleccion}
                 producto={producto}
                 nombreComercio={nombreComercio}
                 mostrarSinStock={mostrarSinStock}
@@ -118,7 +195,7 @@ export function StockGrid({
                     </div>
                   )}
                 </div>
-              </ProductEditDetailSheet>
+              </AbrirDetalleCard>
 
               <ShareButton
                 url={urlProducto ?? ""}

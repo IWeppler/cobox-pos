@@ -7,6 +7,7 @@ import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { PosTerminal } from "@/features/pos/ui/pos-terminal";
 import { CartPanelAdmin } from "@/features/pos/ui/cart-panel-admin";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { RUBRO_DEFAULT } from "@/entities/config/types";
 
 const CATALOG_STALE_TIME_MS = 3 * 60 * 1000;
 
@@ -40,6 +41,7 @@ export function PosPageClient() {
         permitirVentaSinStock={data?.data?.permitirVentaSinStock}
         nombreComercio={data?.data?.nombreComercio}
         mostrarSinStock={data?.data?.mostrarSinStock}
+        rubro={data?.data?.rubro ?? RUBRO_DEFAULT}
       />
       <CartPanelAdmin />
     </div>

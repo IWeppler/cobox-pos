@@ -1,72 +1,84 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight } from "lucide-react";
+import Image from "next/image";
 import { LoginForm } from "./login-form";
 import { SolicitudComercioForm } from "./solicitud-comercio-form";
 
 type Modo = "login" | "registro";
 
-/**
- * Login y alta de comercio en la misma pantalla.
- *
- * Se alterna con estado en vez de navegar a otra ruta: quien está por dejar
- * sus datos no pierde de vista dónde está, y volver al login es un click sin
- * recarga.
- */
+/** El slogan acompaña al modo: no es lo mismo volver a entrar que empezar. */
+const SLOGAN: Record<Modo, readonly [string, string]> = {
+  login: ["Todo tu negocio.", "En un solo lugar."],
+  registro: ["Empezá con Comerz.", "Tu comercio, más simple."],
+};
+
 export function AuthPanel() {
   const [modo, setModo] = useState<Modo>("login");
 
   const esLogin = modo === "login";
+  const [sloganL1, sloganL2] = SLOGAN[modo];
 
   return (
-    <div className="flex-1 flex flex-col justify-center w-full max-w-sm mx-auto space-y-8 mt-16 lg:mt-0">
-      <div className="flex flex-col space-y-2 text-center lg:text-left">
+    <div className="flex-1 flex flex-col justify-center w-full max-w-sm mx-auto lg:mt-0">
+      {/* MARCA — solo mobile. Logo y slogan forman un bloque propio, separado
+          del formulario por una línea: arriba quién sos, abajo qué hacés. En
+          desktop la marca vive arriba a la izquierda de la página. */}
+      <div className="lg:hidden flex flex-col items-center text-center">
+        <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center transition-all duration-300 ease-out group-focus-within:w-11 group-focus-within:h-11">
+          <Image
+            src="/logow.png"
+            alt="Comerz"
+            width={56}
+            height={56}
+            className="w-full h-full object-contain rounded-2xl p-2"
+          />
+        </div>
+        <span className="mt-3 text-xl font-bold tracking-tight text-foreground transition-all duration-300 ease-out group-focus-within:mt-2 group-focus-within:text-lg">
+          Comerz
+        </span>
+        {/* Dos líneas a propósito, y colapsa con el teclado abierto. */}
+        <p className="mt-1.5 max-h-16 overflow-hidden text-sm leading-snug text-muted-foreground transition-all duration-300 ease-out group-focus-within:mt-0 group-focus-within:max-h-0 group-focus-within:opacity-0">
+          <span className="block">{sloganL1}</span>
+          <span className="block">{sloganL2}</span>
+        </p>
+      </div>
+
+      <div className="lg:hidden h-px w-full bg-border/60 my-7 transition-all duration-300 ease-out group-focus-within:my-5" />
+
+      <div className="flex flex-col text-center lg:text-left">
         <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
-          {esLogin ? "Iniciar sesión" : "Creá tu comercio"}
+          {esLogin ? "Ingresá a tu comercio" : "Creá tu comercio"}
         </h1>
-        <p className="text-sm text-muted-foreground">
+        
+        <p className="text-sm text-muted-foreground mt-2 max-h-16 overflow-hidden transition-all duration-300 ease-out max-lg:group-focus-within:max-h-0 max-lg:group-focus-within:mt-0 max-lg:group-focus-within:opacity-0">
           {esLogin
             ? "Ingresá tus credenciales para acceder a tu panel."
             : "Dejanos tus datos y te contactamos para dejarlo funcionando."}
         </p>
       </div>
 
-      {esLogin ? (
-        <LoginForm />
-      ) : (
-        <SolicitudComercioForm onVolver={() => setModo("login")} />
-      )}
-
-      <div className="text-center lg:text-left flex">
+      <div className="mt-8">
         {esLogin ? (
-          <>
-            <p className="text-sm text-muted-foreground pr-1">
-              ¿Todavía no tenés un comercio?{" "}
-            </p>
-            <button
-              type="button"
-              onClick={() => setModo("registro")}
-              className="text-sm font-semibold text-primary inline-flex items-center gap-1 cursor-pointer"
-            >
-              Crear mi comercio
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </>
+          <LoginForm />
         ) : (
-          <>
-            <p className="text-sm text-muted-foreground pr-1">
-              ¿Ya tenés cuenta?{" "}
-            </p>
-            <button
-              type="button"
-              onClick={() => setModo("login")}
-              className="text-sm font-semibold text-primary transition-colors cursor-pointer"
-            >
-              Iniciar sesión
-            </button>
-          </>
+          <SolicitudComercioForm onVolver={() => setModo("login")} />
         )}
+      </div>
+
+      {/* Pregunta y acción van en un mismo párrafo: como flex se partían en
+          dos líneas en pantallas angostas. */}
+      <div className="mt-8 space-y-3 text-center lg:text-left">
+        <p className="text-sm text-muted-foreground">
+          {esLogin ? "¿Todavía no tenés un comercio? " : "¿Ya tenés cuenta? "}
+          <button
+            type="button"
+            onClick={() => setModo(esLogin ? "registro" : "login")}
+            className="font-semibold text-primary underline-offset-4 hover:underline transition-colors cursor-pointer"
+          >
+            {esLogin ? "Crear cuenta" : "Iniciar sesión"}
+          </button>
+        </p>
       </div>
     </div>
   );

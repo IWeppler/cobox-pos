@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Layers } from "lucide-react";
 import { parseRawVariantString } from "@/entities/productos/lib/parse-variant-attributes";
 import { resolverAtributosVariante } from "@/entities/productos/lib/build-propiedades-filtro";
+import { resolverImagenPrincipal } from "../lib/producto-a-carrito";
 
 interface VarianteSeleccionada {
   varianteId: string | undefined;
@@ -195,39 +196,6 @@ function QuickAddModalContent({
         stockDeVariante &&
         (permitirVentaSinStock || stockDeVariante.cantidad > 0)
       ) {
-        let imagenes: string[] = [];
-        if (typeof producto.imagen_url === "string") {
-          try {
-            imagenes = JSON.parse(producto.imagen_url);
-          } catch {
-            imagenes = [producto.imagen_url];
-          }
-        } else if (Array.isArray(producto.imagen_url)) {
-          imagenes = producto.imagen_url;
-        }
-
-        let miniaturas: string[] = [];
-        if (typeof producto.thumbnail_url === "string") {
-          try {
-            miniaturas = JSON.parse(producto.thumbnail_url);
-          } catch {
-            miniaturas = [producto.thumbnail_url];
-          }
-        } else if (Array.isArray(producto.thumbnail_url)) {
-          miniaturas = producto.thumbnail_url;
-        }
-
-        let grids: string[] = [];
-        if (typeof producto.grid_url === "string") {
-          try {
-            grids = JSON.parse(producto.grid_url);
-          } catch {
-            grids = [producto.grid_url];
-          }
-        } else if (Array.isArray(producto.grid_url)) {
-          grids = producto.grid_url;
-        }
-
         if (onSelectVariante) {
           onSelectVariante({
             varianteId: stockDeVariante.varianteId,
@@ -246,7 +214,7 @@ function QuickAddModalContent({
             varianteId: stockDeVariante.varianteId,
             precio: stockDeVariante.precio ?? producto.precio,
             cantidad: 1,
-            imagenUrl: grids[0] || miniaturas[0] || imagenes[0] || null,
+            imagenUrl: resolverImagenPrincipal(producto),
             stockMaximo: stockDeVariante.cantidad,
           });
 

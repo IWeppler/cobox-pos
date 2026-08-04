@@ -116,6 +116,13 @@ export function CargaRapidaLista({
               ? linea
               : null;
 
+          // Producto nuevo simple: precio y cantidad se cargan acá mismo. Es
+          // el caso de la card "crear" del POS, donde la línea nace sin nada
+          // más que el nombre y hay que poder cobrarla en dos toques.
+          const nuevaSimple =
+            linea.kind === "NUEVA" && !linea.tieneVariantes ? linea : null;
+          const editableInline = varianteFija ?? nuevaSimple;
+
           return (
           <div
             key={linea.clienteLineaId}
@@ -147,9 +154,9 @@ export function CargaRapidaLista({
                 {(linea.kind === "EXISTENTE" ? linea.sku : linea.codigo)
                   ? ` · SKU ${linea.kind === "EXISTENTE" ? linea.sku : linea.codigo}`
                   : ""}
-                {/* Con variante fija los precios son inputs acá al lado, así
-                    que repetirlos como texto sería ruido. */}
-                {varianteFija ? null : (
+                {/* Si los precios son inputs acá al lado, repetirlos como
+                    texto sería ruido. */}
+                {editableInline ? null : (
                   <>
                     {" · "}
                     Costo {formatearPrecio(
@@ -184,32 +191,40 @@ export function CargaRapidaLista({
               ) : null}
             </div>
 
-            {varianteFija ? (
+            {editableInline ? (
               <div className="flex items-end gap-2 shrink-0">
+                {/* El costo NO se marca inválido: es opcional a propósito
+                    (ver validarLinea). Lo que sí queda en rojo hasta cargarse
+                    es la venta, que es lo único sin lo que no se puede
+                    cobrar, y la cantidad. */}
                 <CampoInline
                   label="Costo"
-                  value={varianteFija.precioCompra}
-                  // El maestro no trae precios: arrancan en 0 y la línea queda
-                  // marcada en rojo hasta que el empleado los carga, en vez de
-                  // fallar recién al confirmar toda la carga.
-                  invalido={varianteFija.precioCompra <= 0}
+                  value={editableInline.precioCompra}
                   onChange={(v) =>
                     onUpdatePrecio(linea.clienteLineaId, "precioCompra", v)
                   }
                 />
                 <CampoInline
                   label="Venta"
-                  value={varianteFija.precioVenta}
-                  invalido={varianteFija.precioVenta <= 0}
+                  value={editableInline.precioVenta}
+                  invalido={editableInline.precioVenta <= 0}
                   onChange={(v) =>
                     onUpdatePrecio(linea.clienteLineaId, "precioVenta", v)
                   }
                 />
                 <CampoInline
                   label="Cant."
-                  value={stockVarianteFija(varianteFija)}
+                  value={
+                    varianteFija
+                      ? stockVarianteFija(varianteFija)
+                      : nuevaSimple!.cantidad
+                  }
                   entero
-                  invalido={stockVarianteFija(varianteFija) <= 0}
+                  invalido={
+                    (varianteFija
+                      ? stockVarianteFija(varianteFija)
+                      : nuevaSimple!.cantidad) <= 0
+                  }
                   onChange={(v) => onUpdateCantidad(linea.clienteLineaId, v)}
                 />
               </div>

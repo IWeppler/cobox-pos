@@ -5,7 +5,7 @@ import { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Nueva Contraseña | Comerz",
-  description: "Crea una nueva contraseña para tu cuenta de Comerz POS.",
+  description: "Crea una nueva contraseña para tu cuenta de Comer.",
 };
 
 export default function UpdatePasswordPage() {
@@ -44,7 +44,7 @@ export default function UpdatePasswordPage() {
         </div>
 
         <p className="absolute bottom-8 left-0 right-0 text-xs font-medium text-muted-foreground text-center">
-          © {new Date().getFullYear()} Comerz POS. Todos los derechos reservados.
+          © {new Date().getFullYear()} Comerz. Todos los derechos reservados.
         </p>
       </div>
 

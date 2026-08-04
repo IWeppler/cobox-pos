@@ -83,9 +83,14 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isAuthRoute = pathname.startsWith("/auth");
+  // Las páginas legales se linkean desde el login: tienen que abrirse sin
+  // sesión, o el link manda a /auth y no se lee nunca lo que se está por
+  // aceptar.
   const isPublicRoute =
     pathname.startsWith("/store") ||
-    pathname.startsWith("/recuperar")
+    pathname.startsWith("/recuperar") ||
+    pathname.startsWith("/terminos") ||
+    pathname.startsWith("/privacidad")
   // Rutas donde todavía no hay negocio elegido: son justamente las que sirven
   // para elegirlo o crear el primero.
   const isRutaSinNegocio =

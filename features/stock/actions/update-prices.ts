@@ -4,7 +4,10 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
-export type AlcancePrecio = "TODOS" | "CATEGORIA";
+/** SELECCION = los ids que el usuario marcó en la tabla/grilla de stock.
+ * `actualizaciones_precio.tipo_alcance` es `text` sin CHECK, así que el valor
+ * nuevo entra al historial sin migración. */
+export type AlcancePrecio = "TODOS" | "CATEGORIA" | "SELECCION";
 export type OperacionPrecio =
   | "AUMENTAR_PORCENTAJE"
   | "REDUCIR_PORCENTAJE"
@@ -112,9 +115,18 @@ export async function simularPreciosAction(
   operacion: OperacionPrecio,
   valor: number,
   redondeo: TipoRedondeo,
+  /** Solo para alcance SELECCION: los productos marcados en el módulo. */
+  productIds?: string[],
 ) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
+
+  // El alcance se resuelve SIEMPRE contra la base, nunca contra lo que el
+  // cliente dice que hay adentro: el cliente manda ids, el server relee
+  // precio y costo actuales de esos ids.
+  if (alcance === "SELECCION" && (!productIds || productIds.length === 0)) {
+    return { error: "No hay productos seleccionados." };
+  }
 
   let query = supabase
     .from("productos")
@@ -124,6 +136,10 @@ export async function simularPreciosAction(
 
   if (alcance === "CATEGORIA" && categoriaFiltro !== "todos") {
     query = query.eq("categoria_id", categoriaFiltro);
+  }
+
+  if (alcance === "SELECCION") {
+    query = query.in("id", productIds!);
   }
 
   const { data: productos, error } = await query;
@@ -237,6 +253,15 @@ export async function aplicarPreciosAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "No autorizado." };
+
+  // Espejo server-side del gate de UI: la acción entra por dos disparadores
+  // (el menú de Acciones y el modo selección), y estar autenticado no alcanza
+  // para reescribir precios de todo el catálogo.
+  if (!(await esUsuarioAdmin(supabase))) {
+    return {
+      error: "Solo un administrador puede actualizar precios.",
+    };
+  }
 
   try {
     const { data: lote, error: loteError } = await supabase
