@@ -76,7 +76,7 @@ export function CajaHistoryTable({
 }: Readonly<CajaHistoryTableProps>) {
   const [searchQuery, setSearchQuery] = useState("");
   const [paginaActual, setPaginaActual] = useState(1);
-  const DIAS_POR_PAGINA = 7;
+  const DIAS_POR_PAGINA = 10;
   const [turnoAbierto, setTurnoAbierto] = useState<TurnoCajaHistorial | null>(
     null,
   );
@@ -159,7 +159,7 @@ export function CajaHistoryTable({
   const totalTurnosFiltrados = filteredData.length;
 
   return (
-    <div className="mt-12 pt-8 border-t border-border">
+    <div>
       <CajaDetailSheet
         turno={turnoAbierto}
         onClose={() => setTurnoAbierto(null)}

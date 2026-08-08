@@ -290,6 +290,7 @@ export function PosTerminal({
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         {/* Toolbar POS */}
         <StockFiltersToolbar
+          rubro={rubro}
           view="grid"
           onViewChange={() => undefined}
           showViewToggle={false}

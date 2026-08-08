@@ -52,6 +52,14 @@ export interface CatalogoActual {
   imeisExistentes: Set<string>;
 }
 
+/**
+ * Error de la fila que el usuario puede arreglar sin volver a tocar el
+ * archivo. Lo marca el plan (y no una regex sobre el texto del error) para
+ * que el input de corrección de la preview no dependa de cómo esté redactado
+ * el mensaje.
+ */
+export type CorreccionImport = "PRECIO_VENTA";
+
 export interface ItemPlan {
   fila: number;
   producto: string;
@@ -73,6 +81,8 @@ export interface ItemPlan {
   errores: string[];
   /** La fila se importa igual, pero con una decisión que conviene mirar. */
   avisos: string[];
+  /** Errores que se arreglan desde la preview, sin volver a subir el archivo. */
+  correcciones: CorreccionImport[];
 }
 
 export interface PlanImport {
@@ -179,6 +189,7 @@ export function construirPlanImport(
   for (const fila of filas) {
     const errores: string[] = [];
     const avisos: string[] = [];
+    const correcciones: CorreccionImport[] = [];
 
     // --- Categoría -------------------------------------------------------
     let categoriaId: string | null = null;
@@ -281,6 +292,7 @@ export function construirPlanImport(
       errores.push(
         "Falta el precio de venta y el producto es nuevo (no se puede crear a $0).",
       );
+      correcciones.push("PRECIO_VENTA");
     }
     if (esProductoNuevo && fila.precioCosto === null) {
       avisos.push("Sin precio de costo: se guarda en 0.");
@@ -307,6 +319,7 @@ export function construirPlanImport(
       categoriaNombre,
       errores,
       avisos,
+      correcciones,
     });
   }
 

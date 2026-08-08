@@ -38,6 +38,8 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { ImportarPedidoModal } from "@/features/purchases/ui/create-purchase-modal";
+import type { Rubro } from "@/entities/config/types";
+import { metodoIngresoStock } from "../lib/ingreso-por-rubro";
 import { CrearProductoSheet } from "@/features/stock/ui/create-sheet";
 import { ImportProductosModal } from "./import-productos-modal";
 import { UpdatePricesModal } from "./update-prices-modal";
@@ -57,6 +59,9 @@ export type CategoriaToolbar = CategoriaToolbarHijo & {
 };
 
 interface StockFiltersToolbarProps {
+  /** Decide POR CUÁL de los dos flujos entra la mercadería (ver
+   * metodoIngresoStock): remito en indumentaria, planilla en electro. */
+  rubro: Rubro;
   view: "table" | "grid";
   onViewChange: (view: "table" | "grid") => void;
   showViewToggle?: boolean;
@@ -95,6 +100,7 @@ interface StockFiltersToolbarProps {
 }
 
 export function StockFiltersToolbar({
+  rubro,
   view,
   onViewChange,
   showViewToggle = true,
@@ -131,6 +137,10 @@ export function StockFiltersToolbar({
   const [isCrearProductoOpen, setIsCrearProductoOpen] = useState(false);
   const [isImportProductosOpen, setIsImportProductosOpen] = useState(false);
   const seImportoAlgo = useRef(false);
+  // Un comercio ve UN flujo de ingreso de mercadería, el suyo. Antes se
+  // montaban y se ofrecían los dos a todos, y elegir el equivocado te deja
+  // cargando stock por un camino que no está pensado para tu rubro.
+  const metodoIngreso = metodoIngresoStock(rubro);
   const propiedadesVariantes = Object.entries(propiedadesGlobales);
   const hayFiltrosVariantesActivos = Object.values(filtrosVariantes).some(
     (valor) => (Array.isArray(valor) ? valor.length > 0 : valor !== "todos"),
@@ -147,23 +157,27 @@ export function StockFiltersToolbar({
     <>
       {/* 1. BARRA SUPERIOR: Buscador y Acciones */}
       <div className="flex flex-row gap-2 px-2 py-1.5 border-b border-border">
-        <ImportarPedidoModal
-          open={isImportModalOpen}
-          onOpenChange={setIsImportModalOpen}
-          hideTrigger
-        />
+        {metodoIngreso === "remito" && (
+          <ImportarPedidoModal
+            open={isImportModalOpen}
+            onOpenChange={setIsImportModalOpen}
+            hideTrigger
+          />
+        )}
 
         {isAdmin && (
           <CrearProductoSheet
             open={isCrearProductoOpen}
             onOpenChange={setIsCrearProductoOpen}
             hideTrigger
+            rubro={rubro}
           />
         )}
 
-        {isAdmin && (
+        {isAdmin && metodoIngreso === "planilla" && (
           <ImportProductosModal
             open={isImportProductosOpen}
+            rubro={rubro}
             // El refresh se difiere al cierre a propósito: recargar apenas
             // termina de escribir se llevaría por delante el reporte fila
             // por fila, que es justo lo que hay que leer cuando alguna falló.
@@ -410,22 +424,25 @@ export function StockFiltersToolbar({
                     <>
                       <UpdatePricesModal />
                       <PriceHistoryModal />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setIsImportModalOpen(true)}
-                      >
-                        <PackagePlus className="w-4 h-4 mr-2 text-success shrink-0" />
-                        <span>Ingresar Remito</span>
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setIsImportProductosOpen(true)}
-                      >
-                        <FileSpreadsheet className="w-4 h-4 mr-2 text-success shrink-0" />
-                        <span>Importar Planilla</span>
-                      </Button>
+                      {metodoIngreso === "remito" ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setIsImportModalOpen(true)}
+                        >
+                          <PackagePlus className="w-4 h-4 mr-2 text-success shrink-0" />
+                          <span>Ingresar Remito</span>
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setIsImportProductosOpen(true)}
+                        >
+                          <FileSpreadsheet className="w-4 h-4 mr-2 text-success shrink-0" />
+                          <span>Importar Planilla</span>
+                        </Button>
+                      )}
                       <DropdownMenuSeparator className="my-1 bg-border/60" />
                       <Link href="/stock/bajas" className="w-full block">
                         <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium text-foreground hover:bg-warning/10 rounded-md hover:text-warning/90 transition-colors">

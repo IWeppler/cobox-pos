@@ -1,5 +1,5 @@
 import { Venta } from "@/entities/ventas/types";
-import type { PeriodoPanel, RangoFechas } from "./periodo-ranges";
+import type { PeriodoPanel, RangoFechas } from "@/shared/lib/periodo-ranges";
 
 export type Granularidad = "hora" | "dia" | "mes";
 

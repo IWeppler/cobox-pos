@@ -131,33 +131,22 @@ export function VistaGerencial({
 
         <div className="border-t border-border" />
 
-        {/* ---- Breakdown por medio (siempre en vivo) ---- */}
-        <div className="px-6 py-4 space-y-3">
-          {resumen.breakdown_medios.map((medio) => {
-            const Icono = medioIcono(medio.tipo);
-            return (
-              <div
-                key={medio.tipo}
-                className="flex items-center justify-between gap-3 text-sm font-medium"
-              >
-                <span className="flex items-center gap-2 text-muted-foreground min-w-0">
-                  <Icono className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{medioLabel(medio.tipo)}</span>
-                </span>
-                <span className="font-mono font-medium text-foreground shrink-0">
-                  {formatearMoneda(medio.monto)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="border-t border-border" />
+        {/* El desglose por medio de pago NO va acá: estaba duplicado con la
+            lista de al lado, que muestra lo mismo más la cantidad de ventas,
+            cuánto es cobranza de deuda vieja y el detalle cobro por cobro.
+            Dos listas del mismo `breakdown_medios` a dos centímetros una de
+            otra invitan a compararlas buscando una diferencia que no existe. */}
 
         {/* ---- Arqueo ---- */}
         <div className="px-6 py-4 bg-muted/40">
           <div className="flex items-center justify-between gap-3 text-sm font-medium">
-            <span className="text-muted-foreground">Esperado en caja</span>
+            {/* El alcance va en el nombre: hay otros dos "esperado" en el
+                módulo (el de las cajas abiertas ahora, en Dinero, y el del
+                Cierre Z, que es solo el turno propio). Sin decir cuál es
+                cuál, dos números que difieren con razón se leen como un bug. */}
+            <span className="text-muted-foreground">
+              Esperado en caja (todos los turnos de hoy)
+            </span>
             <span className="font-mono font-medium text-foreground">
               {formatearMoneda(caja.esperado)}
             </span>

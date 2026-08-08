@@ -11,6 +11,11 @@ import {
   detectarStockCriticoRotacion,
   VENTANA_ROTACION_DIAS,
 } from "./detectar-quiebres";
+import {
+  normalizarTipoEgreso,
+  sumarGastosOperativos,
+  sumarSalidasDeCaja,
+} from "@/features/caja/lib/tipo-egreso";
 
 export type PeriodoDashboard =
   | "hoy"
@@ -410,10 +415,19 @@ export function getDashboardMetrics(
   const ticketPromedio = ordenes > 0 ? ingresosBrutos / ordenes : 0;
 
   // --- EGRESOS Y BAJAS ---
-  let totalEgresos = 0;
-  egresosFiltrados.forEach((e) => {
-    totalEgresos += Number(e.monto || 0);
-  });
+  // Solo los OPERATIVOS restan del resultado. Un retiro de la dueña es la
+  // ganancia ya hecha, no un gasto, y una compra de mercadería ya está
+  // contada en el precio_costo de lo que se vende: restarla acá la contaba
+  // dos veces. Los tres siguen saliendo del cajón — eso lo mira el arqueo de
+  // caja, no esta cuenta.
+  const totalEgresos = sumarGastosOperativos(egresosFiltrados);
+  const totalSalidasCaja = sumarSalidasDeCaja(egresosFiltrados);
+  const totalRetiros = egresosFiltrados
+    .filter((e) => normalizarTipoEgreso(e.tipo) === "RETIRO_SOCIO")
+    .reduce((acc, e) => acc + Number(e.monto || 0), 0);
+  const totalComprasMercaderia = egresosFiltrados
+    .filter((e) => normalizarTipoEgreso(e.tipo) === "COMPRA_MERCADERIA")
+    .reduce((acc, e) => acc + Number(e.monto || 0), 0);
 
   let costoPerdidoBajas = 0;
   let unidadesBajas = 0;
@@ -535,7 +549,7 @@ export function getDashboardMetrics(
       value: costoMercaderiaVendida,
       color: "#f59e0b",
     }, // Ambar
-    { label: "Egresos Físicos", value: totalEgresos, color: "#f43f5e" }, // Rose
+    { label: "Gastos Operativos", value: totalEgresos, color: "#f43f5e" }, // Rose
     { label: "Comisiones Dig.", value: totalComisiones, color: "#8b5cf6" }, // Violeta
     {
       label: "Result. Operativo",
@@ -609,7 +623,13 @@ export function getDashboardMetrics(
     ticketPromedio,
     gananciaBrutaVentas,
     gananciaNeta: resultadoOperativo,
+    /** Solo gastos operativos: es lo que resta de la ganancia. */
     totalEgresos,
+    /** Todo lo que salió del cajón (gastos + retiros + compras). Es lo que
+     * tiene que cuadrar con el arqueo, NO con el resultado. */
+    totalSalidasCaja,
+    totalRetiros,
+    totalComprasMercaderia,
     totalComisiones,
     recargosCobrados,
     /** Bruto cobrado de deudas en el período. No suma a `ingresos`. */

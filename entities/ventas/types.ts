@@ -71,6 +71,15 @@ export interface CreateSalePaymentInput {
 export type EstadoPagoVenta = "PAGADA" | "PARCIAL" | "PENDIENTE" | "ANULADA";
 export type EstadoOperacionVenta = "CONFIRMADA" | "ANULADA";
 
+/** Comprobante emitido por una venta. Es un array porque una venta puede
+ * tener más de uno: la factura y, si se anula, su nota de crédito. */
+export interface VentaComprobante {
+  tipo: string;
+  punto_venta: number;
+  numero: number;
+  cae?: string | null;
+}
+
 export interface Venta {
   id: string;
   cliente_id?: string | null;
@@ -92,6 +101,7 @@ export interface Venta {
   ventas_items?: VentaItem[];
   ventas_descuentos?: VentaDescuento[];
   venta_pagos?: VentaPago[];
+  comprobantes?: VentaComprobante[];
 
   total_bruto?: number;
   comision_total?: number;

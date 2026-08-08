@@ -3,15 +3,13 @@ Ayudar a vender más, estar organizado y prever qué está pasando en el negocio
 ideas:
 - Para crear usuarios tengo que pedirle a claude code que lo haga. Debo poder crearlo desde el dashboard.
 
-- NO ESTA FUNCIONANDO EL TEMA MARCA Y GENERO PARA EL PRODUCTO. FUNDAMENTAL MEJORAR EL CATALOGO
+- NO ESTA FUNCIONANDO \ TEMA MARCA Y GENERO PARA EL PRODUCTO. FUNDAMENTAL MEJORAR EL CATALOGO
 
 - ver historial de productos cargados a traves de remitos. como agrupaciones y luego detalle de cada remito. Esto va de la mano con la mejora de la creacion de la pagina de movimientos que actualmente ni siquiera me esta leyendo los productos que ingresan a traves de remitos, no tiene paginacion, creo que podria tener mas filtros y podemos poner esto que digo directamente ahi adentro.
 
 - Pérdida de conexión (Offline): Es la más crítica. Si el local se queda sin internet, la cajera debe saber de inmediato (con un banner permanente en la parte superior) que el sistema está guardando las ventas localmente y que no cierre la pestaña.
 
 - Multi-sucursal: Hasta 5 sucursales bajo la misma cuenta, con stock y caja independientes.
-
-- Exportación contable: Resumen de IVA, libro de ventas y compras, caja X y Z: un Excel listo para tu contador.
 
 - Agregar mas Datos de la empresa: nombre comercial +/ razon social, cuit. etiquetas de codigo de barra: a4, 50x30, 40x25, modo de facturacion: AFIP Manual (generar cuando se necesite), AFIP Automatico, Ticket Interno (Sin Afip)
 - Alicuota IVA (creacion de productos): 21% general; 10,5% alimentos básicos, carne, panificados, harinas; 0% exento.
@@ -20,15 +18,8 @@ ideas:
 
 - terminar de hacer la conexión para recuperar contraseñas
 
-# TIER 1 — Plata correcta y operación diaria (2-4 semanas)
 
-## Caja:
-
-1.  Retiros de dueño como movimiento separado.
-2.  Tabla admin "cuánto tengo en cada caja/banco/MP" (alto valor para dueñas, y es agregación de datos que ya tenés).
-3.  Marcar esperado-negativo como revisado.
-4.  Compras ≠ gastos.
-
+1. Landing page + blog/tutoriales — en paralelo (no depende de código del POS), es lo que te permite vender mientras construís.
 
 ## EPIC 1 — Datos Fiscales de la Empresa
 Objetivo: poder configurar correctamente un comercio argentino.
@@ -150,61 +141,32 @@ Primero lo básico.
  Exento
  No Gravado
 
-### Ventas
-Que automáticamente calcule.
-No pedirle al usuario hacer cuentas.
 
-
-## EPIC 6 — Contabilidad
-Acá creo que hay mucho valor.
+## EPIC 6 — Contabilidad 
+Acá creo que hay mucho valor. Exportación contable: Resumen de IVA, libro de ventas y compras, caja X y Z: un Excel listo para tu contador.
 
 ### Exportaciones
  Libro IVA Ventas
  Libro IVA Compras
  Caja diaria
- Caja X y Caja Z: Que es? 
+ Caja X y Caja Z: Que es?
  Excel movimientos
 
-
-# TIER 2 — Decisión de arquitectura SaaS (antes del tercer cliente, no después)
-
-1. Landing page + blog/tutoriales — en paralelo (no depende de código del POS), es lo que te permite vender mientras construís.
 
 
 # TIER 3 — Diferenciadores con IA (después de Tier 2, porque venden el SaaS)
 
-🤖 Asistente de Orden de Compra — el mejor candidato de toda tu lista: "qué comprar y cuánto" en base a ventas del período + stock mínimo + stock actual. El 80% es cálculo determinístico (que es lo que lo hace confiable); la capa IA es el resumen en lenguaje natural ("se viene el invierno y las camperas rotaron 3x más que el mes pasado"). Es demo perfecta para vender el SaaS.
-
-🤖 Carga de stock por voz/texto — ya tenés la mitad construida sin darte cuenta: el parser de remitos + diccionario_alias ES el motor de interpretación; voz/texto libre es otra entrada al mismo pipeline. Por eso va después del asistente de compra: comparte piezas y para entonces el pipeline está más maduro.
+Asistente de Orden de Compra — el mejor candidato de toda tu lista: "qué comprar y cuánto" en base a ventas del período + stock mínimo + stock actual. El 80% es cálculo determinístico (que es lo que lo hace confiable); la capa IA es el resumen en lenguaje natural ("se viene el invierno y las camperas rotaron 3x más que el mes pasado"). Es demo perfecta para vender el SaaS.
 
 # TIER 4 — Expansión de mercado (cuando el SaaS ya factura)
 
 1. Facturación electrónica ARCA (con el IVA de Tier 2 ya cargado).
-
 2. Impresión térmica ESC/POS — suele ser condición de adopción para quioscos/carnicerías; para indumentaria fue esquivable, para el mercado amplio no.
-
 3. Presupuestos y estados de venta (Cobrado/Presupuesto/A Confirmar).
-
 4. Seeds por industria (quiosco, ferretería, carnicería...) + venta por peso — van juntos: venta por peso es el prerrequisito técnico de carnicería/verdulería, y los seeds son lo que hace que el onboarding self-service del SaaS no arranque en blanco.
-
-5. Categorías y subcategorías reales (parent_id + categoria_atributos funcionando de verdad) — encaja acá porque los seeds por industria lo necesitan; mientras tanto el campo queda oculto como ya definimos.
-
 6. Multi-sucursal — y es un vacío real que tu propio pricing ya asumía sin que el roadmap lo dijera. Repasá tu Plan Empresa ($70k): lo llamaste "Empresa / Multi-sucursal" — ya le estás cobrando algo que no existe en ningún lado del roadmap de features. Hay que diseñarlo, y hacerlo distinto y explícito de la decisión de multi-tenant que ya veníamos discutiendo: multi-sucursal es un negocio con varias ubicaciones físicas (mismo dueño, catálogo y clientes compartidos, stock separado por depósito) — es un sucursal_id anidado bajo tu futuro negocio_id, no lo mismo que "muchos negocios distintos en una base". Diseñalos juntos porque son la misma conversación de arquitectura, pero son conceptualmente dos cosas.
-
 7. Integración Tiendanube (y quizás MercadoLibre después) — Dux lo tiene, es un dolor real para comercios argentinos que ya venden en ambos canales sin sincronía de stock (venden el mismo producto dos veces). Tenés razón en que esto no es un feature aislado, es un cluster: necesitás (a) el módulo de órdenes con estados que ya tenías anotado para presupuestos, reusado para pedidos de e-commerce; (b) reportes por canal de venta (mostrador vs. Tiendanube); (c) el flujo de venta con envío, que resucita tu "envío por localidad" pausado — se vuelve prerequisito, no nice-to-have. Es grande; va después de la decisión de multi-tenant, no antes.
 
-
-# Caja / Multicaja
-
-- Retiros de dueño como tipo de movimiento separado de gastos operativos
-- Agrupar historial por día + filtro por rango de fechas
-- Resumen diario consolidado (todos los turnos de un día en una vista)
-- Rediseño de /caja: turno propio vs. historial según estado del usuario, filtros en "Movimientos del - Turno" (egresos/ingresos/método de pago)
-- Cuenta corriente + método de pago real (arriba)
-- Conciliación de cobros digitales contra el resumen real del banco/Mercado Pago — proyecto más grande, aparte
-- Endurecer RLS de SELECT en turnos_caja (hoy abierta, sin defensa en profundidad) — pendiente de hace rato, bajo riesgo
-- compras /= gastos:
-- una tabla para admin donde aparezca cuanto dinero tengo en cada caja/banco/tarjeta/mercado pago...
 
 
  Seeds por industria (quiosco, minimercado, ferretería, carnicería, indumentaria ...)
@@ -227,12 +189,6 @@ No incluye: Reportes avanzados, Roles de usuarios, Multi caja, Multi sucursal, I
 
 - Empresa ($70k/mes): + Múltiples sucursales + Stock por sucursal + Transferencias entre sucursales + Dashboard consolidado + Usuarios por sucursal + Permisos avanzados + Facturación electrónica (cuando esté ARCA) + Integración con impresoras térmicas + Lectores de código de barras + Integraciones futuras + API (si algún día existe)
 
-2. Sistema de Permisos y Límites (Base de Datos)
-Para lograr esa granularidad en vez de utilizar  miles de condicionales en el código, lo ideal es tener una tabla planes en Supabase con una columna JSON que defina las reglas exactas de cada nivel.
-- Estructura sugerida del JSON de un plan: Podrías guardar algo como { "max_usuarios": 1, "max_sucursales": 1, "features": ["caja", "stock", "arca_basico"] }.
-- Límites Cuantitativos: Si el negocio tiene el plan Emprendedor (max_usuarios: 1) y el dueño intenta invitar a un empleado, el backend lee este límite y bloquea la acción devolviendo un error.
-- Permisos Cualitativos (Features): Para restringir vistas parciales (ej: ver el gráfico de rentabilidad en la sección de reportes), tu frontend verificará si el array de features incluye ese permiso específico.
-
 
 3. UI para Funciones Bloqueadas (El Candadito)
 Para implementar tu idea de la mejor manera en Next.js, puedes crear un componente envoltorio (Wrapper) llamado <PaywallGate>.
@@ -240,6 +196,7 @@ Para implementar tu idea de la mejor manera en Next.js, puedes crear un componen
 - Si tiene el plan correcto: Renderiza el contenido normalmente (por ejemplo, el botón de "Agregar Empleado").
 - Si NO tiene el plan: Renderiza el mismo botón, pero deshabilitado, con un filtro grisáceo, el ícono del candado y una estrellita brillante.
 - Llamado a la acción (CTA): Al hacer clic en el componente bloqueado, en lugar de no hacer nada, debe abrir un modal hermoso que diga: "Para usar Multi-Caja necesitas el plan Gestión. [Mejorar mi plan ahora]".
+
 
 
 4. ¿Qué más falta? (Los 4 Pilares del SaaS)

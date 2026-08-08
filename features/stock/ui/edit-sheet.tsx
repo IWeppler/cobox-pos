@@ -56,6 +56,7 @@ import { ProductInventorySection } from "./create-product/product-inventory-sect
 import { ProductMediaSection } from "./create-product/product-media-section";
 import { ProductPriceSection } from "./create-product/product-price-section";
 import { ProductVariantsSection } from "./create-product/product-variants-section";
+import { ProductFiscalSection } from "./create-product/product-fiscal-section";
 import { ShareButton } from "@/shared/components/share-button";
 import {
   armarMensajeProducto,
@@ -674,6 +675,16 @@ function EditProductForm({
             pivotSelections={variantSelection.pivotSelections}
             onPivotChange={variantSelection.handlePivotChange}
             atributosExistentes={variantSelection.atributosExistentes}
+          />
+
+          {/* Colapsada. Mientras esté cerrada NO monta sus inputs, y la
+              action mira `has()`: corregir un precio no puede pisarle el
+              tratamiento de IVA a un producto. */}
+          <ProductFiscalSection
+            tratamientoActual={producto.tratamiento_iva}
+            unidadActual={producto.unidad_medida}
+            generoActual={producto.genero}
+            marcaActual={producto.marca}
           />
         </form>
       </div>

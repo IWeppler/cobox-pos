@@ -86,6 +86,14 @@ export interface Producto {
   /** Modelo oficial del fabricante (T4, rubro electro). Texto libre, mismo
    * patrón que `marca`. Nullable: en indumentaria no se usa. */
   modelo?: string | null;
+  /** Segmento en indumentaria (Mujer, Hombre, Unisex). Texto libre. */
+  genero?: string | null;
+  /** Tratamiento frente al IVA. Un solo campo dice alícuota Y condición —
+   * ver shared/lib/fiscal-producto.ts. Default en la base: GRAVADO_21. */
+  tratamiento_iva?: string | null;
+  /** Unidad semántica de venta. El código fiscal de ARCA se traduce desde
+   * esto cuando se conecte la facturación. Default en la base: UNIDAD. */
+  unidad_medida?: string | null;
   atributos_globales?: Record<string, string>;
   stock?: ProductoStock[];
   producto_variantes?: ProductoVariante[];

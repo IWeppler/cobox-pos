@@ -11,6 +11,10 @@ import { parseProductImages } from "@/features/stock/lib/stock-product-utils";
 import { obtenerAtributosRequeridosFaltantes } from "@/features/stock/lib/validate-required-atributos";
 import { subirImagenesProducto } from "@/features/stock/lib/subir-imagenes-producto";
 import { MAX_IMAGENES_PRODUCTO } from "@/shared/utils/limites-imagen";
+import {
+  normalizarTratamientoIva,
+  normalizarUnidadMedida,
+} from "@/shared/lib/fiscal-producto";
 
 type SupabaseServerClient = ReturnType<typeof createClient>;
 
@@ -125,11 +129,38 @@ export async function editarProductoAction(
     };
   }
 
+  // Identidad y datos fiscales: SOLO se pisan los que el formulario mandó.
+  // `has()` y no `get()` porque un campo ausente y uno vacío son cosas
+  // distintas — el bloque fiscal va colapsado y cuando está cerrado no monta
+  // sus inputs. Con `get()`, un producto al 10,5% volvería al default 21%
+  // cada vez que alguien le corrige el precio. Es el mismo error que borraba
+  // los datos fiscales de un cliente al guardar sin tocar el toggle.
+  const camposOpcionales: Record<string, string | null> = {};
+  if (formData.has("marca")) {
+    camposOpcionales.marca =
+      (formData.get("marca") as string)?.trim() || null;
+  }
+  if (formData.has("genero")) {
+    camposOpcionales.genero =
+      (formData.get("genero") as string)?.trim() || null;
+  }
+  if (formData.has("tratamiento_iva")) {
+    camposOpcionales.tratamiento_iva = normalizarTratamientoIva(
+      formData.get("tratamiento_iva"),
+    );
+  }
+  if (formData.has("unidad_medida")) {
+    camposOpcionales.unidad_medida = normalizarUnidadMedida(
+      formData.get("unidad_medida"),
+    );
+  }
+
   // (a) Imágenes + cabecera del producto — corre siempre, sin importar lo
   // que pase con las variantes.
   const imagenes = await actualizarImagenesYCabecera(supabase, {
     id,
     negocioId,
+    camposOpcionales,
     nombre,
     categoria_id,
     descripcion,
@@ -175,6 +206,8 @@ async function actualizarImagenesYCabecera(
     thumbnails: File[];
     grids: File[];
     imagenesAEliminar: string[];
+    /** Columnas de cabecera que solo se tocan si el form las mandó. */
+    camposOpcionales: Record<string, string | null>;
   },
 ): Promise<ImagenesResult> {
   const {
@@ -190,6 +223,7 @@ async function actualizarImagenesYCabecera(
     thumbnails,
     grids,
     imagenesAEliminar,
+    camposOpcionales,
   } = params;
 
   // Subir imágenes nuevas y mergear contra el imagen_url REAL en base. No
@@ -283,6 +317,9 @@ async function actualizarImagenesYCabecera(
     precio_costo,
     descripcion,
     publicado,
+    // Identidad y datos fiscales: solo los que el formulario mandó (ver
+    // `camposOpcionales` en editarProductoAction).
+    ...camposOpcionales,
   };
 
   if (imagen_url !== undefined) updateData.imagen_url = imagen_url;

@@ -4,6 +4,7 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
+import { requiereNotaCredito } from "@/shared/lib/facturacion";
 
 export async function anularVentaAction(
   ventaId: string,
@@ -28,7 +29,8 @@ export async function anularVentaAction(
         monto_cobrado,
         monto_pendiente,
         cliente_id,
-        ventas_items ( producto_id, variante, cantidad )
+        ventas_items ( producto_id, variante, cantidad ),
+        comprobantes ( tipo )
       `,
       )
       .eq("id", ventaId)
@@ -41,6 +43,28 @@ export async function anularVentaAction(
     // 2. Anulación lógica: preservamos ticket, items, pagos y relaciones contables.
     if (venta.estado_operacion === "ANULADA") {
       return { error: "La venta ya se encuentra anulada.", success: false };
+    }
+
+    // Una FACTURA emitida no se anula marcando la venta: se compensa con una
+    // nota de crédito, que es un comprobante propio y necesita su CAE. Como la
+    // emisión con ARCA todavía no existe, no hay forma de hacerlo bien — y
+    // dejar pasar la anulación dejaría una factura viva en ARCA contra una
+    // venta que el sistema da por anulada. Fail-closed: se frena.
+    //
+    // Con TICKET interno esto NUNCA se activa (requiereNotaCredito da false),
+    // así que para los negocios de hoy anular sigue funcionando igual. Es la
+    // red para el día que se prenda ARCA: quien implemente la emisión de la
+    // nota de crédito va a encontrar este freno y lo va a reemplazar por ella.
+    if (requiereNotaCredito(venta.comprobantes)) {
+      console.error("[ANULACION] Venta con factura emitida", {
+        ventaId,
+        comprobantes: venta.comprobantes,
+      });
+      return {
+        error:
+          "Esta venta tiene una factura emitida: hay que hacerle una nota de crédito en ARCA antes de anularla en el sistema.",
+        success: false,
+      };
     }
 
     // La devolución en efectivo sale de la caja abierta AHORA (no de la

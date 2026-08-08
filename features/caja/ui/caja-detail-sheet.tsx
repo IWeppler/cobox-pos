@@ -27,6 +27,7 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { getDetallesTurnoAction } from "../actions/caja-action";
+import { etiquetaTipoEgreso } from "../lib/tipo-egreso";
 
 interface CajaDetailSheetProps {
   turno: TurnoCajaHistorial | null;
@@ -150,7 +151,7 @@ export function CajaDetailSheet({
           id: e.id,
           tipo: "EGRESO",
           origen: "EGRESO",
-          concepto: `Gasto: ${e.concepto}`,
+          concepto: `${etiquetaTipoEgreso(e.tipo)}: ${e.concepto}`,
           metodo: "CAJA FÍSICA",
           metodo_tipo: "EFECTIVO",
           monto: Number(e.monto),

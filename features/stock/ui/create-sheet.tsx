@@ -17,6 +17,9 @@ import { ProductInventorySection } from "./create-product/product-inventory-sect
 import { ProductMediaSection } from "./create-product/product-media-section";
 import { ProductPriceSection } from "./create-product/product-price-section";
 import { ProductVariantsSection } from "./create-product/product-variants-section";
+import { ProductFiscalSection } from "./create-product/product-fiscal-section";
+import { defaultsFiscalesPorRubro } from "@/shared/lib/fiscal-producto";
+import type { Rubro } from "@/entities/config/types";
 
 interface CrearProductoSheetProps {
   /** Apertura controlada por el padre. Omitir = el sheet se maneja solo con
@@ -25,14 +28,19 @@ interface CrearProductoSheetProps {
   onOpenChange?: (open: boolean) => void;
   /** Para cuando el/los botón/es que abren el sheet viven en otro lado. */
   hideTrigger?: boolean;
+  /** Decide con qué unidad y alícuota nace el producto. Omitirlo cae al
+   * default general (unidad + 21%), igual que el server. */
+  rubro?: Rubro;
 }
 
 export function CrearProductoSheet({
   open,
   onOpenChange,
   hideTrigger = false,
+  rubro,
 }: Readonly<CrearProductoSheetProps> = {}) {
   const form = useCreateProductForm({ open, onOpenChange });
+  const defaultsFiscales = defaultsFiscalesPorRubro(rubro);
 
   return (
     <>
@@ -140,6 +148,10 @@ export function CrearProductoSheet({
                 onPivotChange={form.handlePivotChange}
                 atributosExistentes={form.atributosExistentes}
               />
+
+              {/* Última y colapsada: el alta típica no la abre nunca y el
+                  producto igual nace con los defaults del rubro. */}
+              <ProductFiscalSection defaults={defaultsFiscales} />
             </form>
           </div>
 

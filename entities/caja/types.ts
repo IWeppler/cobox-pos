@@ -144,9 +144,60 @@ export interface EgresoCaja {
   monto: number | string;
   concepto: string;
   fecha: string;
+  /** OPERATIVO | RETIRO_SOCIO | COMPRA_MERCADERIA. Opcional en el tipo porque
+   * hay consultas viejas que no la seleccionan; ausente se lee como
+   * OPERATIVO (ver normalizarTipoEgreso, fail-closed). */
+  tipo?: string | null;
+  /** Solo en COMPRA_MERCADERIA: el remito que originó el pago. */
+  orden_compra_id?: string | null;
   creado_por?: string | null;
   turno_caja_id?: string | null;
   perfiles?: {
     nombre?: string | null;
   } | null;
+}
+
+/**
+ * Posición de dinero: dónde está la plata AHORA, según lo registrado.
+ *
+ * Es derivada, no es un saldo bancario: la base no sabe de transferencias
+ * salientes, débitos automáticos ni de la plata que ya se sacó de la cuenta.
+ * Responde "cuánto entró y dónde debería estar" (ver RPC posicion_dinero).
+ */
+export interface CajaAbiertaPosicion {
+  turno_id: string;
+  vendedor: string;
+  desde: string;
+  inicial: number;
+  ingresos: number;
+  /** Todos los egresos del turno, del tipo que sean: los tres vacían el cajón. */
+  salidas: number;
+  esperado: number;
+}
+
+export interface CuentaPosicion {
+  metodo_nombre: string;
+  metodo_tipo: string;
+  cantidad: number;
+  bruto: number;
+  comision: number;
+  neto: number;
+  /** Solo en por_acreditar: cuándo cae el primero y el último. */
+  proxima?: string;
+  ultima?: string;
+}
+
+export interface PosicionDinero {
+  desde: string;
+  hasta: string;
+  generado_en: string;
+  efectivo: {
+    total: number;
+    turnos_abiertos: number;
+    /** Declarado en los turnos cerrados HOY: plata que ya se contó y salió. */
+    cerrado_hoy: number;
+    cajas: CajaAbiertaPosicion[];
+  };
+  por_acreditar: CuentaPosicion[];
+  acreditado: CuentaPosicion[];
 }

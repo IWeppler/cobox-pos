@@ -6,7 +6,7 @@ import {
 import {
   resolverRangoActual,
   resolverRangoAnterior,
-} from "./periodo-ranges";
+} from "@/shared/lib/periodo-ranges";
 import type { Venta } from "@/entities/ventas/types";
 
 const MIERCOLES = new Date(2026, 6, 22, 15, 0, 0); // miércoles 2026-07-22

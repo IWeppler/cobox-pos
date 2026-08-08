@@ -45,6 +45,12 @@ export async function getVentasAction(opts?: { soloPropias?: boolean }) {
           monto_descontado,
           promocion_nombre
         ),
+        comprobantes (
+          tipo,
+          punto_venta,
+          numero,
+          cae
+        ),
         venta_pagos (
           metodo_nombre,
           metodo_tipo,

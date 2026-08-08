@@ -10,10 +10,77 @@ import {
   RecargoMoraConfig,
 } from "@/features/clients/lib/calcular-saldo-con-recargo";
 import { calcularFechaVencimiento } from "@/features/clients/lib/calcular-fecha-vencimiento";
+import { esCuitValido, normalizarCuit } from "@/shared/lib/cuit";
 
 interface ClientActionState {
   error: string | null;
   success: boolean;
+}
+
+/**
+ * Datos fiscales listos para guardar, o el error que hay que mostrar.
+ *
+ * Vive acá y lo comparten alta y edición porque tenían la validación
+ * duplicada y ya habían empezado a divergir. Dos reglas:
+ *
+ *  - Si el cliente NO es fiscal, todo lo fiscal va a null. Es lo que ya hacían
+ *    las dos actions; queda explícito para que se vea que es a propósito
+ *    (apagar el toggle borra los datos fiscales) y no un olvido.
+ *  - El CUIT se valida por dígito verificador. Es la validación que se puede
+ *    hacer sin ARCA y atrapa el error real: un número mal tipeado. Se guarda
+ *    normalizado (solo dígitos) para que "30-712..." y "30712..." no entren
+ *    como dos clientes distintos y el índice único sirva de algo.
+ */
+function resolverDatosFiscales(formData: FormData):
+  | { error: string; datos?: undefined }
+  | { error?: undefined; datos: Record<string, string | null> } {
+  const esFiscal = formData.get("es_fiscal") === "true";
+  const texto = (clave: string) =>
+    ((formData.get(clave) as string | null) ?? "").trim() || null;
+
+  if (!esFiscal) {
+    return {
+      datos: {
+        cuit: null,
+        razon_social: null,
+        condicion_iva: null,
+        direccion: null,
+        localidad: null,
+        provincia: null,
+        codigo_postal: null,
+      },
+    };
+  }
+
+  const cuit = normalizarCuit(formData.get("cuit"));
+  const razonSocial = texto("razon_social");
+  const condicionIva = texto("condicion_iva");
+
+  if (!cuit || !razonSocial || !condicionIva) {
+    return {
+      error:
+        "El CUIT, la Razón Social y la Condición de IVA son obligatorios para clientes fiscales.",
+    };
+  }
+
+  if (!esCuitValido(cuit)) {
+    return {
+      error:
+        "El CUIT no es válido: revisá los números. Tiene que tener 11 dígitos y el dígito verificador correcto.",
+    };
+  }
+
+  return {
+    datos: {
+      cuit,
+      razon_social: razonSocial,
+      condicion_iva: condicionIva,
+      direccion: texto("direccion"),
+      localidad: texto("localidad"),
+      provincia: texto("provincia"),
+      codigo_postal: texto("codigo_postal"),
+    },
+  };
 }
 
 /** Lo mínimo que necesita el selector del POS para dejar el cliente elegido. */
@@ -305,22 +372,17 @@ export async function crearClienteAction(
   const email = formData.get("email") as string;
   const dni = formData.get("dni") as string;
   const notas = formData.get("notas") as string;
-  
+  // Dirección de contacto/entrega: existe para cualquier cliente, tenga o no
+  // datos fiscales. Es distinta del domicilio fiscal, que va en la factura.
+  const direccionComercial =
+    ((formData.get("direccion_comercial") as string | null) ?? "").trim() ||
+    null;
+
   // Datos operativos
   const fechaVencimientoDeuda =
     (formData.get("fecha_vencimiento_deuda") as string) || null;
   const exceptuadoEntregaMinima =
     formData.get("exceptuado_entrega_minima") === "on";
-
-  // Datos Fiscales
-  const esFiscal = formData.get("es_fiscal") === "true";
-  const cuit = formData.get("cuit") as string;
-  const razonSocial = formData.get("razon_social") as string;
-  const condicionIva = formData.get("condicion_iva") as string;
-  const direccion = formData.get("direccion") as string;
-  const localidad = formData.get("localidad") as string;
-  const provincia = formData.get("provincia") as string;
-  const codigoPostal = formData.get("codigo_postal") as string;
 
   if (!nombre || !telefono) {
     return {
@@ -329,12 +391,9 @@ export async function crearClienteAction(
     };
   }
 
-  // Validación backend extra por seguridad
-  if (esFiscal && (!cuit || !razonSocial || !condicionIva)) {
-    return {
-      error: "El CUIT, la Razón Social y la Condición de IVA son obligatorios para clientes fiscales.",
-      success: false,
-    };
+  const fiscal = resolverDatosFiscales(formData);
+  if (fiscal.error) {
+    return { error: fiscal.error, success: false };
   }
 
   const cookieStore = await cookies();
@@ -348,17 +407,11 @@ export async function crearClienteAction(
       email: email || null,
       dni: dni || null,
       notas: notas || null,
+      direccion_comercial: direccionComercial,
       activo: true,
       exceptuado_entrega_minima: exceptuadoEntregaMinima,
       fecha_vencimiento_deuda: fechaVencimientoDeuda,
-      // Insertamos los fiscales solo si aplica, sino forzamos null
-      cuit: esFiscal ? cuit : null,
-      razon_social: esFiscal ? razonSocial : null,
-      condicion_iva: esFiscal ? condicionIva : null,
-      direccion: esFiscal ? direccion || null : null,
-      localidad: esFiscal ? localidad || null : null,
-      provincia: esFiscal ? provincia || null : null,
-      codigo_postal: esFiscal ? codigoPostal || null : null,
+      ...fiscal.datos,
     })
     // El POS necesita el cliente recién creado para dejarlo seleccionado en el
     // ticket sin volver a consultar la lista entera.
@@ -392,32 +445,23 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
   const dni = formData.get("dni") as string;
   const email = formData.get("email") as string;
   const notas = formData.get("notas") as string;
-  
+  const direccionComercial =
+    ((formData.get("direccion_comercial") as string | null) ?? "").trim() ||
+    null;
+
   // Datos operativos
   const fechaVencimientoDeuda =
     (formData.get("fecha_vencimiento_deuda") as string) || null;
   const exceptuadoEditable =
     formData.get("exceptuado_entrega_minima_editable") === "1";
 
-  // Datos Fiscales
-  const esFiscal = formData.get("es_fiscal") === "true";
-  const cuit = formData.get("cuit") as string;
-  const razonSocial = formData.get("razon_social") as string;
-  const condicionIva = formData.get("condicion_iva") as string;
-  const direccion = formData.get("direccion") as string;
-  const localidad = formData.get("localidad") as string;
-  const provincia = formData.get("provincia") as string;
-  const codigoPostal = formData.get("codigo_postal") as string;
-
   if (!nombre || !clienteId) {
     return { error: "El nombre es obligatorio.", success: false };
   }
 
-  if (esFiscal && (!cuit || !razonSocial || !condicionIva)) {
-    return {
-      error: "El CUIT, la Razón Social y la Condición de IVA son obligatorios para clientes fiscales.",
-      success: false,
-    };
+  const fiscal = resolverDatosFiscales(formData);
+  if (fiscal.error) {
+    return { error: fiscal.error, success: false };
   }
 
   const cookieStore = await cookies();
@@ -429,15 +473,9 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
     dni: dni || null,
     email: email || null,
     notas: notas || null,
+    direccion_comercial: direccionComercial,
     fecha_vencimiento_deuda: fechaVencimientoDeuda,
-    // Actualizamos campos fiscales
-    cuit: esFiscal ? cuit : null,
-    razon_social: esFiscal ? razonSocial : null,
-    condicion_iva: esFiscal ? condicionIva : null,
-    direccion: esFiscal ? direccion || null : null,
-    localidad: esFiscal ? localidad || null : null,
-    provincia: esFiscal ? provincia || null : null,
-    codigo_postal: esFiscal ? codigoPostal || null : null,
+    ...fiscal.datos,
   };
 
   if (exceptuadoEditable) {
@@ -452,6 +490,15 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
 
   if (error) {
     console.error("Error actualizando cliente:", error);
+    // 23505 = choque con clientes_negocio_cuit_unico_idx / _dni_unico_idx.
+    // El alta ya lo traducía; la edición no, y desde que los índices existen
+    // también puede chocar (editar un cliente para ponerle el CUIT de otro).
+    if (error.code === "23505") {
+      return {
+        error: "Ya existe otro cliente con ese DNI o CUIT.",
+        success: false,
+      };
+    }
     return { error: "Error al actualizar el cliente.", success: false };
   }
 

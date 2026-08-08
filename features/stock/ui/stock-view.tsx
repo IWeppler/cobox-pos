@@ -400,6 +400,7 @@ export function StockView({
         <BarraSeleccion seleccion={seleccion} ctx={ctxSeleccion} />
       ) : (
       <StockFiltersToolbar
+        rubro={rubro}
         view={view}
         onViewChange={setView}
         searchQuery={searchQuery}

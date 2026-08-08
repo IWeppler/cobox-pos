@@ -7,6 +7,7 @@ import { CreateSalePaymentInput } from "@/entities/ventas/types";
 import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
 import { calcularFechaVencimiento } from "@/features/clients/lib/calcular-fecha-vencimiento";
 import { calcularPagosConRecargo } from "@/shared/lib/recargo-metodo";
+import { emitirComprobante } from "../lib/emitir-comprobante";
 
 export async function registrarVentaAction(
   prevState: { error: string | null; success: boolean },
@@ -316,10 +317,21 @@ export async function registrarVentaAction(
   const { data: configVenta } = await supabase
     .from("configuracion_pos")
     .select(
-      "permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante, cc_recargo_default",
+      // Las 4 últimas son para el comprobante del paso 11. Viajan en esta
+      // consulta y no en una propia: es la misma fila y ya la estamos trayendo.
+      "permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante, cc_recargo_default, modo_facturacion, comprobante_defecto, condicion_iva, punto_venta",
     )
     .single();
   const permitirVentaSinStock = configVenta?.permitir_venta_sin_stock ?? false;
+
+  const configComprobante = configVenta
+    ? {
+        modo_facturacion: configVenta.modo_facturacion,
+        comprobante_defecto: configVenta.comprobante_defecto,
+        condicion_iva: configVenta.condicion_iva,
+        punto_venta: configVenta.punto_venta,
+      }
+    : null;
 
   const subtotalConDescuento = Math.max(
     0,
@@ -811,6 +823,60 @@ export async function registrarVentaAction(
       console.error("Error al confirmar reservas de la venta:", reservaError);
   }
 
+  // --- 11. EMITIR EL COMPROBANTE ---
+  // Va último y NO puede voltear la venta: a esta altura la plata ya se cobró
+  // y el stock ya se descontó. Ver el comentario largo en emitir-comprobante.ts
+  // — con TICKET interno, dejar la venta sin comprobante es menos grave que
+  // hacer rebotar una venta que ya ocurrió en el mostrador. Cuando ARCA emita
+  // de verdad esto se invierte: el CAE hay que pedirlo ANTES de cerrar.
+  //
+  // Los datos del receptor se leen recién acá y se copian a la fila: el
+  // comprobante los congela, así que no se puede depender de un join contra
+  // `clientes` que mañana devuelva otra cosa.
+  let receptor = null;
+  if (clienteId) {
+    const { data: clienteFiscal } = await supabase
+      .from("clientes")
+      .select("nombre, razon_social, cuit, condicion_iva")
+      .eq("id", clienteId)
+      .maybeSingle();
+
+    receptor = {
+      cliente_id: clienteId,
+      // La razón social es el dato fiscal; el nombre de fantasía es el
+      // fallback para que el comprobante no salga sin receptor cuando el
+      // cliente existe pero nunca cargó sus datos de facturación.
+      receptor_razon_social:
+        clienteFiscal?.razon_social || clienteFiscal?.nombre || null,
+      receptor_cuit: clienteFiscal?.cuit ?? null,
+      receptor_condicion_iva: clienteFiscal?.condicion_iva ?? null,
+    };
+  }
+
+  const comprobante = await emitirComprobante(supabase, {
+    ventaId: nuevaVenta.id,
+    config: configComprobante,
+    receptor,
+    // El mismo número que `ventas.total`, recargos incluidos: si difirieran,
+    // el comprobante diría una cosa y el ticket otra.
+    total: totalConRecargoMetodo,
+    emitidoPor: user.id,
+  });
+
   revalidatePath("/", "layout");
-  return { error: null, success: true, ventaId: nuevaVenta.id };
+  return {
+    error: null,
+    success: true,
+    ventaId: nuevaVenta.id,
+    // Viaja al POS para imprimirlo en el ticket sin una consulta extra. Va
+    // null si la emisión falló: el ticket cae al identificador de la venta,
+    // que es lo que mostraba antes de que existieran los comprobantes.
+    comprobante: comprobante.ok
+      ? {
+          tipo: comprobante.tipo,
+          puntoVenta: comprobante.puntoVenta,
+          numero: comprobante.numero,
+        }
+      : null,
+  };
 }

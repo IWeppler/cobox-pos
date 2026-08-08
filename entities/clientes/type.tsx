@@ -13,11 +13,15 @@ export interface Cliente {
   telefono: string;
   email?: string | null;
   dni?: string | null; // Útil para Facturas B grandes a Consumidor Final
+  /** Dirección de contacto/entrega. Existe para cualquier cliente, tenga o no
+   * datos fiscales — es distinta del domicilio fiscal (`direccion`). */
+  direccion_comercial?: string | null;
 
   // --- DATOS FISCALES ---
   razon_social?: string | null;
   cuit?: string | null;
   condicion_iva?: CondicionIVA | null;
+  /** Domicilio fiscal: el que va impreso en la factura. */
   direccion?: string | null;
   provincia?: string | null;
   localidad?: string | null;

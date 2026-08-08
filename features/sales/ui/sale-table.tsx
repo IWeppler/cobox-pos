@@ -25,6 +25,7 @@ import { AnularVentaModal } from "./cancel-sale-modal";
 import { Button } from "@/shared/ui/button";
 import { TicketSheet } from "./ticket-sheet";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
+import { formatearNumeroComprobante } from "@/shared/lib/facturacion";
 import { SaleTableHeader } from "./sale-table-header";
 
 const ITEMS_POR_PAGINA = 10;
@@ -242,7 +243,15 @@ export function VentasTable({
       ),
       total: venta.total,
       metodoPago: getPagoLabel(venta),
-      nroRecibo: venta.id.split("-")[0].toUpperCase(),
+      // Las ventas anteriores a los comprobantes no tienen ninguno, y las que
+      // fallaron al emitir tampoco: ahí se reimprime el identificador de la
+      // venta, igual que siempre. Se toma el comprobante de emisión (el
+      // primero), no una nota de crédito posterior.
+      nroRecibo:
+        formatearNumeroComprobante(
+          venta.comprobantes?.[0]?.punto_venta,
+          venta.comprobantes?.[0]?.numero,
+        ) ?? venta.id.split("-")[0].toUpperCase(),
       fecha: formatearFechaHora(venta.fecha_venta),
       vendedor: getSupabaseRelation(venta.perfiles)?.nombre || "Administrador",
       descuentoMonto: descuento

@@ -11,6 +11,8 @@ import {
   getResumenGerencialAction,
   getTotalesPorTurnoAction,
 } from "@/features/caja/actions/get-resumen-gerencial";
+import { getPosicionDineroAction } from "@/features/caja/actions/get-posicion-dinero";
+import { PosicionDinero } from "@/features/caja/ui/posicion-dinero";
 import {
   TurnoCajaHistorial,
   VentaCaja,
@@ -19,6 +21,11 @@ import {
 import { VentaPago } from "@/entities/ventas/types";
 
 export const dynamic = "force-dynamic";
+
+/** Con qué período abre la pestaña Dinero. El mes es la unidad en la que la
+ * dueña piensa los gastos fijos; el server y el cliente tienen que arrancar
+ * con el MISMO valor o la etiqueta diría un período y el número sería otro. */
+const PERIODO_INICIAL_DINERO = "mes" as const;
 
 export default async function CajaPage() {
   const cookieStore = await cookies();
@@ -116,7 +123,7 @@ export default async function CajaPage() {
       supabase
         .from("egresos")
         .select(
-          "id, concepto, monto, fecha, creado_por, turno_caja_id, perfiles(nombre)",
+          "id, concepto, monto, fecha, tipo, orden_compra_id, creado_por, turno_caja_id, perfiles(nombre)",
         )
         .eq("turno_caja_id", turnoPropio.id)
         .order("fecha", { ascending: false }),
@@ -141,12 +148,13 @@ export default async function CajaPage() {
   // esto es lo que decide si se renderiza, no lo que protege el dato.
   const puedeVerGerencial = await puedeVerVistaGerencialAction();
 
-  const [resumenGerencial, detalleMedios] = puedeVerGerencial
+  const [resumenGerencial, detalleMedios, posicion] = puedeVerGerencial
     ? await Promise.all([
         getResumenGerencialAction(),
         getDetalleMediosPagoAction(),
+        getPosicionDineroAction(PERIODO_INICIAL_DINERO),
       ])
-    : [null, null];
+    : [null, null, null];
 
   // 8. ¿Esta persona opera caja, o solo mira números? No hay un flag para
   // esto: se deduce de si tiene un turno propio abierto o abrió alguno en el
@@ -166,7 +174,7 @@ export default async function CajaPage() {
     <div className="space-y-6 mx-auto pb-12 p-4">
       <CajaVistas
         esCajera={esCajera}
-        vistaInicial={tieneTurnoPropioAbierto ? "mi-turno" : "general"}
+        vistaInicial={tieneTurnoPropioAbierto ? "hoy" : "dinero"}
         miTurno={
           <CajaDashboard
             turnosAbiertos={turnosAbiertos}
@@ -179,7 +187,7 @@ export default async function CajaPage() {
             userId={user.id}
           />
         }
-        general={
+        resumenHoy={
           resumenGerencial?.data ? (
             <VistaGerencial
               resumen={resumenGerencial.data}
@@ -187,12 +195,20 @@ export default async function CajaPage() {
             />
           ) : undefined
         }
-      />
-
-      {/* Fuera del toggle: el historial es útil en las dos vistas. */}
-      <CajaHistoryTable
-        historial={turnos}
-        totalesPorTurno={totalesPorTurno ?? undefined}
+        dinero={
+          posicion?.data ? (
+            <PosicionDinero
+              posicionInicial={posicion.data}
+              periodoInicial={PERIODO_INICIAL_DINERO}
+            />
+          ) : undefined
+        }
+        historial={
+          <CajaHistoryTable
+            historial={turnos}
+            totalesPorTurno={totalesPorTurno ?? undefined}
+          />
+        }
       />
     </div>
   );

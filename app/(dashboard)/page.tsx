@@ -14,7 +14,7 @@ import {
   calcularCrecimiento,
   ETIQUETA_PERIODO_ANTERIOR,
   type PeriodoPanel,
-} from "@/features/dashboard/lib/periodo-ranges";
+} from "@/shared/lib/periodo-ranges";
 import {
   construirSerieComparada,
   granularidadPara,
@@ -29,7 +29,7 @@ import {
   detectarProximaTemporada,
 } from "@/features/dashboard/lib/detectar-estacionalidad";
 import { resolverCategoriaDisplayLabel } from "@/shared/utils/category-tree";
-import { PanelPeriodoSelector } from "@/features/dashboard/ui/panel-periodo-selector";
+import { PeriodoSelector } from "@/shared/components/periodo-selector";
 import { IngresosAreaChart } from "@/features/dashboard/ui/ingresos-area-chart";
 import { KpiMiniCard } from "@/features/dashboard/ui/kpi-mini-card";
 import { GrowthBadge } from "@/features/dashboard/ui/growth-badge";
@@ -111,7 +111,7 @@ export default async function DashboardPage({
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
-    supabase.from("egresos").select("id, concepto, monto, fecha"),
+    supabase.from("egresos").select("id, concepto, monto, fecha, tipo, orden_compra_id"),
     supabase
       .from("bajas")
       .select("id, producto_id, cantidad, creado_en, estado"),
@@ -340,7 +340,7 @@ export default async function DashboardPage({
               }).format(hoy)}
             </p>
           </div>
-          <PanelPeriodoSelector periodo={periodo} />
+          <PeriodoSelector periodo={periodo} ariaLabel="Período del panel" />
         </div>
 
         {/* ACCIONES — solo mobile: en desktop el POS está siempre a la vista en

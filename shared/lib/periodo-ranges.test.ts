@@ -4,7 +4,7 @@ import {
   resolverRangoAnterior,
   resolverRangoRanking,
   calcularCrecimiento,
-} from "./periodo-ranges";
+} from "@/shared/lib/periodo-ranges";
 
 // Miércoles 2026-07-22 12:00 — día de semana fijo para que los tests no
 // dependan de qué día se corran.

@@ -21,6 +21,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { abrirTurnoAction, cerrarTurnoAction } from "../actions/caja-action";
+import { etiquetaTipoEgreso } from "../lib/tipo-egreso";
 import { useCajaStatusStore } from "@/shared/store/caja-status-store";
 import { toast } from "sonner";
 import {
@@ -219,7 +220,7 @@ export function CajaDashboard({
       id: e.id,
       tipo: "EGRESO",
       origen: "EGRESO",
-      concepto: `Gasto: ${e.concepto}`,
+      concepto: `${etiquetaTipoEgreso(e.tipo)}: ${e.concepto}`,
       metodo: "CAJA FISICA",
       metodo_tipo: "EFECTIVO",
       monto: Number(e.monto),

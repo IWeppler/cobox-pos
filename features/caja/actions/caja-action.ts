@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { CajaActionState } from "@/entities/caja/types";
 import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
+import { normalizarTipoEgreso } from "@/features/caja/lib/tipo-egreso";
 
 // ============================================================================
 // 2. ABRIR TURNO SEGÚN MODO
@@ -218,7 +219,7 @@ export async function getDetallesTurnoAction(turnoId: string) {
         .order("creado_en", { ascending: false }),
       supabase
         .from("egresos")
-        .select("id, concepto, monto, fecha, perfiles(nombre)")
+        .select("id, concepto, monto, fecha, tipo, orden_compra_id, perfiles(nombre)")
         .eq("turno_caja_id", turnoId)
         .order("fecha", { ascending: false }),
     ]);
@@ -248,9 +249,19 @@ export async function registrarEgresoAction(
 ) {
   const concepto = formData.get("concepto") as string;
   const monto = Number(formData.get("monto"));
+  const tipo = normalizarTipoEgreso(formData.get("tipo"));
+  const ordenCompraId = (formData.get("orden_compra_id") as string) || null;
 
   if (!concepto || !monto || monto <= 0) {
     return { error: "Ingresa un concepto y un monto válido.", success: false };
+  }
+  // Espejo del CHECK de la base: un retiro colgado de un remito no tiene
+  // sentido y la base lo rechazaría con un error feo.
+  if (ordenCompraId && tipo !== "COMPRA_MERCADERIA") {
+    return {
+      error: "Solo una compra de mercadería puede asociarse a un remito.",
+      success: false,
+    };
   }
 
   const cookieStore = await cookies();
@@ -279,6 +290,8 @@ export async function registrarEgresoAction(
   const { error } = await supabase.from("egresos").insert({
     concepto,
     monto,
+    tipo,
+    orden_compra_id: tipo === "COMPRA_MERCADERIA" ? ordenCompraId : null,
     creado_por: user.id,
     turno_caja_id: turnoId,
   });

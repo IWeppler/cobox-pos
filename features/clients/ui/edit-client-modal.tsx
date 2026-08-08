@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useState, useEffect, useTransition } from "react";
+import { FormEvent, useState, useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Edit2, Loader2, Search, Building2 } from "lucide-react";
+import { Edit2, Loader2, Building2 } from "lucide-react";
 import { toast } from "sonner";
+import { errorDeCuit } from "@/shared/lib/cuit";
 import {
   Dialog,
   DialogContent,
@@ -43,14 +44,26 @@ export function EditClientModal({
 
   // Estados para datos fiscales
   const [isFiscal, setIsFiscal] = useState(false);
-  const [isSearchingAfip, setIsSearchingAfip] = useState(false);
+  const [cuit, setCuit] = useState("");
+  const [cuitTocado, setCuitTocado] = useState(false);
 
-  // Inicializar el switch fiscal si el cliente ya tiene un CUIT guardado
-  useEffect(() => {
-    if (cliente) {
-      setIsFiscal(!!cliente.cuit);
-    }
-  }, [cliente]);
+  const errorCuit = cuitTocado ? errorDeCuit(cuit) : null;
+
+  // El switch y el CUIT se siembran desde el cliente que se abre. Es
+  // importante que el switch salga de `cuit`: si arrancara en false, guardar
+  // sin tocar el toggle mandaría es_fiscal=false y la action le borraría al
+  // cliente TODOS sus datos fiscales sin avisar.
+  //
+  // Se hace durante el render y no en un useEffect (patrón "adjusting state
+  // when props change" de React): con el efecto había un render intermedio en
+  // el que el modal ya mostraba al cliente nuevo con el CUIT del anterior.
+  const [clienteSembrado, setClienteSembrado] = useState<string | undefined>();
+  if (cliente && cliente.id !== clienteSembrado) {
+    setClienteSembrado(cliente.id);
+    setIsFiscal(!!cliente.cuit);
+    setCuit(cliente.cuit || "");
+    setCuitTocado(false);
+  }
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -70,14 +83,6 @@ export function EditClientModal({
         toast.error(result.error);
       }
     });
-  };
-
-  const handleBuscarAFIP = () => {
-    setIsSearchingAfip(true);
-    setTimeout(() => {
-      setIsSearchingAfip(false);
-      toast.info("Próximamente: Autocompletado con ARCA");
-    }, 1000);
   };
 
   return (
@@ -148,6 +153,24 @@ export function EditClientModal({
                   className="h-10 shadow-none"
                 />
               </div>
+
+              {/* Dirección de contacto/entrega, independiente del toggle
+                  fiscal. El domicilio fiscal es otro campo, más abajo. */}
+              <div className="space-y-2 sm:col-span-2">
+                <Label
+                  htmlFor="edit-direccion-comercial"
+                  className="text-sm font-medium"
+                >
+                  Dirección (Opcional)
+                </Label>
+                <Input
+                  id="edit-direccion-comercial"
+                  name="direccion_comercial"
+                  defaultValue={cliente.direccion_comercial || ""}
+                  placeholder="Ej: Belgrano 450, Tostado"
+                  className="h-10 shadow-none"
+                />
+              </div>
             </div>
 
             {/* ==========================================
@@ -183,25 +206,27 @@ export function EditClientModal({
                     <Label htmlFor="edit-cuit" className="text-sm font-medium">
                       CUIT <span className="text-danger">*</span>
                     </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="edit-cuit"
-                        name="cuit"
-                        defaultValue={cliente.cuit || ""}
-                        required={isFiscal}
-                        className="h-10 shadow-none font-mono"
-                      />
-                      <Button 
-                        type="button" 
-                        variant="secondary" 
-                        onClick={handleBuscarAFIP}
-                        disabled={isSearchingAfip}
-                        className="shrink-0"
-                      >
-                        {isSearchingAfip ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
-                        {isSearchingAfip ? "" : "Buscar en ARCA"}
-                      </Button>
-                    </div>
+                    <Input
+                      id="edit-cuit"
+                      name="cuit"
+                      inputMode="numeric"
+                      value={cuit}
+                      onChange={(e) => setCuit(e.target.value)}
+                      onBlur={() => setCuitTocado(true)}
+                      required={isFiscal}
+                      aria-invalid={Boolean(errorCuit)}
+                      aria-describedby="edit-cuit-ayuda"
+                      className={`h-10 shadow-none font-mono ${
+                        errorCuit ? "border-danger focus-visible:ring-danger" : ""
+                      }`}
+                    />
+                    <p
+                      id="edit-cuit-ayuda"
+                      className={`text-[10px] ${errorCuit ? "text-danger" : "text-muted-foreground"}`}
+                    >
+                      {errorCuit ??
+                        "Con o sin guiones. Se verifica el dígito verificador."}
+                    </p>
                   </div>
 
                   <div className="space-y-2">

@@ -25,8 +25,8 @@ import {
   SelectValue,
 } from "@/shared/ui/select";
 import { DatePickerAR } from "@/shared/components/date-picker-ar";
-import { Loader2, UserPlus, Search, Building2 } from "lucide-react";
-import { toast } from "sonner";
+import { Loader2, UserPlus, Building2 } from "lucide-react";
+import { errorDeCuit } from "@/shared/lib/cuit";
 
 interface CreateClientDialogProps {
   open?: boolean;
@@ -52,17 +52,13 @@ export function CreateClientDialog({
 }: Readonly<CreateClientDialogProps>) {
   // Estado para la revelación progresiva de los datos fiscales
   const [isFiscal, setIsFiscal] = useState(false);
-  const [isSearchingAfip, setIsSearchingAfip] = useState(false);
+  const [cuit, setCuit] = useState("");
 
-  // Función simulada para el futuro autocompletado con AFIP
-  const handleBuscarAFIP = () => {
-    setIsSearchingAfip(true);
-    // Aquí irá tu lógica de fetch a tu backend que consulta afip.js
-    setTimeout(() => {
-      setIsSearchingAfip(false);
-      toast.info("Próximamente: Autocompletado con ARCA");
-    }, 1000);
-  };
+  // Se valida mientras se tipea, pero el error recién se muestra cuando el
+  // campo perdió el foco: marcar en rojo el primer dígito de un CUIT a medio
+  // escribir es ruido, no ayuda.
+  const [cuitTocado, setCuitTocado] = useState(false);
+  const errorCuit = cuitTocado ? errorDeCuit(cuit) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -140,6 +136,22 @@ export function CreateClientDialog({
                 className="h-10 shadow-none"
               />
             </div>
+
+            {/* Dirección de contacto/entrega. No depende del toggle fiscal:
+                un cliente al que le mandás mercadería necesita dirección
+                aunque nunca le factures. El domicilio fiscal es otro campo,
+                dentro del bloque de abajo. */}
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="direccion_comercial" className="text-sm font-medium">
+                Dirección (Opcional)
+              </Label>
+              <Input
+                id="direccion_comercial"
+                name="direccion_comercial"
+                placeholder="Ej: Belgrano 450, Tostado"
+                className="h-10 shadow-none"
+              />
+            </div>
           </div>
 
           {/* ==========================================
@@ -179,36 +191,32 @@ export function CreateClientDialog({
           {isFiscal && (
             <div className="space-y-4 animate-in slide-in-from-top-2 fade-in duration-200">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Búsqueda CUIT */}
+                {/* CUIT */}
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="cuit" className="text-sm font-medium">
                     CUIT <span className="text-danger">*</span>
                   </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="cuit"
-                      name="cuit"
-                      placeholder="Ej: 30712345678"
-                      required={isFiscal}
-                      className="h-10 shadow-none font-mono"
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={handleBuscarAFIP}
-                      disabled={isSearchingAfip}
-                      className="shrink-0"
-                    >
-                      {isSearchingAfip ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Search className="w-4 h-4 mr-2" />
-                      )}
-                      {isSearchingAfip ? "" : "Buscar en ARCA"}
-                    </Button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    Ingresá el CUIT sin guiones para autocompletar los datos.
+                  <Input
+                    id="cuit"
+                    name="cuit"
+                    inputMode="numeric"
+                    placeholder="Ej: 30712345678"
+                    required={isFiscal}
+                    value={cuit}
+                    onChange={(e) => setCuit(e.target.value)}
+                    onBlur={() => setCuitTocado(true)}
+                    aria-invalid={Boolean(errorCuit)}
+                    aria-describedby="cuit-ayuda"
+                    className={`h-10 shadow-none font-mono ${
+                      errorCuit ? "border-danger focus-visible:ring-danger" : ""
+                    }`}
+                  />
+                  <p
+                    id="cuit-ayuda"
+                    className={`text-[10px] ${errorCuit ? "text-danger" : "text-muted-foreground"}`}
+                  >
+                    {errorCuit ??
+                      "Con o sin guiones. Se verifica el dígito verificador."}
                   </p>
                 </div>
 

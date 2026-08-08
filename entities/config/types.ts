@@ -1,3 +1,5 @@
+import type { ModoFacturacion, TipoComprobante } from "@/shared/lib/facturacion";
+
 export type RecargoMoraTipo = "NINGUNO" | "MONTO_FIJO" | "PORCENTAJE";
 
 /** Rubro del comercio. Decide qué columnas muestra Inventario: indumentaria
@@ -76,4 +78,12 @@ export interface ConfiguracionPOS {
 
   // Rubro del comercio (T4) — default 'indumentaria' en la BD
   rubro?: Rubro;
+
+  // Facturación. Los valores y sus reglas viven en
+  // features/ticket/lib/facturacion.ts: `comprobante_defecto` solo puede ser
+  // una factura si `modo_facturacion` es ARCA, y eso lo frena un CHECK.
+  modo_facturacion?: ModoFacturacion;
+  comprobante_defecto?: TipoComprobante;
+  /** Punto de venta de ARCA. null = todavía no dado de alta. */
+  punto_venta?: number | null;
 }

@@ -154,7 +154,7 @@ export function SettingsManager({
       case "ticketConfig":
         // El ticket se configura sobre la misma configuracion_pos del
         // comercio: no hay una fuente de datos aparte que pasarle.
-        return <TicketPanel config={config} />;
+        return <TicketPanel config={config} puedeEditar={isAdmin} />;
       case "empleados":
         return (
           <EmpleadosPanel

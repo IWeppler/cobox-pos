@@ -129,9 +129,11 @@ export function ResumenTab({
                   </TooltipTrigger>
                   <TooltipContent className="max-w-[250px] text-xs bg-foreground text-background border-border">
                     <p>
-                      Ganancia Bruta menos los Egresos cargados en la caja
-                      (fletes, insumos, etc). Es tu ganancia neta estimada en
-                      este período.
+                      Ganancia Bruta menos los gastos operativos cargados en la
+                      caja (fletes, insumos, etc). Los retiros de dueño y las
+                      compras de mercadería NO restan acá: el primero es la
+                      ganancia ya hecha y el segundo ya viene contado en el
+                      costo de lo vendido.
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -149,7 +151,7 @@ export function ResumenTab({
                   {formatearMoneda(metrics.gananciaNeta)} -{" "}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {"  "}Ganancia bruta menos egresos.
+                  {"  "}Ganancia bruta menos gastos operativos.
                 </p>
               </div>
             </CardContent>

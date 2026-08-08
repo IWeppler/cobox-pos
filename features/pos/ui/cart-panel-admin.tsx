@@ -23,6 +23,7 @@ import { crearReservaAction } from "@/features/reservations/actions/manage-reser
 import { TicketSheet } from "@/features/sales/ui/ticket-sheet";
 import { TicketData, CreateSalePaymentInput } from "@/entities/ventas/types";
 import { ConfiguracionPOS } from "@/entities/config/types";
+import { formatearNumeroComprobante } from "@/shared/lib/facturacion";
 import { MetodoPago } from "@/entities/payments/types";
 import { CartSidebarFooter } from "../../../shared/components/cart-sidebar/cart-sidebar-footer";
 import { CartSidebarHeader } from "../../../shared/components/cart-sidebar/cart-sidebar-header";
@@ -638,7 +639,15 @@ export function CartPanelAdmin({
             : metodosPagoDB.find((m) => m.id === pagosToSubmit[0]?.metodoPagoId)
                 ?.nombre || "Efectivo";
 
-        const idReal = result.ventaId.split("-")[0].toUpperCase();
+        // El correlativo emitido es el número real del comprobante. Si la
+        // emisión falló, el ticket cae al identificador de la venta — que es
+        // lo que se imprimía antes de que existieran los comprobantes, así
+        // que la vendedora nunca se queda sin nada que decirle al cliente.
+        const idReal =
+          formatearNumeroComprobante(
+            result.comprobante?.puntoVenta,
+            result.comprobante?.numero,
+          ) ?? result.ventaId.split("-")[0].toUpperCase();
         const montoPendiente = isCuentaCorriente
           ? Math.max(0, totalFinal - montoRealAsignado)
           : 0;

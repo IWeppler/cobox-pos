@@ -147,6 +147,14 @@ export function resolverRangoRanking(
 }
 
 /** Cómo se nombra el período de comparación en la UI (KPIs y chart). */
+/** Cómo se nombra el período en una frase ("acreditado {este mes}"). */
+export const ETIQUETA_PERIODO: Record<PeriodoPanel, string> = {
+  hoy: "hoy",
+  semana: "esta semana",
+  mes: "este mes",
+  anio: "este año",
+};
+
 export const ETIQUETA_PERIODO_ANTERIOR: Record<PeriodoPanel, string> = {
   hoy: "ayer",
   semana: "semana anterior",

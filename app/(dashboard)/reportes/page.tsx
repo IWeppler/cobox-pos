@@ -12,7 +12,8 @@ import {
 import { ReportesFilterbar } from "@/features/reports/ui/reportes-filterbar";
 import { getAdvisorInsights } from "@/features/reports/actions/get-advisor-insights";
 import { AdvisorBanner } from "@/features/reports/ui/advisor-banner";
-import { Tabs, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+import { ExportacionesTab } from "@/features/exportaciones/ui/exportaciones-tab";
 import { ScrollArea, ScrollBar } from "@/shared/ui/scroll-area";
 import {
   Activity,
@@ -21,6 +22,7 @@ import {
   Package,
   ShoppingCart,
   TrendingUp,
+  FileSpreadsheet,
   Users,
 } from "lucide-react";
 import { BajasTab } from "@/features/reports/ui/bajas-tab";
@@ -67,7 +69,7 @@ export default async function ReportesPage({
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
-    supabase.from("egresos").select("id, concepto, monto, fecha"),
+    supabase.from("egresos").select("id, concepto, monto, fecha, tipo, orden_compra_id"),
     supabase
       .from("bajas")
       .select(
@@ -227,6 +229,12 @@ export default async function ReportesPage({
                   <TrendingUp className="w-4 h-4 mr-2" /> Vendedores
                 </TabsTrigger>
               )}
+              <TabsTrigger
+                value="exportaciones"
+                className="rounded-sm px-2 data-[state=active]:bg-background data-[state=active]:border-border data-[state=active]:text-foreground  cursor-pointer transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> Exportaciones
+              </TabsTrigger>
             </TabsList>
             <ScrollBar orientation="horizontal" className="invisible" />
           </ScrollArea>
@@ -267,6 +275,12 @@ export default async function ReportesPage({
           desde={desdeVendedores}
           hasta={hastaVendedores}
         />
+
+        {/* Tiene su propio selector de período: el contador cierra por mes,
+            no por el filtro con el que se miran los reportes del día. */}
+        <TabsContent value="exportaciones" className="mt-0">
+          <ExportacionesTab />
+        </TabsContent>
       </Tabs>
     </div>
   );

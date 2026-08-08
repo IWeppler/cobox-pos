@@ -10,6 +10,11 @@ import {
 } from "@/features/stock/lib/normalize-atributo";
 import { obtenerAtributosRequeridosFaltantes } from "@/features/stock/lib/validate-required-atributos";
 import { subirImagenesProducto } from "@/features/stock/lib/subir-imagenes-producto";
+import {
+  defaultsFiscalesPorRubro,
+  normalizarTratamientoIva,
+  normalizarUnidadMedida,
+} from "@/shared/lib/fiscal-producto";
 
 export async function crearProductoAction(
   prevState: { error: string | null; success: boolean },
@@ -59,10 +64,34 @@ export async function crearProductoAction(
     )
       ? idMasterRaw
       : null;
+  const genero = (formData.get("genero") as string | null)?.trim() || null;
   const precio = Number.parseFloat(formData.get("precio") as string);
   const precio_costo = Number.parseFloat(
     formData.get("precio_costo") as string,
   );
+
+  // Datos fiscales. La abrumadora mayoría de las altas NO los manda: el form
+  // los tiene escondidos detrás de "Datos fiscales" justamente para que una
+  // vendedora cargue nombre y precio y listo. Cuando no vienen, se toman los
+  // defaults del rubro del comercio.
+  //
+  // Se RESUELVEN acá y se guardan en el producto: son un punto de partida, no
+  // una regla viva. Si mañana el comercio cambia de rubro, lo ya cargado no se
+  // recalcula — el tratamiento fiscal de un producto no puede cambiar solo
+  // porque alguien tocó una configuración.
+  const { data: configRubro } = await supabase
+    .from("configuracion_pos")
+    .select("rubro")
+    .single();
+
+  const defaults = defaultsFiscalesPorRubro(configRubro?.rubro);
+
+  const tratamiento_iva = formData.has("tratamiento_iva")
+    ? normalizarTratamientoIva(formData.get("tratamiento_iva"))
+    : defaults.tratamiento_iva;
+  const unidad_medida = formData.has("unidad_medida")
+    ? normalizarUnidadMedida(formData.get("unidad_medida"))
+    : defaults.unidad_medida;
 
   const tieneVariantes = formData.get("tieneVariantes") === "true";
   const stockBase = Number.parseInt(
@@ -129,10 +158,13 @@ export async function crearProductoAction(
       categoria_id: categoria_id || null,
       descripcion,
       marca,
+      genero,
       ...(modelo ? { modelo } : {}),
       ...(id_master ? { id_master } : {}),
       precio,
       precio_costo,
+      tratamiento_iva,
+      unidad_medida,
       imagen_url,
       thumbnail_url,
       grid_url,
