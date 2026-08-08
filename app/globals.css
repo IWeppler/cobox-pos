@@ -161,3 +161,35 @@
     @apply font-sans;
   }
 }
+
+/* Oculta la barra de scroll sin perder el scroll. Ya se usaba en
+   CategoryPills desde antes, pero la clase nunca había sido definida: era un
+   no-op y la barra se veía igual. Ahora la usan los chips de categoría y el
+   carrusel de portadas del catálogo. */
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Persianas del panel de filtros del catálogo (Radix Accordion). Las alturas
+   las expone Radix como variables en el propio elemento; sin estos keyframes
+   el contenido aparece y desaparece de golpe. */
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+
+@utility animate-accordion-down {
+  animation: accordion-down 0.2s ease-out;
+}
+@utility animate-accordion-up {
+  animation: accordion-up 0.2s ease-out;
+}

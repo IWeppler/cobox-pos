@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "backfill:images": "node --experimental-strip-types scripts/backfill-image-thumbnails.ts",
+    "auditar:imagenes": "node --experimental-strip-types scripts/auditar-imagenes-pesadas.ts",
     "cleanup:genero": "node --experimental-strip-types scripts/cleanup-genero-fuera-de-bebe.ts",
     "diagnostico:atributo-2": "node --experimental-strip-types scripts/diagnostico-atributo-2.ts"
   },

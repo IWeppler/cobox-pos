@@ -31,13 +31,23 @@ describe("resolverRangoActual", () => {
     expect(r.inicio.getMonth()).toBe(6);
     expect(r.fin.getDate()).toBe(22);
   });
+
+  it("anio: del 1 de enero hasta ahora", () => {
+    const r = resolverRangoActual("anio", MIERCOLES);
+    expect(r.inicio.getDate()).toBe(1);
+    expect(r.inicio.getMonth()).toBe(0);
+    expect(r.inicio.getFullYear()).toBe(2026);
+    expect(r.fin.getMonth()).toBe(6);
+    expect(r.fin.getDate()).toBe(22);
+  });
 });
 
 describe("resolverRangoAnterior", () => {
-  it("hoy: mismo día de la semana anterior, no ayer", () => {
+  it("hoy: el día calendario anterior", () => {
     const r = resolverRangoAnterior("hoy", MIERCOLES);
-    expect(r.inicio.getDay()).toBe(3); // sigue siendo miércoles
-    expect(r.inicio.getDate()).toBe(15); // miércoles pasado, no martes 21
+    expect(r.inicio.getDate()).toBe(21); // martes 21
+    expect(r.fin.getDate()).toBe(21);
+    expect(r.fin.getHours()).toBe(23);
   });
 
   it("semana: mismo tramo lunes→miércoles de la semana pasada", () => {
@@ -63,6 +73,24 @@ describe("resolverRangoAnterior", () => {
     expect(r.fin.getMonth()).toBe(1);
     expect(r.fin.getDate()).toBe(28); // 2026 no es bisiesto
   });
+
+  it("anio: 1 de enero del año anterior hasta el mismo día y mes", () => {
+    const r = resolverRangoAnterior("anio", MIERCOLES);
+    expect(r.inicio.getFullYear()).toBe(2025);
+    expect(r.inicio.getMonth()).toBe(0);
+    expect(r.inicio.getDate()).toBe(1);
+    expect(r.fin.getFullYear()).toBe(2025);
+    expect(r.fin.getMonth()).toBe(6);
+    expect(r.fin.getDate()).toBe(22);
+  });
+
+  it("anio: clampea el 29 de febrero de un bisiesto contra un año no bisiesto", () => {
+    const bisiesto = new Date(2028, 1, 29, 12, 0, 0);
+    const r = resolverRangoAnterior("anio", bisiesto);
+    expect(r.fin.getFullYear()).toBe(2027);
+    expect(r.fin.getMonth()).toBe(1);
+    expect(r.fin.getDate()).toBe(28);
+  });
 });
 
 describe("resolverRangoRanking", () => {
@@ -77,6 +105,11 @@ describe("resolverRangoRanking", () => {
     const r = resolverRangoRanking("mes", MIERCOLES);
     expect(r).toEqual(resolverRangoActual("mes", MIERCOLES));
   });
+
+  it("con selector Año, usa ventana anual", () => {
+    const r = resolverRangoRanking("anio", MIERCOLES);
+    expect(r).toEqual(resolverRangoActual("anio", MIERCOLES));
+  });
 });
 
 describe("calcularCrecimiento", () => {
@@ -84,8 +117,8 @@ describe("calcularCrecimiento", () => {
     expect(calcularCrecimiento(150, 100)).toBe(50);
   });
 
-  it("período anterior en 0: no inventa un +100%, devuelve 0", () => {
-    expect(calcularCrecimiento(100, 0)).toBe(0);
+  it("período anterior en 0: no inventa un +100% ni un +0%, devuelve null", () => {
+    expect(calcularCrecimiento(100, 0)).toBeNull();
   });
 
   it("caída", () => {

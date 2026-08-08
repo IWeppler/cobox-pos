@@ -48,4 +48,25 @@ describe("construirPayloadCategorias", () => {
 
     expect(payload[0].id).toBe(idExistente);
   });
+
+  it("conserva la portada elegida para cada categoría", () => {
+    const payload = construirPayloadCategorias([
+      { id: "a", nombre: "Ropa", activa: true, parent_id: null, imagen_url: "https://x/portada.webp" },
+    ]);
+
+    expect(payload[0].imagen_url).toBe("https://x/portada.webp");
+  });
+
+  it("incluye imagen_url en TODAS las filas del lote, aunque sea null", () => {
+    // PostgREST arma el UPDATE del upsert con la unión de las claves del
+    // lote: si una fila omitiera la columna, se completaría con null y le
+    // borraría la portada al guardar cualquier otro cambio.
+    const payload = construirPayloadCategorias([
+      { id: "a", nombre: "Con portada", activa: true, parent_id: null, imagen_url: "https://x/a.webp" },
+      { id: "b", nombre: "Sin portada", activa: true, parent_id: null },
+    ]);
+
+    expect(payload.every((f) => "imagen_url" in f)).toBe(true);
+    expect(payload[1].imagen_url).toBeNull();
+  });
 });

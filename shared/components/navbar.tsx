@@ -11,13 +11,26 @@ import { AnnouncementBar } from "../ui/announcement-bar";
 import { SearchBar } from "./search-bar";
 import { useRutaCatalogo } from "@/shared/lib/use-negocio";
 
+export interface CategoriaNavbar {
+  id: string;
+  nombre: string;
+  slug: string | null;
+}
+
 interface NavbarProps {
   // Puede venir null: si la config no resuelve, el navbar tiene que renderizar
   // igual. Antes `branding.marquee_activo` sobre null tumbaba toda la tienda.
   branding: ConfiguracionPOS | null;
+  /**
+   * Categorías principales, para el menú hamburguesa de mobile. Son las mismas
+   * que se ven en la portada del catálogo: sin esto, entrando desde un link a
+   * un producto no había forma de llegar al resto del catálogo sin volver a la
+   * home.
+   */
+  categorias?: CategoriaNavbar[];
 }
 
-export function Navbar({ branding }: Readonly<NavbarProps>) {
+export function Navbar({ branding, categorias = [] }: Readonly<NavbarProps>) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const rutaDelCatalogo = useRutaCatalogo();
 
@@ -48,7 +61,10 @@ export function Navbar({ branding }: Readonly<NavbarProps>) {
 
           {/* CENTRO: Logo y Nombre (Centrado en Mobile, Izquierda en Desktop) */}
           <div className="flex items-center justify-center md:justify-start w-1/3 md:w-auto">
-            <Link href={rutaDelCatalogo} className="flex items-center gap-2 shrink-0">
+            <Link
+              href={rutaDelCatalogo}
+              className="flex items-center gap-2 shrink-0"
+            >
               {branding?.posLogo && (
                 <div className="w-10 h-10 flex items-center justify-center rounded-lg overflow-hidden text-white shrink-0">
                   <Image
@@ -82,14 +98,14 @@ export function Navbar({ branding }: Readonly<NavbarProps>) {
         <div className="hidden md:flex w-full bg-sidebar text-[10px] font-semibold tracking-wider py-1.5 px-4 sm:px-6 lg:px-8 justify-between items-center text-muted-foreground">
           <div className="flex items-center gap-6">
             {branding?.direccion_visible && branding?.direccion && (
-              <div className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-default">
+              <div className="flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5" />
                 <span className="uppercase">{branding?.direccion}</span>
               </div>
             )}
             <div className="h-4 border border-border"></div>
             {branding?.horario_visible && branding?.horario_texto && (
-              <div className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-default">
+              <div className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5" />
                 <span className="uppercase">{branding?.horario_texto}</span>
               </div>
@@ -134,6 +150,40 @@ export function Navbar({ branding }: Readonly<NavbarProps>) {
         {isMenuOpen && (
           <div className="md:hidden absolute top-16 left-0 w-full bg-card border-b border-border animate-in slide-in-from-top-2 z-40">
             <div className="p-5 flex flex-col gap-4">
+              {categorias.length > 0 && (
+                <>
+                  <nav aria-label="Categorías">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+                      Categorías
+                    </p>
+                    <ul className="flex flex-col">
+                      {categorias.map((categoria) => (
+                        <li key={categoria.id}>
+                          <Link
+                            href={`${rutaDelCatalogo}?categoria=${encodeURIComponent(categoria.slug || categoria.id)}`}
+                            onClick={() => setIsMenuOpen(false)}
+                            className="block py-2.5 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                          >
+                            {categoria.nombre}
+                          </Link>
+                        </li>
+                      ))}
+                      <li>
+                        <Link
+                          href={`${rutaDelCatalogo}?ver=todo`}
+                          onClick={() => setIsMenuOpen(false)}
+                          className="block py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Ver todo el catálogo
+                        </Link>
+                      </li>
+                    </ul>
+                  </nav>
+
+                  <div className="border-t border-border my-1" />
+                </>
+              )}
+
               {branding?.direccion_visible && branding?.direccion && (
                 <div className="flex items-start gap-3 text-sm text-muted-foreground font-medium">
                   <MapPin className="w-4 h-4 mt-0.5 shrink-0" />

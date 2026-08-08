@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -14,30 +14,12 @@ import {
   CardFooter,
 } from "@/shared/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
-import {
-  Save,
-  Loader2,
-  User,
-  Mail,
-  Lock,
-  ShieldCheck,
-  CreditCard,
-  Sparkles,
-} from "lucide-react";
+import { Save, Loader2, User, Mail, Lock, ShieldCheck } from "lucide-react";
 import {
   updateProfileAction,
   updatePasswordAction,
 } from "../actions/profile-actions";
-import { Switch } from "@/shared/ui/switch";
-import { Badge } from "@/shared/ui/badge";
-import { Check } from "lucide-react";
 import type { PlanDelNegocio } from "@/features/admin/actions/planes-actions";
-import {
-  NOMBRE_FEATURE,
-  precioMensualEfectivo,
-  precioPorCiclo,
-} from "@/shared/lib/planes";
-import { formatearMoneda } from "@/shared/utils/formatters";
 
 interface CuentaFormProps {
   usuario: {
@@ -47,11 +29,15 @@ interface CuentaFormProps {
   };
   /** Null si la sesión todavía no tiene un negocio resuelto. */
   plan: PlanDelNegocio | null;
+  /** El centro de suscripción se arma en el server y entra ya renderizado. */
+  suscripcion: React.ReactNode;
 }
 
-export function ProfileDashboard({ usuario, plan }: Readonly<CuentaFormProps>) {
+export function ProfileDashboard({
+  usuario,
+  suscripcion,
+}: Readonly<CuentaFormProps>) {
   const [isPending, startTransition] = useTransition();
-  const [isAnnual, setIsAnnual] = useState(true); // Empieza en true para incentivar el anual
   const handleSaveProfile = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -83,7 +69,13 @@ export function ProfileDashboard({ usuario, plan }: Readonly<CuentaFormProps>) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 w-full space-y-8 pb-12">
+    // La página envuelve esto en un contenedor `h-screen overflow-hidden`, así
+    // que el scroll tiene que vivir acá: sin `overflow-y-auto` todo lo que pase
+    // del alto de la pantalla queda recortado y sin forma de llegar. Con la
+    // pestaña de suscripción vieja (una card corta) no se notaba; con el centro
+    // de suscripción sí. `min-h-0` es lo que permite que un hijo de flex column
+    // se achique en vez de desbordar al padre.
+    <div className="min-h-0 flex-1 overflow-y-auto max-w-7xl mx-auto px-4 w-full space-y-8 pb-12">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
           Mi Cuenta
@@ -250,7 +242,7 @@ export function ProfileDashboard({ usuario, plan }: Readonly<CuentaFormProps>) {
                 </div>
               </CardContent>
               <CardFooter className="border-t border-border/50 pt-6">
-                <Button type="submit" disabled={isPending} variant="secondary">
+                <Button type="submit" disabled={isPending}>
                   {isPending ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
@@ -267,129 +259,7 @@ export function ProfileDashboard({ usuario, plan }: Readonly<CuentaFormProps>) {
             PESTAÑA 3: PLAN Y SUSCRIPCIÓN
         ========================================== */}
         <TabsContent value="plan" className="mt-6">
-          <Card className="border-border shadow-sm overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-transparent p-6 border-b border-border/50">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1">
-                    Plan Actual
-                  </h3>
-                  <div className="flex items-center gap-2 text-2xl font-black text-foreground">
-                    {plan?.plan ?? "Sin plan asignado"}
-                    {plan?.plan && (
-                      <Sparkles className="w-5 h-5 text-amber-500" />
-                    )}
-                  </div>
-                  {plan && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {plan.negocio}
-                      {plan.plan
-                        ? ` · ${formatearMoneda(precioMensualEfectivo(plan.precioLista, plan.modalidad))}/mes`
-                        : ""}
-                    </p>
-                  )}
-                </div>
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
-                  <CreditCard className="w-6 h-6 text-primary" />
-                </div>
-              </div>
-            </div>
-
-            <CardContent className="p-6">
-              <p className="text-sm text-muted-foreground mb-6">
-                {plan?.descripcion ??
-                  "Todavía no hay un plan asignado a este comercio. Mientras tanto no hay límites aplicados."}
-              </p>
-
-              <div className="bg-muted/30 rounded-lg p-4 border border-border/50 flex flex-col gap-2">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground font-medium">
-                    Estado de la cuenta
-                  </span>
-                  <span
-                    className={`font-bold px-2 py-0.5 rounded text-xs uppercase tracking-wider ${
-                      plan?.estado === "activo"
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                        : "bg-danger/10 text-danger"
-                    }`}
-                  >
-                    {plan?.estado ?? "—"}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground font-medium">
-                    Modalidad
-                  </span>
-                  <span className="font-semibold text-foreground capitalize">
-                    {plan?.modalidad ?? "—"}
-                    {plan?.plan && plan.modalidad === "semestral"
-                      ? ` (${formatearMoneda(precioPorCiclo(plan.precioLista, "semestral"))} cada 6 meses)`
-                      : ""}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground font-medium">
-                    Próximo vencimiento
-                  </span>
-                  <span className="font-semibold text-foreground">
-                    {plan?.vencimiento
-                      ? new Date(plan.vencimiento).toLocaleDateString("es-AR")
-                      : "—"}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground font-medium">
-                    Usuarios
-                  </span>
-                  <span className="font-semibold text-foreground">
-                    {plan?.usuariosUsados ?? 0}
-                    {plan?.reglas.max_usuarios
-                      ? ` de ${plan.reglas.max_usuarios}`
-                      : ""}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground font-medium">
-                    Cuenta corriente
-                  </span>
-                  <span className="font-semibold text-foreground">
-                    {plan?.reglas.max_clientes_cuenta_corriente
-                      ? `hasta ${plan.reglas.max_clientes_cuenta_corriente} clientes`
-                      : "sin tope"}
-                  </span>
-                </div>
-              </div>
-
-              {plan?.reglas.features?.length ? (
-                <div className="mt-6">
-                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
-                    Incluye
-                  </p>
-                  <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-                    {plan.reglas.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm">
-                        <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>{NOMBRE_FEATURE[f] ?? f}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </CardContent>
-
-            <CardFooter className="bg-muted/5 border-t border-border/50 p-6">
-              <Button
-                className="w-full sm:w-auto font-bold uppercase tracking-widest text-[11px] h-11"
-                variant="outline"
-              >
-                Gestionar Método de Pago
-              </Button>
-            </CardFooter>
-          </Card>
+          {suscripcion}
         </TabsContent>
       </Tabs>
     </div>

@@ -7,6 +7,7 @@ import {
   construirPayloadCategorias,
   type CategoriaBulkInput,
 } from "../lib/build-categorias-payload";
+import { MAX_BYTES_GUARDADOS } from "@/shared/utils/limites-imagen";
 
 export async function bulkSaveCategoriasAction(
   categoriasToUpsert: CategoriaBulkInput[],
@@ -81,6 +82,63 @@ export async function bulkSaveCategoriasAction(
     return { success: true, error: null };
   } catch {
     return { success: false, error: "Error interno del servidor." };
+  }
+}
+
+/**
+ * Sube la portada de una categoría y devuelve su URL pública.
+ *
+ * Va al bucket `logos` y no a uno nuevo: `logos` ya es público y ya tiene las
+ * policies de escritura acotadas a la carpeta del negocio. Crear un bucket
+ * aparte obligaría a una migración de policies aplicada en las 3 bases — el
+ * riesgo de drift no se justifica para guardar una imagen más.
+ *
+ * La imagen llega YA comprimida del cliente (optimizarImagen). Acá se valida
+ * el peso igual, con el mismo criterio que el resto del sistema: nunca confiar
+ * en que el cliente ya validó.
+ */
+export async function subirImagenCategoriaAction(
+  formData: FormData,
+): Promise<{ url: string | null; error: string | null }> {
+  try {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+
+    const archivo = formData.get("imagen") as File | null;
+    if (!archivo || archivo.size === 0) {
+      return { url: null, error: "No llegó ninguna imagen." };
+    }
+    if (archivo.size > MAX_BYTES_GUARDADOS) {
+      return {
+        url: null,
+        error: "La imagen es demasiado pesada. Probá con otra.",
+      };
+    }
+
+    const { data: negocioId } = await supabase.rpc("negocio_actual");
+    if (!negocioId) {
+      return { url: null, error: "No hay un negocio activo en esta sesión." };
+    }
+
+    const extension = archivo.name.split(".").pop() || "webp";
+    const ruta = `${negocioId}/categorias/${crypto.randomUUID()}.${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("logos")
+      .upload(ruta, archivo, { cacheControl: "31536000" });
+
+    if (uploadError) {
+      console.error("[SUBIR IMAGEN CATEGORIA ERROR]", uploadError);
+      return { url: null, error: "No se pudo subir la imagen." };
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("logos").getPublicUrl(ruta);
+
+    return { url: publicUrl, error: null };
+  } catch {
+    return { url: null, error: "Error interno del servidor." };
   }
 }
 

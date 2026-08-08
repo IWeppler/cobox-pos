@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
@@ -17,6 +18,15 @@ import {
   type MembresiaNegocio,
 } from "@/features/auth/actions/negocios";
 
+/**
+ * - "sidebar": la cajita con borde del sidebar desktop.
+ * - "identidad": el logo + nombre del comercio que ya oficia de identidad en
+ *   el header mobile. Sin caja propia ni borde — ES el branding, y además
+ *   abre el selector cuando hay más de un negocio. Así el comercio activo se
+ *   dibuja UNA sola vez.
+ */
+type ModoSwitcher = "sidebar" | "identidad";
+
 interface NegocioSwitcherProps {
   negocios: MembresiaNegocio[];
   negocioActivoId?: string;
@@ -25,6 +35,10 @@ interface NegocioSwitcherProps {
   logoActivo?: string;
   inicial: string;
   isCollapsed: boolean;
+  modo?: ModoSwitcher;
+  /** Modo "identidad" con un solo negocio: no hay nada que elegir, así que el
+   * branding vuelve a ser un link (a dónde lo decide quien lo usa). */
+  hrefSinSwitcher?: string;
 }
 
 export function NegocioSwitcher({
@@ -34,6 +48,8 @@ export function NegocioSwitcher({
   logoActivo,
   inicial,
   isCollapsed,
+  modo = "sidebar",
+  hrefSinSwitcher,
 }: Readonly<NegocioSwitcherProps>) {
   const router = useRouter();
   const [pendiente, startTransition] = useTransition();
@@ -52,39 +68,71 @@ export function NegocioSwitcher({
     });
   };
 
+  const esIdentidad = modo === "identidad";
+  const ladoAvatar = esIdentidad ? 36 : 28;
+
   const avatar = (
-    <div className="w-7 h-7 rounded bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden border border-border/50">
+    <div
+      className={`flex items-center justify-center shrink-0 overflow-hidden border ${
+        esIdentidad
+          ? "w-9 h-9 rounded-lg border-border bg-background"
+          : "w-7 h-7 rounded bg-primary/10 border-border/50"
+      }`}
+    >
       {logoActivo ? (
         <Image
           src={logoActivo}
           alt={nombreActivo}
-          width={28}
-          height={28}
+          width={ladoAvatar}
+          height={ladoAvatar}
           className="object-cover w-full h-full"
         />
       ) : (
-        <span className="font-bold text-xs text-primary">{inicial}</span>
+        <span
+          className={
+            esIdentidad
+              ? "font-bold text-lg text-muted-foreground"
+              : "font-bold text-xs text-primary"
+          }
+        >
+          {inicial}
+        </span>
       )}
     </div>
   );
 
-  const claseBoton = `flex items-center gap-2.5 rounded-lg border border-border/50 bg-background/50 w-full ${
-    isCollapsed ? "p-1.5 justify-center" : "p-2"
-  }`;
+  const claseNombre = esIdentidad
+    ? "font-bold text-lg text-foreground tracking-tight truncate min-w-0"
+    : "font-semibold text-sm truncate flex-1 text-left";
+
+  const claseBoton = esIdentidad
+    ? "flex items-center gap-2.5 min-w-0 max-w-full rounded-lg -ml-1 px-1 py-0.5 cursor-pointer active:bg-muted transition-colors"
+    : `flex items-center gap-2.5 rounded-lg border border-border/50 bg-background/50 w-full ${
+        isCollapsed ? "p-1.5 justify-center" : "p-2"
+      }`;
+
+  // El nombre se oculta solo en modo sidebar colapsado; en identidad siempre
+  // va (es la única marca del comercio en toda la pantalla).
+  const mostrarNombre = esIdentidad || !isCollapsed;
 
   // Con un solo negocio no hay nada que elegir: se muestra igual pero sin
   // menú, para no ofrecer una acción que no hace nada.
   if (negocios.length <= 1) {
-    return (
-      <div className={claseBoton}>
+    const contenido = (
+      <>
         {avatar}
-        {!isCollapsed && (
-          <span className="font-semibold text-sm truncate flex-1 text-left">
-            {nombreActivo}
-          </span>
-        )}
-      </div>
+        {mostrarNombre && <span className={claseNombre}>{nombreActivo}</span>}
+      </>
     );
+
+    if (esIdentidad && hrefSinSwitcher) {
+      return (
+        <Link href={hrefSinSwitcher} className={claseBoton}>
+          {contenido}
+        </Link>
+      );
+    }
+    return <div className={claseBoton}>{contenido}</div>;
   }
 
   return (
@@ -92,16 +140,18 @@ export function NegocioSwitcher({
       <DropdownMenuTrigger asChild>
         <button className={claseBoton} aria-label="Cambiar de negocio">
           {pendiente ? (
-            <Loader2 className="w-7 h-7 p-1.5 animate-spin shrink-0" />
+            <Loader2
+              className={`animate-spin shrink-0 ${esIdentidad ? "w-9 h-9 p-2" : "w-7 h-7 p-1.5"}`}
+            />
           ) : (
             avatar
           )}
-          {!isCollapsed && (
+          {mostrarNombre && (
             <>
-              <span className="font-semibold text-sm truncate flex-1 text-left">
-                {nombreActivo}
-              </span>
-              <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className={claseNombre}>{nombreActivo}</span>
+              <ChevronsUpDown
+                className={`text-muted-foreground shrink-0 ${esIdentidad ? "w-3.5 h-3.5" : "w-4 h-4"}`}
+              />
             </>
           )}
         </button>

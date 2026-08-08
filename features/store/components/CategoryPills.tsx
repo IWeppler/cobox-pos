@@ -8,6 +8,12 @@ interface CategoryPillsProps {
   arbolCategorias: ArbolCategorias;
   onSelectTodos: () => void;
   onSelectCategoria: (id: string) => void;
+  /**
+   * En la grilla completa ("ver todo") el primer chip ya no es un filtro —
+   * es la salida hacia la portada. Sin esto quedaba marcado como activo y al
+   * tocarlo te sacaba de la pantalla, que se lee como un bug.
+   */
+  volverAInicio?: boolean;
 }
 
 const pillBase =
@@ -28,6 +34,7 @@ export function CategoryPills({
   arbolCategorias,
   onSelectTodos,
   onSelectCategoria,
+  volverAInicio = false,
 }: Readonly<CategoryPillsProps>) {
   // El padre "en vista" para el nivel 2 es el que matchea directo (se
   // seleccionó el padre o "Todo <Padre>") o el que contiene al hijo activo
@@ -82,15 +89,22 @@ export function CategoryPills({
   return (
     <div className="flex gap-2 overflow-x-auto bg-background py-1 scrollbar-hide w-full top-16 z-20">
       <Button
-        variant={tipoActivo === "todos" ? "default" : "outline"}
-        className={`${pillBase} ${
-          tipoActivo === "todos"
+        variant={!volverAInicio && tipoActivo === "todos" ? "default" : "outline"}
+        className={`${pillBase} ${volverAInicio ? "gap-1.5 " : ""}${
+          !volverAInicio && tipoActivo === "todos"
             ? "bg-neutral-900 text-white border-transparent hover:bg-neutral-800"
             : pillInactivo
         }`}
         onClick={onSelectTodos}
       >
-        Ver todo
+        {volverAInicio ? (
+          <>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Inicio
+          </>
+        ) : (
+          "Ver todo"
+        )}
       </Button>
 
       {arbolCategorias.padres.map((padre) => (

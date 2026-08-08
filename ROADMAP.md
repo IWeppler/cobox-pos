@@ -1,23 +1,13 @@
 Ayudar a vender más, estar organizado y prever qué está pasando en el negocio.
 
 ideas:
-- Carga rapida no me puede llevar a otra pagina, sino que debe estar en el misma pagina de /POS, simplemente cambiando la vista para poder realizar la venta en el momento.
-
 - Para crear usuarios tengo que pedirle a claude code que lo haga. Debo poder crearlo desde el dashboard.
 
-- En el dashboard hay dos lugares para seleccionar fechas: en general y dentro del chart de tendencias. Quisiera que todo se maneje con el general y borrar, el selector del chart 7d y 30d. Pero hay algo que no me cuadra y nose cual es la mejor opción. Por un lado el chart muestra 7 o 30 dias para atras desde donde estamos, mientras que el selector general del panel muestra, esta semana o este mes, pero no 7 dias para atras, sino que desde lo generado desde el lunes, o en el caso del mes. Desde el 1 de agosto, no los 30 dias para atras.
-
-- Diccionario de Mapeo (Heurística) en la función de parseo de variantes.
-
 - NO ESTA FUNCIONANDO EL TEMA MARCA Y GENERO PARA EL PRODUCTO. FUNDAMENTAL MEJORAR EL CATALOGO
-
-- Mejorar ux de seleccion multiple dentro del modulo de /stock. Actualmente se abre una barra abajo que no me deja avanzar de pagina y necesito que tenga simplemente para ver cantidad de productos seleccionados y acciones entonces ahi pongo que accion quiero hacer: editar precios, eliminar, cambiar de categoria, subcategoria.
 
 - ver historial de productos cargados a traves de remitos. como agrupaciones y luego detalle de cada remito. Esto va de la mano con la mejora de la creacion de la pagina de movimientos que actualmente ni siquiera me esta leyendo los productos que ingresan a traves de remitos, no tiene paginacion, creo que podria tener mas filtros y podemos poner esto que digo directamente ahi adentro.
 
 - Pérdida de conexión (Offline): Es la más crítica. Si el local se queda sin internet, la cajera debe saber de inmediato (con un banner permanente en la parte superior) que el sistema está guardando las ventas localmente y que no cierre la pestaña.
-
-- Alertas del Cliente (CRM): Si la cajera selecciona a "Juan Pérez" para venderle, ahí mismo debe aparecer una etiqueta roja que diga "Atención: Juan debe $15.000". Es una notificación en tiempo real, pero en contexto.
 
 - Multi-sucursal: Hasta 5 sucursales bajo la misma cuenta, con stock y caja independientes.
 
@@ -29,7 +19,6 @@ ideas:
 - Login con huella: Entrás con tu huella o Face ID en vez de escribir la contraseña cada vez.
 
 - terminar de hacer la conexión para recuperar contraseñas
-- hice la pagina de perfil pero hay que mejorar la UI de los planes
 
 # TIER 1 — Plata correcta y operación diaria (2-4 semanas)
 
@@ -179,12 +168,8 @@ Acá creo que hay mucho valor.
 
 # TIER 2 — Decisión de arquitectura SaaS (antes del tercer cliente, no después)
 
-1. Multi-tenant (negocio_id): decidilo YA, con lo aprendido. El segundo comercio te mostró el costo real del modelo por-proyecto: drift infinito, cada categoría de schema (policies, constraints, columnas) rompiéndose por separado. Mi recomendación: el refactor a negocio_id es grande pero se hace UNA vez; el drift lo pagás por cliente por siempre. Con 2 clientes es el momento más barato de tu vida para hacerlo. Si decidís quedarte con por-proyecto igual, entonces la automatización del provisioning (runbook + script + diff de esquema) deja de ser opcional y pasa a ser producto interno de primera clase.
+1. Landing page + blog/tutoriales — en paralelo (no depende de código del POS), es lo que te permite vender mientras construís.
 
-2. Landing page + blog/tutoriales — en paralelo (no depende de código del POS), es lo que te permite vender mientras construís.
-
-3. Separación de módulos/planes ($30k/$50k/$70k) — requiere gating por plan; diseñarlo junto con la decisión multi-tenant porque el "qué plan tiene este negocio" vive en la misma capa que negocio_id.
-   IVA: dropdown de impuesto en producto (creación/edición/CSV) — es el prerrequisito chico de la facturación ARCA de Fase 5; hacelo antes y la integración fiscal después se apoya en datos ya cargados.
 
 # TIER 3 — Diferenciadores con IA (después de Tier 2, porque venden el SaaS)
 
@@ -211,9 +196,7 @@ Acá creo que hay mucho valor.
 
 # Caja / Multicaja
 
-- Atribuir devoluciones al turno original de la venta (si sigue abierto), no al turno de quien ejecuta la anulación — ya diseñado, falta implementar
 - Retiros de dueño como tipo de movimiento separado de gastos operativos
-- Marcar un "esperado negativo" como revisado/explicado (sin borrar el historial)
 - Agrupar historial por día + filtro por rango de fechas
 - Resumen diario consolidado (todos los turnos de un día en una vista)
 - Rediseño de /caja: turno propio vs. historial según estado del usuario, filtros en "Movimientos del - Turno" (egresos/ingresos/método de pago)

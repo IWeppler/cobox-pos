@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, ImagePlus, X } from "lucide-react";
+import { toast } from "sonner";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import {
+  MAX_IMAGENES_PRODUCTO,
+  filtrarArchivosImagen,
+} from "@/shared/utils/image-optimizer";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,16 +47,75 @@ export function ProductMediaSection({
     string | null
   >(null);
 
+  const totalImagenes = existingImages.length + archivos.length;
+  // >= y no ===: hay productos viejos que ya tienen 4 o 5 fotos. El tope no
+  // es retroactivo — esas se siguen mostrando, solo no se pueden sumar más.
+  const yaEnElTope = totalImagenes >= MAX_IMAGENES_PRODUCTO;
+
   const handlePickImages = () => {
+    if (yaEnElTope) {
+      toast.warning(
+        `Este producto ya tiene ${totalImagenes} ${totalImagenes === 1 ? "foto" : "fotos"} — el máximo es ${MAX_IMAGENES_PRODUCTO}.`,
+        { description: "Quitá alguna para poder agregar otra." },
+      );
+      return;
+    }
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
       fileInputRef.current.click();
     }
   };
 
+  // Único punto de entrada de archivos nuevos (input, drop y pegado): la
+  // galería del celular deja elegir decenas de fotos de una y hasta acá no
+  // había ningún freno — cada una se decodificaba entera para comprimirla y
+  // para el preview. Rechazar en silencio sería peor que el bug, así que
+  // avisamos qué quedó afuera y por qué.
+  const agregarArchivos = (nuevos: File[]) => {
+    if (nuevos.length === 0) return;
+
+    const { aceptados, rechazados, excedeMaximo } = filtrarArchivosImagen(
+      nuevos,
+      // Cuentan las ya guardadas Y las elegidas sin guardar: si no, un
+      // producto que ya tiene fotos podría sumar el tope entero en cada
+      // edición.
+      existingImages.length + archivos.length,
+    );
+
+    if (rechazados.length > 0) {
+      const detalle = rechazados
+        .slice(0, 3)
+        .map((r) => `${r.file.name}: ${r.motivo}`)
+        .join(" · ");
+      toast.error(
+        rechazados.length === 1
+          ? `No se agregó ${detalle}`
+          : `No se agregaron ${rechazados.length} archivos — ${detalle}`,
+      );
+    }
+
+    if (excedeMaximo > 0) {
+      toast.warning(
+        `Máximo ${MAX_IMAGENES_PRODUCTO} fotos por producto — ${
+          excedeMaximo === 1
+            ? "quedó 1 afuera"
+            : `quedaron ${excedeMaximo} afuera`
+        }.`,
+        {
+          description:
+            yaEnElTope && aceptados.length === 0
+              ? "Quitá alguna de las que ya están para poder agregar otra."
+              : undefined,
+        },
+      );
+    }
+
+    if (aceptados.length > 0) onArchivosChange([...archivos, ...aceptados]);
+  };
+
   const handleFilesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
-      onArchivosChange([...archivos, ...Array.from(event.target.files)]);
+      agregarArchivos(Array.from(event.target.files));
     }
   };
 
@@ -60,10 +124,7 @@ export function ProductMediaSection({
     event.stopPropagation();
     setIsDraggingOver(false);
 
-    const soltados = Array.from(event.dataTransfer.files ?? []).filter((f) =>
-      f.type.startsWith("image/"),
-    );
-    if (soltados.length > 0) onArchivosChange([...archivos, ...soltados]);
+    agregarArchivos(Array.from(event.dataTransfer.files ?? []));
   };
 
   const handleDragOver = (event: React.DragEvent) => {
@@ -92,12 +153,35 @@ export function ProductMediaSection({
           if (file) pegadas.push(file);
         }
       }
-      if (pegadas.length > 0) onArchivosChange([...archivos, ...pegadas]);
+      agregarArchivos(pegadas);
     };
 
     document.addEventListener("paste", handlePaste);
     return () => document.removeEventListener("paste", handlePaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [archivos, onArchivosChange]);
+
+  // Antes el src del preview era `URL.createObjectURL(file)` llamado DENTRO
+  // del render y nunca revocado. Cada re-render del form (una tecla en la
+  // grilla de variantes, un cambio de precio) creaba un blob URL nuevo por
+  // archivo, y cada uno retiene el File entero hasta que se revoca. Sumado a
+  // que el navegador decodifica la foto de 12MP completa para pintarla a
+  // 80×80, en mobile la memoria solo subía hasta que el navegador mataba la
+  // pestaña — el crash que se veía como "This page couldn't load", sin
+  // excepción de JS ni log de servidor.
+  //
+  // Ahora se crea una sola URL por archivo y se revoca cuando cambia la
+  // selección o se desmonta el componente.
+  const previews = useMemo(
+    () => archivos.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [archivos],
+  );
+
+  useEffect(() => {
+    return () => {
+      previews.forEach((p) => URL.revokeObjectURL(p.url));
+    };
+  }, [previews]);
 
   const handleRemoveArchivo = (file: File) => {
     onArchivosChange(archivos.filter((f) => f !== file));
@@ -112,15 +196,29 @@ export function ProductMediaSection({
 
   return (
     <div className="space-y-2">
-      <Label className="text-sm font-semibold text-foreground">Media</Label>
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-semibold text-foreground">Media</Label>
+        <span
+          className={`text-xs tabular-nums ${
+            yaEnElTope ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground"
+          }`}
+        >
+          {totalImagenes}/{MAX_IMAGENES_PRODUCTO}
+        </span>
+      </div>
       <button
         type="button"
         onClick={handlePickImages}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        className={`flex w-full items-center justify-between p-4 text-left rounded-xl cursor-pointer hover:bg-muted/50 transition-colors border border-dashed group ${
-          isDraggingOver
+        aria-disabled={yaEnElTope}
+        className={`flex w-full items-center justify-between p-4 text-left rounded-xl transition-colors border border-dashed group ${
+          yaEnElTope
+            ? "cursor-not-allowed opacity-60 border-border/60"
+            : "cursor-pointer hover:bg-muted/50"
+        } ${
+          isDraggingOver && !yaEnElTope
             ? "border-primary bg-primary/5"
             : "border-border/80"
         }`}
@@ -134,7 +232,9 @@ export function ProductMediaSection({
               Agregar media
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Click, arrastrá una imagen o pegala con Ctrl+V
+              {yaEnElTope
+                ? `Llegaste al máximo de ${MAX_IMAGENES_PRODUCTO} fotos — quitá alguna para agregar otra`
+                : "Click, arrastrá una imagen o pegala con Ctrl+V"}
             </p>
           </div>
         </div>
@@ -146,7 +246,10 @@ export function ProductMediaSection({
         name="imagenes"
         type="file"
         multiple
-        accept="image/png, image/jpeg, image/webp, image/heic"
+        // Sin image/heic a propósito: con ese tipo en la lista iOS entrega el
+        // HEIC crudo, que ningún navegador Android sabe decodificar por
+        // canvas. Dejándolo afuera, iOS convierte a JPEG antes de entregarlo.
+        accept="image/png, image/jpeg, image/webp"
         className="hidden"
         onChange={handleFilesChange}
       />
@@ -176,15 +279,17 @@ export function ProductMediaSection({
               )}
             </div>
           ))}
-          {archivos.map((file, idx) => (
+          {previews.map(({ file, url }, idx) => (
             <div
               key={`${file.name}-${idx}`}
               className="relative w-20 h-20 rounded-lg overflow-hidden border border-border"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={URL.createObjectURL(file)}
+                src={url}
                 alt="Preview"
+                loading="lazy"
+                decoding="async"
                 className="object-cover w-full h-full"
               />
               <button

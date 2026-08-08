@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Wallet } from "lucide-react";
 import { useCajaStatusStore } from "@/shared/store/caja-status-store";
 import { CajaQuickModal } from "./caja-quick-modal";
+import { EgresoModal } from "./egreso-modal";
 import {
   Tooltip,
   TooltipContent,
@@ -32,6 +33,9 @@ export function CajaStatusButton({
   const isCajaAbierta = useCajaStatusStore((state) => state.isCajaAbierta);
   const turno = useCajaStatusStore((state) => state.turno);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // El egreso se dispara desde el modal de caja, pero se monta acá como
+  // hermano: anidar un Dialog dentro de otro rompe foco y scroll-lock.
+  const [isEgresoOpen, setIsEgresoOpen] = useState(false);
 
   const boton = (
     <button
@@ -84,6 +88,13 @@ export function CajaStatusButton({
         onOpenChange={setIsModalOpen}
         modoCaja={modoCaja}
         userId={userId}
+        onAnotarGasto={() => setIsEgresoOpen(true)}
+      />
+
+      <EgresoModal
+        open={isEgresoOpen}
+        onOpenChange={setIsEgresoOpen}
+        mostrarTrigger={false}
       />
     </>
   );

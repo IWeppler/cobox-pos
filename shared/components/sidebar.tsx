@@ -163,43 +163,24 @@ export function Sidebar({
     <TooltipProvider>
       {/* MOBILE TOP NAVBAR (Solo visible en celular) */}
       <div className="md:hidden flex w-full shrink-0 items-center justify-between px-4 h-16 bg-background border-b border-border sticky top-0 z-50">
-        <Link
-          href={userRole === "ADMIN" ? "/" : "/stock"}
-          className="flex items-center gap-3 overflow-hidden"
-        >
-          <div className="w-9 h-9 flex items-center justify-center rounded-lg overflow-hidden border border-border bg-background shrink-0">
-            {branding.posLogo ? (
-              <Image
-                src={branding.posLogo}
-                alt={`Logo ${branding.posName}`}
-                width={36}
-                height={36}
-                className="object-cover w-full h-full"
-              />
-            ) : (
-              <span className="font-bold text-lg text-muted-foreground">
-                {initial}
-              </span>
-            )}
-          </div>
-          <span className="font-bold text-lg text-foreground tracking-tight truncate">
-            {branding.posName}
-          </span>
-        </Link>
+        {/* UNA sola representación del comercio activo: el logo + nombre ES el
+            switcher cuando hay más de un negocio (antes se dibujaba el logo a
+            la izquierda y otra vez adentro del switcher, a la derecha). Con un
+            solo negocio sigue siendo un link, como siempre. */}
+        <div className="flex items-center min-w-0 flex-1 mr-2">
+          <NegocioSwitcher
+            negocios={negocios}
+            negocioActivoId={negocioActivoId}
+            nombreActivo={branding.posName}
+            logoActivo={branding.posLogo}
+            inicial={initial}
+            isCollapsed={false}
+            modo="identidad"
+            hrefSinSwitcher={userRole === "ADMIN" ? "/" : "/stock"}
+          />
+        </div>
 
-        <div className="flex items-center gap-1">
-          {/* Con un solo negocio no hay nada que elegir y el header ya muestra
-              su nombre al lado del logo: mostrarlo sería ruido. */}
-          {negocios.length > 1 && (
-            <NegocioSwitcher
-              negocios={negocios}
-              negocioActivoId={negocioActivoId}
-              nombreActivo={branding.posName}
-              logoActivo={branding.posLogo}
-              inicial={initial}
-              isCollapsed
-            />
-          )}
+        <div className="flex items-center gap-1 shrink-0">
           <CajaStatusButton
             modoCaja={branding.modo_caja || "UNICA"}
             userId={userId}

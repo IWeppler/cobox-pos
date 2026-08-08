@@ -37,14 +37,21 @@ export default async function PublicLayout({
 
   const supabase = await createPublicClient();
 
-  const { data: config } = await supabase
-    .from("configuracion_pos")
-    .select("*")
-    .maybeSingle();
+  // Las categorías principales (sin padre) van al menú hamburguesa de mobile:
+  // son las mismas que muestra la portada del catálogo.
+  const [{ data: config }, { data: categorias }] = await Promise.all([
+    supabase.from("configuracion_pos").select("*").maybeSingle(),
+    supabase
+      .from("categorias")
+      .select("id, nombre, slug")
+      .eq("activa", true)
+      .is("parent_id", null)
+      .order("orden", { ascending: true }),
+  ]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <Navbar branding={config} />
+      <Navbar branding={config} categorias={categorias ?? []} />
       <CartPanelPublico numeroWhatsApp={config?.whatsapp} />
       {children}
 

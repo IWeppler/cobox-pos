@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Lock, Unlock, Clock } from "lucide-react";
+import { Loader2, Lock, Unlock, Clock, TrendingDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,9 @@ interface CajaQuickModalProps {
   onOpenChange: (open: boolean) => void;
   modoCaja: string;
   userId: string;
+  /** Abre el modal de egreso (cerrando este). El egreso es plata que sale
+   * del cajón: su lugar es acá, no en el header del panel. */
+  onAnotarGasto: () => void;
 }
 
 /**
@@ -39,6 +42,7 @@ export function CajaQuickModal({
   onOpenChange,
   modoCaja,
   userId,
+  onAnotarGasto,
 }: Readonly<CajaQuickModalProps>) {
   const router = useRouter();
   const isCajaAbierta = useCajaStatusStore((state) => state.isCajaAbierta);
@@ -80,6 +84,26 @@ export function CajaQuickModal({
   );
 
   const mostrarCierre = isCajaAbierta && turno;
+
+  // Acción secundaria: nunca compite con abrir/cerrar turno, que es a lo que
+  // se entra a este modal. Cierra este diálogo ANTES de abrir el de egreso —
+  // dos Dialog anidados de Radix se pelean el foco y el scroll-lock.
+  const botonGasto = (
+    <div className="border-t border-border px-6 py-3">
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={() => {
+          onOpenChange(false);
+          onAnotarGasto();
+        }}
+        className="h-9 w-full justify-center text-muted-foreground"
+      >
+        <TrendingDown className="mr-2 h-4 w-4" />
+        Anotar gasto
+      </Button>
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -168,6 +192,8 @@ export function CajaQuickModal({
                 Cerrar turno
               </Button>
             </form>
+
+            {botonGasto}
           </>
         ) : (
           <>
@@ -212,6 +238,8 @@ export function CajaQuickModal({
                 Abrir turno
               </Button>
             </form>
+
+            {botonGasto}
           </>
         )}
       </DialogContent>

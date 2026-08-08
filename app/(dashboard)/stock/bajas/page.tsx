@@ -172,9 +172,9 @@ export default async function BajasPage({
             {pendientes.map((baja) => (
               <div
                 key={baja.id}
-                className="bg-white border border-amber-200 rounded-xl p-5 relative overflow-hidden"
-              >
-                <div className="absolute top-0 left-0 w-1 h-full bg-amber-400"></div>
+                className="bg-white border border-warning/20 rounded-xl p-5 relative overflow-hidden"
+              > 
+                <div className="absolute top-0 left-0 w-1 h-full bg-warning"></div>
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h3 className="font-bold text-foreground truncate max-w-45">

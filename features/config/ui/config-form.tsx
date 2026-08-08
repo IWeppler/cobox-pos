@@ -35,7 +35,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/ui/card";
-import { optimizarImagen } from "@/shared/utils/image-optimizer";
+import {
+  ImagenNoProcesableError,
+  optimizarImagen,
+} from "@/shared/utils/image-optimizer";
 import { useRouter } from "next/navigation";
 
 export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
@@ -74,9 +77,21 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
     if (logoFile) {
       setIsCompressing(true);
       formData.delete("logo");
-      const compressed = await optimizarImagen(logoFile);
-      formData.append("logo", compressed);
-      setIsCompressing(false);
+      try {
+        const compressed = await optimizarImagen(logoFile);
+        formData.append("logo", compressed);
+      } catch (error) {
+        // optimizarImagen ya no devuelve el original cuando falla: cortamos
+        // el guardado en vez de subir el archivo crudo.
+        toast.error(
+          error instanceof ImagenNoProcesableError
+            ? error.message
+            : "No se pudo procesar el logo. Probá con otra imagen.",
+        );
+        return;
+      } finally {
+        setIsCompressing(false);
+      }
     }
 
     startTransition(() => {

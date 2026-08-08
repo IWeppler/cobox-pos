@@ -265,7 +265,7 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
     <div className="min-h-screen flex flex-col">
       <main className="flex-1 mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6 w-full">
         {config?.banner_activo && config.banner_imagen && (
-          <div className="relative w-full aspect-[21/9] sm:aspect-[4/1] rounded-2xl overflow-hidden mb-6 lg:mb-8 group">
+          <div className="relative w-full aspect-16/12 sm:aspect-[3/1] rounded-2xl overflow-hidden mb-6 lg:mb-8 group">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={config.banner_imagen}
@@ -286,7 +286,7 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
               {config.banner_boton_texto && config.banner_link && (
                 <a
                   href={config.banner_link}
-                  className="bg-white text-black font-bold uppercase tracking-widest text-[10px] sm:text-xs px-8 py-3 rounded-full hover:scale-105 transition-transform"
+                  className="bg-white text-neutral-900 font-bold uppercase tracking-widest text-[10px] sm:text-xs px-8 py-3 rounded-full hover:bg-white/90 transition-colors duration-300"
                 >
                   {config.banner_boton_texto}
                 </a>

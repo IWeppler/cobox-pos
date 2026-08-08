@@ -71,7 +71,11 @@ import { Producto } from "@/entities/productos/types";
 import { createClient } from "@/shared/config/supabase/client";
 import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-attributes";
 import { ProductMediaSection } from "@/features/stock/ui/create-product/product-media-section";
-import { optimizarImagenProducto } from "@/shared/utils/image-optimizer";
+import { ProgresoOverlay } from "./progreso-overlay";
+import {
+  ImagenNoProcesableError,
+  optimizarImagenesProducto,
+} from "@/shared/utils/image-optimizer";
 import {
   clasificarDesconocido,
   construirMapaSimilares,
@@ -379,6 +383,13 @@ export function MergeTable({
   );
   const [categoriaIdParaSeleccion, setCategoriaIdParaSeleccion] = useState("");
   const [bulkCrearLoading, setBulkCrearLoading] = useState(false);
+  // Progreso determinado de la creación masiva: se puede contar cuántos
+  // grupos terminaron. La aprobación, en cambio, es una sola RPC —
+  // ahí el overlay muestra solo el cronómetro.
+  const [bulkProgreso, setBulkProgreso] = useState<{
+    hechos: number;
+    total: number;
+  } | null>(null);
 
   // Borrador local (IndexedDB) de esta conciliación
   const [draftState, setDraftState] = useState<"checking" | "prompt" | "ready">(
@@ -775,12 +786,12 @@ export function MergeTable({
     setCrearError(null);
 
     try {
-      // Comprimimos generando las tres versiones (main + thumbnail + grid)
+      // Comprimimos generando las tres versiones (main + thumbnail + grid),
+      // secuencial a propósito (ver optimizarImagenesProducto): en paralelo
+      // el pico de memoria mataba la pestaña en mobile.
       const imagenesProcesadas =
         archivosNuevoProducto.length > 0
-          ? await Promise.all(
-              archivosNuevoProducto.map((f) => optimizarImagenProducto(f)),
-            )
+          ? await optimizarImagenesProducto(archivosNuevoProducto)
           : [];
 
       const archivosMain = imagenesProcesadas.map((img) => img.main);
@@ -808,6 +819,17 @@ export function MergeTable({
       );
       setGroupToCreateName(null);
       setArchivosNuevoProducto([]);
+    } catch (error) {
+      // La compresión ahora tira si no puede procesar una imagen (antes
+      // devolvía el archivo crudo y reventaba el límite de body de la acción).
+      // Sin este catch quedaba como unhandled rejection y el modal se
+      // congelaba sin decir nada.
+      console.error("[MERGE] Error creando producto al vuelo", error);
+      setCrearError(
+        error instanceof ImagenNoProcesableError
+          ? error.message
+          : "No se pudo crear el producto. Revisá las imágenes y volvé a intentar.",
+      );
     } finally {
       setCrearLoading(false);
     }
@@ -882,6 +904,7 @@ export function MergeTable({
     if (gruposNuevoSugerido.length === 0 || bulkCrearLoading) return;
 
     setBulkCrearLoading(true);
+    setBulkProgreso({ hechos: 0, total: gruposNuevoSugerido.length });
     setLoadingPorGrupo((prev) => {
       const next = { ...prev };
       for (const rawNombre of gruposNuevoSugerido) next[rawNombre] = true;
@@ -912,12 +935,18 @@ export function MergeTable({
         ...prev,
         [rawNombre]: resultado.ok ? null : resultado.error,
       }));
+      // Cuenta los terminados, con éxito o no: el progreso mide avance del
+      // proceso, no cuántos salieron bien (eso ya lo dice el toast final).
+      setBulkProgreso((prev) =>
+        prev ? { ...prev, hechos: prev.hechos + 1 } : prev,
+      );
 
       return resultado.ok;
     });
 
     const resultados = await runWithConcurrencyLimit(tareas, 3);
     setBulkCrearLoading(false);
+    setBulkProgreso(null);
 
     const exitosos = resultados.filter(Boolean).length;
     const fallidos = resultados.length - exitosos;
@@ -942,7 +971,6 @@ export function MergeTable({
 
     setAprobarLoading(true);
     setAprobarError(null);
-    toast.info("Impactando stock y precios...");
 
     try {
       // SIN withTimeout, a propósito: esta acción muta stock y precios. Un
@@ -988,6 +1016,22 @@ export function MergeTable({
 
   return (
     <div className="space-y-6 px-4 py-2">
+      {/* Overlay de la aprobación: una sola RPC, no hay progreso parcial que
+          mostrar — el cronómetro es lo que demuestra que sigue viva. */}
+      <ProgresoOverlay
+        abierto={aprobarLoading}
+        titulo="Impactando stock y precios"
+        descripcion={`Actualizando ${items.length} ${items.length === 1 ? "renglón" : "renglones"} del remito de ${orden.proveedor}.`}
+      />
+
+      {/* Overlay de la creación masiva: acá sí se puede contar. */}
+      <ProgresoOverlay
+        abierto={bulkCrearLoading}
+        titulo="Creando productos sugeridos"
+        descripcion="Se crean de a tres por vez para no saturar la conexión."
+        progreso={bulkProgreso ?? undefined}
+      />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>

@@ -6,6 +6,10 @@ import {
   resolverAtributosVariante,
 } from "@/entities/productos/lib/build-propiedades-filtro";
 import {
+  esPropiedadColor,
+  valorPerteneceAFamilia,
+} from "@/entities/productos/lib/color-familias";
+import {
   construirArbolCategorias,
   aplanarArbolCategorias,
   type ArbolCategorias,
@@ -70,6 +74,7 @@ export function useCatalogFilters({
         // desactiva acá para que "Propiedad N" no pueda volver a filtrarse
         // en el catálogo público sin importar cómo fluctúe el stock.
         incluirStockLegacy: false,
+        agruparColores: true,
       }),
     [productos, config],
   );
@@ -105,20 +110,33 @@ export function useCatalogFilters({
           if (valores.length === 0) return true;
           const valoresNormalizados = valores.map((v) => v.toLowerCase());
 
+          // El filtro de color guarda la FAMILIA ("Azul"), no el valor crudo
+          // ("asul", "azul/azul", "azul con bigote"), así que la comparación
+          // tiene que pasar por el mismo mapeo que armó las opciones. Para el
+          // resto de las propiedades sigue siendo igualdad exacta.
+          const esColor = esPropiedadColor(propKey);
+          const coincide = (valorCrudo: string | undefined) => {
+            if (valorCrudo === undefined) return false;
+            if (!esColor) {
+              return valoresNormalizados.includes(valorCrudo.toLowerCase());
+            }
+            return valores.some((familia) =>
+              valorPerteneceAFamilia(valorCrudo, familia),
+            );
+          };
+
           const matchNew =
             c.producto_variantes?.some((pv) => {
               if ((pv.stock_disponible ?? pv.stock) <= 0) return false;
               const atributos = resolverAtributosVariante(pv);
-              const val = atributos[propKey]?.toLowerCase();
-              return val !== undefined && valoresNormalizados.includes(val);
+              return coincide(atributos[propKey]);
             }) ?? false;
 
           const matchOld =
             c.stock?.some((s) => {
               if (s.cantidad <= 0) return false;
               const parsed = parseRawVariantString(s.variante || "");
-              const val = parsed[propKey]?.toLowerCase();
-              return val !== undefined && valoresNormalizados.includes(val);
+              return coincide(parsed[propKey]);
             }) ?? false;
 
           return matchOld || matchNew;
@@ -386,6 +404,11 @@ export function useCatalogFilters({
     categoriasConStock,
     arbolCategorias,
     resolverCategoria,
+    // La portada necesita saber a qué categoría pertenece cada producto para
+    // elegirle imagen. Se expone la MISMA función que usa el filtrado — que
+    // ya resuelve tanto `categoria_id` real como el `tipo` legacy de texto
+    // libre — en vez de reimplementarla y quedar con dos verdades.
+    resolverCategoriaIdDeProducto,
     productosFiltrados,
     productosVisibles,
     hayMasProductos,

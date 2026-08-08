@@ -3,8 +3,6 @@ import {
   getPagosCuentaCorrienteAction,
 } from "@/features/sales/actions/get-sales";
 import { getStockAction } from "@/features/stock/actions/get-product";
-import { CrearProductoSheet } from "@/features/stock/ui/create-sheet";
-import { EgresoModal } from "@/features/caja/ui/egreso-modal";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { getDashboardMetrics } from "@/features/dashboard/lib/get-dashboard-metrics";
@@ -14,9 +12,13 @@ import {
   resolverRangoRanking,
   formatearFechaISO,
   calcularCrecimiento,
+  ETIQUETA_PERIODO_ANTERIOR,
   type PeriodoPanel,
 } from "@/features/dashboard/lib/periodo-ranges";
-import { construirSerieDiaria } from "@/features/dashboard/lib/build-chart-series";
+import {
+  construirSerieComparada,
+  granularidadPara,
+} from "@/features/dashboard/lib/build-chart-series";
 import {
   detectarQuiebresRotacion,
   VENTANA_ROTACION_DIAS,
@@ -44,13 +46,15 @@ import {
   Venta,
   VentaPago,
 } from "@/entities/ventas/types";
-import Link from "next/link";
-import { Receipt, Plus } from "lucide-react";
 import { formatearMoneda } from "@/shared/utils/formatters";
+import { EgresoModal } from "@/features/caja/ui/egreso-modal";
+import { Button } from "@/shared/ui/button";
+import Link from "next/link";
+import { Plus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-const PERIODOS_VALIDOS: PeriodoPanel[] = ["hoy", "semana", "mes"];
+const PERIODOS_VALIDOS: PeriodoPanel[] = ["hoy", "semana", "mes", "anio"];
 
 function parsearPeriodo(valor: string | undefined): PeriodoPanel {
   return PERIODOS_VALIDOS.includes(valor as PeriodoPanel)
@@ -62,6 +66,7 @@ const ETIQUETA_PERIODO: Record<PeriodoPanel, string> = {
   hoy: "hoy",
   semana: "esta semana",
   mes: "este mes",
+  anio: "este año",
 };
 
 // Los rankings nunca son diarios (una ventana de un solo día es mala
@@ -71,6 +76,7 @@ const ETIQUETA_RANKING: Record<PeriodoPanel, string> = {
   hoy: "esta semana",
   semana: "esta semana",
   mes: "este mes",
+  anio: "este año",
 };
 
 type ReservaActivaRow = {
@@ -186,8 +192,22 @@ export default async function DashboardPage({
     metricasActuales.gananciaBrutaVentas,
     metricasAnteriores.gananciaBrutaVentas,
   );
+  const crecimientoTicket = calcularCrecimiento(
+    metricasActuales.ticketPromedio,
+    metricasAnteriores.ticketPromedio,
+  );
 
-  const serieChart = construirSerieDiaria(ventasOperativas, 30, hoy);
+  // El chart usa EXACTAMENTE los rangos del selector general (no una ventana
+  // fija de 30 días) — el selector 7D/30D propio del chart ya no existe.
+  const serieChart = construirSerieComparada(
+    ventasOperativas,
+    rangoActual,
+    rangoAnterior,
+    granularidadPara(periodo),
+    hoy,
+  );
+  const etiquetaAnterior = ETIQUETA_PERIODO_ANTERIOR[periodo];
+  const tituloComparacion = `vs. ${etiquetaAnterior}`;
 
   const quiebres = detectarQuiebresRotacion(
     ventasOperativas,
@@ -302,13 +322,16 @@ export default async function DashboardPage({
       />
 
       <div className="flex flex-col gap-3 px-2 py-2">
-        {/* HEADER UNIFICADO — título + acciones + selector de período, una sola barra */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border">
-          <div>
+        {/* HEADER — título + selector de período, nada más. Las acciones se
+            fueron a donde vive cada una: vender y crear producto ya están en
+            el menú y en la toolbar de /stock, y el gasto pasó al modal de
+            caja del navbar (es plata que sale del cajón). */}
+        <div className="flex items-center justify-between gap-3 pb-3 border-b border-border">
+          <div className="min-w-0">
             <h1 className="text-sm font-medium text-foreground">
               Operación de hoy
             </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">
               {new Intl.DateTimeFormat("es-AR", {
                 weekday: "long",
                 day: "numeric",
@@ -317,54 +340,82 @@ export default async function DashboardPage({
               }).format(hoy)}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={"/pos"}
-              className="h-10 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 sm:w-auto bg-primary text-white py-2 [a]:hover:bg-primary/80 cursor-pointer inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
-            >
-              <Plus className="mr-2 h-4 w-4" /> Registrar Venta
+          <PanelPeriodoSelector periodo={periodo} />
+        </div>
+
+        {/* ACCIONES — solo mobile: en desktop el POS está siempre a la vista en
+            el sidebar, acá el menú está detrás de la hamburguesa y vender
+            quedaba a dos toques. El gasto va al lado porque a este panel solo
+            entra quien tiene permiso, y ese permiso implica poder anotarlo
+            (sigue estando también en el modal de caja del navbar). */}
+        <div className="grid grid-cols-2 gap-2 sm:hidden">
+          <Button asChild className="h-11 w-full">
+            <Link href="/pos">
+              <Plus className="mr-2 h-4 w-4" />
+              Vender
             </Link>
-            <div className="hidden md:flex">
-              <CrearProductoSheet />
-            </div>
-            <EgresoModal />
-            <PanelPeriodoSelector periodo={periodo} />
-          </div>
+          </Button>
+          <EgresoModal
+            triggerVariant="outline"
+            triggerClassName="h-11 w-full"
+          />
         </div>
 
         {/* FILA 1 — 40% KPIs / 60% chart, ambas dependen del selector de período */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch">
-          <div className="lg:col-span-2 grid grid-cols-2 gap-3">
+          <div className="lg:col-span-2 grid grid-cols-2 gap-2">
             <KpiMiniCard
               label="Ingresos"
               value={formatearMoneda(metricasActuales.ingresos)}
-              sublabel={ETIQUETA_PERIODO[periodo]}
-              rightSlot={<GrowthBadge value={crecimientoIngresos} />}
+              sublabel={`${ETIQUETA_PERIODO[periodo]} · ${tituloComparacion}`}
+              rightSlot={
+                <GrowthBadge
+                  value={crecimientoIngresos}
+                  titulo={tituloComparacion}
+                />
+              }
             />
             <KpiMiniCard
               label="Unidades"
               value={String(metricasActuales.unidadesVendidas)}
-              sublabel="vendidas"
-              rightSlot={<GrowthBadge value={crecimientoUnidades} />}
+              sublabel={`vendidas · ${tituloComparacion}`}
+              rightSlot={
+                <GrowthBadge
+                  value={crecimientoUnidades}
+                  titulo={tituloComparacion}
+                />
+              }
             />
             <KpiMiniCard
               label="Ticket promedio"
               value={formatearMoneda(metricasActuales.ticketPromedio)}
               sublabel={`${metricasActuales.ordenes} tickets`}
               rightSlot={
-                <Receipt className="w-3.5 h-3.5 text-muted-foreground/40" />
+                <GrowthBadge
+                  value={crecimientoTicket}
+                  titulo={tituloComparacion}
+                />
               }
             />
             <KpiMiniCard
               label="Ganancia"
               value={formatearMoneda(metricasActuales.gananciaBrutaVentas)}
               sublabel={`Margen ${metricasActuales.margenPorcentaje.toFixed(1)}%`}
-              rightSlot={<GrowthBadge value={crecimientoGanancia} />}
+              rightSlot={
+                <GrowthBadge
+                  value={crecimientoGanancia}
+                  titulo={tituloComparacion}
+                />
+              }
             />
           </div>
 
           <div className="lg:col-span-3">
-            <IngresosAreaChart serie={serieChart} />
+            <IngresosAreaChart
+              serie={serieChart}
+              etiquetaPeriodo={ETIQUETA_PERIODO[periodo]}
+              etiquetaPeriodoAnterior={etiquetaAnterior}
+            />
           </div>
         </div>
 

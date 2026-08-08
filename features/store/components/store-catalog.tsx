@@ -6,8 +6,16 @@ import { Button } from "@/shared/ui/button";
 import { Plus, SearchX, ShoppingBag } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CategoryPills } from "./CategoryPills";
-import { CatalogToolbar, OrdenOption } from "./CatalogToolbar";
+
+import { FiltrosPanel } from "./filtros/filtros-panel";
+import { BarraCatalogo } from "./filtros/barra-catalogo";
 import { ProductCard } from "./product-card";
+import {
+  alternarValorFiltro,
+  parsearValoresFiltro,
+  serializarValoresFiltro,
+  type OrdenOption,
+} from "../lib/filtros-url";
 import {
   DEFAULT_ORDEN,
   DEFAULT_TIPO,
@@ -19,12 +27,22 @@ import { slugify } from "@/shared/utils/slugify";
 import { resolverCategoriaPorSlug } from "@/shared/utils/category-tree";
 import { parsearIdsSeleccion } from "@/shared/utils/compartir-catalogo";
 import { ConfiguracionPOS } from "@/entities/config/types";
+import { StoreHome } from "./store-home";
+import {
+  construirPortadaCategorias,
+  esModoPortada,
+  PARAM_VER_TODO,
+  recienLlegados,
+  VALOR_VER_TODO,
+} from "../lib/portada-catalogo";
 
 interface CategoriaProp {
   id: string;
   nombre: string;
   slug?: string | null;
   parent_id?: string | null;
+  /** Portada elegida en Configuración → Categorías. */
+  imagen_url?: string | null;
 }
 
 interface StoreCatalogProps {
@@ -41,7 +59,16 @@ const ordenOptions: OrdenOption[] = [
 ];
 const ORDEN_VALIDOS = new Set(ordenOptions.map((o) => o.value));
 
-const PARAMS_RESERVADOS = new Set(["q", "categoria", "sub", "orden", "productos"]);
+const PARAMS_RESERVADOS = new Set([
+  "q",
+  "categoria",
+  "sub",
+  "orden",
+  "productos",
+  // `ver` alterna portada/grilla completa: si no estuviera acá, una propiedad
+  // de variante llamada "Ver" lo pisaría.
+  PARAM_VER_TODO,
+]);
 
 export function StoreCatalog({
   productos,
@@ -97,6 +124,16 @@ function CatalogContent({
       })),
     [categorias],
   );
+
+  // El árbol de categorías no transporta la portada (no la necesita para
+  // filtrar), así que se busca acá contra las filas crudas.
+  const portadaPorCategoriaId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const cat of categorias || []) {
+      if (cat.imagen_url) map.set(cat.id, cat.imagen_url);
+    }
+    return map;
+  }, [categorias]);
 
   // --- categoria (?categoria=<slug>) + sub (?sub=<slug>) ---
   // La identidad (padre/hijo) se resuelve contra la lista PLANA de
@@ -156,9 +193,9 @@ function CatalogContent({
 
       // 2. Filtro por Categoría activa
       if (tipo !== DEFAULT_TIPO) {
-        // NOTA: Ajusta `p.categoria_id` si en tu interfaz Producto la propiedad se llama distinto
-        // (por ejemplo: p.tipo_id, p.categoria, etc.)
-        const catId = (p as any).categoria_id; 
+        // `categoria_id` está en el tipo Producto (lo usa useCatalogFilters
+        // directo); el `as any` que había acá no hacía falta.
+        const catId = p.categoria_id;
         if (!catId) return false;
 
         // Match exacto (Ej: Seleccionó Hombre y el producto es Hombre)
@@ -180,18 +217,23 @@ function CatalogContent({
       buildPropiedadesFiltro(productosContextuales, {
         ocultarSinStock: config?.mostrar_sin_stock === false,
         incluirStockLegacy: false,
+        // Los colores se muestran agrupados en familias con su muestra de
+        // color; el valor crudo se sigue viendo en la ficha del producto.
+        agruparColores: true,
       }),
     [productosContextuales, config],
   );
 
+  // Multi-valor: `?color=Azul,Negro`. Un link viejo de un solo valor parsea a
+  // un array de uno y filtra igual que antes.
   const filtrosVariantes = useMemo(() => {
     if (modoSeleccion) return {};
-    const result: Record<string, string> = {};
+    const result: Record<string, string[]> = {};
     for (const propName of Object.keys(propiedadesGlobales)) {
       const paramName = slugify(propName);
       if (PARAMS_RESERVADOS.has(paramName)) continue;
-      const valor = searchParams.get(paramName);
-      if (valor) result[propName] = valor;
+      const valores = parsearValoresFiltro(searchParams.get(paramName));
+      if (valores.length > 0) result[propName] = valores;
     }
     return result;
   }, [searchParams, propiedadesGlobales, modoSeleccion]);
@@ -205,6 +247,7 @@ function CatalogContent({
     hayMasProductos,
     hayFiltrosActivos,
     matchesFueraDeCategoria,
+    resolverCategoriaIdDeProducto,
   } = useCatalogFilters({
     productos: productosBase,
     categorias,
@@ -217,6 +260,65 @@ function CatalogContent({
   });
 
   const resetVisibleCount = () => setVisibleCount(ITEMS_POR_PAGINA);
+
+  // --- portada vs. grilla completa ---
+  const verTodo = searchParams.get(PARAM_VER_TODO) === VALOR_VER_TODO;
+  // El `length > 0` no está en esModoPortada porque no es una decisión de
+  // navegación sino de datos: si el catálogo tiene productos cargados pero
+  // ninguno visible (todo sin stock con `mostrar_sin_stock: false`), la
+  // portada quedaría en una pantalla con un botón que dice "Ver los 0
+  // productos". Ahí conviene caer al estado vacío de la grilla.
+  const modoPortada =
+    esModoPortada({
+      modoSeleccion,
+      tipo,
+      searchQuery,
+      verTodo,
+      cantidadFiltrosVariante: Object.keys(filtrosVariantes).length,
+    }) && productosFiltrados.length > 0;
+
+  // `productosFiltrados` en la portada equivale a "todo lo visible" (sin
+  // categoría, sin búsqueda, sin filtros), así que sirve de base tanto para
+  // los recién llegados como para el total del botón de salida.
+  const recientes = useMemo(
+    () => (modoPortada ? recienLlegados(productosFiltrados) : []),
+    [modoPortada, productosFiltrados],
+  );
+
+  const categoriasPortada = useMemo(() => {
+    if (!modoPortada) return [];
+
+    // Un padre no tiene productos propios: su rama son él y sus hijos. Las
+    // categorías sueltas (sin padre) entran como una rama de uno.
+    const entradas = [
+      ...arbolCategorias.padres.map((padre) => ({
+        id: padre.id,
+        nombre: padre.nombre,
+        count: padre.count,
+        idsRama: [padre.id, ...padre.hijos.map((h) => h.id)],
+        imagenConfigurada: portadaPorCategoriaId.get(padre.id) ?? null,
+      })),
+      ...arbolCategorias.sinPadre.map((cat) => ({
+        id: cat.id,
+        nombre: cat.nombre,
+        count: cat.count,
+        idsRama: [cat.id],
+        imagenConfigurada: portadaPorCategoriaId.get(cat.id) ?? null,
+      })),
+    ];
+
+    return construirPortadaCategorias({
+      entradas,
+      productos: productosFiltrados,
+      resolverCategoriaId: resolverCategoriaIdDeProducto,
+    });
+  }, [
+    modoPortada,
+    arbolCategorias,
+    productosFiltrados,
+    resolverCategoriaIdDeProducto,
+    portadaPorCategoriaId,
+  ]);
 
   const updateParams = (
     entries: Record<string, string | null>,
@@ -246,9 +348,17 @@ function CatalogContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolucion, subResuelto, categoriasBase]);
 
+  // Salir de una categoría vuelve a la PORTADA, no a la grilla completa: por
+  // eso también se limpia `ver`. Para ver todo con filtros está el botón
+  // explícito de la portada.
   const handleSelectTodos = () => {
     resetVisibleCount();
-    updateParams({ categoria: null, sub: null }, "push");
+    updateParams({ categoria: null, sub: null, [PARAM_VER_TODO]: null }, "push");
+  };
+
+  const handleVerTodo = () => {
+    resetVisibleCount();
+    updateParams({ [PARAM_VER_TODO]: VALOR_VER_TODO }, "push");
   };
 
   // Un solo id de entrada: puede ser un padre (entra a nivel 2 / "Todo
@@ -256,10 +366,13 @@ function CatalogContent({
   // suelta (comportamiento plano de siempre).
   const handleSelectCategoria = (id: string) => {
     resetVisibleCount();
+    // `ver` se limpia siempre: adentro de una categoría la grilla con filtros
+    // acotados es el comportamiento por defecto, no hace falta el flag.
+    const salirDeVerTodo = { [PARAM_VER_TODO]: null };
 
     const padre = arbolCategorias.padres.find((p) => p.id === id);
     if (padre) {
-      updateParams({ categoria: padre.slug, sub: null }, "push");
+      updateParams({ categoria: padre.slug, sub: null, ...salirDeVerTodo }, "push");
       return;
     }
 
@@ -268,12 +381,18 @@ function CatalogContent({
     );
     if (padreDeHijo) {
       const hijo = padreDeHijo.hijos.find((h) => h.id === id)!;
-      updateParams({ categoria: padreDeHijo.slug, sub: hijo.slug }, "push");
+      updateParams(
+        { categoria: padreDeHijo.slug, sub: hijo.slug, ...salirDeVerTodo },
+        "push",
+      );
       return;
     }
 
     const cat = categoriasBase.find((c) => c.id === id);
-    updateParams({ categoria: cat?.slug ?? id, sub: null }, "push");
+    updateParams(
+      { categoria: cat?.slug ?? id, sub: null, ...salirDeVerTodo },
+      "push",
+    );
   };
 
   const handleOrdenChange = (value: string) => {
@@ -281,16 +400,37 @@ function CatalogContent({
     updateParams({ orden: value === DEFAULT_ORDEN ? null : value }, "replace");
   };
 
-  const handleFiltroVarianteChange = (propiedad: string, valor: string) => {
+  // Toggle: tocar un valor ya elegido lo desmarca. Es lo que permite tener
+  // varios colores puestos y sacar uno solo sin limpiar todo.
+  const handleToggleValorFiltro = (propiedad: string, valor: string) => {
     resetVisibleCount();
     const paramName = slugify(propiedad);
     if (PARAMS_RESERVADOS.has(paramName)) return;
-    updateParams({ [paramName]: valor === "todos" ? null : valor }, "push");
+
+    const actuales = filtrosVariantes[propiedad] ?? [];
+    const siguiente = alternarValorFiltro(actuales, valor);
+    updateParams({ [paramName]: serializarValoresFiltro(siguiente) }, "push");
   };
 
+  /**
+   * Limpia SÓLO los filtros de variante y la búsqueda — la categoría en la que
+   * estás parado se conserva.
+   *
+   * Antes esto hacía `router.replace(pathname)`, que borraba todo: estando en
+   * "Ropa Mujer" con dos colores puestos, tocar Limpiar te devolvía a la
+   * portada. Con los filtros escondidos en un dropdown casi no se notaba; con
+   * el botón a la vista en el panel es el camino obvio para sacarse un color
+   * de encima.
+   */
   const limpiarFiltros = () => {
     resetVisibleCount();
-    router.replace(pathname);
+    const aBorrar: Record<string, string | null> = { q: null };
+    for (const propName of Object.keys(propiedadesGlobales)) {
+      const paramName = slugify(propName);
+      if (PARAMS_RESERVADOS.has(paramName)) continue;
+      aBorrar[paramName] = null;
+    }
+    updateParams(aBorrar, "replace");
   };
 
   if (productos.length === 0) {
@@ -307,88 +447,141 @@ function CatalogContent({
     );
   }
 
+  // Portada: categorías + recién llegados, SIN la barra de filtros. Los
+  // filtros de variante sobre el catálogo entero eran ilegibles (todos los
+  // talles y todos los colores del local juntos); adentro de una categoría el
+  // mismo componente ya sale acotado, porque `propiedadesGlobales` se calcula
+  // sobre `productosContextuales`.
+  if (modoPortada) {
+    return (
+      <StoreHome
+        categorias={categoriasPortada}
+        recientes={recientes}
+        totalProductos={productosFiltrados.length}
+        onSelectCategoria={handleSelectCategoria}
+        onVerTodo={handleVerTodo}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Los chips de categoría quedan arriba de todo: adentro de una
+          categoría muestran sus SUBcategorías, que es navegación y no
+          filtrado. Por eso no se mudan al aside. */}
       {!modoSeleccion && (
-        <>
-          <CategoryPills
-            tipoActivo={tipo}
-            arbolCategorias={arbolCategorias}
-            onSelectTodos={handleSelectTodos}
-            onSelectCategoria={handleSelectCategoria}
-          />
-
-          <CatalogToolbar
-            propiedadesGlobales={propiedadesGlobales}
-            filtrosVariantes={filtrosVariantes}
-            orden={orden}
-            searchQuery={searchQuery}
-            hayFiltrosActivos={hayFiltrosActivos}
-            ordenOptions={ordenOptions}
-            onFiltroVarianteChange={handleFiltroVarianteChange}
-            onOrdenChange={handleOrdenChange}
-            onLimpiarFiltros={limpiarFiltros}
-          />
-
-          {tipo !== DEFAULT_TIPO && matchesFueraDeCategoria > 0 && (
-            <button
-              type="button"
-              onClick={handleSelectTodos}
-              className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
-            >
-              Ver {matchesFueraDeCategoria} resultado
-              {matchesFueraDeCategoria === 1 ? "" : "s"} más en todo el
-              catálogo
-            </button>
-          )}
-        </>
+        <CategoryPills
+          tipoActivo={tipo}
+          arbolCategorias={arbolCategorias}
+          onSelectTodos={handleSelectTodos}
+          onSelectCategoria={handleSelectCategoria}
+          volverAInicio={verTodo}
+        />
       )}
 
-      {productosFiltrados.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <SearchX
-            className="w-12 h-12 text-muted-foreground/30 mb-4"
-            strokeWidth={1}
-          />
-          <h2 className="text-xl font-medium text-foreground tracking-tight">
-            No encontramos resultados
-          </h2>
-          <Button
-            variant="link"
-            className="mt-4 text-foreground underline underline-offset-4"
-            onClick={limpiarFiltros}
-          >
-            Limpiar filtros
-          </Button>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12">
-            {productosVisibles.map((producto, index) => (
-              <ProductCard
-                key={producto.id}
-                producto={producto}
-                priority={index < 8}
+      <div className="flex gap-8">
+        {/* ASIDE DE FILTROS (desktop). `sticky` con su propio scroll: en una
+            categoría con muchos talles el panel es más alto que la pantalla y
+            si no, el final quedaba inalcanzable. */}
+        {!modoSeleccion && (
+          <aside className="hidden lg:block w-60 xl:w-64 shrink-0">
+            <div className="sticky top-24 max-h-[calc(100dvh-8rem)] overflow-y-auto pr-2 scrollbar-hide">
+              <FiltrosPanel
+                propiedadesGlobales={propiedadesGlobales}
+                filtrosVariantes={filtrosVariantes}
+                onToggleValor={handleToggleValorFiltro}
+                onLimpiarFiltros={limpiarFiltros}
+                hayFiltrosActivos={hayFiltrosActivos}
+                orden={orden}
+                ordenOptions={ordenOptions}
+                onOrdenChange={handleOrdenChange}
               />
-            ))}
-          </div>
+            </div>
+          </aside>
+        )}
 
-          {hayMasProductos && (
-            <div className="flex justify-center pt-12 pb-8">
+        <div className="min-w-0 flex-1 space-y-6">
+          {!modoSeleccion && (
+            <>
+              <BarraCatalogo
+                totalResultados={productosFiltrados.length}
+                propiedadesGlobales={propiedadesGlobales}
+                filtrosVariantes={filtrosVariantes}
+                onToggleValor={handleToggleValorFiltro}
+                onLimpiarFiltros={limpiarFiltros}
+                hayFiltrosActivos={hayFiltrosActivos}
+                orden={orden}
+                ordenOptions={ordenOptions}
+                onOrdenChange={handleOrdenChange}
+              />
+
+              {tipo !== DEFAULT_TIPO && matchesFueraDeCategoria > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSelectTodos}
+                  className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
+                >
+                  Ver {matchesFueraDeCategoria} resultado
+                  {matchesFueraDeCategoria === 1 ? "" : "s"} más en todo el
+                  catálogo
+                </button>
+              )}
+            </>
+          )}
+
+          {productosFiltrados.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <SearchX
+                className="w-12 h-12 text-muted-foreground/30 mb-4"
+                strokeWidth={1}
+              />
+              <h2 className="text-xl font-medium text-foreground tracking-tight">
+                No encontramos resultados
+              </h2>
               <Button
-                variant="outline"
-                size="lg"
-                onClick={() =>
-                  setVisibleCount((prev) => prev + ITEMS_POR_PAGINA)
-                }
-                className="w-full sm:w-auto font-bold rounded-none border-border shadow-none text-foreground px-12 uppercase tracking-widest text-xs transition-colors h-14 cursor-pointer"
+                variant="link"
+                className="mt-4 text-foreground underline underline-offset-4"
+                onClick={limpiarFiltros}
               >
-                <Plus className="mr-2 h-4 w-4" /> Cargar más
+                Limpiar filtros
               </Button>
             </div>
+          ) : (
+            <>
+              {/* La cuarta columna vuelve en xl. No es sólo estética: las
+                  imágenes de grilla se guardan a 480px de lado máximo, así
+                  que a 3 columnas en una pantalla de 1280px cada card queda
+                  en ~300px CSS y en retina pide 600px reales — de ahí que se
+                  vieran pixeladas. Con 4 columnas la card baja a ~224px, que
+                  en retina pide 448px y entra dentro del original. */}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12">
+                {productosVisibles.map((producto, index) => (
+                  <ProductCard
+                    key={producto.id}
+                    producto={producto}
+                    priority={index < 8}
+                  />
+                ))}
+              </div>
+
+              {hayMasProductos && (
+                <div className="flex justify-center pt-12 pb-8">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() =>
+                      setVisibleCount((prev) => prev + ITEMS_POR_PAGINA)
+                    }
+                    className="w-full sm:w-auto font-bold rounded-none border-border shadow-none text-foreground px-12 uppercase tracking-widest text-xs transition-colors h-14 cursor-pointer"
+                  >
+                    <Plus className="mr-2 h-4 w-4" /> Cargar más
+                  </Button>
+                </div>
+              )}
+            </>
           )}
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 }

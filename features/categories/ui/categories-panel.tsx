@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { bulkSaveCategoriasAction } from "../actions/manage-categories";
 import { CategoryAttributesModal } from "./category-attributes-modal";
+import { PortadaCategoria } from "./portada-categoria";
 
 export interface Categoria {
   id: string;
@@ -43,6 +44,8 @@ export interface Categoria {
   activa: boolean;
   orden: number;
   parent_id?: string | null;
+  /** Portada en la home del catálogo público. Sólo aplica a categorías raíz. */
+  imagen_url?: string | null;
 }
 
 type LocalCategory = Categoria & { isNew?: boolean };
@@ -231,7 +234,9 @@ export function CategoriesPanel({
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             Para organizar tus productos, creá categorías y subcategorías que
-            aparecerán en el menú de tu tienda y POS.
+            aparecerán en el menú de tu tienda y POS. La miniatura de cada
+            categoría principal es su portada en la home del catálogo: si no
+            elegís ninguna, se usa la foto de alguno de sus productos.
           </p>
         </div>
 
@@ -274,6 +279,14 @@ export function CategoriesPanel({
                       <ChevronRight className="w-4 h-4" />
                     )}
                   </button>
+
+                  {/* Sólo en raíces: la portada del catálogo muestra padres y
+                      categorías sueltas, nunca subcategorías. */}
+                  <PortadaCategoria
+                    imagenUrl={root.imagen_url}
+                    nombreCategoria={root.nombre}
+                    onChange={(url) => updateCat(root.id, { imagen_url: url })}
+                  />
 
                   <Input
                     value={root.nombre}

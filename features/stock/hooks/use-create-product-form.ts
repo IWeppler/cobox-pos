@@ -6,10 +6,17 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
-import { optimizarImagenProducto } from "@/shared/utils/image-optimizer";
+import {
+  ImagenNoProcesableError,
+  optimizarImagenesProducto,
+} from "@/shared/utils/image-optimizer";
 import { crearProductoAction } from "../actions/create-product";
 import { useVariantSelection } from "./use-variant-selection";
 import { queryKeys } from "@/shared/lib/query-keys";
+import {
+  marcarFinOperacion,
+  marcarInicioOperacion,
+} from "@/shared/lib/breadcrumb-carga";
 import type {
   CategoriaOption,
   ProductActionState,
@@ -157,21 +164,42 @@ export function useCreateProductForm(control?: ControlDeApertura) {
 
     if (archivos.length > 0) {
       setIsCompressing(true);
+      // Miga de pan: si la pestaña muere acá (el crash por memoria no tira
+      // excepción), al recargar se reporta como "posible-crash-renderer" con
+      // cuántas imágenes había. Sin esto no queda rastro en ningún lado.
+      marcarInicioOperacion("crear-producto:comprimir-imagenes", {
+        cantidadImagenes: archivos.length,
+        bytesTotales: archivos.reduce((acc, f) => acc + f.size, 0),
+      });
       formData.delete("imagenes");
       formData.delete("thumbnails");
       formData.delete("grids");
 
-      const imagenesOptimizadas = await Promise.all(
-        archivos.map((f) => optimizarImagenProducto(f)),
-      );
+      // Secuencial a propósito (ver optimizarImagenesProducto): en paralelo
+      // el pico de memoria mataba la pestaña en mobile.
+      try {
+        const imagenesOptimizadas = await optimizarImagenesProducto(archivos);
 
-      imagenesOptimizadas.forEach(({ main, thumbnail, grid }) => {
-        formData.append("imagenes", main);
-        formData.append("thumbnails", thumbnail);
-        formData.append("grids", grid);
-      });
-
-      setIsCompressing(false);
+        imagenesOptimizadas.forEach(({ main, thumbnail, grid }) => {
+          formData.append("imagenes", main);
+          formData.append("thumbnails", thumbnail);
+          formData.append("grids", grid);
+        });
+      } catch (error) {
+        // Cortamos el guardado: mandar el archivo sin comprimir era lo que
+        // hacía explotar el límite de body de la Server Action en silencio.
+        toast.error(
+          error instanceof ImagenNoProcesableError
+            ? error.message
+            : "No se pudieron procesar las imágenes. Probá con menos fotos o volvé a intentar.",
+        );
+        return;
+      } finally {
+        // finally y no una línea suelta: si la compresión tira, el form
+        // quedaba trabado en "comprimiendo" para siempre.
+        setIsCompressing(false);
+        marcarFinOperacion();
+      }
     }
 
     startTransition(() => formAction(formData));

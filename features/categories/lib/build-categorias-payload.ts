@@ -5,6 +5,8 @@ export type CategoriaBulkInput = {
   nombre: string;
   parent_id?: string | null;
   activa: boolean;
+  /** Portada de la categoría en el catálogo público. */
+  imagen_url?: string | null;
   isNew?: boolean;
 };
 
@@ -38,6 +40,11 @@ export function construirPayloadCategorias(categorias: CategoriaBulkInput[]) {
     slug: generateSlug(cat.nombre),
     parent_id: cat.parent_id || null, // Relación Padre/Hijo
     activa: cat.activa,
+    // Siempre presente, aunque sea null: PostgREST arma el UPDATE del upsert
+    // con la UNIÓN de las claves de todas las filas del lote. Si una fila
+    // omitiera `imagen_url`, se completaría con null y le borraría la portada
+    // a esa categoría al guardar cualquier otro cambio.
+    imagen_url: cat.imagen_url ?? null,
     orden: index, // Guardamos el orden visual
   }));
 }

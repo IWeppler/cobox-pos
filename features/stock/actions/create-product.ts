@@ -9,6 +9,7 @@ import {
   construirCacheAtributos,
 } from "@/features/stock/lib/normalize-atributo";
 import { obtenerAtributosRequeridosFaltantes } from "@/features/stock/lib/validate-required-atributos";
+import { subirImagenesProducto } from "@/features/stock/lib/subir-imagenes-producto";
 
 export async function crearProductoAction(
   prevState: { error: string | null; success: boolean },
@@ -90,82 +91,28 @@ export async function crearProductoAction(
     if (cat) tipo = cat.nombre;
   }
 
-  // 1. Subir imágenes (main + thumbnail + grid, asociadas por índice via baseFileName)
+  // 1. Subir imágenes (main + thumbnail + grid, alineadas por índice — ver
+  // subirImagenesProducto para por qué el bucle que estaba acá desalineaba
+  // las tres listas).
   let imagen_url = null;
   let thumbnail_url = null;
   let grid_url = null;
-  const validFiles = archivos.filter((f) => f.size > 0);
-  
-  if (validFiles.length > 0) {
-    const urls: string[] = [];
-    const urlsThumb: string[] = [];
-    const urlsGrid: string[] = [];
 
-    for (let i = 0; i < validFiles.length; i++) {
-      const file = validFiles[i];
-      const fileExt = file.name.split(".").pop();
-      const baseFileName = crypto.randomUUID();
-      
-      const fileName = `${negocioId}/${baseFileName}.${fileExt}`;
+  if (archivos.some((f) => f.size > 0)) {
+    const { mains, thumbs, grids: gridUrls } = await subirImagenesProducto(
+      supabase,
+      negocioId,
+      archivos,
+      thumbnails,
+      grids,
+      "CREATE PRODUCT",
+    );
 
-      const { error: uploadError } = await supabase.storage
-        .from("productos")
-        .upload(fileName, file, { cacheControl: "31536000" });
-     
-        if (!uploadError) {
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("productos").getPublicUrl(fileName);
-        urls.push(publicUrl);
-      }
-
-      const thumb = thumbnails[i];
-      if (thumb && thumb.size > 0) {
-        const thumbExt = thumb.name.split(".").pop();
-        const thumbName = `${negocioId}/thumbs/${baseFileName}-thumb.${thumbExt}`;
-        const { error: uploadThumbError } = await supabase.storage
-          .from("productos")
-          .upload(thumbName, thumb, { cacheControl: "31536000" });
-        
-          if (!uploadThumbError) {
-          const {
-            data: { publicUrl: thumbUrl },
-          } = supabase.storage.from("productos").getPublicUrl(thumbName);
-          urlsThumb.push(thumbUrl);
-        } else {
-          console.error("[CREATE PRODUCT THUMBNAIL ERROR]", uploadThumbError);
-        }
-      } else if (!uploadError) {
-        console.warn(
-          `[CREATE PRODUCT] Sin thumbnail para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
-        );
-      }
-
-      const grid = grids[i];
-      if (grid && grid.size > 0) {
-        const gridExt = grid.name.split(".").pop();
-        const gridName = `${negocioId}/grids/${baseFileName}-grid.${gridExt}`;
-        const { error: uploadGridError } = await supabase.storage
-          .from("productos")
-          .upload(gridName, grid, { cacheControl: "31536000" });
-        if (!uploadGridError) {
-          const {
-            data: { publicUrl: gridUrl },
-          } = supabase.storage.from("productos").getPublicUrl(gridName);
-          urlsGrid.push(gridUrl);
-        } else {
-          console.error("[CREATE PRODUCT GRID ERROR]", uploadGridError);
-        }
-      } else if (!uploadError) {
-        console.warn(
-          `[CREATE PRODUCT] Sin grid para la imagen ${i} (archivo "${file.name}") — se sube igual el main.`,
-        );
-      }
+    if (mains.length > 0) {
+      imagen_url = JSON.stringify(mains);
+      thumbnail_url = JSON.stringify(thumbs);
+      grid_url = JSON.stringify(gridUrls);
     }
-
-    if (urls.length > 0) imagen_url = JSON.stringify(urls);
-    if (urlsThumb.length > 0) thumbnail_url = JSON.stringify(urlsThumb);
-    if (urlsGrid.length > 0) grid_url = JSON.stringify(urlsGrid);
   }
 
   let slug = slugify(`${nombre}-${tipo}`);
@@ -303,6 +250,11 @@ export async function crearProductoAction(
       /^(propiedad|opci[oó]n)\s*\d*$/i.test(op.nombre),
     );
     if (nombreGenerico) {
+      // La cabecera del producto ya está insertada en este punto: sin este
+      // delete quedaba un producto sin ninguna variante en la base, invisible
+      // para quien lo creó (el form muestra el error y no se cierra) pero
+      // presente en el listado de stock.
+      await supabase.from("productos").delete().eq("id", nuevoProducto.id);
       return {
         error: `La propiedad "${nombreGenerico.nombre}" es un nombre genérico auto-generado. Renombrala (ej. "Color", "Talle", "Material") antes de guardar.`,
         success: false,
@@ -316,6 +268,8 @@ export async function crearProductoAction(
     );
 
     if (opciones.length === 0 || variantes.length === 0) {
+      // Mismo motivo que arriba: producto ya insertado, sin variantes.
+      await supabase.from("productos").delete().eq("id", nuevoProducto.id);
       return {
         error:
           "Las variantes no tienen propiedades o valores válidos. Revisa la grilla antes de guardar.",

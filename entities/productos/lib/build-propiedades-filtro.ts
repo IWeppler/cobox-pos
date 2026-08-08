@@ -3,6 +3,10 @@ import {
   parseRawVariantString,
 } from "./parse-variant-attributes";
 import { compararTalles } from "./comparar-talles";
+import {
+  agruparValoresPorFamilia,
+  esPropiedadColor,
+} from "./color-familias";
 
 /**
  * Forma mínima que necesitan estas funciones — deliberadamente más chica
@@ -60,6 +64,12 @@ export interface BuildPropiedadesFiltroOptions extends ResolverAtributosOptions 
   /** Excluye variantes/stock en 0 al armar los grupos (catálogo público). */
   ocultarSinStock?: boolean;
   incluirStockLegacy?: boolean;
+  /**
+   * Colapsa los valores de las propiedades de color en familias
+   * (ver color-familias.ts). Sólo lo usa el catálogo público: en /stock hay
+   * que ver el valor exacto que se cargó, no una agrupación.
+   */
+  agruparColores?: boolean;
 }
 
 export function buildPropiedadesFiltro(
@@ -70,6 +80,7 @@ export function buildPropiedadesFiltro(
     ocultarSinStock = false,
     incluirFallbackRelacional = false,
     incluirStockLegacy = false,
+    agruparColores = false,
   } = options;
 
   const propsMap: Record<string, { label: string; valores: Map<string, string> }> =
@@ -138,8 +149,20 @@ export function buildPropiedadesFiltro(
       return pa - pb || a.label.localeCompare(b.label);
     })
     .forEach(({ label, valores }) => {
-      const esTalle = normalizarParaComparar(label) === "talle";
       const valoresArray = Array.from(valores.values());
+
+      // El color se colapsa a familias: en el catálogo real son ~300 valores
+      // distintos entre sinónimos, tonos, combinaciones y typos, imposible de
+      // leer como lista. agruparValoresPorFamilia ya devuelve las familias en
+      // el orden declarado, así que no se re-ordena alfabéticamente.
+      if (agruparColores && esPropiedadColor(label)) {
+        result[label] = agruparValoresPorFamilia(valoresArray).map(
+          (f) => f.etiqueta,
+        );
+        return;
+      }
+
+      const esTalle = normalizarParaComparar(label) === "talle";
       result[label] = esTalle
         ? valoresArray.sort(compararTalles)
         : valoresArray.sort();

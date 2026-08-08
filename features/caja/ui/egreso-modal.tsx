@@ -15,12 +15,39 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { TrendingDown, Loader2 } from "lucide-react";
+import { CajaActionState } from "@/entities/caja/types";
 
-export function EgresoModal() {
-  const [isOpen, setIsOpen] = useState(false);
+interface EgresoModalProps {
+  /** Controlado desde afuera (el modal de caja lo abre sin trigger propio).
+   * Sin esta prop el modal se maneja solo, como siempre. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** false cuando quien abre el modal es otro control (ver CajaStatusButton). */
+  mostrarTrigger?: boolean;
+  /** Estilo del trigger propio, para que el mismo modal sirva como acción
+   * suelta de una barra o como botón ancho del panel en mobile. */
+  triggerClassName?: string;
+  triggerVariant?: "ghost" | "outline" | "secondary";
+}
 
-  const [state, formAction, isPending] = useActionState(
-    async (prevState: any, formData: FormData) => {
+export function EgresoModal({
+  open,
+  onOpenChange,
+  mostrarTrigger = true,
+  triggerClassName,
+  triggerVariant = "ghost",
+}: Readonly<EgresoModalProps> = {}) {
+  const [isOpenInterno, setIsOpenInterno] = useState(false);
+
+  const esControlado = open !== undefined;
+  const isOpen = esControlado ? open : isOpenInterno;
+  const setIsOpen = (valor: boolean) => {
+    if (!esControlado) setIsOpenInterno(valor);
+    onOpenChange?.(valor);
+  };
+
+  const [, formAction, isPending] = useActionState(
+    async (prevState: CajaActionState, formData: FormData) => {
       const result = await registrarEgresoAction(prevState, formData);
       if (result.success) {
         toast.success("Gasto registrado correctamente");
@@ -35,14 +62,14 @@ export function EgresoModal() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-        >
-          <TrendingDown className="w-4 h-4 mr-2" />
-          Anotar Gasto
-        </Button>
-      </DialogTrigger>
+      {mostrarTrigger && (
+        <DialogTrigger asChild>
+          <Button variant={triggerVariant} className={triggerClassName}>
+            <TrendingDown className="w-4 h-4 mr-2" />
+            Anotar Gasto
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Registrar Egreso</DialogTitle>

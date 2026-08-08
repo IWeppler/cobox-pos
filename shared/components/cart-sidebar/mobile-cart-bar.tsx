@@ -29,7 +29,7 @@ export function MobileCartBar({
       </span>
       </div>
       <div className="flex h-10 w-10 items-center justify-center bg-primary rounded-lg">
-      <ChevronUp className="h-5 w-5 shrink-0" />
+      <ChevronUp className="h-5 w-5 shrink-0 text-white" />
       </div>
     </button>
   );
