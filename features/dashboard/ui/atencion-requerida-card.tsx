@@ -1,5 +1,6 @@
 import { Package, Bookmark } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+import { DevolverReservaButton } from "@/features/reservations/ui/devolver-reserva-button";
 import { formatearFechaHora } from "@/shared/utils/formatters";
 import type { QuiebreProducto } from "../lib/detectar-quiebres";
 
@@ -127,11 +128,17 @@ export function AtencionRequeridaCard({
                       {r.clienteNombre ? ` · para ${r.clienteNombre}` : ""}
                     </p>
                   </div>
-                  {r.vencida && (
-                    <span className="shrink-0 text-warning font-medium">
-                      +24h
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {r.vencida && (
+                      <span className="text-warning font-medium">+24h</span>
+                    )}
+                    <DevolverReservaButton
+                      reservaId={r.id}
+                      nombreProducto={r.nombreProducto}
+                      varianteNombre={r.varianteNombre}
+                      clienteNombre={r.clienteNombre}
+                    />
+                  </div>
                 </div>
               ))}
             </div>

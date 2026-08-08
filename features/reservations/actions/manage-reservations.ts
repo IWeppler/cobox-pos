@@ -163,15 +163,26 @@ export async function devolverReservaAction(
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const { error } = await supabase
+  // UPDATE condicional + chequeo de filas afectadas: si otra pestaña ya la
+  // devolvió o la reserva se vendió en el medio, no hay filas y NO se puede
+  // reportar éxito (avisaríamos "volvió a stock" sobre algo que no pasó).
+  const { data: actualizadas, error } = await supabase
     .from("reservas")
     .update({ estado: "DEVUELTA", resuelto_en: new Date().toISOString() })
     .eq("id", reservaId)
-    .eq("estado", "ACTIVA");
+    .eq("estado", "ACTIVA")
+    .select("id");
 
   if (error) {
     console.error("[DEVOLVER RESERVA ERROR]", error);
     return { error: "No se pudo devolver la reserva a stock.", success: false };
+  }
+
+  if (!actualizadas?.length) {
+    return {
+      error: "Esa reserva ya no está activa (se vendió o ya se devolvió).",
+      success: false,
+    };
   }
 
   revalidatePath("/stock");
