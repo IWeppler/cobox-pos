@@ -452,8 +452,13 @@ export function MergeTable({
     itemsOriginales.map((item) => ({
       ...item,
       variante_match: item.variante_match || item.raw_variante || "Unico",
+      // El precio de la planilla gana sobre el que ya tiene el producto: si
+      // el proveedor mandó lista nueva, ese es el dato más fresco. No se
+      // escribe solo — queda en el input de la fila y se aprueba a mano.
       precio_venta_actualizado:
-        productoReal(item.producto_id, productos)?.precio || 0,
+        Number(item.precio_venta_sugerido) > 0
+          ? Number(item.precio_venta_sugerido)
+          : productoReal(item.producto_id, productos)?.precio || 0,
     })),
   );
 
@@ -835,6 +840,16 @@ export function MergeTable({
     }
   };
 
+  /** Precio de venta con el que se crea un producto al vuelo. Usa el de la
+   * fila (que ya viene sembrado con el precio_venta de la planilla, o con el
+   * recargo global si se aplicó) y solo cae a costo + 50% si no hay ninguno:
+   * crear al 1.5 teniendo el precio del proveedor era descartarlo. */
+  function precioParaCrear(item: ItemResueltoConCategoria | undefined): number {
+    const desdeFila = Number(item?.precio_venta_actualizado || 0);
+    if (desdeFila > 0) return desdeFila;
+    return Math.ceil(Number(item?.precio_costo || 0) * 1.5);
+  }
+
   // --- 1-click: bucket (b) Nuevo Sugerido ---
   const handleCrearSugerido = async (
     rawNombre: string,
@@ -845,7 +860,7 @@ export function MergeTable({
     if (!itemActual) return;
 
     const categoriaId = categoriaIdPorGrupo[rawNombre] ?? categoriaIdSugerida;
-    const precio = Math.ceil(itemActual.precio_costo * 1.5);
+    const precio = precioParaCrear(itemActual);
 
     setLoadingPorGrupo((prev) => ({ ...prev, [rawNombre]: true }));
     setErrorPorGrupo((prev) => ({ ...prev, [rawNombre]: null }));
@@ -920,7 +935,7 @@ export function MergeTable({
           : undefined;
       const categoriaId = categoriaIdPorGrupo[rawNombre] ?? categoriaIdSugerida;
       const itemActual = items.find((i) => i.raw_nombre === rawNombre);
-      const precio = Math.ceil((itemActual?.precio_costo || 0) * 1.5);
+      const precio = precioParaCrear(itemActual);
 
       const resultado = await crearYAsignarProducto({
         rawNombre,

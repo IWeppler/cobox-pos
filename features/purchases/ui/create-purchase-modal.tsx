@@ -8,6 +8,7 @@ import {
   procesarPedidoAction,
   RawOrderItem,
 } from "@/features/purchases/actions/create-purchase";
+import { parseNumeroLocal } from "@/features/stock/lib/parse-productos-csv";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +40,25 @@ type ImportarPedidoModalProps = {
 const normalizeCellText = (value: ExcelCell) => String(value ?? "").trim();
 const normalizeHeaderText = (value: ExcelCell) =>
   normalizeCellText(value).toUpperCase();
+
+/**
+ * Clave de comparación de headers: mayúsculas + sin tildes + sin espacios,
+ * guiones ni guiones bajos. Así "precio_venta", "Precio Venta" y
+ * "PRECIO-VENTA" son la misma columna, venga la planilla de donde venga.
+ *
+ * Se usa SOLO para comparar contra las listas de columnas conocidas: el
+ * header original (normalizeHeaderText) sigue siendo el que se guarda como
+ * nombre de atributo de la variante, porque acá "TALLE DE PRENDA" se
+ * volvería "TALLEDEPRENDA".
+ */
+const normalizeHeaderKey = (value: ExcelCell) =>
+  normalizeHeaderText(value)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\s\-_]+/g, "");
+
+const matchColumna = (header: string, columnas: readonly string[]) =>
+  columnas.some((c) => normalizeHeaderKey(c) === normalizeHeaderKey(header));
 
 const isMeaningfulHeaderCell = (value: ExcelCell) => {
   const text = normalizeCellText(value);
@@ -162,11 +182,24 @@ export function ImportarPedidoModal({
         "ARTICULO",
       ];
       const knownCantCols = ["CANTIDAD", "CANT", "STOCK"];
+      // "PRECIO" a secas sigue siendo COSTO: en un remito el precio que manda
+      // el proveedor es lo que le cobra al comercio. El precio al público solo
+      // se toma cuando la columna lo dice explícitamente.
       const knownPriceCols = [
         "PRECIO UNITARIO",
         "COSTO",
         "PRECIO",
         "PRECIO COSTO",
+        "PRECIO COMPRA",
+      ];
+      const knownVentaCols = [
+        "PRECIO VENTA",
+        "PRECIO DE VENTA",
+        "VENTA",
+        "PVP",
+        "PRECIO PUBLICO",
+        "PRECIO AL PUBLICO",
+        "PRECIO SUGERIDO",
       ];
 
       const knownCategoryCols = ["CATEGORIA", "CATEGORÍA", "RUBRO", "TIPO"];
@@ -179,6 +212,7 @@ export function ImportarPedidoModal({
           let desc = "";
           let cant: ExcelCell = 0;
           let precio: ExcelCell = 0;
+          let precioVenta: ExcelCell = "";
           let rawCategoria = "";
           let rawGenero = "";
           let sku = "";
@@ -195,22 +229,26 @@ export function ImportarPedidoModal({
             const normalizedValue = normalizeCellText(cellValue);
             if (!normalizedValue) return;
 
-            if (knownNameCols.includes(upperKey)) {
+            if (matchColumna(upperKey, knownNameCols)) {
               desc = normalizedValue;
-            } else if (knownCantCols.includes(upperKey)) {
+            } else if (matchColumna(upperKey, knownCantCols)) {
               cant = cellValue;
-            } else if (knownPriceCols.includes(upperKey)) {
+            } else if (matchColumna(upperKey, knownVentaCols)) {
+              // Antes de la de costo: "PRECIO VENTA" no puede caer en el
+              // genérico "PRECIO" y entrar como costo.
+              precioVenta = cellValue;
+            } else if (matchColumna(upperKey, knownPriceCols)) {
               precio = cellValue;
-            } else if (knownCategoryCols.includes(upperKey)) {
+            } else if (matchColumna(upperKey, knownCategoryCols)) {
               rawCategoria = normalizedValue;
-            } else if (knownGeneroCols.includes(upperKey)) {
+            } else if (matchColumna(upperKey, knownGeneroCols)) {
               rawGenero = normalizedValue;
-            } else if (knownSkuCols.includes(upperKey)) {
+            } else if (matchColumna(upperKey, knownSkuCols)) {
               // Columna propia, NUNCA se mezcla con raw_variante — si no,
               // el SKU terminaría pisando el nombre visible de la variante
               // (nombre_display) y colándose como atributo filtrable.
               sku = normalizedValue;
-            } else if (knownMarcaCols.includes(upperKey)) {
+            } else if (matchColumna(upperKey, knownMarcaCols)) {
               // Columna propia también — alimenta productos.marca al crear
               // el producto en la conciliación, no un atributo de variante.
               marca = normalizedValue;
@@ -233,15 +271,14 @@ export function ImportarPedidoModal({
           ];
           if (duplicatedHeaderValues.includes(normalizedDesc)) return null;
 
+          // parseNumeroLocal es el mismo parser de la importación de
+          // productos: tolera "$", separador de miles y coma decimal, y —a
+          // diferencia del parseo que había acá— no rompe "1234.50", que
+          // antes perdía el punto y se leía 123450.
           const parseNumber = (val: ExcelCell) => {
             if (typeof val === "number") return val;
             if (!val) return 0;
-            return Number(
-              val
-                .toString()
-                .replace(/[^0-9,-]+/g, "")
-                .replace(",", "."),
-            );
+            return parseNumeroLocal(val.toString()) ?? 0;
           };
 
           // SEÑALES CRUDAS DE CATEGORÍA Y GÉNERO — la resolución real
@@ -293,6 +330,12 @@ export function ImportarPedidoModal({
             raw_marca: marca || null,
             cantidad: Math.max(0, parseInt(String(cant)) || 0),
             precio_costo: Math.max(0, parseNumber(precio)),
+            // null (no 0) cuando la planilla no trae la columna: 0 querría
+            // decir "vender a $0" y en la conciliación pisaría el precio que
+            // ya tiene el producto.
+            precio_venta: normalizeCellText(precioVenta)
+              ? Math.max(0, parseNumber(precioVenta))
+              : null,
           };
         })
         .filter((item): item is RawOrderItem => item !== null);
@@ -342,7 +385,6 @@ export function ImportarPedidoModal({
         if (!open) handleClose();
         else setOpen(true);
       }}
-      modal={false}
     >
       {/* El DialogTrigger ha sido adaptado para que funcione perfectamente 
         dentro de tu DropdownMenu (o fuera de él) sin romperse. 
@@ -396,13 +438,19 @@ export function ImportarPedidoModal({
               Formato esperado (Columnas)
             </Label>
             <code className="text-xs bg-background border border-border px-2 py-1 rounded block mb-1">
-              producto, cantidad, precio-costo, categoria, talle, color, genero,
-              marca, sku
+              producto, cantidad, precio_costo, precio_venta, categoria, talle,
+              color, genero, marca, sku
             </code>
             <p className="text-[10px] text-muted-foreground mt-2">
               Solo &quot;producto&quot; y &quot;cantidad&quot; son obligatorias.
-              &quot;categoria&quot;. Cualquier otra columna (talle, color...) se
-              guarda como atributo de la variante.
+              Cualquier otra columna (talle, color...) se guarda como atributo
+              de la variante.
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Si la planilla trae <strong>precio_venta</strong>, se usa como
+              precio al público sugerido en la conciliación — igual lo podés
+              cambiar antes de aprobar. Sin esa columna,
+              &quot;precio&quot; se toma como costo.
             </p>
           </div>
 
@@ -469,7 +517,7 @@ export function ImportarPedidoModal({
                 {!file && (
                   <p className="text-xs text-muted-foreground mt-1">
                     Columnas requeridas: Descripción, Cantidad. (Opcional:
-                    Color, Talle, Género, SKU...)
+                    Precio Venta, Color, Talle, Género, SKU...)
                   </p>
                 )}
               </div>

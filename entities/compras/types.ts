@@ -30,6 +30,10 @@ export interface ItemResuelto {
   variante_match: string;
   cantidad: number;
   precio_costo: number;
+  /** Lo que dijo la planilla del proveedor (columna precio_venta). Solo
+   * siembra el precio de la conciliación; lo que se escribe es
+   * precio_venta_actualizado. */
+  precio_venta_sugerido?: number | null;
   precio_venta_actualizado?: number;
   estado_match:
     | "PERFECTO"

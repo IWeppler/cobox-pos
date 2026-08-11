@@ -14,6 +14,9 @@ export type RawOrderItem = {
   raw_variante: string;
   cantidad: number;
   precio_costo: number;
+  /** Precio al público sugerido por el proveedor. null = la planilla no lo
+   * trae; 0 sería "vender a $0" y pisaría el precio actual del producto. */
+  precio_venta?: number | null;
   raw_categoria?: string | null;
   raw_genero?: string | null;
   raw_sku?: string | null;
@@ -229,6 +232,15 @@ export async function procesarPedidoAction(
         precio_costo: isNaN(Number(item.precio_costo))
           ? 0
           : Number(item.precio_costo),
+        // Se guarda como SUGERIDO: el precio que termina en productos.precio
+        // es el que se aprueba en la conciliación, no este.
+        precio_venta_sugerido:
+          item.precio_venta === null ||
+          item.precio_venta === undefined ||
+          isNaN(Number(item.precio_venta)) ||
+          Number(item.precio_venta) <= 0
+            ? null
+            : Number(item.precio_venta),
         estado_match,
         producto_id,
         variante_match: producto_id ? rawVarianteConGenero : null,
