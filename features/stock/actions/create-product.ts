@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { invalidarCatalogo } from "@/shared/lib/cache-catalogo";
 import { slugify } from "@/shared/utils/slugify";
 import {
   canonicalizarValores,
@@ -101,6 +102,7 @@ export async function crearProductoAction(
   const archivos = formData.getAll("imagenes") as File[];
   const thumbnails = formData.getAll("thumbnails") as File[];
   const grids = formData.getAll("grids") as File[];
+  const masters = formData.getAll("masters") as File[];
 
   if (!nombre || Number.isNaN(precio) || Number.isNaN(precio_costo)) {
     return {
@@ -126,21 +128,33 @@ export async function crearProductoAction(
   let imagen_url = null;
   let thumbnail_url = null;
   let grid_url = null;
+  let master_url = null;
 
   if (archivos.some((f) => f.size > 0)) {
-    const { mains, thumbs, grids: gridUrls } = await subirImagenesProducto(
+    const {
+      mains,
+      thumbs,
+      grids: gridUrls,
+      masters: masterUrls,
+    } = await subirImagenesProducto(
       supabase,
       negocioId,
       archivos,
       thumbnails,
       grids,
       "CREATE PRODUCT",
+      undefined,
+      masters,
     );
 
     if (mains.length > 0) {
       imagen_url = JSON.stringify(mains);
       thumbnail_url = JSON.stringify(thumbs);
       grid_url = JSON.stringify(gridUrls);
+      // Si NINGUNA imagen dejó master, se guarda null en vez de un array de
+      // nulls: es la misma información y distingue "cliente viejo que no manda
+      // masters" de "subieron pero fallaron".
+      master_url = masterUrls.some(Boolean) ? JSON.stringify(masterUrls) : null;
     }
   }
 
@@ -168,6 +182,7 @@ export async function crearProductoAction(
       imagen_url,
       thumbnail_url,
       grid_url,
+      master_url,
       slug,
       publicado: true,
       atributos_globales: {},
@@ -210,6 +225,7 @@ export async function crearProductoAction(
 
     revalidatePath("/stock");
     revalidatePath("/store", "layout");
+    invalidarCatalogo(negocioId);
     return {
       error: null,
       success: true,
@@ -442,6 +458,7 @@ export async function crearProductoAction(
 
   revalidatePath("/stock");
   revalidatePath("/store", "layout");
+  invalidarCatalogo(negocioId);
 
   return {
     error: null,

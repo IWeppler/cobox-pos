@@ -230,6 +230,11 @@ export async function crearProductoAlVueloAction(
   archivosGrid: File[],
   categoriaId?: string,
   marca?: string,
+  /** Copias de mayor calidad (1600px @0.9), para poder regenerar derivadas.
+   * Va al final y opcional para no romper llamadas viejas, pero un producto
+   * creado sin master es uno que no se va a poder reoptimizar nunca — ver la
+   * migración 20260812140000. */
+  archivosMaster: File[] = [],
 ) {
   try {
     const cookieStore = await cookies();
@@ -282,14 +287,17 @@ export async function crearProductoAlVueloAction(
     let imagen_url: string | null = null;
     let thumbnail_url: string | null = null;
     let grid_url: string | null = null;
+    let master_url: string | null = null;
     const urlsMain: string[] = [];
     const urlsThumb: string[] = [];
     const urlsGrid: string[] = [];
+    const urlsMaster: (string | null)[] = [];
 
     for (let i = 0; i < archivosMain.length; i++) {
       const fileMain = archivosMain[i];
       const fileThumb = archivosThumb[i];
       const fileGrid = archivosGrid[i];
+      const fileMaster = archivosMaster[i];
 
       if (fileMain && fileMain.size > 0) {
         const fileExt = fileMain.name.split(".").pop();
@@ -337,12 +345,38 @@ export async function crearProductoAlVueloAction(
             urlsGrid.push(urlGrid);
           }
         }
+
+        // 4. Subir Master — la copia desde la que se van a poder regenerar las
+        // otras tres. Si falla se guarda `null` y NO se cae al main: decir que
+        // hay master cuando no lo hay haría que una futura reoptimización
+        // recomprima desde una copia ya degradada.
+        let urlMaster: string | null = null;
+        if (fileMaster && fileMaster.size > 0) {
+          const masterName = `${negocioId}/masters/${baseFileName}-master.${fileMaster.name.split(".").pop()}`;
+          const { error: uploadMasterError } = await supabase.storage
+            .from("productos")
+            .upload(masterName, fileMaster, { cacheControl: "31536000" });
+
+          if (uploadMasterError) {
+            console.error("[MERGE MASTER ERROR]", {
+              archivo: fileMain.name,
+              indice: i,
+              error: uploadMasterError,
+            });
+          } else {
+            urlMaster = supabase.storage
+              .from("productos")
+              .getPublicUrl(masterName).data.publicUrl;
+          }
+        }
+        urlsMaster.push(urlMaster);
       }
     }
 
     if (urlsMain.length > 0) imagen_url = JSON.stringify(urlsMain);
     if (urlsThumb.length > 0) thumbnail_url = JSON.stringify(urlsThumb);
     if (urlsGrid.length > 0) grid_url = JSON.stringify(urlsGrid);
+    if (urlsMaster.some(Boolean)) master_url = JSON.stringify(urlsMaster);
 
     const { data: nuevoProducto, error } = await supabase
       .from("productos")
@@ -357,6 +391,7 @@ export async function crearProductoAlVueloAction(
         publicado: true,
         atributos_globales: {},
         imagen_url,
+        master_url,
         thumbnail_url,
         grid_url,
       })

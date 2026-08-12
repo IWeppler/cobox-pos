@@ -725,6 +725,7 @@ export function MergeTable({
     archivosMain?: File[];
     archivosThumb?: File[];
     archivosGrid?: File[];
+    archivosMaster?: File[];
   }): Promise<{ ok: true; producto: Producto } | { ok: false; error: string }> {
     const itemActual = items.find((i) => i.raw_nombre === params.rawNombre);
     if (!itemActual) {
@@ -742,6 +743,7 @@ export function MergeTable({
           params.archivosGrid || [],
           params.categoriaId,
           params.marca,
+          params.archivosMaster || [],
         ),
         ACTION_TIMEOUT_MS,
       );
@@ -802,6 +804,7 @@ export function MergeTable({
       const archivosMain = imagenesProcesadas.map((img) => img.main);
       const archivosThumb = imagenesProcesadas.map((img) => img.thumbnail);
       const archivosGrid = imagenesProcesadas.map((img) => img.grid);
+      const archivosMaster = imagenesProcesadas.map((img) => img.master);
 
       const resultado = await crearYAsignarProducto({
         rawNombre: groupToCreateName,

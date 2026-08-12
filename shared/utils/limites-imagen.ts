@@ -40,3 +40,15 @@ export const MAX_BYTES_POR_IMAGEN = 25 * 1024 * 1024;
  * confiar en que el cliente ya validó. 2MB es holgado a propósito: no busca
  * afinar el tamaño, busca que NUNCA entre un original sin comprimir. */
 export const MAX_BYTES_GUARDADOS = 2 * 1024 * 1024;
+
+/** Tope para el MASTER, que a propósito es más alto que los demás.
+ *
+ * El master (1600px @0.9) existe para poder regenerar derivadas el día que se
+ * quiera cambiar tamaños o códec. Apretarlo con el mismo tope que una derivada
+ * sería sabotearlo: si se lo comprime hasta entrar en 2MB deja de ser un
+ * master y pasa a ser otra copia degradada, que es exactamente el problema que
+ * viene a resolver.
+ *
+ * 4MB igual frena un original crudo de celular (12MP ronda los 4-8MB), así que
+ * el guard de "nunca entre un original sin procesar" se mantiene. */
+export const MAX_BYTES_MASTER = 4 * 1024 * 1024;

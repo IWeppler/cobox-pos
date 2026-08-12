@@ -419,6 +419,7 @@ function EditProductForm({
       formData.delete("imagenes");
       formData.delete("thumbnails");
       formData.delete("grids");
+      formData.delete("masters");
 
       // Secuencial a propósito (ver optimizarImagenesProducto): en paralelo
       // el pico de memoria mataba la pestaña en mobile.
@@ -426,10 +427,11 @@ function EditProductForm({
         const imagenesOptimizadas = await optimizarImagenesProducto(archivos);
 
         // Desestructuramos el main, el thumbnail y el grid de cada iteración
-        imagenesOptimizadas.forEach(({ main, thumbnail, grid }) => {
+        imagenesOptimizadas.forEach(({ main, thumbnail, grid, master }) => {
           formData.append("imagenes", main);
           formData.append("thumbnails", thumbnail);
           formData.append("grids", grid);
+          formData.append("masters", master);
         });
       } catch (error) {
         // Cortamos el guardado: mandar el archivo sin comprimir era lo que

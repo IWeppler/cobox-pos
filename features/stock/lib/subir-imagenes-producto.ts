@@ -1,6 +1,7 @@
 import type { createClient } from "@/shared/config/supabase/server";
 import {
   MAX_BYTES_GUARDADOS,
+  MAX_BYTES_MASTER,
   MAX_IMAGENES_PRODUCTO,
 } from "@/shared/utils/limites-imagen";
 
@@ -10,6 +11,9 @@ export type UrlsImagenesProducto = {
   mains: string[];
   thumbs: string[];
   grids: string[];
+  /** Alineado por índice con los otros tres. `null` = el master no subió; la
+   * foto se muestra igual, pero esa no se va a poder regenerar. */
+  masters: (string | null)[];
 };
 
 /**
@@ -46,10 +50,16 @@ export async function subirImagenesProducto(
   /** Cuántas imágenes más admite este producto. En alta es el tope entero; en
    * edición es lo que queda libre después de contar las que ya tiene. */
   cupoDisponible: number = MAX_IMAGENES_PRODUCTO,
+  /** Copias de mayor calidad, para poder regenerar derivadas más adelante.
+   * Va último y con default a propósito: un cliente viejo cacheado por el
+   * service worker no las manda, y eso tiene que seguir dando de alta el
+   * producto igual — sin master, pero dado de alta. */
+  masters: File[] = [],
 ): Promise<UrlsImagenesProducto> {
   const mains: string[] = [];
   const thumbs: string[] = [];
   const grids_: string[] = [];
+  const masters_: (string | null)[] = [];
 
   const publicUrl = (path: string) =>
     supabase.storage.from("productos").getPublicUrl(path).data.publicUrl;
@@ -107,14 +117,30 @@ export async function subirImagenesProducto(
       ? `${negocioId}/grids/${baseFileName}-grid.${grid.name.split(".").pop()}`
       : null;
 
+    // El master tiene su propio techo (MAX_BYTES_MASTER, más alto): medirlo con
+    // la vara de una derivada lo descartaría por ser justamente lo que tiene
+    // que ser, la copia más pesada.
+    const master = masters[i];
+    const masterPath =
+      master && master.size > 0 && master.size <= MAX_BYTES_MASTER
+        ? `${negocioId}/masters/${baseFileName}-master.${master.name.split(".").pop()}`
+        : null;
+
+    if (master && !masterPath) {
+      console.warn(
+        `[${contexto}] Master descartado para la imagen ${i} ("${main.name}"): ${(master.size / 1024 / 1024).toFixed(1)}MB supera el máximo de ${MAX_BYTES_MASTER / 1024 / 1024}MB.`,
+      );
+    }
+
     // Las tres versiones de UNA imagen van en paralelo: son requests
     // independientes a Storage y antes eran 3 round-trips en serie por
     // imagen. Las imágenes entre sí siguen yendo de a una para no abrir
     // demasiadas conexiones simultáneas desde la función.
-    const [mainError, thumbError, gridError] = await Promise.all([
+    const [mainError, thumbError, gridError, masterError] = await Promise.all([
       subir(mainPath, main),
       thumbPath ? subir(thumbPath, thumb) : Promise.resolve(null),
       gridPath ? subir(gridPath, grid) : Promise.resolve(null),
+      masterPath ? subir(masterPath, master) : Promise.resolve(null),
     ]);
 
     if (mainError) {
@@ -165,7 +191,24 @@ export async function subirImagenesProducto(
       }
       grids_.push(mainUrl);
     }
+
+    // El master NUNCA cae al placeholder del main: si no está, tiene que
+    // quedar `null`. Poner el main sería mentir sobre qué se puede regenerar, y
+    // el día que se reoptimicen las imágenes esa foto se recomprimiría desde
+    // una copia ya degradada — el error que este master viene a impedir.
+    if (masterPath && !masterError) {
+      masters_.push(publicUrl(masterPath));
+    } else {
+      if (masterError) {
+        console.error(`[${contexto} MASTER ERROR]`, {
+          archivo: main.name,
+          indice: i,
+          error: masterError,
+        });
+      }
+      masters_.push(null);
+    }
   }
 
-  return { mains, thumbs, grids: grids_ };
+  return { mains, thumbs, grids: grids_, masters: masters_ };
 }

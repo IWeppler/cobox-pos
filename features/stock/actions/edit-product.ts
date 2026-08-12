@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { invalidarCatalogo } from "@/shared/lib/cache-catalogo";
 import {
   canonicalizarValores,
   construirCacheAtributos,
@@ -84,6 +85,7 @@ export async function editarProductoAction(
   const archivos = formData.getAll("imagenes") as File[];
   const thumbnails = formData.getAll("thumbnails") as File[];
   const grids = formData.getAll("grids") as File[];
+  const masters = formData.getAll("masters") as File[];
   const imagenesAEliminarStr = formData.get("imagenesAEliminar") as
     | string
     | null;
@@ -170,6 +172,7 @@ export async function editarProductoAction(
     archivos,
     thumbnails,
     grids,
+    masters,
     imagenesAEliminar,
   });
 
@@ -187,6 +190,7 @@ export async function editarProductoAction(
 
   revalidatePath("/stock");
   revalidatePath("/store", "layout");
+  invalidarCatalogo(negocioId);
 
   return { imagenes, variantes };
 }
@@ -205,6 +209,7 @@ async function actualizarImagenesYCabecera(
     archivos: File[];
     thumbnails: File[];
     grids: File[];
+    masters: File[];
     imagenesAEliminar: string[];
     /** Columnas de cabecera que solo se tocan si el form las mandó. */
     camposOpcionales: Record<string, string | null>;
@@ -222,6 +227,7 @@ async function actualizarImagenesYCabecera(
     archivos,
     thumbnails,
     grids,
+    masters,
     imagenesAEliminar,
     camposOpcionales,
   } = params;
@@ -235,11 +241,12 @@ async function actualizarImagenesYCabecera(
   let imagen_url: string | undefined = undefined;
   let thumbnail_url: string | undefined = undefined;
   let grid_url: string | undefined = undefined;
+  let master_url: string | undefined = undefined;
   const hayArchivosNuevos = archivos.some((f) => f.size > 0);
   if (hayArchivosNuevos || imagenesAEliminar.length > 0) {
     const { data: productoActual } = await supabase
       .from("productos")
-      .select("imagen_url, thumbnail_url, grid_url")
+      .select("imagen_url, thumbnail_url, grid_url, master_url")
       .eq("id", id)
       .single();
 
@@ -248,6 +255,7 @@ async function actualizarImagenesYCabecera(
       productoActual?.thumbnail_url,
     );
     const gridsActuales = parseProductImages(productoActual?.grid_url);
+    const mastersActuales = parseProductImages(productoActual?.master_url);
 
     // imagenesAEliminar llega como URLs de imagen_url (lo único que ve el
     // usuario en el sheet) — recorremos por índice para descartar el
@@ -262,11 +270,17 @@ async function actualizarImagenesYCabecera(
     const imagenesFinal: string[] = [];
     const thumbnailsFinal: string[] = [];
     const gridsFinal: string[] = [];
+    const mastersFinal: (string | null)[] = [];
     imagenesActuales.forEach((url, idx) => {
       if (imagenesAEliminar.includes(url)) return;
       imagenesFinal.push(url);
       thumbnailsFinal.push(thumbnailsActuales[idx] ?? url);
       gridsFinal.push(gridsActuales[idx] ?? url);
+      // A diferencia del thumb y el grid, el master NO cae al placeholder de la
+      // imagen: una foto vieja sin master no tiene desde dónde regenerarse, y
+      // decir lo contrario haría que una futura reoptimización la recomprima
+      // desde una copia ya degradada.
+      mastersFinal.push(mastersActuales[idx] ?? null);
     });
 
     // El tope NO es retroactivo: un producto viejo con 5 fotos conserva las 5.
@@ -283,6 +297,7 @@ async function actualizarImagenesYCabecera(
       mains: urls,
       thumbs: urlsThumb,
       grids: urlsGrid,
+      masters: urlsMaster,
     } = hayArchivosNuevos
       ? await subirImagenesProducto(
           supabase,
@@ -292,12 +307,18 @@ async function actualizarImagenesYCabecera(
           grids,
           "EDIT PRODUCT",
           cupoDisponible,
+          masters,
         )
-      : { mains: [], thumbs: [], grids: [] };
+      : { mains: [], thumbs: [], grids: [], masters: [] };
 
     imagen_url = JSON.stringify(imagenesFinal.concat(urls));
     thumbnail_url = JSON.stringify(thumbnailsFinal.concat(urlsThumb));
     grid_url = JSON.stringify(gridsFinal.concat(urlsGrid));
+
+    const mastersCompletos = mastersFinal.concat(urlsMaster);
+    master_url = mastersCompletos.some(Boolean)
+      ? JSON.stringify(mastersCompletos)
+      : undefined;
   }
 
   const updateData: {
@@ -310,6 +331,7 @@ async function actualizarImagenesYCabecera(
     imagen_url?: string;
     thumbnail_url?: string;
     grid_url?: string;
+    master_url?: string;
   } = {
     nombre,
     categoria_id: categoria_id || null,
@@ -325,6 +347,7 @@ async function actualizarImagenesYCabecera(
   if (imagen_url !== undefined) updateData.imagen_url = imagen_url;
   if (thumbnail_url !== undefined) updateData.thumbnail_url = thumbnail_url;
   if (grid_url !== undefined) updateData.grid_url = grid_url;
+  if (master_url !== undefined) updateData.master_url = master_url;
 
   const { error: errorProducto } = await supabase
     .from("productos")

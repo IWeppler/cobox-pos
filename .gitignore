@@ -46,3 +46,6 @@ next-env.d.ts
 /.claude/skills/
 .AGENTS.md
 .codex
+# Manifiestos de limpieza de Storage (scripts/limpiar-huerfanos-storage.ts).
+# Son un registro puntual de una corrida, no parte del proyecto.
+huerfanos-storage-*.json

@@ -52,6 +52,22 @@ if (!SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 const COMMIT = process.argv.includes("--commit");
+
+/**
+ * La Fase 2 (recomprimir mains pesados) es OPT-IN, no opt-out.
+ *
+ * Fase 1 solo RELLENA huecos: genera el thumb/grid que falta y no toca nada
+ * existente. Fase 2 recomprime el main y repunta `imagen_url` al archivo nuevo
+ * — o sea, degrada la copia de mayor calidad que existe del producto, y como
+ * hasta el 12/8/2026 no se guardaba master, para las fotos viejas NO hay desde
+ * dónde regenerar. Ya pasó una vez: se comprimió de más, la dueña de Evens se
+ * quejó y no se pudo revertir.
+ *
+ * Por eso el default seguro es no tocar los mains. Para las fotos que SÍ
+ * tengan `master_url` esto va a poder hacerse sin riesgo; hasta entonces,
+ * quien lo corra tiene que pedirlo explícitamente.
+ */
+const REOPTIMIZAR_MAINS = process.argv.includes("--reoptimizar-mains");
 const BUCKET = "productos";
 const CONCURRENCY = 5;
 const FETCH_TIMEOUT_MS = 25_000;
@@ -78,9 +94,15 @@ const THUMB_PARAMS: CompressParams = {
   calidadInicial: 70,
   calidadMinima: 35,
 };
+// OJO: esto decía 320px / 60KB, que eran los valores VIEJOS del optimizador.
+// `image-optimizer.ts` subió el grid a 480px (0.1MB) porque a 320 las cards
+// quedaban borrosas en pantallas retina, y este script se quedó atrás. Correrlo
+// desactualizado habría generado 1.065 grids peores que los que crea la app —
+// el mismo síntoma de "las fotos se ven mal" pero por otro camino.
+// Si cambian los valores del optimizador, cambian acá.
 const GRID_PARAMS: CompressParams = {
-  maxDim: 320,
-  maxBytes: 60_000,
+  maxDim: 480,
+  maxBytes: 100_000,
   calidadInicial: 70,
   calidadMinima: 35,
 };
@@ -229,7 +251,7 @@ const reporte = {
 async function procesarProductos() {
   const { data: productos, error } = await supabase
     .from("productos")
-    .select("id, imagen_url, thumbnail_url, grid_url")
+    .select("id, negocio_id, imagen_url, thumbnail_url, grid_url")
     .not("imagen_url", "is", null)
     .neq("imagen_url", "");
 
@@ -278,7 +300,14 @@ async function procesarProductos() {
           reporte.fase1.bytesDespues += thumb.length;
           reporte.fase1.thumbsOk++;
           if (COMMIT) {
-            const objectPath = `thumbs/${crypto.randomUUID()}-thumb.webp`;
+            // El prefijo del negocio NO es cosmético: la policy de Storage
+            // exige `(storage.foldername(name))[1] = current_negocio_id()`, así
+            // que un archivo en la raíz no lo puede borrar ni actualizar
+            // ninguna sesión de usuario — solo el service role. Sin esto, cada
+            // derivada que genera este script queda fuera del alcance de la app
+            // para siempre, y al borrar el producto se filtra (12/8/2026: pasó,
+            // 550 archivos).
+            const objectPath = `${producto.negocio_id}/thumbs/${crypto.randomUUID()}-thumb.webp`;
             thumbsFinal[i] = await subir(objectPath, thumb);
           }
           huboCambioThumb = true;
@@ -297,7 +326,7 @@ async function procesarProductos() {
           reporte.fase1.bytesDespues += grid.length;
           reporte.fase1.gridsOk++;
           if (COMMIT) {
-            const objectPath = `grids/${crypto.randomUUID()}-grid.webp`;
+            const objectPath = `${producto.negocio_id}/grids/${crypto.randomUUID()}-grid.webp`;
             gridsFinal[i] = await subir(objectPath, grid);
           }
           huboCambioGrid = true;
@@ -308,15 +337,19 @@ async function procesarProductos() {
         }
       }
 
-      // Fase 2: main pesado (mismo buffer ya descargado, no se vuelve a bajar)
-      if (original.length > MAIN_REOPTIMIZE_THRESHOLD_BYTES) {
+      // Fase 2: main pesado (mismo buffer ya descargado, no se vuelve a bajar).
+      // Solo si se pidió explícitamente: ver el comentario de REOPTIMIZAR_MAINS.
+      if (
+        REOPTIMIZAR_MAINS &&
+        original.length > MAIN_REOPTIMIZE_THRESHOLD_BYTES
+      ) {
         reporte.fase2.bytesAntes += original.length;
         try {
           const optimizada = await comprimir(original, MAIN_PARAMS);
           reporte.fase2.bytesDespues += optimizada.length;
           reporte.fase2.fotosOk++;
           if (COMMIT) {
-            const objectPath = `optimized/${crypto.randomUUID()}.webp`;
+            const objectPath = `${producto.negocio_id}/optimized/${crypto.randomUUID()}.webp`;
             imagenesFinal[i] = await subir(objectPath, optimizada);
           }
           huboCambioMain = true;
@@ -384,6 +417,11 @@ function imprimirFase(
 async function main() {
   console.log(
     `Modo: ${COMMIT ? "COMMIT (escribe en Storage y en la tabla)" : "DRY-RUN (solo reporte, no escribe nada)"}`,
+  );
+  console.log(
+    REOPTIMIZAR_MAINS
+      ? "Fase 2: ACTIVADA — se van a recomprimir los mains pesados y a repuntar imagen_url."
+      : "Fase 2: apagada (default seguro). Solo se rellenan thumbs/grids faltantes; ningún main se toca.",
   );
 
   await procesarProductos();

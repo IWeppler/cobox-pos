@@ -11,11 +11,13 @@ export {
   MAX_IMAGENES_PRODUCTO,
 } from "@/shared/utils/limites-imagen";
 
-type TipoImagen = "thumbnail" | "grid" | "main";
+type TipoImagen = "thumbnail" | "grid" | "main" | "master";
 export interface ProductoOptimizado {
   main: File;
   thumbnail: File;
   grid: File;
+  /** Copia de mayor calidad, para regenerar. No se muestra nunca. */
+  master: File;
 }
 
 /** Error de compresión con el nombre del archivo, para poder avisar cuál falló
@@ -39,6 +41,7 @@ export async function optimizarImagen(
 ): Promise<File> {
   const isThumb = tipo === "thumbnail";
   const isGrid = tipo === "grid";
+  const isMaster = tipo === "master";
 
   // "main" (imagen_url) es la única de las 3 que se ve a tamaño de detalle
   // — en desktop puede ocupar gran parte del viewport, donde 600px con
@@ -49,11 +52,20 @@ export async function optimizarImagen(
   // medición exacta de la card del catálogo en desktop — cubre cards de
   // hasta ~240px CSS reales en retina (2x). Ajustar si una medición
   // posterior da un ancho de card distinto.
+  // "master" NO es una versión más para mostrar: es la fuente para regenerar
+  // las otras tres el día que cambien tamaños o códec. Por eso va con calidad
+  // 0.9 y 1600px (por encima de main, que es 1100) y con un techo de peso más
+  // alto — apretarlo con los mismos números que una derivada lo convertiría en
+  // otra copia degradada, que es justo lo que viene a evitar.
+  //
+  // Sin master, cualquier decisión de compresión es irreversible: ya pasó una
+  // vez que se comprimió de más, la dueña de Evens se quejó y no había desde
+  // dónde volver. Ver la migración 20260812140000.
   const baseOptions = {
-    maxSizeMB: isThumb ? 0.03 : isGrid ? 0.1 : 0.2,
-    maxWidthOrHeight: isThumb ? 150 : isGrid ? 480 : 1100,
+    maxSizeMB: isMaster ? 1 : isThumb ? 0.03 : isGrid ? 0.1 : 0.2,
+    maxWidthOrHeight: isMaster ? 1600 : isThumb ? 150 : isGrid ? 480 : 1100,
     useWebWorker: true,
-    initialQuality: 0.7,
+    initialQuality: isMaster ? 0.9 : 0.7,
   };
 
   try {
@@ -87,7 +99,13 @@ export async function optimizarImagen(
     // que hoy tienen los .webp que en realidad son PNG.
     const extension = compressedBlob.type === "image/webp" ? "webp" : "jpg";
     const baseName = file.name.replace(/\.[^/.]+$/, "");
-    const suffix = isThumb ? "-thumb" : isGrid ? "-grid" : "";
+    const suffix = isThumb
+      ? "-thumb"
+      : isGrid
+        ? "-grid"
+        : isMaster
+          ? "-master"
+          : "";
 
     return new File([compressedBlob], `${baseName}${suffix}.${extension}`, {
       type: compressedBlob.type,
@@ -123,14 +141,19 @@ export async function optimizarImagen(
 //
 // Serializar cuesta tiempo de reloj, pero el pico de memoria pasa a ser el de
 // UNA imagen en vez de 3 × N.
+// El master va PRIMERO: si el navegador va a morirse procesando esta foto, que
+// se muera antes de haber subido tres derivadas huérfanas de fuente. Las cuatro
+// salen del MISMO archivo original, nunca una de otra — encadenarlas sería
+// apilar generaciones de pérdida.
 export async function optimizarImagenProducto(
   file: File,
 ): Promise<ProductoOptimizado> {
+  const master = await optimizarImagen(file, "master");
   const main = await optimizarImagen(file, "main");
   const thumbnail = await optimizarImagen(file, "thumbnail");
   const grid = await optimizarImagen(file, "grid");
 
-  return { main, thumbnail, grid };
+  return { main, thumbnail, grid, master };
 }
 
 // 3. Para varios archivos: también uno por vez, por el mismo motivo que
