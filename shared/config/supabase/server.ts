@@ -66,15 +66,29 @@ export const createClient = (
  * consultas de catálogo dentro del dashboard) y ahí sí manda la sesión, que es
  * lo que la restrictive de `authenticated` necesita.
  */
+/**
+ * Cliente anónimo del catálogo con el slug pasado EXPLÍCITAMENTE.
+ *
+ * Existe para poder correr adentro de `unstable_cache`: ahí no se puede llamar
+ * a `headers()` —Next lo prohíbe, porque una función cacheada no puede depender
+ * de datos de la request— así que el tenant tiene que entrar por argumento.
+ *
+ * Es también la forma honesta de escribirlo: hace visible en la firma que esta
+ * consulta depende del negocio, que es justo lo que hay que tener presente al
+ * armar una clave de cache.
+ */
+export const createPublicClientParaSlug = (negocioSlug: string) =>
+  createSupabaseClient(supabaseUrl!, supabaseKey!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { [HEADER_NEGOCIO_SLUG]: negocioSlug } },
+  });
+
 export const createPublicClient = async () => {
   const headerStore = await headers();
   const negocioSlug = headerStore.get(HEADER_NEGOCIO_SLUG);
 
   if (negocioSlug) {
-    return createSupabaseClient(supabaseUrl!, supabaseKey!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: { [HEADER_NEGOCIO_SLUG]: negocioSlug } },
-    });
+    return createPublicClientParaSlug(negocioSlug);
   }
 
   // Mismo cliente que el dashboard: además de la sesión reenvía el negocio

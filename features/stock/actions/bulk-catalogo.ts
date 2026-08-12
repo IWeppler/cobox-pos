@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { invalidarCatalogoDeSesion } from "@/shared/lib/cache-catalogo";
 
 /**
  * Publica u oculta del catálogo público un lote de productos.
@@ -41,5 +42,6 @@ export async function bulkTogglePublicadoAction(
 
   revalidatePath("/stock");
   revalidatePath("/store", "layout");
+  await invalidarCatalogoDeSesion(supabase);
   return { error: null, success: true };
 }

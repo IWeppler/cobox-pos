@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { invalidarCatalogo } from "@/shared/lib/cache-catalogo";
 import { createClient } from "@/shared/config/supabase/server";
 import {
   construirCacheAtributos,
@@ -223,6 +224,7 @@ export async function confirmarImportProductosAction(
 
   revalidatePath("/stock");
   revalidatePath("/store", "layout");
+  invalidarCatalogo(negocioId);
 
   return {
     error: null,

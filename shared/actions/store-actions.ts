@@ -27,9 +27,23 @@ import { traerTodo } from "@/shared/lib/traer-todo";
  * Que el POS los reciba es solo para mostrarlos: el costo que PERSISTE en la
  * venta lo resuelve create-sale.ts contra la base, nunca desde este payload.
  */
-export async function getProductosAction({ conCostos = false } = {}) {
-  const supabase = await createPublicClient();
+type ClienteSupabase = Awaited<ReturnType<typeof createPublicClient>>;
 
+/**
+ * El fetch en sí, con el cliente inyectado.
+ *
+ * Está separado de `getProductosAction` para que la versión CACHEADA del
+ * catálogo público (shared/lib/cache-catalogo.ts) pueda reusar exactamente esta
+ * consulta sin arrastrar el `createPublicClient()` de adentro, que lee
+ * `headers()` — y adentro de `unstable_cache` eso no se puede.
+ *
+ * Dos caminos, una sola consulta: si divergen, el POS y la vidriera empiezan a
+ * mostrar cosas distintas del mismo producto.
+ */
+export async function traerProductosPublicos(
+  supabase: ClienteSupabase,
+  { conCostos = false } = {},
+) {
   // Las dos variantes van escritas enteras y se elige una: el parser de tipos
   // de supabase-js resuelve el select en compilación y necesita un literal.
   // Con las columnas concatenadas en una variable ve una unión y da ParserError.
@@ -82,6 +96,11 @@ export async function getProductosAction({ conCostos = false } = {}) {
   }));
 
   return { data: productos, error: null, total };
+}
+
+export async function getProductosAction({ conCostos = false } = {}) {
+  const supabase = await createPublicClient();
+  return traerProductosPublicos(supabase, { conCostos });
 }
 
 // Combina productos + categorías + config para la terminal VENDER en un

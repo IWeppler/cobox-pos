@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { invalidarCatalogoDeSesion } from "@/shared/lib/cache-catalogo";
 import { crearProductoAction } from "@/features/stock/actions/create-product";
 import type {
   ConfirmarCargaResponse,
@@ -220,6 +221,7 @@ export async function confirmarCargaAction(
 
   revalidatePath("/stock");
   revalidatePath("/store", "layout");
+  await invalidarCatalogoDeSesion(supabase);
 
   const totalOk = resultados.filter((r) => r.ok).length;
   const totalError = resultados.length - totalOk;
