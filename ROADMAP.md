@@ -180,7 +180,7 @@ Carnicería — la que sí exige una feature nueva de verdad: venta por peso. Ho
 
 Modalidad	Precio	      Beneficio
 Mensual	   Precio normal	Sin compromiso
-Semestral   15%  off       Recomendado
+Semestral   20%  off       Recomendado
 
 - Emprendedor ($30k/mes): Punto de venta + caja + ventas + Gestión básica de productos + Control de stock + Catálogo online para compartir por WhatsApp + Registro de clientes + Cuenta corriente de clientes (hasta 100 clientes activos, por ejemplo) + Historial completo de ventas + Tickets digitales. Cuenta corriente con tope chico de clientes, sin reportes avanzados, sin multi-caja. 1 solo usuario.
 No incluye: Reportes avanzados, Roles de usuarios, Multi caja, Multi sucursal, Integraciones
@@ -196,7 +196,6 @@ Para implementar tu idea de la mejor manera en Next.js, puedes crear un componen
 - Si tiene el plan correcto: Renderiza el contenido normalmente (por ejemplo, el botón de "Agregar Empleado").
 - Si NO tiene el plan: Renderiza el mismo botón, pero deshabilitado, con un filtro grisáceo, el ícono del candado y una estrellita brillante.
 - Llamado a la acción (CTA): Al hacer clic en el componente bloqueado, en lugar de no hacer nada, debe abrir un modal hermoso que diga: "Para usar Multi-Caja necesitas el plan Gestión. [Mejorar mi plan ahora]".
-
 
 
 4. ¿Qué más falta? (Los 4 Pilares del SaaS)

@@ -4,6 +4,10 @@ import { createPublicClient } from "@/shared/config/supabase/server";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { resolveTenant } from "@/shared/lib/tenant";
+import { ModoCatalogoProvider } from "@/shared/components/modo-catalogo-provider";
+import { HEADER_MODO_CATALOGO } from "@/shared/lib/host-comerz";
+import { urlDelPanel } from "@/shared/lib/ruteo-host";
+import { COLUMNAS_CONFIG_PUBLICA } from "@/shared/lib/columnas-publicas";
 import type { Metadata } from "next";
 
 // El título sale del negocio que se está mirando: no hay tienda por defecto
@@ -35,12 +39,22 @@ export default async function PublicLayout({
   const headersList = await headers();
   await resolveTenant({ hostname: headersList.get("host"), slug: negocio });
 
+  // Cómo se está sirviendo el catálogo lo decidió el middleware; acá solo se
+  // lee, para que los links del cliente coincidan con la URL que se ve.
+  const modo =
+    headersList.get(HEADER_MODO_CATALOGO) === "subdominio"
+      ? "subdominio"
+      : "path";
+
   const supabase = await createPublicClient();
 
   // Las categorías principales (sin padre) van al menú hamburguesa de mobile:
   // son las mismas que muestra la portada del catálogo.
   const [{ data: config }, { data: categorias }] = await Promise.all([
-    supabase.from("configuracion_pos").select("*").maybeSingle(),
+    supabase
+      .from("configuracion_pos")
+      .select(COLUMNAS_CONFIG_PUBLICA)
+      .maybeSingle(),
     supabase
       .from("categorias")
       .select("id, nombre, slug")
@@ -50,7 +64,8 @@ export default async function PublicLayout({
   ]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <ModoCatalogoProvider modo={modo}>
+      <div className="min-h-screen bg-background flex flex-col">
       <Navbar branding={config} categorias={categorias ?? []} />
       <CartPanelPublico numeroWhatsApp={config?.whatsapp} />
       {children}
@@ -62,12 +77,13 @@ export default async function PublicLayout({
           reservados.
         </div>
         <Link
-          href="/auth"
+          href={urlDelPanel("/auth")}
           className="right-1 absolute text-sm text-muted-foreground"
         >
           Ingresar
         </Link>
-      </footer>
-    </div>
+        </footer>
+      </div>
+    </ModoCatalogoProvider>
   );
 }

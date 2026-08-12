@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { ItemResuelto, SugerenciaSimilitud } from "@/entities/compras/types";
 import { slugify } from "@/shared/utils/slugify";
+import { traerTodo } from "@/shared/lib/traer-todo";
 import {
   resolverAudienciaCategoria,
   type CategoriaReal,
@@ -73,11 +74,22 @@ export async function getOrdenParaMergeAction(ordenId: string) {
   const [ordenRes, itemsRes, productosRes, categoriasRes] = await Promise.all([
     supabase.from("ordenes_compra").select("*").eq("id", ordenId).single(),
     supabase.from("ordenes_items").select("*").eq("orden_id", ordenId),
-    supabase
-      .from("productos")
-      .select("id, nombre, precio, precio_costo, tipo")
-      .eq("publicado", true),
-    supabase.from("categorias").select("id, nombre, slug, parent_id"),
+    // Paginado: es el catálogo contra el que se sugieren los matches del
+    // remito. Truncado al tope de PostgREST, lo que quedó afuera se ofrece como
+    // "producto nuevo" y termina duplicado.
+    traerTodo("merge: productos", (desde, hasta) =>
+      supabase
+        .from("productos")
+        .select("id, nombre, precio, precio_costo, tipo", { count: "exact" })
+        .eq("publicado", true)
+        .range(desde, hasta),
+    ),
+    traerTodo("merge: categorías", (desde, hasta) =>
+      supabase
+        .from("categorias")
+        .select("id, nombre, slug, parent_id", { count: "exact" })
+        .range(desde, hasta),
+    ),
   ]);
 
   if (ordenRes.error || !ordenRes.data) {
@@ -104,7 +116,7 @@ export async function getOrdenParaMergeAction(ordenId: string) {
 
   if (productosRes.error) {
     return {
-      error: `No se pudieron leer los productos para conciliar: ${formatSupabaseError(productosRes.error)}`,
+      error: `No se pudieron leer los productos para conciliar: ${productosRes.error}`,
       orden: null,
       items: [],
       productos: [],

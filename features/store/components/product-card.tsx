@@ -4,8 +4,7 @@ import { Producto } from "@/entities/productos/types";
 import { ShoppingBag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSlugNegocio } from "@/shared/lib/use-negocio";
-import { rutaCatalogo } from "@/shared/lib/dominios";
+import { useLinkCatalogo } from "@/shared/lib/use-negocio";
 
 interface ProductCardProps {
   producto: Producto;
@@ -34,11 +33,8 @@ export function ProductCard({
     null;
   // El link es al catálogo del negocio que se está viendo: fuera de un
   // catálogo no hay tienda a la que ir.
-  const slugNegocio = useSlugNegocio();
-  const linkDestino =
-    producto.slug && slugNegocio
-      ? rutaCatalogo(slugNegocio, producto.slug)
-      : "#";
+  const linkCatalogo = useLinkCatalogo();
+  const linkDestino = producto.slug ? linkCatalogo(producto.slug) : "#";
 
   return (
     <div

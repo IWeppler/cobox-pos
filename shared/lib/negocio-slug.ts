@@ -7,27 +7,19 @@
  * único mientras exista uno solo (ver la migración del paso 5).
  */
 
+import { clasificarHost } from "./host-comerz";
+
 export const HEADER_NEGOCIO_SLUG = "x-negocio-slug";
 
-/** Hosts que nunca representan a un negocio. */
-const HOSTS_SIN_NEGOCIO = new Set(["www", "app", "admin", "localhost"]);
-
+/**
+ * Slug del negocio que sirve este host, o null si el host no es de una tienda.
+ *
+ * Es una vista de `clasificarHost`, no una segunda implementación: cuál es el
+ * panel, cuál la landing y cuál una tienda se decide en UN lado. Antes esto
+ * tenía su propia lista de hosts excluidos y decía cosas distintas que el resto
+ * del ruteo.
+ */
 export function slugDesdeHost(host: string | null | undefined): string | null {
-  if (!host) return null;
-
-  const limpio = host.split(":")[0].toLowerCase();
-  const partes = limpio.split(".");
-
-  // Un dominio de dos etiquetas (comerz.app) o un host plano (localhost) no
-  // tiene subdominio: es el sitio principal, no la tienda de un negocio.
-  if (partes.length < 3) return null;
-
-  // Los previews de Vercel son comerz-pos-git-rama-cuenta.vercel.app: el
-  // primer segmento es el deploy, no un negocio.
-  if (limpio.endsWith(".vercel.app")) return null;
-
-  const sub = partes[0];
-  if (!sub || HOSTS_SIN_NEGOCIO.has(sub)) return null;
-
-  return sub;
+  const destino = clasificarHost(host);
+  return destino.tipo === "tienda" ? destino.slug : null;
 }

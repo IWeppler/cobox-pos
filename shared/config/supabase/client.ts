@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { HEADER_NEGOCIO_SLUG, slugDesdeHost } from "@/shared/lib/negocio-slug";
 import {
   COOKIE_IMPERSONATE,
@@ -52,6 +53,18 @@ const headersNegocio = (): Record<string, string> => {
   return headers;
 };
 
+/**
+ * Cliente del PANEL: lleva la sesión del usuario. NO usarlo en el catálogo
+ * público — para eso está `createPublicBrowserClient`, abajo, que explica por
+ * qué mandar la sesión ahí rompe la tienda.
+ *
+ * OJO con las cookies: acá no se pasa `cookieOptions`, y es a propósito. Sin
+ * `domain`, la cookie de sesión queda host-only, o sea pegada a app.comerz.app
+ * y a ningún otro host. Poner `domain: ".comerz.app"` para "compartir la sesión
+ * entre subdominios" mandaría la sesión de la dueña al catálogo público de los
+ * 4 negocios, en un host que sirve HTML a cualquiera. Hay un test que falla si
+ * aparece (`cookies-dominio.test.ts`).
+ */
 export const createClient = () =>
   createBrowserClient(supabaseUrl, supabaseKey, {
     global: {
@@ -64,3 +77,50 @@ export const createClient = () =>
       },
     },
   });
+
+/**
+ * `createSupabaseClient` no es singleton: llamarlo por cada useEffect crea un
+ * GoTrueClient por llamada (y su warning de "Multiple GoTrueClient instances").
+ * Se cachea por slug, que es lo único que cambia entre instancias.
+ */
+const crearClientePublico = (slugNegocio: string | null) =>
+  createSupabaseClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: slugNegocio
+      ? { headers: { [HEADER_NEGOCIO_SLUG]: slugNegocio } }
+      : undefined,
+  });
+
+const clientesPublicos = new Map<
+  string,
+  ReturnType<typeof crearClientePublico>
+>();
+
+/**
+ * Cliente del CATÁLOGO PÚBLICO en el navegador. Siempre anónimo, nunca con
+ * sesión. Es el espejo de `createPublicClient` del server, y existe por el
+ * mismo motivo que aquel (ver el comentario largo en `supabase/server.ts`):
+ *
+ * `createBrowserClient` de @supabase/ssr manda la sesión que encuentre en las
+ * cookies. Un visitante logueado deja de ser `anon`, la RLS pasa a evaluar la
+ * restrictive de `authenticated` —negocio ACTIVO del usuario, no el slug de la
+ * tienda— y devuelve cero filas: es el incidente del 2/8, que se arregló en el
+ * server y quedó vivo acá. En el catálogo el visitante no tiene identidad: la
+ * tienda se sirve igual para todos, siempre por slug.
+ *
+ * El slug viene de la ruta (`useSlugNegocio`), NO del host, porque el catálogo
+ * se sirve de dos formas y solo una tiene el slug en el host. Resolviéndolo por
+ * host, en modo path (comerz.app/store/evens) no había header, la policy
+ * `negocio_publico()` devolvía NULL y estas consultas volvían VACÍAS —
+ * verificado contra PostgREST: sin header `[]`, con header las 3 promociones.
+ */
+export const createPublicBrowserClient = (slugNegocio: string | null) => {
+  const clave = slugNegocio ?? "";
+
+  const cacheado = clientesPublicos.get(clave);
+  if (cacheado) return cacheado;
+
+  const cliente = crearClientePublico(slugNegocio);
+  clientesPublicos.set(clave, cliente);
+  return cliente;
+};

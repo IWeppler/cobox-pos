@@ -7,33 +7,73 @@ import {
   anotarStockDisponible,
   contarReservasActivasPorVariante,
 } from "@/entities/productos/lib/stock-disponible";
+import {
+  COLUMNAS_CATEGORIA_PUBLICA,
+  COLUMNAS_PRODUCTO_PUBLICO,
+  COLUMNAS_VARIANTE_PUBLICA,
+} from "@/shared/lib/columnas-publicas";
+import { traerTodo } from "@/shared/lib/traer-todo";
 
-export async function getProductosAction() {
+/**
+ * Catálogo de productos.
+ *
+ * `conCostos` parte en dos lo que antes era una sola consulta para dos
+ * consumidores muy distintos: la vidriera pública (anon, cualquier visitante)
+ * y la terminal VENDER (authenticated, gente del comercio). El costo y el
+ * margen son del comercio: en la tienda no se piden — y desde
+ * 20260811140000 anon tampoco los tiene concedidos en la base, así que
+ * pedirlos sería un 403, no un dato de más.
+ *
+ * Que el POS los reciba es solo para mostrarlos: el costo que PERSISTE en la
+ * venta lo resuelve create-sale.ts contra la base, nunca desde este payload.
+ */
+export async function getProductosAction({ conCostos = false } = {}) {
   const supabase = await createPublicClient();
 
-  const [{ data, error }, { data: reservasActivas }] = await Promise.all([
-    supabase
-      .from("productos")
-      .select(
-        `
-      id, nombre, tipo, categoria_id, precio, precio_costo, imagen_url, thumbnail_url, grid_url, slug, publicado,
-      stock:productos_stock(id, variante, cantidad),
-      producto_variantes(id, sku, nombre_display, precio, stock, atributos)
-    `,
-      )
-      .eq("publicado", true)
-      .eq("producto_variantes.activa", true)
-      .order("creado_en", { ascending: false }),
-    supabase.from("reservas").select("variante_id").eq("estado", "ACTIVA"),
-  ]);
+  // Las dos variantes van escritas enteras y se elige una: el parser de tipos
+  // de supabase-js resuelve el select en compilación y necesita un literal.
+  // Con las columnas concatenadas en una variable ve una unión y da ParserError.
+  //
+  // Ojo con lo que NO está: el embed `stock:productos_stock(...)`. Es el espejo
+  // legacy, y `producto_variantes.stock` —que ya viene acá— es la fuente
+  // canónica, así que era una segunda copia del mismo dato: 85 KB comprimidos
+  // por carga de catálogo, el 28% del payload. Los consumidores lo leen con
+  // `p.stock?.` como fallback para productos sin variantes, y no queda ninguno:
+  // de 1.727 publicados hay 7 sin variantes y ninguno tiene filas en el espejo.
+  const SELECT_PUBLICO = `${COLUMNAS_PRODUCTO_PUBLICO}, producto_variantes(${COLUMNAS_VARIANTE_PUBLICA})`;
+  const SELECT_CON_COSTOS = `${COLUMNAS_PRODUCTO_PUBLICO}, precio_costo, producto_variantes(${COLUMNAS_VARIANTE_PUBLICA}, costo)`;
+
+  // Sin paginar, con 1.116 productos publicados PostgREST devolvía 1.000 y los
+  // 116 más viejos desaparecían del catálogo Y del POS sin un error ni un log —
+  // invendibles, porque tampoco salían en la búsqueda de la terminal. Ordenado
+  // por `creado_en` desc, lo que se cae es siempre lo más viejo: el síntoma era
+  // "faltan las camperas de invierno".
+  const [{ data: filas, error, total }, { data: reservasActivas }] =
+    await Promise.all([
+      traerTodo("catálogo público", (desde, hasta) => {
+        const consulta = conCostos
+          ? supabase
+              .from("productos")
+              .select(SELECT_CON_COSTOS, { count: "exact" })
+          : supabase
+              .from("productos")
+              .select(SELECT_PUBLICO, { count: "exact" });
+
+        return consulta
+          .eq("publicado", true)
+          .eq("producto_variantes.activa", true)
+          .order("creado_en", { ascending: false })
+          .range(desde, hasta);
+      }),
+      supabase.from("reservas").select("variante_id").eq("estado", "ACTIVA"),
+    ]);
 
   if (error) {
-    console.error("Error fetching public catalog:", error);
-    return { data: null, error: "No se pudo cargar el catálogo." };
+    return { data: null, error: "No se pudo cargar el catálogo.", total: 0 };
   }
 
   const reservasPorVariante = contarReservasActivasPorVariante(reservasActivas);
-  const productos = (data as Producto[]).map((p) => ({
+  const productos = (filas as Producto[]).map((p) => ({
     ...p,
     producto_variantes: anotarStockDisponible(
       p.producto_variantes,
@@ -41,7 +81,7 @@ export async function getProductosAction() {
     ),
   }));
 
-  return { data: productos, error: null };
+  return { data: productos, error: null, total };
 }
 
 // Combina productos + categorías + config para la terminal VENDER en un
@@ -50,10 +90,11 @@ export async function getPosCatalogDataAction() {
   const supabase = await createPublicClient();
 
   const [productosRes, categoriasRes, configRes] = await Promise.all([
-    getProductosAction(),
+    // Con costos: esto es la terminal del comercio, no la vidriera.
+    getProductosAction({ conCostos: true }),
     supabase
       .from("categorias")
-      .select("*")
+      .select(COLUMNAS_CATEGORIA_PUBLICA)
       .eq("activa", true)
       .order("orden", { ascending: true }),
     supabase
@@ -87,11 +128,7 @@ export async function getProductoBySlugAction(slug: string) {
   const { data, error } = await supabase
     .from("productos")
     .select(
-      `
-      *,
-      stock:productos_stock(id, variante, cantidad),
-      producto_variantes(id, sku, nombre_display, precio, stock, atributos)
-    `,
+      `${COLUMNAS_PRODUCTO_PUBLICO}, stock:productos_stock(id, variante, cantidad), producto_variantes(${COLUMNAS_VARIANTE_PUBLICA})`,
     )
     .eq("slug", slug)
     .eq("publicado", true)

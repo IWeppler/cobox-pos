@@ -8,6 +8,7 @@ import {
   anotarStockDisponible,
   contarReservasActivasPorVariante,
 } from "@/entities/productos/lib/stock-disponible";
+import { traerTodo } from "@/shared/lib/traer-todo";
 
 export async function getStockAction(): Promise<{
   data: Producto[] | null;
@@ -17,11 +18,15 @@ export async function getStockAction(): Promise<{
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
+    // Paginado: sin esto PostgREST corta en 1000 y la pantalla de stock miente
+    // por omisión — muestra parte del catálogo como si fuera todo. Ver
+    // shared/lib/traer-todo.ts.
     const [{ data, error }, { data: reservasActivas }] = await Promise.all([
-      supabase
-        .from("productos")
-        .select(
-          `
+      traerTodo("stock (detalle)", (desde, hasta) =>
+        supabase
+          .from("productos")
+          .select(
+            `
         id, nombre, tipo, precio, precio_costo, imagen_url, thumbnail_url, slug, publicado, descripcion, categoria_id, creado_en,
         categoria:categorias(id, nombre, slug),
         producto_variantes(
@@ -33,8 +38,11 @@ export async function getStockAction(): Promise<{
         ),
         stock:productos_stock(id, variante, cantidad)
         `,
-        )
-        .order("creado_en", { ascending: false }),
+            { count: "exact" },
+          )
+          .order("creado_en", { ascending: false })
+          .range(desde, hasta),
+      ),
       supabase.from("reservas").select("variante_id").eq("estado", "ACTIVA"),
     ]);
 
@@ -65,10 +73,14 @@ export async function getStockIndexAction(): Promise<{
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    const { data, error } = await supabase
-      .from("productos")
-      .select(
-        `
+    // Paginado por el mismo motivo que getStockAction: este índice es LA lista
+    // de productos de la pantalla /stock, y truncada al kilo hace que un
+    // producto que existe parezca borrado.
+    const { data, error } = await traerTodo("stock (índice)", (desde, hasta) =>
+      supabase
+        .from("productos")
+        .select(
+          `
         id, nombre, tipo, precio, precio_costo, categoria_id, marca, modelo,
         imagen_url, thumbnail_url, grid_url, slug, publicado,
         categoria:categorias(id, nombre, slug),
@@ -81,11 +93,13 @@ export async function getStockIndexAction(): Promise<{
         ),
         stock:productos_stock(cantidad)
         `,
-      )
-      .order("creado_en", { ascending: false });
+          { count: "exact" },
+        )
+        .order("creado_en", { ascending: false })
+        .range(desde, hasta),
+    );
 
     if (error) {
-      console.error("[getStockIndexAction] Error:", error);
       return { data: null, error: "Error al cargar el índice de productos." };
     }
 

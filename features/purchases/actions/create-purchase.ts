@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { traerTodo } from "@/shared/lib/traer-todo";
 import {
   resolverCategoriaImport,
   mapGeneroRopaBebe,
@@ -116,12 +117,29 @@ export async function procesarPedidoAction(
       { data: diccionario, error: dicError },
       { data: categoriasReales, error: catError },
     ] = await Promise.all([
-      supabase.from("productos").select("id, nombre, precio_costo"),
-      supabase
-        .from("diccionario_alias")
-        .select("raw_nombre, producto_id")
-        .eq("proveedor", proveedor),
-      supabase.from("categorias").select("id, nombre, slug, parent_id"),
+      // Paginados: es el historial contra el que se matchean los nombres del
+      // proveedor. Truncado, un producto que existe no se reconoce y el remito
+      // lo da de alta de nuevo. `diccionario_alias` de Evens ya pasó las 1.000
+      // filas, así que también entraba en el corte.
+      traerTodo("remito: productos", (desde, hasta) =>
+        supabase
+          .from("productos")
+          .select("id, nombre, precio_costo", { count: "exact" })
+          .range(desde, hasta),
+      ),
+      traerTodo("remito: alias", (desde, hasta) =>
+        supabase
+          .from("diccionario_alias")
+          .select("raw_nombre, producto_id", { count: "exact" })
+          .eq("proveedor", proveedor)
+          .range(desde, hasta),
+      ),
+      traerTodo("remito: categorías", (desde, hasta) =>
+        supabase
+          .from("categorias")
+          .select("id, nombre, slug, parent_id", { count: "exact" })
+          .range(desde, hasta),
+      ),
     ]);
 
     if (catError) {
@@ -132,7 +150,7 @@ export async function procesarPedidoAction(
       await supabase.from("ordenes_compra").delete().eq("id", orden.id);
       return {
         success: false,
-        error: "Error buscando categorías existentes: " + catError.message,
+        error: "Error buscando categorías existentes: " + catError,
       };
     }
 
@@ -144,7 +162,7 @@ export async function procesarPedidoAction(
       await supabase.from("ordenes_compra").delete().eq("id", orden.id);
       return {
         success: false,
-        error: "Error buscando productos existentes: " + prodError.message,
+        error: "Error buscando productos existentes: " + prodError,
       };
     }
 
@@ -156,7 +174,7 @@ export async function procesarPedidoAction(
       await supabase.from("ordenes_compra").delete().eq("id", orden.id);
       return {
         success: false,
-        error: "Error buscando alias del proveedor: " + dicError.message,
+        error: "Error buscando alias del proveedor: " + dicError,
       };
     }
 

@@ -1,6 +1,7 @@
 import type { createClient } from "@/shared/config/supabase/server";
 import type { FilaImport } from "./parse-productos-csv";
 import type { CatalogoActual } from "./import-productos-plan";
+import { traerTodo } from "@/shared/lib/traer-todo";
 
 type SupabaseDb = ReturnType<typeof createClient>;
 
@@ -18,13 +19,35 @@ export async function cargarCatalogoActual(
   filas: FilaImport[],
   negocioId: string,
 ): Promise<CatalogoActual | null> {
+  // Paginado y no una consulta suelta: esta foto es contra la que se decide si
+  // una fila del archivo YA existe. Truncada al tope de PostgREST, el import no
+  // reconoce lo que hay y lo crea de nuevo — duplicados con stock propio. Es el
+  // caso más caro del bug: `producto_variantes` de Evens tiene 2.965 filas, así
+  // que se estaba viendo un tercio del catálogo.
   const [productosRes, variantesRes, categoriasRes] = await Promise.all([
-    supabase.from("productos").select("id, nombre").eq("negocio_id", negocioId),
-    supabase
-      .from("producto_variantes")
-      .select("id, producto_id, sku, atributos, nombre_display")
-      .eq("negocio_id", negocioId),
-    supabase.from("categorias").select("id, nombre, slug").eq("negocio_id", negocioId),
+    traerTodo("import: productos", (desde, hasta) =>
+      supabase
+        .from("productos")
+        .select("id, nombre", { count: "exact" })
+        .eq("negocio_id", negocioId)
+        .range(desde, hasta),
+    ),
+    traerTodo("import: variantes", (desde, hasta) =>
+      supabase
+        .from("producto_variantes")
+        .select("id, producto_id, sku, atributos, nombre_display", {
+          count: "exact",
+        })
+        .eq("negocio_id", negocioId)
+        .range(desde, hasta),
+    ),
+    traerTodo("import: categorías", (desde, hasta) =>
+      supabase
+        .from("categorias")
+        .select("id, nombre, slug", { count: "exact" })
+        .eq("negocio_id", negocioId)
+        .range(desde, hasta),
+    ),
   ]);
 
   if (productosRes.error || variantesRes.error || categoriasRes.error) {

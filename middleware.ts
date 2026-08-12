@@ -1,6 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { HEADER_NEGOCIO_SLUG, slugDesdeHost } from "@/shared/lib/negocio-slug";
+import { HEADER_NEGOCIO_SLUG } from "@/shared/lib/negocio-slug";
+import {
+  clasificarHost,
+  esHostDeDesarrollo,
+  COOKIE_TIENDA_DEV,
+  HEADER_MODO_CATALOGO,
+  HEADER_TIENDA_DEV,
+  PARAM_TIENDA_DEV,
+} from "@/shared/lib/host-comerz";
+import { decidirRuteo, RUTA_TIENDA_NO_ENCONTRADA } from "@/shared/lib/ruteo-host";
+import { resolverTienda } from "@/shared/lib/cache-tenants";
 import {
   COOKIE_IMPERSONATE,
   COOKIE_NEGOCIO_ACTIVO,
@@ -10,11 +20,25 @@ import {
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  const host = request.headers.get("host");
+
+  // Override para probar subdominios sin DNS: ?tienda=evens una vez, y de ahí
+  // en más lo sostiene la cookie —si no, el primer link interno vuelve al panel
+  // y no se puede navegar el catálogo—. `?tienda=` vacío la borra. Solo se lee
+  // en localhost y previews (`clasificarHost` lo vuelve a chequear).
+  const paramTienda = request.nextUrl.searchParams.get(PARAM_TIENDA_DEV);
+  const overrideTienda =
+    paramTienda ??
+    request.headers.get(HEADER_TIENDA_DEV) ??
+    request.cookies.get(COOKIE_TIENDA_DEV)?.value ??
+    null;
+
+  const destino = clasificarHost(host, { overrideTienda });
 
   // Qué negocio sirve el catálogo. Dos formas, misma resolución dinámica:
   // el subdominio (evens.comerz.app) o el primer segmento del path
   // (/store/evens). Si llegan las dos, gana el subdominio.
-  const slugDelHost = slugDesdeHost(request.headers.get("host"));
+  const slugDelHost = destino.tipo === "tienda" ? destino.slug : null;
   const slugDelPath = pathname.startsWith("/store/")
     ? (pathname.split("/")[2] || null)
     : null;
@@ -30,16 +54,68 @@ export async function middleware(request: NextRequest) {
     } else {
       headers.delete(HEADER_NEGOCIO_SLUG);
     }
+    // Los links del catálogo dependen de cómo se está sirviendo: desde un
+    // subdominio son relativos a la raíz. Se decide acá, donde ya se sabe.
+    headers.set(HEADER_MODO_CATALOGO, slugDelHost ? "subdominio" : "path");
     return { headers };
   };
 
-  // En un subdominio de tienda, la raíz y /store son el catálogo de ESE
-  // negocio. Se reescribe a la ruta canónica por path, que es la única que
-  // existe: así hay un solo juego de páginas para los dos modos.
-  if (slugDelHost && (pathname === "/" || pathname === "/store")) {
-    const url = request.nextUrl.clone();
-    url.pathname = `/store/${slugDelHost}`;
-    return NextResponse.rewrite(url, { request: conNegocio() });
+  /** Persiste (o borra) el override de desarrollo cuando vino por query. */
+  const conCookieDev = <T extends NextResponse>(respuesta: T): T => {
+    if (paramTienda === null || !esHostDeDesarrollo(host)) return respuesta;
+
+    if (paramTienda) {
+      respuesta.cookies.set(COOKIE_TIENDA_DEV, paramTienda, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+      });
+    } else {
+      respuesta.cookies.delete(COOKIE_TIENDA_DEV);
+    }
+    return respuesta;
+  };
+
+  // Ruteo por host, ANTES de cualquier consulta de sesión: el catálogo público
+  // es anónimo y no tiene por qué pagar un getUser() por request.
+  if (destino.tipo !== "app") {
+    // El slug se valida contra el cache en memoria (TTL), no contra Supabase:
+    // esto corre en cada request de cada tienda. `indeterminado` deja pasar
+    // —lo resuelve la página— para que un parpadeo de la base no apague todos
+    // los catálogos a la vez.
+    let existe: boolean | null = null;
+    if (destino.tipo === "tienda") {
+      const resolucion = await resolverTienda(destino.slug);
+      if (resolucion.estado !== "indeterminado") {
+        existe = resolucion.estado === "existe";
+      }
+    }
+
+    const accion = decidirRuteo({
+      destino,
+      pathname,
+      search: request.nextUrl.search,
+      tiendaExiste: existe,
+    });
+
+    if (accion.tipo === "redirect") {
+      return conCookieDev(
+        NextResponse.redirect(new URL(accion.destino, request.url)),
+      );
+    }
+
+    if (accion.tipo === "no-encontrada") {
+      const url = request.nextUrl.clone();
+      url.pathname = RUTA_TIENDA_NO_ENCONTRADA;
+      url.search = "";
+      return conCookieDev(NextResponse.rewrite(url, { request: conNegocio() }));
+    }
+
+    if (accion.tipo === "rewrite") {
+      const url = request.nextUrl.clone();
+      url.pathname = accion.pathname;
+      return conCookieDev(NextResponse.rewrite(url, { request: conNegocio() }));
+    }
   }
 
   let supabaseResponse = NextResponse.next({
@@ -186,8 +262,17 @@ export async function middleware(request: NextRequest) {
   return supabaseResponse;
 }
 
+/**
+ * El middleware corre en CADA request que pase por acá, y ahora además resuelve
+ * el host. Todo lo que no es una página se saca del camino:
+ *
+ * - `/api`: no hay ruta de API que dependa del ruteo por host ni de la sesión
+ *   del middleware; hacerlas pasar es latencia por nada.
+ * - `/_next`, assets, íconos y el service worker: son archivos, no rutas.
+ *   Además, en un subdominio de tienda entrarían al rewrite del catálogo.
+ */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|workbox-.*\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon\\.ico|apple-icon\\.png|icon\\.png|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|sw\\.js|workbox-.*\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|txt|xml|json|woff2?|ttf)$).*)",
   ],
 };

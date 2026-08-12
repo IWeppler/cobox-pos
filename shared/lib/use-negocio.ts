@@ -1,7 +1,8 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { rutaCatalogo } from "@/shared/lib/dominios";
+import { rutaCatalogoEnModo } from "@/shared/lib/dominios";
+import { useModoCatalogo } from "@/shared/components/modo-catalogo-provider";
 
 /**
  * Slug del negocio del catálogo que se está viendo, tomado de la ruta
@@ -15,11 +16,24 @@ export function useSlugNegocio(): string | null {
 }
 
 /**
- * Link dentro del catálogo actual. Devuelve "#" si no hay negocio en la ruta,
- * para no mandar a nadie a un catálogo que no existe.
+ * Constructor de links del catálogo actual. Es una función y no un valor porque
+ * las grillas arman un link por producto dentro de un `map`, donde no se puede
+ * llamar a un hook: se toma el constructor una vez y se lo usa N veces.
+ *
+ * Devuelve "#" si no hay negocio en la ruta, para no mandar a nadie a un
+ * catálogo que no existe.
  */
-export function useRutaCatalogo(slugProducto?: string): string {
+export function useLinkCatalogo(): (slugProducto?: string | null) => string {
   const slugNegocio = useSlugNegocio();
-  if (!slugNegocio) return "#";
-  return rutaCatalogo(slugNegocio, slugProducto);
+  const modo = useModoCatalogo();
+
+  return (slugProducto) => {
+    if (!slugNegocio) return "#";
+    return rutaCatalogoEnModo(modo, slugNegocio, slugProducto ?? undefined);
+  };
+}
+
+/** Link a un destino puntual del catálogo actual. */
+export function useRutaCatalogo(slugProducto?: string): string {
+  return useLinkCatalogo()(slugProducto);
 }

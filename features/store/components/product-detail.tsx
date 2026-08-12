@@ -15,7 +15,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCartStore } from "@/shared/store/cart-store";
 import { useRutaCatalogo } from "@/shared/lib/use-negocio";
-import { toast } from "sonner";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { resolverAtributosVariante } from "@/entities/productos/lib/build-propiedades-filtro";
 import { compararTalles } from "@/entities/productos/lib/comparar-talles";
@@ -42,7 +41,12 @@ export function ProductDetail({
   const MAX_VISIBLE_THUMBS = 4;
 
   const [selecciones, setSelecciones] = useState<Record<string, string>>({});
-  const [errorVariante, setErrorVariante] = useState(false);
+  // Un solo aviso para los dos motivos por los que "Añadir al carrito" no
+  // agrega: falta elegir una opción, o la combinación elegida está agotada.
+  // Va inline y no como toast: en mobile el toast (abajo al medio) cae justo
+  // sobre la barra fija del botón, o sea tapa lo que el cliente acaba de
+  // tocar. Acá el mensaje queda pegado a lo que hay que corregir.
+  const [errorSeleccion, setErrorSeleccion] = useState<string | null>(null);
 
   const addItem = useCartStore((state) => state.addItem);
 
@@ -180,10 +184,10 @@ export function ProductDetail({
       Object.keys(parsedVariants.properties).length !==
         Object.keys(selecciones).length
     ) {
-      setErrorVariante(true);
+      setErrorSeleccion("Faltan opciones por seleccionar");
       return;
     }
-    setErrorVariante(false);
+    setErrorSeleccion(null);
 
     // 🚀 4. BUSCADOR DE STOCK (JSONB Nativo)
     const stockDeVariante = variantesArray.find((s) => {
@@ -201,7 +205,7 @@ export function ProductDetail({
     const stockMaximo = stockDeVariante ? stockDeVariante.cantidad : 0;
 
     if (stockMaximo <= 0) {
-      toast.error("Esta combinación se encuentra agotada.");
+      setErrorSeleccion("Esta combinación se encuentra agotada");
       return;
     }
 
@@ -215,8 +219,6 @@ export function ProductDetail({
       imagenUrl: imagenes[0] || null,
       stockMaximo: stockMaximo,
     });
-
-    // toast.success("Añadido al carrito de compras");
   };
 
   const handlePrevImage = () =>
@@ -464,7 +466,7 @@ export function ProductDetail({
                                   ...prev,
                                   [propName]: val,
                                 }));
-                                setErrorVariante(false);
+                                setErrorSeleccion(null);
                               }}
                               className={`min-w-16 px-4 py-3 text-[10px] sm:text-xs font-semibold uppercase transition-all border cursor-pointer ${
                                 isSelected
@@ -483,10 +485,10 @@ export function ProductDetail({
                   ),
                 )}
 
-                {errorVariante && (
+                {errorSeleccion && (
                   <p className="text-danger text-xs font-medium tracking-wide flex items-center animate-in fade-in slide-in-from-top-1">
-                    <AlertCircle className="w-3.5 h-3.5 mr-1.5" /> Faltan
-                    opciones por seleccionar
+                    <AlertCircle className="w-3.5 h-3.5 mr-1.5" />
+                    {errorSeleccion}
                   </p>
                 )}
               </div>
@@ -574,6 +576,14 @@ export function ProductDetail({
 
       {config?.pedidos_whatsapp !== false && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-background backdrop-blur-md border-t border-border z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+          {/* El aviso también acá: en mobile el botón de esta barra es el que
+              se toca, y el mensaje de arriba puede quedar fuera de pantalla. */}
+          {errorSeleccion && (
+            <p className="text-danger text-xs font-medium tracking-wide flex items-center mb-2 animate-in fade-in slide-in-from-bottom-1">
+              <AlertCircle className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+              {errorSeleccion}
+            </p>
+          )}
           <button
             onClick={handleAddToCart}
             disabled={estaAgotado}

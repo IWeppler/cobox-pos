@@ -13,7 +13,8 @@ export interface ProductoVariante {
   sku?: string | null;
   nombre_display: string;
   precio: number | null;
-  costo: number | null;
+  /** NO lo trae el catálogo público: anon no tiene `costo` concedido en la base (20260811140000). Solo viene por los caminos autenticados (POS, stock). */
+  costo?: number | null;
   stock: number;
   /** stock físico neto de reservas ACTIVAS. Solo lo calculan las actions que ya consultan `reservas`; si no viene, tratar como igual a `stock`. */
   stock_disponible?: number;
@@ -74,7 +75,8 @@ export interface Producto {
   categoria_id?: string | null;
   categoria?: CategoriaRelacion | null;
   precio: number;
-  precio_costo: number;
+  /** NO lo trae el catálogo público: es el margen del comercio y anon no lo tiene concedido (20260811140000). Solo por caminos autenticados. */
+  precio_costo?: number;
   imagen_url: string | null;
   thumbnail_url: string | null;
   grid_url: string | null;

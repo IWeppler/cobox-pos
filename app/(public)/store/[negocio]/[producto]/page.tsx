@@ -11,6 +11,7 @@ import { urlDeCatalogo } from "@/shared/lib/dominios";
 import { createPublicClient } from "@/shared/config/supabase/server";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { elegirImagenOg, imagenOgConMime } from "@/shared/lib/og-imagen";
+import { COLUMNAS_CONFIG_PUBLICA } from "@/shared/lib/columnas-publicas";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ async function getConfigPublica() {
   const supabase = await createPublicClient();
   const { data } = await supabase
     .from("configuracion_pos")
-    .select("*")
+    .select(COLUMNAS_CONFIG_PUBLICA)
     .maybeSingle();
   return data;
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCartStore } from "@/shared/store/cart-store";
-import { createClient } from "@/shared/config/supabase/client";
+import { createPublicBrowserClient } from "@/shared/config/supabase/client";
+import { useSlugNegocio } from "@/shared/lib/use-negocio";
 import { useShallow } from "zustand/react/shallow";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { ConfiguracionPOS } from "@/entities/config/types";
@@ -15,6 +16,10 @@ import {
   ModalidadEntregaPublica,
 } from "@/shared/components/cart-sidebar/cart-sidebar-utils";
 import { PromocionDB } from "@/shared/components/cart-sidebar/types";
+import {
+  COLUMNAS_CONFIG_PUBLICA,
+  COLUMNAS_PROMOCION_PUBLICA,
+} from "@/shared/lib/columnas-publicas";
 import { CartCheckoutPublico, EnvioInfo } from "./cart-checkout-publico";
 import { CartFooterPublico } from "./cart-footer-publico";
 
@@ -76,12 +81,21 @@ export function CartPanelPublico({
   const effectiveCheckoutStep: CheckoutStep =
     items.length === 0 ? "CART" : checkoutStep;
 
+  // El slug sale de la RUTA, que lo tiene en los dos modos (subdominio y
+  // /store/[negocio]). Sacándolo del host, en modo path no había slug y estas
+  // tres consultas volvían vacías: sin promos, sin branding y sin el aviso de
+  // recargo. Cliente siempre anónimo: el catálogo es igual para todos.
+  const slugNegocio = useSlugNegocio();
+  const supabase = useMemo(
+    () => createPublicBrowserClient(slugNegocio),
+    [slugNegocio],
+  );
+
   useEffect(() => {
     const fetchConfig = async () => {
-      const supabase = createClient();
       const { data } = await supabase
         .from("configuracion_pos")
-        .select("*")
+        .select(COLUMNAS_CONFIG_PUBLICA)
         .single();
 
       if (data) {
@@ -90,19 +104,18 @@ export function CartPanelPublico({
     };
 
     fetchConfig();
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     // Sin gate de sesión a propósito: esto es informativo para cualquier
     // visitante anónimo del catálogo, no una acción que requiera estar
     // logueado.
     const fetchPromos = async () => {
-      const supabase = createClient();
       const { data } = await supabase
         .from("promociones")
         .select(
           `
-            *,
+            ${COLUMNAS_PROMOCION_PUBLICA},
             promociones_metodos_pago ( metodo_pago ),
             promociones_categorias ( categoria_nombre )
           `,
@@ -113,14 +126,13 @@ export function CartPanelPublico({
     };
 
     fetchPromos();
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     // Métodos con recargo, para avisarlo antes de que el cliente pida.
     // anon solo puede leer las columnas no sensibles (ver la policy y los
     // GRANT por columna de 20260730170000): `comision` no se expone acá.
     const fetchRecargos = async () => {
-      const supabase = createClient();
       const { data } = await supabase
         .from("metodos_pago")
         .select("id, nombre, recargo_porcentaje")
@@ -132,7 +144,7 @@ export function CartPanelPublico({
     };
 
     fetchRecargos();
-  }, []);
+  }, [supabase]);
 
   const promocionesElegibles = useMemo(() => {
     return getPromocionesElegibles({

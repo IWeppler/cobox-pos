@@ -38,8 +38,10 @@ describe("urlDeCatalogo", () => {
     process.env.NEXT_PUBLIC_ROOT_DOMAIN = "comerz.app";
     const { urlDeCatalogo } = await cargarModulo();
     expect(urlDeCatalogo("evens")).toBe("https://evens.comerz.app");
+    // En el subdominio el producto cuelga de la raíz: la ruta interna
+    // (/store/evens/...) no puede aparecer en un link que se comparte.
     expect(urlDeCatalogo("evens", "campera-negra")).toBe(
-      "https://evens.comerz.app/store/evens/campera-negra",
+      "https://evens.comerz.app/campera-negra",
     );
   });
 

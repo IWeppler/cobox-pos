@@ -5,6 +5,10 @@ import { headers } from "next/headers";
 import { resolveTenant } from "@/shared/lib/tenant";
 import { urlDeCatalogo } from "@/shared/lib/dominios";
 import {
+  COLUMNAS_CATEGORIA_PUBLICA,
+  COLUMNAS_CONFIG_PUBLICA,
+} from "@/shared/lib/columnas-publicas";
+import {
   elegirImagenOg,
   elegirImagenOgConEtiqueta,
   imagenOgConMime,
@@ -234,10 +238,13 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
 
   const [productosRes, configRes, categoriasRes] = await Promise.all([
     getProductosAction(),
-    supabase.from("configuracion_pos").select("*").maybeSingle(),
+    supabase
+      .from("configuracion_pos")
+      .select(COLUMNAS_CONFIG_PUBLICA)
+      .maybeSingle(),
     supabase
       .from("categorias")
-      .select("*")
+      .select(COLUMNAS_CATEGORIA_PUBLICA)
       .eq("activa", true)
       .order("orden", { ascending: true }),
   ]);

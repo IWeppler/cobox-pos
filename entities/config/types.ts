@@ -18,15 +18,19 @@ export interface ConfiguracionPOS {
   id: string;
   posName: string;
   posLogo: string;
-  razon_social: string;
-  cuit: string;
-  condicion_iva: string;
-  inicio_actividades: string;
+  // La identidad fiscal del comercio y el pie del ticket NO salen al catálogo
+  // público: anon no los tiene concedidos en la base (20260811140000), así que
+  // en las páginas de tienda estos campos no vienen. Son opcionales por eso,
+  // no porque el comercio pueda no tenerlos cargados.
+  razon_social?: string;
+  cuit?: string;
+  condicion_iva?: string;
+  inicio_actividades?: string;
   provincia: string;
   localidad: string;
   whatsapp: string;
   direccion: string;
-  mensaje_ticket: string;
+  mensaje_ticket?: string;
 
   // Catálogo y E-commerce
   catalogo_activo?: boolean;

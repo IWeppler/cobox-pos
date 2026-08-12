@@ -4,15 +4,14 @@ import { Producto } from "@/entities/productos/types";
 import Image from "next/image";
 import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
-import { useSlugNegocio } from "@/shared/lib/use-negocio";
-import { rutaCatalogo } from "@/shared/lib/dominios";
+import { useLinkCatalogo } from "@/shared/lib/use-negocio";
 
 interface RelatedProductsProps {
   productos: Producto[];
 }
 
 export function RelatedProducts({ productos }: Readonly<RelatedProductsProps>) {
-  const slugNegocio = useSlugNegocio();
+  const linkCatalogo = useLinkCatalogo();
 
   if (!productos || productos.length === 0) return null;
 
@@ -51,10 +50,7 @@ export function RelatedProducts({ productos }: Readonly<RelatedProductsProps>) {
           }
 
           const primeraImagen = miniaturas[0] || imagenes[0] || null;
-          const linkDestino =
-            producto.slug && slugNegocio
-              ? rutaCatalogo(slugNegocio, producto.slug)
-              : "#";
+          const linkDestino = producto.slug ? linkCatalogo(producto.slug) : "#";
 
           return (
             <Link

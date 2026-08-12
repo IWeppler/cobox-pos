@@ -242,7 +242,7 @@ export function useCargaRapida(
         nombreDisplay: variantes[0].nombre_display,
         nombreProducto: producto.nombre,
         sku: variantes[0].sku ?? null,
-        precioCosto: variantes[0].costo ?? producto.precio_costo,
+        precioCosto: variantes[0].costo ?? producto.precio_costo ?? 0,
         precioVenta: variantes[0].precio ?? producto.precio,
       });
       return;
@@ -358,7 +358,7 @@ export function useCargaRapida(
         nombreDisplay: m.variante.nombre_display,
         nombreProducto: m.producto.nombre,
         sku: m.variante.sku ?? null,
-        precioCosto: m.variante.costo ?? m.producto.precio_costo,
+        precioCosto: m.variante.costo ?? m.producto.precio_costo ?? 0,
         precioVenta: m.variante.precio ?? m.producto.precio,
       });
       setQuery("");
@@ -665,7 +665,8 @@ export function useCargaRapida(
         nombreDisplay: seleccion.variante,
         nombreProducto: variantSelectorProducto.nombre,
         sku: seleccion.sku,
-        precioCosto: seleccion.costo ?? variantSelectorProducto.precio_costo,
+        precioCosto:
+          seleccion.costo ?? variantSelectorProducto.precio_costo ?? 0,
         precioVenta: seleccion.precio ?? variantSelectorProducto.precio,
       });
     },

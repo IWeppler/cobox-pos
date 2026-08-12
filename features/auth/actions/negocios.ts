@@ -7,6 +7,7 @@ import {
   COOKIE_NEGOCIO_ACTIVO,
   COOKIE_NEGOCIO_MAX_AGE,
 } from "@/shared/lib/negocio-activo";
+import { slugDesdeNombre, validarSlugNegocio } from "@/shared/lib/slug-negocio";
 
 export interface MembresiaNegocio {
   negocio_id: string;
@@ -118,19 +119,18 @@ export async function crearNegocioAction(
     return { error: "El nombre del negocio es obligatorio.", success: false };
   }
 
-  const slug = nombre
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  // El slug es el subdominio de la tienda, no un detalle cosmético: validarlo
+  // acá es lo que evita que un comercio llamado "App" se lleve app.comerz.app.
+  // La base tiene los mismos dos CHECK (20260811130000); esto existe para dar
+  // un mensaje entendible en vez de un 23514.
+  const candidato = slugDesdeNombre(nombre);
+  const validacion = validarSlugNegocio(candidato);
 
-  if (!slug) {
-    return {
-      error: "El nombre tiene que tener al menos una letra o número.",
-      success: false,
-    };
+  if (!validacion.valido) {
+    return { error: validacion.error, success: false };
   }
+
+  const slug = validacion.slug;
 
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);

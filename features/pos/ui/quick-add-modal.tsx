@@ -96,7 +96,11 @@ function QuickAddModalContent({
         varianteId: v.id,
         atributos,
         precio: v.precio,
-        costo: v.costo,
+        // El catálogo público no trae `costo` (anon no lo tiene concedido);
+        // acá siempre viene, porque esto es el POS. El ?? null es para el tipo,
+        // no para un caso real — y de todos modos el costo que persiste en la
+        // venta lo resuelve create-sale.ts contra la base.
+        costo: v.costo ?? null,
         sku: v.sku ?? null,
       });
     });
@@ -201,7 +205,7 @@ function QuickAddModalContent({
             varianteId: stockDeVariante.varianteId,
             variante: stockDeVariante.variante,
             precio: stockDeVariante.precio ?? producto.precio,
-            costo: stockDeVariante.costo ?? producto.precio_costo,
+            costo: stockDeVariante.costo ?? producto.precio_costo ?? null,
             sku: stockDeVariante.sku,
             stockDisponible: stockDeVariante.cantidad,
           });
