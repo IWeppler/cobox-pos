@@ -3,6 +3,7 @@ import { AuthPanel } from "@/features/auth/ui/auth-panel";
 import Link from "next/link";
 import Image from "next/image";
 import { Suspense } from "react";
+import { InstallAppWidget } from "@/shared/components/install-widget";
 
 export default function AuthPage() {
   return (
@@ -40,6 +41,20 @@ export default function AuthPage() {
         <Suspense fallback={null}>
           <AuthPanel />
         </Suspense>
+
+        {/* Instalar la app se ofrece ACÁ y no en el catálogo.
+            Antes el único camino era el link "Ingresar" del footer del
+            catálogo, así que quien instalaba lo hacía desde la tienda — y el
+            catálogo público es de las clientas, no del comercio: a una clienta
+            no le sirve instalar el POS.
+
+            El widget se muestra solo si de verdad se puede instalar: devuelve
+            null si ya está instalada o si el navegador no lo permite, y en iOS
+            —que no tiene prompt nativo— abre las instrucciones del menú
+            Compartir en vez de un botón que no haría nada. */}
+        <div className="mx-auto mt-6 w-full max-w-xs">
+          <InstallAppWidget isCollapsed={false} />
+        </div>
 
        <div className="mt-8 text-center space-y-3">
         <p className="mx-auto max-w-xs text-xs leading-relaxed text-muted-foreground/80">

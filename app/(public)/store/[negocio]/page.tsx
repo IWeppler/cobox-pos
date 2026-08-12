@@ -1,4 +1,5 @@
 import { getProductosAction } from "@/shared/actions/store-actions";
+import { getProductosPublicosCacheados } from "@/shared/lib/cache-catalogo";
 import { StoreCatalog } from "@/features/store/components/store-catalog";
 import { createPublicClient } from "@/shared/config/supabase/server";
 import { headers } from "next/headers";
@@ -232,12 +233,19 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
   const { negocio } = await params;
   const headersList = await headers();
   // Único punto de resolución del tenant: sin negocio válido, 404.
-  await resolveTenant({ hostname: headersList.get("host"), slug: negocio });
+  const { negocio_id, negocio: datosNegocio } = await resolveTenant({
+    hostname: headersList.get("host"),
+    slug: negocio,
+  });
 
   const supabase = await createPublicClient();
 
   const [productosRes, configRes, categoriasRes] = await Promise.all([
-    getProductosAction(),
+    // Cacheado por negocio (ver shared/lib/cache-catalogo.ts). El slug sale del
+    // tenant YA resuelto, no del parámetro de la URL: en modo subdominio el
+    // param y el host podrían discrepar, y la clave del cache tiene que salir
+    // de la misma resolución que autorizó la página.
+    getProductosPublicosCacheados(datosNegocio.slug, negocio_id),
     supabase
       .from("configuracion_pos")
       .select(COLUMNAS_CONFIG_PUBLICA)

@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarClock,
   Inbox,
+  Sparkles,
   TrendingDown,
   TrendingUp,
   Wallet,
@@ -73,6 +74,31 @@ export default async function AdminComerzPage() {
           icono={<Building2 className="w-4 h-4" />}
         />
       </div>
+
+      {/* Altas self-service en prueba. Es la métrica que dice si el onboarding
+          abierto está funcionando, y el momento en que un comercio nuevo decide
+          si se queda: son los 14 días en los que conviene aparecer. */}
+      {metricas.enPrueba > 0 && (
+        <Aviso
+          icono={<Sparkles className="w-4 h-4 text-primary shrink-0" />}
+          texto={
+            <>
+              <strong>
+                {metricas.enPrueba} comercio{metricas.enPrueba === 1 ? "" : "s"}{" "}
+                en prueba
+              </strong>{" "}
+              — se registraron solos y están dentro de sus 14 días.{" "}
+              <Link
+                href="/admincomerz/negocios"
+                className="text-primary hover:underline font-medium"
+              >
+                Contactalos ahora
+              </Link>
+              .
+            </>
+          }
+        />
+      )}
 
       {/* Lo que necesita acción, dicho sin vueltas. */}
       {(solicitudesNuevas > 0 ||

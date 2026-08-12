@@ -7,8 +7,6 @@ import { cookies } from "next/headers";
 import { Geist_Mono, Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 import Script from "next/script";
-import { Analytics } from "@vercel/analytics/next"
-import { SpeedInsights } from "@vercel/speed-insights/next"
 import { InstalacionPwaListener } from "@/shared/components/instalacion-pwa-listener";
 import { ClientErrorReporter } from "@/shared/components/client-error-reporter";
 
@@ -95,8 +93,18 @@ export default async function RootLayout({
         </ThemeProvider>
         <ClientErrorReporter />
         <InstalacionPwaListener />
-        <Analytics/>
-        <SpeedInsights/>
+        {/*
+          Analytics y Speed Insights NO van acá: viven en el layout del catálogo
+          público (app/(public)/store/[negocio]/layout.tsx). Del POS no
+          interesan las métricas —son 4 personas conocidas, si algo va lento
+          avisan— y en cambio cada navegación suya consumía cuota. Lo que sí
+          importa medir es el catálogo: clientas reales, en celular, con red de
+          local.
+
+          Si algún día hace falta medir el panel, que sea con su propio
+          componente en el layout del dashboard, nunca acá: este layout lo
+          comparten las dos mitades de la app.
+        */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-PGP6P5VS3Y"
           strategy="afterInteractive"

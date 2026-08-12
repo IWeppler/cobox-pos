@@ -1,0 +1,75 @@
+<!--
+  Template: "Confirm signup" (confirmation).
+  Se pega en Authentication → Email Templates → Confirm signup.
+
+  Se usa SOLO si se prende "Confirm email" en Authentication → Providers →
+  Email. Hoy (12/8/2026) está apagado, así que este template no se dispara: el
+  registro entra derecho a /crear-negocio. Queda escrito para el día que se
+  prenda — y conviene prenderlo antes de abrir el alta de verdad, porque sin
+  confirmación cualquiera crea cuentas con mails que no son suyos.
+
+  El código ya contempla los dos casos: si `signUp` no devuelve sesión,
+  registro.ts responde con el aviso de "revisá tu mail" en vez de navegar
+  (ver features/auth/actions/registro.ts).
+-->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;padding:32px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr>
+    <td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background-color:#ffffff;border-radius:12px;border:1px solid #e4e4e7;">
+        <tr>
+          <td style="padding:32px 32px 0 32px;">
+            <p style="margin:0;font-size:18px;font-weight:700;color:#09090b;letter-spacing:-0.3px;">Comerz</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px 0 32px;">
+            <h1 style="margin:0;font-size:22px;line-height:1.3;font-weight:600;color:#09090b;">
+              Confirmá tu cuenta
+            </h1>
+            <p style="margin:12px 0 0 0;font-size:15px;line-height:1.6;color:#52525b;">
+              Ya casi estás. Confirmá que este mail es tuyo y seguí con la
+              creación de tu comercio — tenés 14 días de prueba, sin tarjeta.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px 0 32px;">
+            <table cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="background-color:#09090b;border-radius:8px;">
+                  <a href="{{ .ConfirmationURL }}"
+                     style="display:inline-block;padding:12px 24px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">
+                    Confirmar mi cuenta
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px 0 32px;">
+            <p style="margin:0;font-size:13px;line-height:1.6;color:#71717a;">
+              Si el botón no funciona, copiá y pegá esta dirección en tu navegador:
+            </p>
+            <p style="margin:8px 0 0 0;font-size:12px;line-height:1.5;word-break:break-all;color:#3f3f46;">
+              {{ .ConfirmationURL }}
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px 32px 32px;">
+            <div style="border-top:1px solid #e4e4e7;padding-top:16px;">
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#71717a;">
+                <strong style="color:#3f3f46;">¿No creaste ninguna cuenta?</strong>
+                Ignorá este mail. Sin confirmar, la cuenta no se activa.
+              </p>
+            </div>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:16px 0 0 0;font-size:12px;color:#a1a1aa;">
+        Comerz — gestión y punto de venta
+      </p>
+    </td>
+  </tr>
+</table>

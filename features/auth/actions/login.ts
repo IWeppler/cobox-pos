@@ -6,6 +6,7 @@ import {
   COOKIE_NEGOCIO_ACTIVO,
   COOKIE_NEGOCIO_MAX_AGE,
 } from "@/shared/lib/negocio-activo";
+import { destinoSinNegocio } from "./registro";
 
 export interface LoginState {
   error: string;
@@ -56,15 +57,25 @@ export async function loginAction(
   const negocios = membresias ?? [];
 
   if (negocios.length === 0) {
-    // Sin negocio no hay nada que mostrar. Se cierra la sesión para no dejarlo
-    // dando vueltas logueado en una app vacía, y se le dice qué pasa: crear un
-    // negocio es un flujo aparte, no el premio consuelo de un login fallido.
-    await supabase.auth.signOut();
+    // Con el alta self-service abierta, "sin negocio" dejó de ser un callejón.
+    // Antes acá se cerraba la sesión y se le decía que pidiera una invitación;
+    // eso ahora dejaría afuera a quien se registró para abrir SU comercio y no
+    // llegó a crearlo. `destinoSinNegocio` separa los dos casos por la
+    // invitación pendiente.
     cookieStore.delete(COOKIE_NEGOCIO_ACTIVO);
-    return {
-      error:
-        "Tu cuenta no está asociada a ningún negocio. Pedile a la persona a cargo que te invite.",
-    };
+    const { destino, error: aviso } = await destinoSinNegocio(
+      supabase,
+      sesion.user.email,
+    );
+
+    if (!destino) {
+      // Invitación pendiente: la sesión no le sirve para nada hasta que use el
+      // link, así que se cierra igual que antes.
+      await supabase.auth.signOut();
+      return { error: aviso };
+    }
+
+    return { error: "", success: true, destino };
   }
 
   if (negocios.length === 1) {

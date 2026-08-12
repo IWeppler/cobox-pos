@@ -30,6 +30,8 @@ export interface MetricasComerz {
   altasSemana: number;
   bajasMes: number;
   porVencer: number;
+  /** Altas self-service dentro de sus 14 días de prueba. */
+  enPrueba: number;
 }
 
 /**
@@ -114,6 +116,17 @@ export async function getPanelComerzAction(): Promise<{
       (n) =>
         n.plan_vencimiento &&
         new Date(n.plan_vencimiento).getTime() <= ahora + 15 * 86400000,
+    ).length,
+    // Altas self-service que todavía están en los 14 días de prueba. Se derivan
+    // del vencimiento en vez de un estado propio: un negocio en prueba ES un
+    // negocio activo con vencimiento cerca (ver la migración
+    // 20260812180000). Un estado más sería otra cosa que mantener en sincronía.
+    enPrueba: activos.filter(
+      (n) =>
+        n.plan_vencimiento &&
+        new Date(n.plan_vencimiento).getTime() > ahora &&
+        new Date(n.plan_vencimiento).getTime() <=
+          new Date(n.created_at).getTime() + 14 * 86400000,
     ).length,
   };
 

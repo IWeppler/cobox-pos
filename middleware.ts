@@ -216,9 +216,16 @@ export async function middleware(request: NextRequest) {
   }
 
   // 4. Logueado con negocios pero sin uno elegido: al selector.
-  // Sin NINGÚN negocio no se lo manda a crear uno —crear negocio es un flujo
-  // explícito, no la salida de un login incompleto—: se lo devuelve al login,
-  // que le explica que le falta una invitación.
+  //
+  // Sin NINGÚN negocio ahora se lo manda a crear uno. Antes iba a /auth con
+  // ?error=sin-negocio, porque el alta de comercios era manual y "sin negocio"
+  // solo podía significar "empleado al que no invitaron". Con el alta
+  // self-service abierta significa además "se registró para abrir su comercio
+  // y todavía no lo creó", que es el camino normal del onboarding — devolverlo
+  // al login lo dejaría sin forma de entrar nunca.
+  //
+  // Al empleado con invitación pendiente lo separa `destinoSinNegocio` en el
+  // login, que es donde está el email para buscarla.
   if (user && !rolActual && !isRutaSinNegocio && !isPublicRoute && !isAuthRoute) {
     const { count } = await supabase
       .from("usuarios_negocios")
@@ -226,12 +233,7 @@ export async function middleware(request: NextRequest) {
       .eq("usuario_id", user.id);
 
     const url = request.nextUrl.clone();
-    if ((count ?? 0) > 0) {
-      url.pathname = "/seleccionar-negocio";
-    } else {
-      url.pathname = "/auth";
-      url.searchParams.set("error", "sin-negocio");
-    }
+    url.pathname = (count ?? 0) > 0 ? "/seleccionar-negocio" : "/crear-negocio";
     return NextResponse.redirect(url);
   }
 

@@ -7,6 +7,8 @@ import { resolveTenant } from "@/shared/lib/tenant";
 import { ModoCatalogoProvider } from "@/shared/components/modo-catalogo-provider";
 import { HEADER_MODO_CATALOGO } from "@/shared/lib/host-comerz";
 import { urlDelPanel } from "@/shared/lib/ruteo-host";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { COLUMNAS_CONFIG_PUBLICA } from "@/shared/lib/columnas-publicas";
 import type { Metadata } from "next";
 
@@ -70,20 +72,62 @@ export default async function PublicLayout({
       <CartPanelPublico numeroWhatsApp={config?.whatsapp} />
       {children}
 
-      {/* FOOTER BÁSICO */}
-      <footer className="bg-neutral-900 border-t border-border py-8 mt-auto flex items-center justify-center relative">
-        <div className="max-w-7xl mx-auto px-4 text-center text-sm text-neutral-400 boreder">
-          © {new Date().getFullYear()} {config?.posName}. Todos los derechos
-          reservados.
-        </div>
-        <Link
-          href={urlDelPanel("/auth")}
-          className="right-1 absolute text-sm text-muted-foreground"
-        >
-          Ingresar
-        </Link>
+      <footer className="bg-neutral-900 mt-auto">
+          {/* Franja de marca. Le habla al DUEÑO DE OTRO NEGOCIO que llegó acá
+              mirando un catálogo — es el canal por el que Comerz se conoce:
+              alguien ve la tienda de una conocida y pregunta con qué está
+              hecha. Va arriba del copyright y con jerarquía visual propia,
+              pero contenida: este footer es de la tienda, no de Comerz. */}
+          <div className="border-b border-white/10">
+            <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-5 text-center sm:text-left">
+              <div>
+                <p className="text-white font-semibold text-base">
+                  ¿Tenés un negocio? Vendé online como {config?.posName}.
+                </p>
+                <p className="text-neutral-400 text-sm mt-1 max-w-md">
+                  Catálogo web, control de stock y punto de venta en un solo
+                  lugar. Sin comisiones por venta.
+                </p>
+              </div>
+              <Link
+                href={urlDelPanel("/auth")}
+                className="shrink-0 inline-flex items-center justify-center rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-neutral-900 transition-colors hover:bg-neutral-200"
+              >
+                Crear mi tienda
+              </Link>
+            </div>
+          </div>
+
+          <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-neutral-400">
+            <p>
+              © {new Date().getFullYear()} {config?.posName}. Todos los derechos
+              reservados.
+            </p>
+            {/* Antes acá había un link "Ingresar" al panel. Se sacó: apuntaba a
+                una pantalla de login que al visitante no le sirve, y era el
+                camino por el que se terminaba instalando la PWA del POS desde
+                el catálogo. Instalar la app es cosa de /auth. */}
+            <p className="text-neutral-500">
+              Hecho con{" "}
+              <Link
+                href={urlDelPanel("/auth")}
+                className="font-medium text-neutral-300 underline-offset-4 hover:underline"
+              >
+                Comerz
+              </Link>
+            </p>
+          </div>
         </footer>
       </div>
+
+      {/* Telemetría SOLO del catálogo. En el POS no interesa medir y cada
+          navegación de las vendedoras consumía cuota. El muestreo es porque
+          Speed Insights cobra por data point: al 12/8/2026 iba 50% de la cuota
+          al día 12, o sea ~129% proyectado. Sacando el POS el volumen cae
+          aproximadamente a la mitad, y con 0.5 encima de eso el mes cierra
+          holgado. Revisar el número con datos reales en unos días. */}
+      <Analytics />
+      <SpeedInsights sampleRate={0.5} />
     </ModoCatalogoProvider>
   );
 }

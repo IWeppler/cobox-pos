@@ -114,9 +114,17 @@ export async function crearNegocioAction(
 ) {
   const nombre = String(formData.get("nombre") ?? "").trim();
   const whatsapp = String(formData.get("whatsapp") ?? "").trim();
+  const planId = String(formData.get("plan_id") ?? "").trim();
 
   if (!nombre) {
     return { error: "El nombre del negocio es obligatorio.", success: false };
+  }
+
+  // El plan define las reglas del negocio (max_usuarios, features). Sin plan no
+  // hay reglas, así que se exige acá y la RPC además tiene su propio fallback:
+  // un negocio sin plan es un negocio sin límites.
+  if (!planId) {
+    return { error: "Elegí un plan para empezar.", success: false };
   }
 
   // El slug es el subdominio de la tienda, no un detalle cosmético: validarlo
@@ -137,7 +145,14 @@ export async function crearNegocioAction(
 
   const { data: negocioId, error } = await supabase.rpc(
     "crear_negocio_con_owner",
-    { p_nombre: nombre, p_slug: slug, p_whatsapp: whatsapp },
+    {
+      p_nombre: nombre,
+      p_slug: slug,
+      p_whatsapp: whatsapp,
+      // La RPC lo valida contra `planes` (y contra `activo`): un id manipulado
+      // desde el cliente no elige un plan que no existe, cae al de entrada.
+      p_plan_id: planId,
+    },
   );
 
   if (error) {

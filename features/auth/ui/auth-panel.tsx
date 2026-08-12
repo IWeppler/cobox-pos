@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { LoginForm } from "./login-form";
 import { SolicitudComercioForm } from "./solicitud-comercio-form";
+import { RegistroForm } from "./registro-form";
 
 type Modo = "login" | "registro";
 
@@ -54,16 +55,17 @@ export function AuthPanel() {
         <p className="text-sm text-muted-foreground mt-2 max-h-16 overflow-hidden transition-all duration-300 ease-out max-lg:group-focus-within:max-h-0 max-lg:group-focus-within:mt-0 max-lg:group-focus-within:opacity-0">
           {esLogin
             ? "Ingresá tus credenciales para acceder a tu panel."
-            : "Dejanos tus datos y te contactamos para dejarlo funcionando."}
+            : "Creá tu cuenta y empezá con 14 días de prueba."}
         </p>
       </div>
 
       <div className="mt-8">
-        {esLogin ? (
-          <LoginForm />
-        ) : (
-          <SolicitudComercioForm onVolver={() => setModo("login")} />
-        )}
+        {/* El modo "registro" era un formulario de contacto: escribía en
+            `solicitudes_comercio` y Comerz respondía por WhatsApp. Ahora crea
+            la cuenta de verdad y sigue solo hasta /crear-negocio, donde elige
+            plan. El formulario de contacto sigue existiendo
+            (SolicitudComercioForm) para quien prefiera que lo llamen. */}
+        {esLogin ? <LoginForm /> : <RegistroForm onVolver={() => setModo("login")} />}
       </div>
 
       {/* Pregunta y acción van en un mismo párrafo: como flex se partían en

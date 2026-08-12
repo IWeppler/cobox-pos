@@ -1,10 +1,6 @@
 Ayudar a vender más, estar organizado y prever qué está pasando en el negocio.
 
 ideas:
-- Para crear usuarios tengo que pedirle a claude code que lo haga. Debo poder crearlo desde el dashboard.
-
-- NO ESTA FUNCIONANDO \ TEMA MARCA Y GENERO PARA EL PRODUCTO. FUNDAMENTAL MEJORAR EL CATALOGO
-
 - ver historial de productos cargados a traves de remitos. como agrupaciones y luego detalle de cada remito. Esto va de la mano con la mejora de la creacion de la pagina de movimientos que actualmente ni siquiera me esta leyendo los productos que ingresan a traves de remitos, no tiene paginacion, creo que podria tener mas filtros y podemos poner esto que digo directamente ahi adentro.
 
 - Pérdida de conexión (Offline): Es la más crítica. Si el local se queda sin internet, la cajera debe saber de inmediato (con un banner permanente en la parte superior) que el sistema está guardando las ventas localmente y que no cierre la pestaña.
@@ -17,9 +13,6 @@ ideas:
 - Login con huella: Entrás con tu huella o Face ID en vez de escribir la contraseña cada vez.
 
 - terminar de hacer la conexión para recuperar contraseñas
-
-
-1. Landing page + blog/tutoriales — en paralelo (no depende de código del POS), es lo que te permite vender mientras construís.
 
 ## EPIC 1 — Datos Fiscales de la Empresa
 Objetivo: poder configurar correctamente un comercio argentino.
