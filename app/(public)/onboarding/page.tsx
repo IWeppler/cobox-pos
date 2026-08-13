@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/shared/config/supabase/server";
 import { OnboardingStepper } from "@/features/auth/ui/onboarding-stepper";
+import { PanelVisualAuth } from "@/features/auth/ui/panel-visual";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,11 @@ export const metadata = {
  * tiene cuenta. Meter el alta ahí obligaba a decidir "¿entro o me registro?"
  * antes de saber de qué se trata, y dejaba el paso más largo del producto
  * escondido detrás de un link chico.
+ *
+ * El layout es el MISMO que /auth (formulario a la izquierda, panel visual a la
+ * derecha) y comparten el componente: entrar y registrarse son dos puertas de
+ * la misma casa, y si se ven distinto parece que una de las dos no es del mismo
+ * producto.
  */
 export default async function OnboardingPage() {
   const supabase = createClient(await cookies());
@@ -41,36 +47,90 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <main className="min-h-svh bg-background px-6 py-10">
-      <div className="mx-auto w-full max-w-md space-y-8">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white">
+    <div className="min-h-svh grid grid-cols-1 lg:grid-cols-2 bg-background">
+      {/* PANEL IZQUIERDO — FORMULARIO. `group` habilita el modo teclado igual
+          que en /auth: cuando algo toma foco en mobile, la marca se achica en
+          vez de empujar el formulario abajo de la pantalla. */}
+      <div className="group flex flex-col relative px-6 sm:px-16 py-10 lg:py-8 bg-card lg:border-r border-border/50">
+        {/* Logo — desktop: arriba a la izquierda */}
+        <div className="hidden lg:flex absolute top-8 left-8 sm:top-12 sm:left-12 items-center gap-3">
+          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
             <Image
               src="/logow.png"
               alt=""
               width={36}
               height={36}
-              className="rounded object-contain"
+              className="object-contain rounded"
             />
           </div>
-          <span className="text-lg font-bold tracking-tight">Comerz</span>
+          <span className="font-bold text-lg tracking-tight text-foreground">
+            Comerz
+          </span>
         </div>
 
-        {/* `yaAutenticado` es lo que permite retomar: si se registró y abandonó
-            antes de crear el negocio, vuelve directo al paso 2 en vez de
-            chocarse con un formulario de cuenta que ya completó. */}
-        <OnboardingStepper yaAutenticado={Boolean(user)} />
+        <div className="flex-1 flex flex-col justify-center w-full max-w-sm mx-auto lg:mt-0">
+          {/* MARCA — solo mobile, mismo bloque que /auth. */}
+          <div className="lg:hidden flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center transition-all duration-300 ease-out group-focus-within:w-11 group-focus-within:h-11">
+              <Image
+                src="/logow.png"
+                alt="Comerz"
+                width={56}
+                height={56}
+                className="w-full h-full object-contain rounded-2xl p-2"
+              />
+            </div>
+            <span className="mt-3 text-xl font-bold tracking-tight text-foreground transition-all duration-300 ease-out group-focus-within:mt-2 group-focus-within:text-lg">
+              Comerz
+            </span>
+            <p className="mt-1.5 max-h-16 overflow-hidden text-sm leading-snug text-muted-foreground transition-all duration-300 ease-out group-focus-within:mt-0 group-focus-within:max-h-0 group-focus-within:opacity-0">
+              <span className="block">Empezá con Comerz.</span>
+              <span className="block">Tu comercio, más simple.</span>
+            </p>
+          </div>
 
-        <p className="text-center text-sm text-muted-foreground">
-          ¿Ya tenés cuenta?{" "}
-          <Link
-            href="/auth"
-            className="font-semibold text-primary underline-offset-4 hover:underline"
-          >
-            Iniciar sesión
-          </Link>
-        </p>
+          <div className="lg:hidden h-px w-full bg-border/60 my-7 transition-all duration-300 ease-out group-focus-within:my-5" />
+
+          {/* `yaAutenticado` es lo que permite retomar: si se registró y
+              abandonó antes de crear el negocio, vuelve directo al paso 2 en
+              vez de chocarse con un formulario de cuenta que ya completó. */}
+          <OnboardingStepper yaAutenticado={Boolean(user)} />
+
+          <p className="mt-8 text-center text-sm text-muted-foreground lg:text-left">
+            ¿Ya tenés cuenta?{" "}
+            <Link
+              href="/auth"
+              className="font-semibold text-primary underline-offset-4 hover:underline transition-colors"
+            >
+              Iniciar sesión
+            </Link>
+          </p>
+        </div>
+
+        <div className="mt-8 text-center space-y-3">
+          <p className="mx-auto max-w-xs text-xs leading-relaxed text-muted-foreground/80">
+            Al continuar, aceptás nuestros{" "}
+            <Link
+              href="/terminos"
+              className="underline underline-offset-2 hover:text-foreground transition-colors"
+            >
+              Términos y Condiciones
+            </Link>{" "}
+            y reconocés haber leído nuestra{" "}
+            <Link
+              href="/privacidad"
+              className="underline underline-offset-2 hover:text-foreground transition-colors"
+            >
+              Política de Privacidad
+            </Link>
+            .
+          </p>
+        </div>
       </div>
-    </main>
+
+      {/* Titular propio: en /auth le habla al que vuelve, acá al que todavía no
+          decidió. El resto del panel es idéntico. */}
+      <PanelVisualAuth titulo="Tu comercio ordenado, desde el primer día" />
+    </div>
   );
 }

@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { COOKIE_NEGOCIO_ACTIVO } from "@/shared/lib/negocio-activo";
+import { SITE_URL } from "@/shared/lib/dominios";
 
 export interface RegistroState {
   error: string;
@@ -20,10 +21,11 @@ export interface RegistroState {
  * `solicitudes_comercio` —datos de contacto, sin cuenta— y Comerz contestaba
  * por WhatsApp. Ahora el usuario crea su cuenta y sigue solo hasta adentro.
  *
- * Lo que este action NO hace: crear el negocio. Eso es el paso siguiente
- * (/onboarding), y va separado a propósito — son dos cosas distintas y la
- * segunda pide elegir plan. Si alguien abandona en el medio queda con cuenta y
- * sin negocio, que es un estado válido y contemplado en el login.
+ * Lo que este action NO hace: crear el negocio. Eso son los pasos 2 y 3 del
+ * stepper, y van separados porque la RPC de alta necesita una sesión — la
+ * cuenta tiene que existir antes. Si alguien abandona en el medio queda con
+ * cuenta y sin negocio, que es un estado válido: el login y el middleware lo
+ * devuelven a /onboarding y retoma en el paso 2.
  */
 export async function registrarseAction(
   prevState: RegistroState,
@@ -53,7 +55,20 @@ export async function registrarseAction(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { nombre } },
+    options: {
+      data: { nombre },
+      // A dónde vuelve después de confirmar. Se manda EXPLÍCITO y no se deja
+      // que Supabase caiga a su "Site URL": ese es un campo del dashboard que
+      // nadie mira, y quedó apuntando a http://localhost:3000 — o sea que el
+      // mail de confirmación de un usuario real lo mandaba a su propia
+      // computadora. Acá sale de la misma variable que ya usa el mail de
+      // recuperación, así que las dos puntas se mueven juntas.
+      //
+      // Va a /auth/callback y no directo a /onboarding porque el link llega en
+      // formato PKCE: lo que aterriza es un `code`, no una sesión, y alguien
+      // tiene que canjearlo.
+      emailRedirectTo: `${SITE_URL}/auth/callback?next=/onboarding`,
+    },
   });
 
   if (error) {
