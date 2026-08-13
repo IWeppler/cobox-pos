@@ -8,6 +8,13 @@ import {
   COOKIE_NEGOCIO_MAX_AGE,
 } from "@/shared/lib/negocio-activo";
 import { slugDesdeNombre, validarSlugNegocio } from "@/shared/lib/slug-negocio";
+import {
+  CONDICIONES_IVA,
+  RUBROS,
+  TAMANOS_EQUIPO,
+  rubroOperativoDesde,
+} from "@/shared/lib/rubros";
+import { errorDeCuit, normalizarCuit } from "@/shared/lib/cuit";
 
 export interface MembresiaNegocio {
   negocio_id: string;
@@ -114,17 +121,37 @@ export async function crearNegocioAction(
 ) {
   const nombre = String(formData.get("nombre") ?? "").trim();
   const whatsapp = String(formData.get("whatsapp") ?? "").trim();
-  const planId = String(formData.get("plan_id") ?? "").trim();
+  const rubro = String(formData.get("rubro") ?? "").trim();
+  const tamanoEquipo = String(formData.get("tamano_equipo") ?? "").trim();
+
+  // Paso 3 del onboarding, TODO opcional: un comercio puede empezar a vender
+  // sin haber cargado su identidad fiscal, y pedírsela para entrar sería
+  // frenarlo en el peor momento. Se completa después desde Configuración.
+  const razonSocial = String(formData.get("razon_social") ?? "").trim();
+  const cuitCrudo = String(formData.get("cuit") ?? "").trim();
+  const condicionIva = String(formData.get("condicion_iva") ?? "").trim();
 
   if (!nombre) {
     return { error: "El nombre del negocio es obligatorio.", success: false };
   }
 
-  // El plan define las reglas del negocio (max_usuarios, features). Sin plan no
-  // hay reglas, así que se exige acá y la RPC además tiene su propio fallback:
-  // un negocio sin plan es un negocio sin límites.
-  if (!planId) {
-    return { error: "Elegí un plan para empezar.", success: false };
+  if (!RUBROS.some((r) => r.valor === rubro)) {
+    return { error: "Elegí el rubro de tu comercio.", success: false };
+  }
+
+  if (!TAMANOS_EQUIPO.some((t) => t.valor === tamanoEquipo)) {
+    return { error: "Contanos cuánta gente trabaja en el comercio.", success: false };
+  }
+
+  // El CUIT se valida por dígito verificador, igual que en clientes: atrapa el
+  // tipeo en el momento y no dos días después, cuando aparece en una factura.
+  if (cuitCrudo) {
+    const errorCuit = errorDeCuit(cuitCrudo);
+    if (errorCuit) return { error: errorCuit, success: false };
+  }
+
+  if (condicionIva && !CONDICIONES_IVA.some((c) => c.valor === condicionIva)) {
+    return { error: "Elegí una condición frente al IVA válida.", success: false };
   }
 
   // El slug es el subdominio de la tienda, no un detalle cosmético: validarlo
@@ -149,9 +176,16 @@ export async function crearNegocioAction(
       p_nombre: nombre,
       p_slug: slug,
       p_whatsapp: whatsapp,
-      // La RPC lo valida contra `planes` (y contra `activo`): un id manipulado
-      // desde el cliente no elige un plan que no existe, cae al de entrada.
-      p_plan_id: planId,
+      p_rubro_comercial: rubro,
+      p_tamano_equipo: tamanoEquipo,
+      // El operativo se deriva del comercial acá, en Node — mismo criterio que
+      // la canonicalización de atributos: la traducción se queda del lado de la
+      // app y la base recibe el valor ya resuelto. Es un default: el comercio
+      // lo puede cambiar después en Configuración.
+      p_rubro: rubroOperativoDesde(rubro),
+      p_razon_social: razonSocial || null,
+      p_cuit: cuitCrudo ? normalizarCuit(cuitCrudo) : null,
+      p_condicion_iva: condicionIva || null,
     },
   );
 

@@ -21,7 +21,7 @@ export interface RegistroState {
  * por WhatsApp. Ahora el usuario crea su cuenta y sigue solo hasta adentro.
  *
  * Lo que este action NO hace: crear el negocio. Eso es el paso siguiente
- * (/crear-negocio), y va separado a propósito — son dos cosas distintas y la
+ * (/onboarding), y va separado a propósito — son dos cosas distintas y la
  * segunda pide elegir plan. Si alguien abandona en el medio queda con cuenta y
  * sin negocio, que es un estado válido y contemplado en el login.
  */
@@ -83,7 +83,7 @@ export async function registrarseAction(
   // apuntaría a un negocio que este usuario no integra.
   cookieStore.delete(COOKIE_NEGOCIO_ACTIVO);
 
-  return { error: "", success: true, destino: "/crear-negocio" };
+  return { error: "", success: true, destino: "/onboarding" };
 }
 
 /**
@@ -94,7 +94,7 @@ export async function registrarseAction(
  * deja a una de las dos golpeando una puerta cerrada:
  *
  *   - Alguien que se registró para abrir SU comercio y todavía no lo creó
- *     (o abandonó a mitad). Tiene que poder seguir: /crear-negocio.
+ *     (o abandonó a mitad). Tiene que poder seguir: /onboarding.
  *   - Un empleado invitado que entró antes de usar el link de la invitación.
  *     Crear un negocio propio sería exactamente lo que NO quiere hacer.
  *
@@ -105,7 +105,7 @@ export async function destinoSinNegocio(
   supabase: ReturnType<typeof createClient>,
   email: string | undefined,
 ): Promise<{ destino: string; error: string }> {
-  if (!email) return { destino: "/crear-negocio", error: "" };
+  if (!email) return { destino: "/onboarding", error: "" };
 
   const { data: invitacion } = await supabase
     .from("invitaciones")
@@ -122,5 +122,5 @@ export async function destinoSinNegocio(
     };
   }
 
-  return { destino: "/crear-negocio", error: "" };
+  return { destino: "/onboarding", error: "" };
 }

@@ -166,12 +166,17 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/store") ||
     pathname.startsWith("/recuperar") ||
     pathname.startsWith("/terminos") ||
-    pathname.startsWith("/privacidad")
+    pathname.startsWith("/privacidad") ||
+    // /onboarding es donde se CREA la cuenta: exigir sesión para entrar sería
+    // pedirle la llave a quien viene a que se la demos. Va también en
+    // `isRutaSinNegocio` de abajo, porque el que ya se registró y volvió
+    // todavía no tiene negocio y no debe rebotar al selector.
+    pathname.startsWith("/onboarding")
   // Rutas donde todavía no hay negocio elegido: son justamente las que sirven
   // para elegirlo o crear el primero.
   const isRutaSinNegocio =
     pathname.startsWith("/seleccionar-negocio") ||
-    pathname.startsWith("/crear-negocio") ||
+    pathname.startsWith("/onboarding") ||
     pathname.startsWith("/invitacion");
 
   // 1. Rol del usuario EN EL NEGOCIO ACTIVO (ya no es un dato del perfil: el
@@ -233,7 +238,7 @@ export async function middleware(request: NextRequest) {
       .eq("usuario_id", user.id);
 
     const url = request.nextUrl.clone();
-    url.pathname = (count ?? 0) > 0 ? "/seleccionar-negocio" : "/crear-negocio";
+    url.pathname = (count ?? 0) > 0 ? "/seleccionar-negocio" : "/onboarding";
     return NextResponse.redirect(url);
   }
 

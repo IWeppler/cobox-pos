@@ -3,14 +3,12 @@ import {
   AlertTriangle,
   Building2,
   CalendarClock,
-  Inbox,
   Sparkles,
   TrendingDown,
   TrendingUp,
   Wallet,
 } from "lucide-react";
 import { getPanelComerzAction } from "@/features/admin/actions/metricas-comerz";
-import { getSolicitudesAction } from "@/features/admin/actions/solicitudes-actions";
 import { formatearMoneda } from "@/shared/utils/formatters";
 
 export const dynamic = "force-dynamic";
@@ -18,15 +16,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Panel Comerz" };
 
 export default async function AdminComerzPage() {
-  const [{ negocios, metricas }, solicitudes] = await Promise.all([
-    getPanelComerzAction(),
-    getSolicitudesAction(),
-  ]);
-
-  // Un lead sin contestar es plata en la puerta: va arriba de todo.
-  const solicitudesNuevas = solicitudes.filter(
-    (s) => s.estado === "NUEVA",
-  ).length;
+  const { negocios, metricas } = await getPanelComerzAction();
 
   const ultimos = [...negocios]
     .sort(
@@ -100,32 +90,13 @@ export default async function AdminComerzPage() {
         />
       )}
 
-      {/* Lo que necesita acción, dicho sin vueltas. */}
-      {(solicitudesNuevas > 0 ||
-        metricas.sinPlan > 0 ||
-        metricas.porVencer > 0) && (
+      {/* Lo que necesita acción, dicho sin vueltas.
+          Ya no hay aviso de "solicitudes sin contestar": con el alta
+          self-service no hay a quién contestarle — el que quiere Comerz se
+          registra y entra solo. La señal que lo reemplaza es "comercios en
+          prueba", que es donde ahora hay algo que hacer. */}
+      {(metricas.sinPlan > 0 || metricas.porVencer > 0) && (
         <div className="space-y-2">
-          {solicitudesNuevas > 0 && (
-            <Aviso
-              icono={<Inbox className="w-4 h-4 text-primary shrink-0" />}
-              texto={
-                <>
-                  <strong>
-                    {solicitudesNuevas} solicitud
-                    {solicitudesNuevas === 1 ? "" : "es"} sin contestar
-                  </strong>
-                  {" — "}
-                  <Link
-                    href="/admincomerz/solicitudes"
-                    className="text-primary hover:underline font-medium"
-                  >
-                    verlas ahora
-                  </Link>
-                  .
-                </>
-              }
-            />
-          )}
           {metricas.sinPlan > 0 && (
             <Aviso
               icono={

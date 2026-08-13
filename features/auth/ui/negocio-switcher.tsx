@@ -191,7 +191,7 @@ export function NegocioSwitcher({
 
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <a href="/crear-negocio" className="gap-2">
+          <a href="/onboarding" className="gap-2">
             <Plus className="size-4" />
             <span className="text-sm">Crear otro negocio</span>
           </a>

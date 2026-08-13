@@ -1,25 +1,23 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { LoginForm } from "./login-form";
-import { SolicitudComercioForm } from "./solicitud-comercio-form";
-import { RegistroForm } from "./registro-form";
 
-type Modo = "login" | "registro";
-
-/** El slogan acompaña al modo: no es lo mismo volver a entrar que empezar. */
-const SLOGAN: Record<Modo, readonly [string, string]> = {
-  login: ["Todo tu negocio.", "En un solo lugar."],
-  registro: ["Empezá con Comerz.", "Tu comercio, más simple."],
-};
-
+/**
+ * Panel de /auth: SOLO login.
+ *
+ * Antes alternaba entre entrar y un formulario de "dejanos tus datos" que
+ * escribía en `solicitudes_comercio` y esperaba un WhatsApp de Comerz. Ese
+ * camino se fue: el alta ahora es self-service y vive en /onboarding, que es
+ * ruta propia porque es el paso más largo del producto y no puede quedar
+ * escondido detrás de un toggle en la pantalla de login.
+ *
+ * Acá quedó "Crear cuenta" como link, no como cambio de modo: /auth es para el
+ * que ya tiene cuenta, y mezclar las dos cosas obligaba a decidir "¿entro o me
+ * registro?" antes de saber de qué se trata.
+ */
 export function AuthPanel() {
-  const [modo, setModo] = useState<Modo>("login");
-
-  const esLogin = modo === "login";
-  const [sloganL1, sloganL2] = SLOGAN[modo];
-
   return (
     <div className="flex-1 flex flex-col justify-center w-full max-w-sm mx-auto lg:mt-0">
       {/* MARCA — solo mobile. Logo y slogan forman un bloque propio, separado
@@ -40,8 +38,8 @@ export function AuthPanel() {
         </span>
         {/* Dos líneas a propósito, y colapsa con el teclado abierto. */}
         <p className="mt-1.5 max-h-16 overflow-hidden text-sm leading-snug text-muted-foreground transition-all duration-300 ease-out group-focus-within:mt-0 group-focus-within:max-h-0 group-focus-within:opacity-0">
-          <span className="block">{sloganL1}</span>
-          <span className="block">{sloganL2}</span>
+          <span className="block">Todo tu negocio.</span>
+          <span className="block">En un solo lugar.</span>
         </p>
       </div>
 
@@ -49,37 +47,29 @@ export function AuthPanel() {
 
       <div className="flex flex-col text-center lg:text-left">
         <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
-          {esLogin ? "Ingresá a tu comercio" : "Creá tu comercio"}
+          Ingresá a tu comercio
         </h1>
-        
+
         <p className="text-sm text-muted-foreground mt-2 max-h-16 overflow-hidden transition-all duration-300 ease-out max-lg:group-focus-within:max-h-0 max-lg:group-focus-within:mt-0 max-lg:group-focus-within:opacity-0">
-          {esLogin
-            ? "Ingresá tus credenciales para acceder a tu panel."
-            : "Creá tu cuenta y empezá con 14 días de prueba."}
+          Ingresá tus credenciales para acceder a tu panel.
         </p>
       </div>
 
       <div className="mt-8">
-        {/* El modo "registro" era un formulario de contacto: escribía en
-            `solicitudes_comercio` y Comerz respondía por WhatsApp. Ahora crea
-            la cuenta de verdad y sigue solo hasta /crear-negocio, donde elige
-            plan. El formulario de contacto sigue existiendo
-            (SolicitudComercioForm) para quien prefiera que lo llamen. */}
-        {esLogin ? <LoginForm /> : <RegistroForm onVolver={() => setModo("login")} />}
+        <LoginForm />
       </div>
 
       {/* Pregunta y acción van en un mismo párrafo: como flex se partían en
           dos líneas en pantallas angostas. */}
       <div className="mt-8 space-y-3 text-center lg:text-left">
         <p className="text-sm text-muted-foreground">
-          {esLogin ? "¿Todavía no tenés un comercio? " : "¿Ya tenés cuenta? "}
-          <button
-            type="button"
-            onClick={() => setModo(esLogin ? "registro" : "login")}
-            className="font-semibold text-primary underline-offset-4 hover:underline transition-colors cursor-pointer"
+          ¿Todavía no tenés un comercio?{" "}
+          <Link
+            href="/onboarding"
+            className="font-semibold text-primary underline-offset-4 hover:underline transition-colors"
           >
-            {esLogin ? "Crear cuenta" : "Iniciar sesión"}
-          </button>
+            Crear cuenta
+          </Link>
         </p>
       </div>
     </div>

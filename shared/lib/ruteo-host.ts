@@ -29,7 +29,7 @@ export const PATHS_DE_PLATAFORMA = [
   "clientes",
   "compras",
   "configuracion",
-  "crear-negocio",
+  "onboarding",
   "invitacion",
   "perfil",
   "pos",
