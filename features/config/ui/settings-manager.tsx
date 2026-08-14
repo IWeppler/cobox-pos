@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Lock, Sparkles } from "lucide-react";
 import { ConfiguracionPOS } from "@/entities/config/types";
+import { useTieneFeature } from "@/features/planes/ui/plan-provider";
 import type {
   Permiso,
   PerfilConRol,
@@ -141,6 +143,13 @@ export function SettingsManager({
     [isAdmin],
   );
 
+  // Qué secciones necesitan un plan que este comercio no tiene. El candado va
+  // en el MENÚ y no solo adentro del panel: sin esto, Estilo Bonito entraba a
+  // "Empleados y Permisos" sin ninguna señal previa y se encontraba con el
+  // paywall recién después de hacer click.
+  const tieneRoles = useTieneFeature("roles");
+  const seccionBloqueada = (id: string) => id === "empleados" && !tieneRoles;
+
   const renderPanel = () => {
     switch (activeSection) {
       case "comercio":
@@ -204,6 +213,9 @@ export function SettingsManager({
                   <div className="flex items-center gap-2">
                     <section.icon className="w-4 h-4 text-muted-foreground" />
                     {section.label}
+                    {seccionBloqueada(section.id) && (
+                      <Sparkles className="h-3 w-3 shrink-0 text-amber-500" />
+                    )}
                   </div>
                 </SelectItem>
               ))}
@@ -230,8 +242,16 @@ export function SettingsManager({
                 <Icon
                   className={`w-5 h-5 shrink-0 mt-0.5 ${isActive ? "text-primary" : "opacity-70"}`}
                 />
-                <div>
-                  <p className="text-sm">{section.label}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 text-sm">
+                    {section.label}
+                    {seccionBloqueada(section.id) && (
+                      <>
+                        <Lock className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+                        <Sparkles className="h-3 w-3 shrink-0 text-amber-500" />
+                      </>
+                    )}
+                  </p>
                   {isActive && (
                     <p className="text-[10px] text-muted-foreground leading-tight mt-0.5 animate-in fade-in slide-in-from-top-1">
                       {section.description}

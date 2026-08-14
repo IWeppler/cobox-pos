@@ -33,15 +33,19 @@ import {
   calcularSaldoConRecargo,
   RecargoMoraConfig,
 } from "../lib/calcular-saldo-con-recargo";
-import { LimiteDelPlan } from "@/features/planes/ui/limite-del-plan";
-import { useContextoPlan } from "@/features/planes/ui/plan-provider";
+import type { ScoringCliente } from "../lib/scoring-cliente";
+import {
+  calcularReferencia,
+  scoringDesdeCliente,
+} from "../lib/scoring-desde-cliente";
+import { ScoringBadges } from "./scoring-badges";
 import {
   ClienteEstadoBadge,
   ESTADO_CLIENTE_CONFIG,
 } from "@/shared/components/cliente-estado-badge";
 
 type SortConfig = {
-  key: "nombre" | "deuda" | "ltv" | "vencimiento";
+  key: "nombre" | "deuda" | "ltv" | "vencimiento" | "scoring";
   direction: "asc" | "desc";
 };
 const CLIENTS_PER_PAGE = 10;
@@ -57,6 +61,7 @@ type ClienteConVentas = Cliente & {
 type ClienteMapeado = ClienteConVentas & {
   cantidadVentas: number;
   totalComprado: number;
+  scoring: ScoringCliente;
   /** Recargo por mora de HOY, 0 si no está vencido o si el comercio no lo
    * configuró. Derivado, nunca guardado: el saldo con recargo cambia solo con
    * el paso del tiempo. */
@@ -82,7 +87,16 @@ export function ClientsView({
   recargoMoraConfig,
   isAdmin = false,
 }: Readonly<ClientsViewProps>) {
-  const contextoPlan = useContextoPlan();
+  // El "ahora" se congela en el primer render: si saliera de `new Date()`
+  // dentro del useMemo, cada recálculo daría puntajes microscópicamente
+  // distintos y el memo dejaría de servir.
+  const [ahora] = useState(() => new Date());
+  // La referencia del valor es el mejor cliente de ESTE comercio: "$200.000 de
+  // margen" no dice si es mucho hasta saber contra qué.
+  const referenciaScoring = useMemo(
+    () => calcularReferencia(clientes),
+    [clientes],
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<ClientStatusFilter>("todos");
   const [sortConfig, setSortConfig] = useState<SortConfig>({
@@ -121,6 +135,7 @@ export function ClientsView({
           }).format(new Date(fechaVencimiento))
         : null;
       const estado = clasificarEstadoCliente(saldo, diasVencido);
+      const scoring = scoringDesdeCliente(cliente, referenciaScoring, ahora);
       // Misma función que usa el server al cobrar y el detalle del cliente:
       // si la tabla dijera un número y el cobro imputara otro, el vendedor no
       // tendría forma de saber cuál es el bueno.
@@ -141,18 +156,10 @@ export function ClientsView({
         fechaVencimientoFormateada,
         diasVencido,
         estado,
+        scoring,
       };
     });
-  }, [clientes, recargoMoraConfig]);
-
-  // El cupo de cuenta corriente se cuenta EXACTAMENTE como el trigger
-  // `validar_limite_cuenta_corriente`: clientes con saldo pendiente > 0, no
-  // clientes cargados. El plan vende "fiarle a N", no "tener N contactos".
-  // Sale del array que ya está en pantalla, así que se mueve solo cuando se
-  // cobra una deuda o se fía a alguien nuevo.
-  const clientesConCuentaCorriente = morosos.length;
-  const maxClientesCc =
-    contextoPlan?.reglasActuales?.max_clientes_cuenta_corriente;
+  }, [clientes, recargoMoraConfig, referenciaScoring, ahora]);
 
   // El KPI sigue siendo CAPITAL: la mora no es plata prestada, es una
   // penalidad que recién existe si el cliente paga tarde. Sumarla al "dinero
@@ -194,6 +201,12 @@ export function ClientsView({
         return sortConfig.direction === "asc"
           ? a.totalComprado - b.totalComprado
           : b.totalComprado - a.totalComprado;
+      }
+
+      if (sortConfig.key === "scoring") {
+        return sortConfig.direction === "asc"
+          ? a.scoring.puntaje - b.scoring.puntaje
+          : b.scoring.puntaje - a.scoring.puntaje;
       }
 
       if (sortConfig.key === "vencimiento") {
@@ -269,22 +282,12 @@ export function ClientsView({
 
   return (
     <div className="flex flex-col gap-4 py-2 px-2 md:px-4">
-      {/* Medidor siempre a la vista, no solo cuando ya chocó: el cupo de
-          cuenta corriente se llena de a poco y sin aviso se descubre el día
-          que no se le puede fiar a una clienta que está en el mostrador.
-          Va arriba de los KPIs porque es una condición del plan, no un dato
-          del negocio.
-
-          No envuelve ningún botón: el cupo NO se consume al crear el cliente
-          sino al fiarle, así que acá el componente es solo el medidor. */}
-      <LimiteDelPlan
-        usado={clientesConCuentaCorriente}
-        limite={maxClientesCc}
-        singular="cliente con cuenta corriente"
-        plural="clientes con cuenta corriente"
-        claveLimite="max_clientes_cuenta_corriente"
-        siempreVisible
-      />
+      {/* El medidor del cupo de cuenta corriente vive SOLO en Perfil >
+          Suscripción, que es donde se mira el plan. Acá ocupaba una banda
+          entera arriba de la tabla todos los días para un dato que cambia una
+          vez por mes. El freno real sigue estando donde importa: la base
+          rechaza el alta manual de deuda al llegar al tope, y la venta fiada
+          nunca se frena. */}
 
       {/* ── KPIs SUPERIORES ── */}
       <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">
@@ -421,6 +424,14 @@ export function ClientsView({
                   </div>
                 </th>
                 <th
+                  className="px-3 py-3 md:px-5 md:py-4 text-center"
+                  onClick={() => handleSort("scoring")}
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    Scoring {renderSortIcon("scoring")}
+                  </div>
+                </th>
+                <th
                   className="px-3 py-3 md:px-5 md:py-4 text-right"
                   onClick={() => handleSort("deuda")}
                 >
@@ -520,19 +531,19 @@ export function ClientsView({
                         </div>
                       </td>
 
+                      <td className="px-3 py-3 md:px-5 md:py-4">
+                        <ScoringBadges scoring={cliente.scoring} />
+                      </td>
+
                       <td className="px-2 py-3 md:px-5 md:py-4 text-right">
+                        {/* Solo el total. El desglose de la mora quedó en el
+                            detalle del cliente: en la tabla era una segunda
+                            línea en cada fila para explicar un número que ya
+                            se entiende. */}
                         {saldo > 0 ? (
-                          <div className="flex flex-col items-end">
-                            <span className="font-mono font-medium text-foreground px-2 py-0.5 shadow-none text-sm">
-                              {formatearMoneda(cliente.saldoConRecargo)}
-                            </span>
-                            {cliente.montoRecargoMora > 0 && (
-                              <span className="px-2 text-[10px] font-mono text-danger">
-                                incluye {formatearMoneda(cliente.montoRecargoMora)}{" "}
-                                de mora
-                              </span>
-                            )}
-                          </div>
+                          <span className="font-mono font-medium text-foreground px-2 py-0.5 shadow-none text-sm">
+                            {formatearMoneda(cliente.saldoConRecargo)}
+                          </span>
                         ) : (
                           <span className="text-muted-foreground/50 font-bold text-lg">
                             -

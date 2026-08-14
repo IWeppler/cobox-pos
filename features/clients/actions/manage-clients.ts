@@ -101,12 +101,17 @@ export async function getClientesAction() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
+  // Se traen fecha y costo de cada venta, y los movimientos de cuenta
+  // corriente, porque son la materia prima del scoring: sin las fechas no hay
+  // recencia ni episodios de deuda, y sin el costo el "valor" se calcularía
+  // sobre facturación en vez de margen (ver scoring-cliente.ts).
   const { data, error } = await supabase
     .from("clientes")
     .select(
       `
       *,
-      ventas ( id, total )
+      ventas ( id, total, precio_costo, cantidad, fecha_venta ),
+      cuenta_corriente_movimientos ( tipo, monto, creado_en, fecha_origen, anulado, descripcion )
     `,
     )
     .order("nombre", { ascending: true });
