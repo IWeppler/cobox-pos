@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import Link from "next/link";
 import {
@@ -8,7 +8,6 @@ import {
   ArrowRightLeft,
   Check,
   ClipboardList,
-  FileSpreadsheet,
   Filter,
   FilterX,
   FolderOpen,
@@ -19,7 +18,9 @@ import {
   Plus,
   ScanBarcode,
   Search,
+  Lock,
 } from "lucide-react";
+import { useLimiteLleno } from "@/features/planes/lib/use-limite-lleno";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -39,9 +40,8 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { ImportarPedidoModal } from "@/features/purchases/ui/create-purchase-modal";
 import type { Rubro } from "@/entities/config/types";
-import { metodoIngresoStock } from "../lib/ingreso-por-rubro";
 import { CrearProductoSheet } from "@/features/stock/ui/create-sheet";
-import { ImportProductosModal } from "./import-productos-modal";
+import { IngresarMercaderiaModal } from "./ingresar-mercaderia-modal";
 import { UpdatePricesModal } from "./update-prices-modal";
 import { PriceHistoryModal } from "./price-history-modal";
 import { ShareButton } from "@/shared/components/share-button";
@@ -97,6 +97,10 @@ interface StockFiltersToolbarProps {
   /** Reemplaza la fila de pills de categoría. Lo usa el POS en la vista de
    * Carga rápida, donde filtrar por categoría no significa nada. */
   filaSecundaria?: React.ReactNode;
+  /** Productos cargados en el negocio, para el tope del plan. NO es
+   * `totalProductos`, que es lo que quedó después de los filtros y de la
+   * paginación: filtrar por categoría no le devuelve cupo a nadie. */
+  productosDelNegocio?: number;
 }
 
 export function StockFiltersToolbar({
@@ -127,7 +131,26 @@ export function StockFiltersToolbar({
   searchInputRef,
   searchDisabled = false,
   filaSecundaria,
+  productosDelNegocio,
 }: Readonly<StockFiltersToolbarProps>) {
+  // Tope de productos del plan. Apaga TODAS las puertas de alta —manual,
+  // carga rápida, remito y planilla— y no solo el botón principal: el límite
+  // es del catálogo, no de un camino en particular. Lo ya cargado se sigue
+  // vendiendo y editando; la base lo frena igual (trg_limite_productos), esto
+  // evita que el freno llegue después de abrir el formulario.
+  const { lleno: catalogoLleno, avisar: avisarCatalogoLleno } = useLimiteLleno(
+    "max_productos",
+    productosDelNegocio,
+    "productos",
+  );
+
+  const abrirAltaProducto = () => {
+    if (catalogoLleno) {
+      avisarCatalogoLleno();
+      return;
+    }
+    setIsCrearProductoOpen(true);
+  };
   // El link del catálogo necesita el negocio, no solo el origen: cada
   // comercio tiene su propia tienda.
   const slugNegocio = useSlugNegocioActivo() ?? "";
@@ -135,12 +158,10 @@ export function StockFiltersToolbar({
   // El sheet de carga manual se monta UNA vez y se abre desde dos botones
   // distintos según breakpoint (barra en desktop, dropdown en mobile).
   const [isCrearProductoOpen, setIsCrearProductoOpen] = useState(false);
-  const [isImportProductosOpen, setIsImportProductosOpen] = useState(false);
-  const seImportoAlgo = useRef(false);
-  // Un comercio ve UN flujo de ingreso de mercadería, el suyo. Antes se
-  // montaban y se ofrecían los dos a todos, y elegir el equivocado te deja
-  // cargando stock por un camino que no está pensado para tu rubro.
-  const metodoIngreso = metodoIngresoStock(rubro);
+  // UN solo punto de entrada para la mercadería, para todos los rubros. Lo que
+  // cambia por rubro es la plantilla que se descarga, no el camino: los dos
+  // orígenes —proveedor y planilla propia— terminan en la conciliación.
+  const [isIngresoOpen, setIsIngresoOpen] = useState(false);
   const propiedadesVariantes = Object.entries(propiedadesGlobales);
   const hayFiltrosVariantesActivos = Object.values(filtrosVariantes).some(
     (valor) => (Array.isArray(valor) ? valor.length > 0 : valor !== "todos"),
@@ -157,7 +178,12 @@ export function StockFiltersToolbar({
     <>
       {/* 1. BARRA SUPERIOR: Buscador y Acciones */}
       <div className="flex flex-row gap-2 px-2 py-1.5 border-b border-border">
-        {metodoIngreso === "remito" && (
+        {/* Los dos caminos de ingreso se montan SIEMPRE, sin importar el
+            rubro: el modal unificado ofrece los dos y el rubro solo decide qué
+            plantilla se baja. Antes se montaba uno solo —remito para
+            indumentaria, planilla para electro— como si una tienda de ropa no
+            pudiera tener una planilla propia. */}
+        {isAdmin && (
           <ImportarPedidoModal
             open={isImportModalOpen}
             onOpenChange={setIsImportModalOpen}
@@ -174,20 +200,12 @@ export function StockFiltersToolbar({
           />
         )}
 
-        {isAdmin && metodoIngreso === "planilla" && (
-          <ImportProductosModal
-            open={isImportProductosOpen}
+        {isAdmin && (
+          <IngresarMercaderiaModal
+            open={isIngresoOpen}
+            onOpenChange={setIsIngresoOpen}
             rubro={rubro}
-            // El refresh se difiere al cierre a propósito: recargar apenas
-            // termina de escribir se llevaría por delante el reporte fila
-            // por fila, que es justo lo que hay que leer cuando alguna falló.
-            onOpenChange={(open) => {
-              setIsImportProductosOpen(open);
-              if (!open && seImportoAlgo.current) window.location.reload();
-            }}
-            onImportado={() => {
-              seImportoAlgo.current = true;
-            }}
+            onAbrirRemitoProveedor={() => setIsImportModalOpen(true)}
           />
         )}
 
@@ -411,9 +429,13 @@ export function StockFiltersToolbar({
                         type="button"
                         variant="ghost"
                         className="sm:hidden"
-                        onClick={() => setIsCrearProductoOpen(true)}
+                        onClick={abrirAltaProducto}
                       >
-                        <Plus className="w-4 h-4 mr-2 text-primary shrink-0" />
+                        {catalogoLleno ? (
+                          <Lock className="w-4 h-4 mr-2 text-muted-foreground shrink-0" />
+                        ) : (
+                          <Plus className="w-4 h-4 mr-2 text-primary shrink-0" />
+                        )}
                         <span>Carga manual</span>
                       </Button>
                       <DropdownMenuSeparator className="my-1 bg-border/60 sm:hidden" />
@@ -424,25 +446,24 @@ export function StockFiltersToolbar({
                     <>
                       <UpdatePricesModal />
                       <PriceHistoryModal />
-                      {metodoIngreso === "remito" ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => setIsImportModalOpen(true)}
-                        >
+                      {/* Un solo ítem para todos los rubros: adentro se elige
+                          el origen del archivo. */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() =>
+                          catalogoLleno
+                            ? avisarCatalogoLleno()
+                            : setIsIngresoOpen(true)
+                        }
+                      >
+                        {catalogoLleno ? (
+                          <Lock className="w-4 h-4 mr-2 text-muted-foreground shrink-0" />
+                        ) : (
                           <PackagePlus className="w-4 h-4 mr-2 text-success shrink-0" />
-                          <span>Ingresar Remito</span>
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => setIsImportProductosOpen(true)}
-                        >
-                          <FileSpreadsheet className="w-4 h-4 mr-2 text-success shrink-0" />
-                          <span>Importar Planilla</span>
-                        </Button>
-                      )}
+                        )}
+                        <span>Ingresar mercadería</span>
+                      </Button>
                       <DropdownMenuSeparator className="my-1 bg-border/60" />
                       <Link href="/stock/bajas" className="w-full block">
                         <button className="w-full flex items-center justify-start h-9 px-2 text-sm font-medium text-foreground hover:bg-warning/10 rounded-md hover:text-warning/90 transition-colors">
@@ -467,10 +488,14 @@ export function StockFiltersToolbar({
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => setIsCrearProductoOpen(true)}
+                onClick={abrirAltaProducto}
                 className="hidden sm:flex h-10 px-4 shrink-0"
               >
-                <Plus className="h-4 w-4 sm:mr-2" />
+                {catalogoLleno ? (
+                  <Lock className="h-4 w-4 sm:mr-2" />
+                ) : (
+                  <Plus className="h-4 w-4 sm:mr-2" />
+                )}
                 <span>Nuevo Producto</span>
               </Button>
             )}

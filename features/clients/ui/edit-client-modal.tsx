@@ -4,7 +4,7 @@ import { FormEvent, useState, useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Edit2, Loader2, Building2 } from "lucide-react";
 import { toast } from "sonner";
-import { errorDeCuit } from "@/shared/lib/cuit";
+import { CuitInput } from "@/shared/components/cuit-input";
 import {
   Dialog,
   DialogContent,
@@ -44,15 +44,11 @@ export function EditClientModal({
 
   // Estados para datos fiscales
   const [isFiscal, setIsFiscal] = useState(false);
-  const [cuit, setCuit] = useState("");
-  const [cuitTocado, setCuitTocado] = useState(false);
 
-  const errorCuit = cuitTocado ? errorDeCuit(cuit) : null;
-
-  // El switch y el CUIT se siembran desde el cliente que se abre. Es
-  // importante que el switch salga de `cuit`: si arrancara en false, guardar
-  // sin tocar el toggle mandaría es_fiscal=false y la action le borraría al
-  // cliente TODOS sus datos fiscales sin avisar.
+  // El switch se siembra desde el cliente que se abre. Es importante que salga
+  // de `cliente.cuit`: si arrancara en false, guardar sin tocar el toggle
+  // mandaría es_fiscal=false y la action le borraría al cliente TODOS sus
+  // datos fiscales sin avisar.
   //
   // Se hace durante el render y no en un useEffect (patrón "adjusting state
   // when props change" de React): con el efecto había un render intermedio en
@@ -61,8 +57,6 @@ export function EditClientModal({
   if (cliente && cliente.id !== clienteSembrado) {
     setClienteSembrado(cliente.id);
     setIsFiscal(!!cliente.cuit);
-    setCuit(cliente.cuit || "");
-    setCuitTocado(false);
   }
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -202,31 +196,17 @@ export function EditClientModal({
               <div className="space-y-4 p-5 border border-border/50 bg-muted/10 rounded-xl animate-in slide-in-from-top-2 fade-in duration-200">
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="edit-cuit" className="text-sm font-medium">
-                      CUIT <span className="text-danger">*</span>
-                    </Label>
-                    <Input
+                  <div className="sm:col-span-2">
+                    {/* `key` por cliente: el campo tiene estado propio, y sin
+                        remount abrir otro cliente mostraría el CUIT del
+                        anterior. Es el mismo problema que resuelve el sembrado
+                        del switch de acá arriba. */}
+                    <CuitInput
+                      key={cliente?.id}
                       id="edit-cuit"
-                      name="cuit"
-                      inputMode="numeric"
-                      value={cuit}
-                      onChange={(e) => setCuit(e.target.value)}
-                      onBlur={() => setCuitTocado(true)}
+                      defaultValue={cliente?.cuit}
                       required={isFiscal}
-                      aria-invalid={Boolean(errorCuit)}
-                      aria-describedby="edit-cuit-ayuda"
-                      className={`h-10 shadow-none font-mono ${
-                        errorCuit ? "border-danger focus-visible:ring-danger" : ""
-                      }`}
                     />
-                    <p
-                      id="edit-cuit-ayuda"
-                      className={`text-[10px] ${errorCuit ? "text-danger" : "text-muted-foreground"}`}
-                    >
-                      {errorCuit ??
-                        "Con o sin guiones. Se verifica el dígito verificador."}
-                    </p>
                   </div>
 
                   <div className="space-y-2">

@@ -17,6 +17,8 @@ import {
   Store,
   Users,
   UserIcon,
+  Lock,
+  Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { ConfiguracionPOS } from "@/entities/config/types";
@@ -33,6 +35,7 @@ import {
   TooltipTrigger,
 } from "@/shared/ui/tooltip";
 import { InstallAppWidget } from "./install-widget";
+import { useContextoPlan } from "@/features/planes/ui/plan-provider";
 
 // 1. Grupos con estructura compacta
 const NAV_GROUPS = [
@@ -55,7 +58,17 @@ const NAV_GROUPS = [
   {
     label: "Herramientas",
     items: [
-      { name: "Reportes", href: "/reportes", icon: ChartArea, adminOnly: true },
+      {
+        name: "Reportes",
+        href: "/reportes",
+        icon: ChartArea,
+        adminOnly: true,
+        // El link NO se esconde cuando el plan no lo incluye: se muestra con
+        // candado. Un módulo que desaparece no se puede querer; uno que se ve
+        // bloqueado dice qué se está perdiendo. El corte de verdad está en el
+        // server (ver app/(dashboard)/reportes/page.tsx) — esto es el aviso.
+        feature: "reportes",
+      },
       {
         name: "Configuración",
         href: "/configuracion",
@@ -93,6 +106,7 @@ export function Sidebar({
   negocioActivoId,
 }: Readonly<SidebarProps>) {
   const pathname = usePathname();
+  const contextoPlan = useContextoPlan();
   const { isCollapsed, isOpenMobile, setIsOpenMobile } = useSidebarStore();
   const isCajaAbierta = useCajaStatusStore((state) => state.isCajaAbierta);
   const fetchCajaStatusStore = useCajaStatusStore(
@@ -282,6 +296,15 @@ export function Sidebar({
                   const Icon = item.icon;
                   const showCajaAlert =
                     item.name === "Caja" && isCajaAbierta === false;
+                  // Sin plan cargado no se bloquea nada, igual que
+                  // useTieneFeature y que la base: el paywall no puede apagar
+                  // medio sistema porque el contexto todavía no llegó.
+                  const bloqueadoPorPlan = Boolean(
+                    item.feature &&
+                      contextoPlan &&
+                      !contextoPlan.sinPlan &&
+                      !contextoPlan.features.includes(item.feature),
+                  );
 
                   return (
                     <Tooltip
@@ -312,14 +335,27 @@ export function Sidebar({
                             {showCajaAlert && (
                               <span className="absolute -top-1 -right-1 flex h-2 w-2 ring-2 ring-sidebar rounded-full bg-rose-500" />
                             )}
+                            {/* Colapsado no hay lugar para el candado al lado
+                                del nombre: va sobre el ícono. */}
+                            {bloqueadoPorPlan && isCollapsed && (
+                              <Sparkles className="absolute -top-1.5 -right-1.5 h-2.5 w-2.5 text-amber-500" />
+                            )}
                           </div>
                           {!isCollapsed && (
                             <span className="text-sm">{item.name}</span>
                           )}
+                          {bloqueadoPorPlan && !isCollapsed && (
+                            <span className="ml-auto flex items-center gap-0.5">
+                              <Lock className="h-3 w-3 text-muted-foreground/70" />
+                              <Sparkles className="h-3 w-3 text-amber-500" />
+                            </span>
+                          )}
                         </Link>
                       </TooltipTrigger>
                       <TooltipContent side="right" hidden={!isCollapsed}>
-                        {item.name}
+                        {bloqueadoPorPlan
+                          ? `${item.name} — mejorá tu plan`
+                          : item.name}
                       </TooltipContent>
                     </Tooltip>
                   );

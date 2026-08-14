@@ -143,9 +143,9 @@ export const ProductVariantsSection = memo(function ProductVariantsSection({
     opciones.some((o) => o.nombre.trim() && o.valores.length > 0);
 
   return (
-    <div className="bg-card">
+    <div className="bg-card border border-border rounded-xl overflow-hidden transition-all">
       <div
-        className="flex items-center justify-between py-2 cursor-pointer"
+        className="flex items-center justify-between p-3 md:p-5 cursor-pointer"
         onClick={() => onShowVariantsChange(true)}
       >
         <div className="flex items-center gap-3">
@@ -189,7 +189,7 @@ export const ProductVariantsSection = memo(function ProductVariantsSection({
       </div>
 
       {showVariants && (
-        <div className="px-2 pb-4 animate-in fade-in slide-in-from-top-4 space-y-6 border-t border-border/50 pt-5 mt-2">
+        <div className="px-2 md:px-5 pb-5 animate-in fade-in slide-in-from-top-4 space-y-6 border-t border-border/50 pt-5 mt-2">
           <div className="space-y-4">
             {opciones.map((op) => {
               const isCustom = customTypeMode[op.id];

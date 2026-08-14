@@ -1,213 +1,182 @@
-import Link from "next/link";
-import {
-  AlertTriangle,
-  Building2,
-  CalendarClock,
-  Sparkles,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-} from "lucide-react";
+import { cookies } from "next/headers";
+import { createClient } from "@/shared/config/supabase/server";
 import { getPanelComerzAction } from "@/features/admin/actions/metricas-comerz";
+import { getComerciosConUsoAction } from "@/features/admin/actions/comercios-con-uso";
+import { getFeedComerzAction } from "@/features/admin/actions/feed-comerz";
+import { getPlanesCompletosAction } from "@/features/admin/actions/planes-actions";
+import {
+  construirSerieMrr,
+  variacionMensual,
+} from "@/features/admin/lib/serie-mrr";
+import { MrrChart } from "@/features/admin/ui/mrr-chart";
+import { ComerciosTabla } from "@/features/admin/ui/comercios-tabla";
+import { NotificacionesTabla } from "@/features/admin/ui/notificaciones-tabla";
 import { formatearMoneda } from "@/shared/utils/formatters";
+import { getCostosDelMesAction } from "@/features/admin/actions/costos-infra";
+import {
+  calcularArpu,
+  calcularChurnMensual,
+  calcularLtv,
+  resumirCostos,
+} from "@/features/admin/lib/metricas-saas";
+import { MetricasSaasPanel } from "@/features/admin/ui/metricas-saas-panel";
 
-export const dynamic = "force-dynamic";
+// export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Panel Comerz" };
 
 export default async function AdminComerzPage() {
-  const { negocios, metricas } = await getPanelComerzAction();
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
 
-  const ultimos = [...negocios]
-    .sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-    )
-    .slice(0, 5);
+  const [
+    { negocios, metricas },
+    comercios,
+    feed,
+    planes,
+    { data: pagos },
+    costosDelMes,
+  ] = await Promise.all([
+    getPanelComerzAction(),
+    getComerciosConUsoAction(),
+    getFeedComerzAction(),
+    getPlanesCompletosAction(),
+    supabase
+      .from("pagos_suscripcion")
+      .select("monto, fecha_pago")
+      .order("fecha_pago", { ascending: true }),
+    getCostosDelMesAction(),
+  ]);
+
+  const serie = construirSerieMrr(
+    (pagos ?? []).map((p) => ({
+      monto: Number(p.monto ?? 0),
+      fecha_pago: p.fecha_pago as string,
+    })),
+    new Date(),
+  );
+  const cobradoEsteMes = serie[serie.length - 1]?.total ?? 0;
+  const variacion = variacionMensual(serie);
+
+  // ARPU, churn y LTV se calculan sobre lo COBRADO y sobre las bajas reales.
+  // Cada uno devuelve null cuando la muestra no alcanza, y el panel muestra el
+  // motivo en vez del número: ver metricas-saas.ts.
+  const ahora = new Date();
+  const arpu = calcularArpu(cobradoEsteMes, metricas.activos);
+  const churn = calcularChurnMensual(
+    negocios.map((n) => ({
+      estado: n.estado,
+      created_at: n.created_at,
+      estado_cambiado_en: n.estado_cambiado_en,
+    })),
+    ahora,
+  );
+  const ltv = calcularLtv(arpu, churn);
+  const costos = resumirCostos(
+    costosDelMes.map((c) => ({ proveedor: c.proveedor, monto: c.monto })),
+    cobradoEsteMes,
+    metricas.activos,
+  );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Panel Comerz</h1>
-        <p className="text-sm text-muted-foreground">
-          Cómo viene el negocio, de un vistazo.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight text-white">
+          Panel Comerz
+        </h1>
+        <p className="text-sm text-white/40">Cómo viene el negocio.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Tarjeta
-          titulo="MRR"
-          valor={formatearMoneda(metricas.mrr)}
-          detalle={`${metricas.activos} comercio${metricas.activos === 1 ? "" : "s"} activo${metricas.activos === 1 ? "" : "s"}`}
-          icono={<Wallet className="w-4 h-4" />}
-        />
-        <Tarjeta
-          titulo="Altas de la semana"
-          valor={String(metricas.altasSemana)}
-          detalle="últimos 7 días"
-          icono={<TrendingUp className="w-4 h-4 text-success" />}
-        />
-        <Tarjeta
-          titulo="Bajas"
-          valor={String(metricas.bajasMes)}
-          detalle="últimos 30 días"
-          icono={<TrendingDown className="w-4 h-4 text-danger" />}
-        />
-        <Tarjeta
-          titulo="Comercios activos"
-          valor={String(metricas.activos)}
-          detalle={
-            metricas.suspendidos > 0
-              ? `${metricas.suspendidos} fuera de servicio`
-              : "ninguno suspendido"
-          }
-          icono={<Building2 className="w-4 h-4" />}
-        />
-      </div>
-
-      {/* Altas self-service en prueba. Es la métrica que dice si el onboarding
-          abierto está funcionando, y el momento en que un comercio nuevo decide
-          si se queda: son los 14 días en los que conviene aparecer. */}
-      {metricas.enPrueba > 0 && (
-        <Aviso
-          icono={<Sparkles className="w-4 h-4 text-primary shrink-0" />}
-          texto={
-            <>
-              <strong>
-                {metricas.enPrueba} comercio{metricas.enPrueba === 1 ? "" : "s"}{" "}
-                en prueba
-              </strong>{" "}
-              — se registraron solos y están dentro de sus 14 días.{" "}
-              <Link
-                href="/admincomerz/negocios"
-                className="text-primary hover:underline font-medium"
+      {/* La figura principal es lo COBRADO, no el MRR teórico. Son dos números
+          distintos y confundirlos es creerse una facturación que no entró: el
+          MRR teórico cuenta al comercio que hace tres meses no paga. Los dos
+          se muestran, cada uno con su nombre. */}
+      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-white/40">
+              Cobrado este mes
+            </p>
+            <p className="mt-1 text-4xl font-semibold tracking-tight text-white">
+              {formatearMoneda(cobradoEsteMes)}
+            </p>
+            {variacion !== null && (
+              <p
+                className={`mt-1 text-xs font-medium ${
+                  variacion >= 0 ? "text-emerald-400" : "text-rose-400"
+                }`}
               >
-                Contactalos ahora
-              </Link>
-              .
-            </>
-          }
-        />
-      )}
+                {variacion >= 0 ? "▲" : "▼"} {Math.abs(variacion).toFixed(0)}%
+                vs. el mes pasado
+              </p>
+            )}
+          </div>
 
-      {/* Lo que necesita acción, dicho sin vueltas.
-          Ya no hay aviso de "solicitudes sin contestar": con el alta
-          self-service no hay a quién contestarle — el que quiere Comerz se
-          registra y entra solo. La señal que lo reemplaza es "comercios en
-          prueba", que es donde ahora hay algo que hacer. */}
-      {(metricas.sinPlan > 0 || metricas.porVencer > 0) && (
-        <div className="space-y-2">
-          {metricas.sinPlan > 0 && (
-            <Aviso
-              icono={
-                <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
-              }
-              texto={
-                <>
-                  <strong>
-                    {metricas.sinPlan} comercio
-                    {metricas.sinPlan === 1 ? "" : "s"} sin plan asignado
-                  </strong>
-                  {" — "}no suman al MRR hasta que les pongas uno.
-                </>
+          <div className="flex gap-6">
+            <Dato
+              titulo="MRR teórico"
+              valor={formatearMoneda(metricas.mrr)}
+              detalle="si todos pagaran"
+            />
+            <Dato
+              titulo="Activos"
+              valor={String(metricas.activos)}
+              detalle={
+                metricas.suspendidos > 0
+                  ? `${metricas.suspendidos} suspendidos`
+                  : "ninguno suspendido"
               }
             />
-          )}
-          {metricas.porVencer > 0 && (
-            <Aviso
-              icono={
-                <CalendarClock className="w-4 h-4 text-warning shrink-0" />
-              }
-              texto={
-                <>
-                  <strong>
-                    {metricas.porVencer} vence
-                    {metricas.porVencer === 1 ? "" : "n"} en menos de 15 días
-                  </strong>
-                  {" — "}hora de renovar.
-                </>
-              }
+            <Dato
+              titulo="En prueba"
+              valor={String(metricas.enPrueba)}
+              detalle="dentro de sus 14 días"
             />
-          )}
+          </div>
         </div>
-      )}
 
-      <div className="border border-border rounded-xl bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <h2 className="font-semibold text-sm">Últimas altas</h2>
-          <Link
-            href="/admincomerz/negocios"
-            className="text-xs text-primary hover:underline"
-          >
-            Ver todos
-          </Link>
+        <MrrChart serie={serie} />
+      </div>
+
+      <MetricasSaasPanel
+        arpu={arpu}
+        churn={churn}
+        ltv={ltv}
+        costos={costos}
+        costosDelMes={costosDelMes}
+      />
+
+      <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-white/90">Comercios</h2>
+          <ComerciosTabla
+            comercios={comercios}
+            planes={planes.map((p) => ({
+              id: p.id,
+              nombre: p.nombre,
+              precio_mensual: p.precio_mensual,
+            }))}
+          />
         </div>
-        <ul className="divide-y divide-border">
-          {ultimos.map((n) => (
-            <li
-              key={n.id}
-              className="px-4 py-3 flex items-center justify-between gap-3 text-sm"
-            >
-              <div className="min-w-0">
-                <p className="font-medium truncate">{n.nombre}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {n.duenio ?? "sin dueño asignado"}
-                </p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="text-xs font-medium">
-                  {n.plan_nombre ?? "Sin plan"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(n.created_at).toLocaleDateString("es-AR")}
-                </p>
-              </div>
-            </li>
-          ))}
-          {ultimos.length === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-muted-foreground">
-              Todavía no hay comercios.
-            </li>
-          )}
-        </ul>
+
+        <NotificacionesTabla notificaciones={feed} />
       </div>
     </div>
   );
 }
 
-function Tarjeta({
+function Dato({
   titulo,
   valor,
   detalle,
-  icono,
-}: Readonly<{
-  titulo: string;
-  valor: string;
-  detalle: string;
-  icono: React.ReactNode;
-}>) {
+}: Readonly<{ titulo: string; valor: string; detalle: string }>) {
   return (
-    <div className="border border-border rounded-xl bg-card p-4 space-y-1">
-      <div className="flex items-center justify-between text-muted-foreground">
-        <span className="text-xs font-medium uppercase tracking-wide">
-          {titulo}
-        </span>
-        {icono}
-      </div>
-      <p className="text-2xl font-bold tracking-tight">{valor}</p>
-      <p className="text-xs text-muted-foreground">{detalle}</p>
-    </div>
-  );
-}
-
-function Aviso({
-  icono,
-  texto,
-}: Readonly<{ icono: React.ReactNode; texto: React.ReactNode }>) {
-  return (
-    <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-warning/30 bg-warning/10 text-sm">
-      {icono}
-      <span>{texto}</span>
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-white/35">
+        {titulo}
+      </p>
+      <p className="mt-0.5 text-lg font-semibold text-white/90">{valor}</p>
+      <p className="text-[11px] text-white/30">{detalle}</p>
     </div>
   );
 }

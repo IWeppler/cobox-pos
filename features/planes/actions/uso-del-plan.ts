@@ -26,6 +26,10 @@ export interface UsoDelPlan {
   usuariosActivos: number;
   invitacionesPendientes: number;
   clientesConCuentaCorriente: number;
+  /** Productos cargados. El tope (`max_productos`) frena el alta y nada más,
+   * así que este número puede quedar POR ENCIMA del límite sin que sea un
+   * error: pasa con quien venía de un plan sin tope. */
+  productos: number;
 }
 
 export async function getUsoDelPlanAction(): Promise<UsoDelPlan | null> {
@@ -35,7 +39,7 @@ export async function getUsoDelPlanAction(): Promise<UsoDelPlan | null> {
   const { data: negocioId } = await supabase.rpc("negocio_actual");
   if (!negocioId) return null;
 
-  const [usuarios, invitaciones, clientesCc] = await Promise.all([
+  const [usuarios, invitaciones, clientesCc, productos] = await Promise.all([
     supabase
       .from("usuarios_negocios")
       .select("id", { count: "exact", head: true })
@@ -50,11 +54,16 @@ export async function getUsoDelPlanAction(): Promise<UsoDelPlan | null> {
       .select("id", { count: "exact", head: true })
       .eq("negocio_id", negocioId)
       .gt("saldo_pendiente", 0),
+    supabase
+      .from("productos")
+      .select("id", { count: "exact", head: true })
+      .eq("negocio_id", negocioId),
   ]);
 
   return {
     usuariosActivos: usuarios.count ?? 0,
     invitacionesPendientes: invitaciones.count ?? 0,
     clientesConCuentaCorriente: clientesCc.count ?? 0,
+    productos: productos.count ?? 0,
   };
 }

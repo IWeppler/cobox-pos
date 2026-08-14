@@ -68,11 +68,11 @@ export default async function PublicLayout({
   return (
     <ModoCatalogoProvider modo={modo}>
       <div className="min-h-screen bg-background flex flex-col">
-      <Navbar branding={config} categorias={categorias ?? []} />
-      <CartPanelPublico numeroWhatsApp={config?.whatsapp} />
-      {children}
+        <Navbar branding={config} categorias={categorias ?? []} />
+        <CartPanelPublico numeroWhatsApp={config?.whatsapp} />
+        {children}
 
-      <footer className="bg-neutral-900 mt-auto">
+        <footer className="bg-neutral-900 mt-auto">
           {/* Franja de marca. Le habla al DUEÑO DE OTRO NEGOCIO que llegó acá
               mirando un catálogo — es el canal por el que Comerz se conoce:
               alguien ve la tienda de una conocida y pregunta con qué está
@@ -86,11 +86,11 @@ export default async function PublicLayout({
                 </p>
                 <p className="text-neutral-400 text-sm mt-1 max-w-md">
                   Catálogo web, control de stock y punto de venta en un solo
-                  lugar. Sin comisiones por venta.
+                  lugar.
                 </p>
               </div>
               <Link
-                href={urlDelPanel("/auth")}
+                href={urlDelPanel("/onboarding")}
                 className="shrink-0 inline-flex items-center justify-center rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-neutral-900 transition-colors hover:bg-neutral-200"
               >
                 Crear mi tienda

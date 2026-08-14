@@ -26,7 +26,7 @@ import {
 } from "@/shared/ui/select";
 import { DatePickerAR } from "@/shared/components/date-picker-ar";
 import { Loader2, UserPlus, Building2 } from "lucide-react";
-import { errorDeCuit } from "@/shared/lib/cuit";
+import { CuitInput } from "@/shared/components/cuit-input";
 
 interface CreateClientDialogProps {
   open?: boolean;
@@ -52,13 +52,6 @@ export function CreateClientDialog({
 }: Readonly<CreateClientDialogProps>) {
   // Estado para la revelación progresiva de los datos fiscales
   const [isFiscal, setIsFiscal] = useState(false);
-  const [cuit, setCuit] = useState("");
-
-  // Se valida mientras se tipea, pero el error recién se muestra cuando el
-  // campo perdió el foco: marcar en rojo el primer dígito de un CUIT a medio
-  // escribir es ruido, no ayuda.
-  const [cuitTocado, setCuitTocado] = useState(false);
-  const errorCuit = cuitTocado ? errorDeCuit(cuit) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -192,32 +185,8 @@ export function CreateClientDialog({
             <div className="space-y-4 animate-in slide-in-from-top-2 fade-in duration-200">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* CUIT */}
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="cuit" className="text-sm font-medium">
-                    CUIT <span className="text-danger">*</span>
-                  </Label>
-                  <Input
-                    id="cuit"
-                    name="cuit"
-                    inputMode="numeric"
-                    placeholder="Ej: 30712345678"
-                    required={isFiscal}
-                    value={cuit}
-                    onChange={(e) => setCuit(e.target.value)}
-                    onBlur={() => setCuitTocado(true)}
-                    aria-invalid={Boolean(errorCuit)}
-                    aria-describedby="cuit-ayuda"
-                    className={`h-10 shadow-none font-mono ${
-                      errorCuit ? "border-danger focus-visible:ring-danger" : ""
-                    }`}
-                  />
-                  <p
-                    id="cuit-ayuda"
-                    className={`text-[10px] ${errorCuit ? "text-danger" : "text-muted-foreground"}`}
-                  >
-                    {errorCuit ??
-                      "Con o sin guiones. Se verifica el dígito verificador."}
-                  </p>
+                <div className="sm:col-span-2">
+                  <CuitInput required={isFiscal} />
                 </div>
 
                 <div className="space-y-2">

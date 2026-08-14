@@ -459,6 +459,11 @@ export async function aprobarOrdenAction(
       .map((item) => {
         const variante = item.variante_match || item.raw_variante || "Unico";
         return {
+          // Con esto la RPC puede escribir en la línea del remito a qué
+          // producto fue. Sin `item_id`, `ordenes_items.producto_id` quedaba
+          // null aunque el stock hubiera entrado, y el ingreso desaparecía del
+          // historial de Movimientos de Stock.
+          item_id: item.id ?? null,
           producto_id: item.producto_id,
           raw_nombre: item.raw_nombre,
           estado_match: item.estado_match,
@@ -468,6 +473,10 @@ export async function aprobarOrdenAction(
             atributoCache,
           ),
           sku: item.raw_sku?.trim() || null,
+          // Si la línea trae número de serie, la RPC crea la unidad en
+          // `unidades_serie`. Es lo que permite que una planilla de electro
+          // entre por conciliación sin perder los IMEI.
+          imei: item.raw_imei?.trim() || null,
           cantidad: item.cantidad,
           precio_costo: item.precio_costo ?? null,
           precio_venta_actualizado: item.precio_venta_actualizado ?? null,

@@ -48,6 +48,8 @@ import {
 } from "@/entities/ventas/types";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { EgresoModal } from "@/features/caja/ui/egreso-modal";
+import { getEstadoActivacionAction } from "@/features/onboarding/actions/get-estado-activacion";
+import { ChecklistActivacion } from "@/features/onboarding/ui/checklist-activacion";
 import { Button } from "@/shared/ui/button";
 import Link from "next/link";
 import { Plus } from "lucide-react";
@@ -108,6 +110,7 @@ export default async function DashboardPage({
     remitosPendientes,
     categoriasResponse,
     pagosCuentaCorrienteResponse,
+    estadoActivacion,
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
@@ -120,6 +123,9 @@ export default async function DashboardPage({
     getRemitosPendientesAction(),
     supabase.from("categorias").select("id, nombre, slug, parent_id"),
     getPagosCuentaCorrienteAction(),
+    // Devuelve null si no es ADMIN: el gate vive en la RPC, así que acá no hay
+    // que preguntar el rol por separado.
+    getEstadoActivacionAction(),
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
@@ -342,6 +348,11 @@ export default async function DashboardPage({
           </div>
           <PeriodoSelector periodo={periodo} ariaLabel="Período del panel" />
         </div>
+
+        {/* GUÍA DE INICIO — arriba de todo mientras falte algo para vender, y
+            se va sola cuando está completa (el estado es derivado, no un flag).
+            Solo ADMIN: la RPC devuelve null para el resto. */}
+        {estadoActivacion && <ChecklistActivacion estado={estadoActivacion} />}
 
         {/* ACCIONES — solo mobile: en desktop el POS está siempre a la vista en
             el sidebar, acá el menú está detrás de la hamburguesa y vender

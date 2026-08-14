@@ -29,6 +29,10 @@ interface StockViewProps {
   nombreComercio: string;
   mostrarSinStock: boolean;
   rubro: Rubro;
+  /** Total de productos del negocio, contado en el server. Distinto de
+   * `productosIndice.length`, que puede venir recortado por el tope de filas
+   * de PostgREST — justo en 1000, que es el límite del plan Emprendedor. */
+  productosDelNegocio?: number;
 }
 
 interface CategoriaDB {
@@ -47,6 +51,7 @@ export function StockView({
   nombreComercio,
   mostrarSinStock,
   rubro,
+  productosDelNegocio,
 }: Readonly<StockViewProps>) {
   const [view, setView] = useState<"table" | "grid">("table");
   const [paginaActual, setPaginaActual] = useState(1);
@@ -409,6 +414,7 @@ export function StockView({
         onCategoriaChange={handleCategoriaChange}
         categoriasDisponibles={categoriasDisponibles}
         totalProductos={productosIndice.length}
+        productosDelNegocio={productosDelNegocio}
         resultadosFueraDeCategoria={resultadosFueraDeCategoria}
         hayFiltrosActivos={hayFiltrosActivos}
         propiedadesGlobales={propiedadesGlobales}

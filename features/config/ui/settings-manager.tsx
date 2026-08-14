@@ -37,6 +37,7 @@ import { ClientsPanel } from "@/features/clients/ui/clients-panel";
 import { CajaConfigPanel } from "@/features/clients/ui/caja-panel";
 import { EmpleadosPanel } from "./empleados-panel";
 import type { InvitacionPendiente } from "./invitaciones-panel";
+import type { UsoDelPlan } from "@/features/planes/actions/uso-del-plan";
 import { TicketPanel } from "@/features/ticket/TicketPanel";
 
 const SECTIONS = [
@@ -112,6 +113,8 @@ interface SettingsManagerProps {
   roles: Rol[];
   permisos: Permiso[];
   rolPermisos: RolPermiso[];
+  /** Uso de los límites del plan, para el medidor de la sección de equipo. */
+  uso?: UsoDelPlan | null;
   invitaciones?: InvitacionPendiente[];
 }
 
@@ -125,6 +128,7 @@ export function SettingsManager({
   roles,
   permisos,
   rolPermisos,
+  uso,
   invitaciones = [],
 }: Readonly<SettingsManagerProps>) {
   const [activeSection, setActiveSection] = useState("comercio");
@@ -163,6 +167,7 @@ export function SettingsManager({
             roles={roles}
             permisos={permisos}
             rolPermisos={rolPermisos}
+            uso={uso}
             invitaciones={invitaciones}
           />
         );

@@ -29,7 +29,12 @@ import {
   clasificarEstadoCliente,
   type EstadoCliente,
 } from "../lib/clasificar-estado-cliente";
-import { RecargoMoraConfig } from "../lib/calcular-saldo-con-recargo";
+import {
+  calcularSaldoConRecargo,
+  RecargoMoraConfig,
+} from "../lib/calcular-saldo-con-recargo";
+import { LimiteDelPlan } from "@/features/planes/ui/limite-del-plan";
+import { useContextoPlan } from "@/features/planes/ui/plan-provider";
 import {
   ClienteEstadoBadge,
   ESTADO_CLIENTE_CONFIG,
@@ -52,6 +57,11 @@ type ClienteConVentas = Cliente & {
 type ClienteMapeado = ClienteConVentas & {
   cantidadVentas: number;
   totalComprado: number;
+  /** Recargo por mora de HOY, 0 si no está vencido o si el comercio no lo
+   * configuró. Derivado, nunca guardado: el saldo con recargo cambia solo con
+   * el paso del tiempo. */
+  montoRecargoMora: number;
+  saldoConRecargo: number;
   fechaVencimientoFormateada: string | null;
   diasVencido: number | null;
   estado: EstadoCliente;
@@ -72,6 +82,7 @@ export function ClientsView({
   recargoMoraConfig,
   isAdmin = false,
 }: Readonly<ClientsViewProps>) {
+  const contextoPlan = useContextoPlan();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<ClientStatusFilter>("todos");
   const [sortConfig, setSortConfig] = useState<SortConfig>({
@@ -110,17 +121,48 @@ export function ClientsView({
           }).format(new Date(fechaVencimiento))
         : null;
       const estado = clasificarEstadoCliente(saldo, diasVencido);
+      // Misma función que usa el server al cobrar y el detalle del cliente:
+      // si la tabla dijera un número y el cobro imputara otro, el vendedor no
+      // tendría forma de saber cuál es el bueno.
+      const { montoRecargo, saldoConRecargo } = calcularSaldoConRecargo(
+        {
+          monto_pendiente: cliente.saldo_pendiente,
+          fecha_vencimiento: cliente.fecha_vencimiento_deuda,
+        },
+        recargoMoraConfig,
+      );
 
       return {
         ...cliente,
         cantidadVentas: ventas.length,
         totalComprado,
+        montoRecargoMora: montoRecargo,
+        saldoConRecargo,
         fechaVencimientoFormateada,
         diasVencido,
         estado,
       };
     });
-  }, [clientes]);
+  }, [clientes, recargoMoraConfig]);
+
+  // El cupo de cuenta corriente se cuenta EXACTAMENTE como el trigger
+  // `validar_limite_cuenta_corriente`: clientes con saldo pendiente > 0, no
+  // clientes cargados. El plan vende "fiarle a N", no "tener N contactos".
+  // Sale del array que ya está en pantalla, así que se mueve solo cuando se
+  // cobra una deuda o se fía a alguien nuevo.
+  const clientesConCuentaCorriente = morosos.length;
+  const maxClientesCc =
+    contextoPlan?.reglasActuales?.max_clientes_cuenta_corriente;
+
+  // El KPI sigue siendo CAPITAL: la mora no es plata prestada, es una
+  // penalidad que recién existe si el cliente paga tarde. Sumarla al "dinero
+  // en la calle" inflaría el número que el comercio usa para saber cuánto le
+  // deben. Va como línea aparte, que es el mismo criterio que la posición de
+  // dinero usa con lo cobrado-sin-acreditar.
+  const recargoMoraEnCalle = useMemo(
+    () => clientesMapeados.reduce((total, c) => total + c.montoRecargoMora, 0),
+    [clientesMapeados],
+  );
 
   // Deriva del array vivo por id (en vez de guardar la fila clickeada como
   // snapshot) para que el sheet abierto refleje el saldo apenas se
@@ -166,8 +208,10 @@ export function ClientsView({
           : b.diasVencido - a.diasVencido;
       }
 
-      const deudaA = Number(a.saldo_pendiente);
-      const deudaB = Number(b.saldo_pendiente);
+      // Ordena por el saldo CON recargo, que es la columna que se ve: ordenar
+      // por el capital dejaría filas fuera de orden a la vista.
+      const deudaA = a.saldoConRecargo;
+      const deudaB = b.saldoConRecargo;
       return sortConfig.direction === "asc" ? deudaA - deudaB : deudaB - deudaA;
     });
 
@@ -225,6 +269,23 @@ export function ClientsView({
 
   return (
     <div className="flex flex-col gap-4 py-2 px-2 md:px-4">
+      {/* Medidor siempre a la vista, no solo cuando ya chocó: el cupo de
+          cuenta corriente se llena de a poco y sin aviso se descubre el día
+          que no se le puede fiar a una clienta que está en el mostrador.
+          Va arriba de los KPIs porque es una condición del plan, no un dato
+          del negocio.
+
+          No envuelve ningún botón: el cupo NO se consume al crear el cliente
+          sino al fiarle, así que acá el componente es solo el medidor. */}
+      <LimiteDelPlan
+        usado={clientesConCuentaCorriente}
+        limite={maxClientesCc}
+        singular="cliente con cuenta corriente"
+        plural="clientes con cuenta corriente"
+        claveLimite="max_clientes_cuenta_corriente"
+        siempreVisible
+      />
+
       {/* ── KPIs SUPERIORES ── */}
       <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">
         <Card className="min-w-[82vw] border-border shadow-none snap-start sm:min-w-0">
@@ -241,6 +302,11 @@ export function ClientsView({
             <p className="text-xs font-mono uppercase text-muted-foreground mt-1">
               Capital a cobrar
             </p>
+            {recargoMoraEnCalle > 0 && (
+              <p className="text-xs font-mono uppercase text-danger mt-0.5">
+                + {formatearMoneda(recargoMoraEnCalle)} de mora
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -456,9 +522,17 @@ export function ClientsView({
 
                       <td className="px-2 py-3 md:px-5 md:py-4 text-right">
                         {saldo > 0 ? (
-                          <span className="font-mono font-medium text-foreground px-2 py-0.5 shadow-none text-sm">
-                            {formatearMoneda(saldo)}
-                          </span>
+                          <div className="flex flex-col items-end">
+                            <span className="font-mono font-medium text-foreground px-2 py-0.5 shadow-none text-sm">
+                              {formatearMoneda(cliente.saldoConRecargo)}
+                            </span>
+                            {cliente.montoRecargoMora > 0 && (
+                              <span className="px-2 text-[10px] font-mono text-danger">
+                                incluye {formatearMoneda(cliente.montoRecargoMora)}{" "}
+                                de mora
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-muted-foreground/50 font-bold text-lg">
                             -

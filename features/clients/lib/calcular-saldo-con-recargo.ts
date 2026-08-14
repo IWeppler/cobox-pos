@@ -23,6 +23,13 @@ export interface SaldoConRecargo {
  * fecha_vencimiento del ticket (datos base estables), nunca de un saldo
  * que ya tenga el recargo sumado — da el mismo resultado sin importar
  * cuántas veces se recalcule.
+ *
+ * La ÚNICA puerta del recargo por mora, y se le pasa siempre el saldo del
+ * cliente (`saldo_pendiente` + `fecha_vencimiento_deuda`), no una venta: la
+ * deuda también entra por CSV y por ajuste manual, y esas no dejan fila en
+ * `ventas`. La firma quedó genérica a propósito —monto pendiente + fecha— para
+ * que el server (registrarPagoDeudaAction) y la UI (tabla y detalle del
+ * cliente) calculen exactamente el mismo número.
  */
 export function calcularSaldoConRecargo(
   ticket: TicketConVencimiento,
@@ -57,22 +64,3 @@ export function calcularSaldoConRecargo(
   };
 }
 
-export function calcularRecargoMoraTotal(
-  tickets: TicketConVencimiento[],
-  config: RecargoMoraConfig,
-) {
-  let totalBase = 0;
-  let totalRecargo = 0;
-
-  for (const ticket of tickets) {
-    const resultado = calcularSaldoConRecargo(ticket, config);
-    totalBase += resultado.saldoBase;
-    totalRecargo += resultado.montoRecargo;
-  }
-
-  return {
-    totalBase,
-    totalRecargo,
-    totalConRecargo: totalBase + totalRecargo,
-  };
-}

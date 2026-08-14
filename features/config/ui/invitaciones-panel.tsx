@@ -20,7 +20,8 @@ import {
   type InvitacionActionState,
 } from "../actions/invitaciones-actions";
 import type { Rol } from "@/entities/roles/types";
-import { PaywallGate } from "@/features/planes/ui/paywall-gate";
+import { LimiteDelPlan } from "@/features/planes/ui/limite-del-plan";
+import type { UsoDelPlan } from "@/features/planes/actions/uso-del-plan";
 
 export interface InvitacionPendiente {
   id: string;
@@ -34,8 +35,23 @@ const initialState: InvitacionActionState = { error: null, success: false };
 export function InvitacionesPanel({
   roles,
   invitaciones,
-}: Readonly<{ roles: Rol[]; invitaciones: InvitacionPendiente[] }>) {
+  uso,
+  maxUsuarios,
+}: Readonly<{
+  roles: Rol[];
+  invitaciones: InvitacionPendiente[];
+  uso?: UsoDelPlan | null;
+  maxUsuarios?: number | null;
+}>) {
   const router = useRouter();
+
+  // La MISMA cuenta que `validar_limite_usuarios`: miembros + invitaciones
+  // pendientes. Se prefiere el largo de `invitaciones` (que el server acaba de
+  // traer y `router.refresh()` mantiene fresco) sobre el conteo del uso, para
+  // que el medidor se mueva apenas se manda una invitación.
+  const usuariosOcupados =
+    (uso?.usuariosActivos ?? 0) +
+    Math.max(uso?.invitacionesPendientes ?? 0, invitaciones.length);
   const [state, formAction, isPending] = useActionState(
     invitarEmpleadoAction,
     initialState,
@@ -126,10 +142,23 @@ export function InvitacionesPanel({
           </Select>
         </div>
 
-        {/* Sumar gente al negocio depende del plan: Emprendedor es de un
-            solo usuario. El tope real lo aplica un trigger en la base; esto
-            evita que el dueño se entere recién cuando le rebota. */}
-        <PaywallGate feature="roles" etiqueta="Sumar usuarios al negocio">
+        {/* El tope de usuarios lo aplica `validar_limite_usuarios` en la base,
+            que cuenta miembros MÁS invitaciones pendientes (una invitación ya
+            reserva el lugar). Se replica exactamente esa cuenta: si la UI
+            contara distinto, el dueño vería lugar libre y la invitación le
+            rebotaría con 23514 después de escribir el mail.
+
+            Ya NO hay PaywallGate acá: quien no tiene la feature `roles` ni
+            llega a esta pantalla (ver empleados-panel). Lo que queda es el
+            otro caso, el que antes pasaba de largo — tener la función y haber
+            llenado el cupo, que es donde está Evens hoy con 5 de 5. */}
+        <LimiteDelPlan
+          usado={usuariosOcupados}
+          limite={maxUsuarios}
+          singular="usuario"
+          plural="usuarios"
+          claveLimite="max_usuarios"
+        >
           <Button type="submit" disabled={isPending} className="h-10 gap-2">
             {isPending ? (
               <Loader2 className="size-4 animate-spin" />
@@ -138,7 +167,7 @@ export function InvitacionesPanel({
             )}
             Invitar
           </Button>
-        </PaywallGate>
+        </LimiteDelPlan>
       </form>
 
       {state.error ? (

@@ -4,6 +4,7 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { ConfiguracionPOS } from "@/entities/config/types";
+import { errorDeCuit, normalizarCuit } from "@/shared/lib/cuit";
 
 export async function getConfiguracionAction(): Promise<{
   data: ConfiguracionPOS | null;
@@ -47,7 +48,12 @@ export async function updateConfiguracionAction(
   const id = formData.get("id") as string;
   const posName = ((formData.get("posName") as string) ?? "").trim();
   const razon_social = textoOpcional("razon_social");
-  const cuit = textoOpcional("cuit");
+  // Se guarda normalizado a 11 dígitos, igual que el de los clientes: el campo
+  // ahora lo muestra con guiones, y esos guiones son de la pantalla, no del
+  // dato. Guardar "30-71234567-8" lo dejaría impreso así en el comprobante y
+  // haría que el mismo CUIT no se compare igual consigo mismo.
+  const cuitCrudo = textoOpcional("cuit");
+  const cuit = cuitCrudo ? normalizarCuit(cuitCrudo) : null;
   const condicion_iva = textoOpcional("condicion_iva");
   const inicio_actividades = textoOpcional("inicio_actividades");
   const provincia = textoOpcional("provincia");
@@ -65,6 +71,14 @@ export async function updateConfiguracionAction(
       error: "No se pudo identificar la configuración. Recargá la página.",
       success: false,
     };
+  }
+
+  // El CUIT del emisor no se validaba: entraba cualquier cosa y recién se
+  // notaba en una factura. Mismo criterio que en clientes y en el alta —
+  // vacío sigue siendo válido (se puede completar después).
+  if (cuitCrudo) {
+    const errorCuit = errorDeCuit(cuitCrudo);
+    if (errorCuit) return { error: errorCuit, success: false };
   }
 
   // Los mensajes nombran el campo tal cual figura en pantalla: "el nombre" a

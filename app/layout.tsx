@@ -6,7 +6,6 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { Geist_Mono, Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
-import Script from "next/script";
 import { InstalacionPwaListener } from "@/shared/components/instalacion-pwa-listener";
 import { ClientErrorReporter } from "@/shared/components/client-error-reporter";
 
@@ -105,18 +104,43 @@ export default async function RootLayout({
           componente en el layout del dashboard, nunca acá: este layout lo
           comparten las dos mitades de la app.
         */}
-        <Script
+        {/* Etiquetas `<script>` NATIVAS y no `next/script`.
+
+            next/script es un componente de CLIENTE que renderiza un `<script>`
+            adentro, y React 19 avisa por eso en cada carga: "los scripts dentro
+            de componentes nunca se ejecutan al renderizar en el cliente". El
+            aviso es correcto — en una navegación del lado del cliente ese
+            contenido no corre. Este layout es un Server Component, así que el
+            script sale en el HTML de la respuesta y el navegador lo ejecuta
+            como cualquier script de una página: sin componente de por medio, no
+            hay nada de qué avisar.
+
+            El orden importa y es el del snippet oficial: gtag.js va `async`, y
+            el inline de abajo define `dataLayer` y `gtag` antes de que termine
+            de cargar, así ninguna llamada temprana se pierde.
+
+            El linter de Next sugiere el componente de
+            `@next/third-parties/google`. Es la forma oficial y es una buena
+            sugerencia, pero significa sumar una dependencia: queda anotado para
+            decidirlo aparte, no para resolverlo de paso mientras se arregla un
+            warning de render. El script nativo funciona igual y no arrastra
+            nada. */}
+        {/* eslint-disable-next-line @next/next/next-script-for-ga */}
+        <script
+          async
           src="https://www.googletagmanager.com/gtag/js?id=G-PGP6P5VS3Y"
-          strategy="afterInteractive"
         />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
+        <script
+          id="google-analytics"
+          dangerouslySetInnerHTML={{
+            __html: `
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
             gtag('config', 'G-PGP6P5VS3Y');
-          `}
-        </Script>
+          `,
+          }}
+        />
       </body>
     </html>
   );

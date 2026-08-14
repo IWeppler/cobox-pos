@@ -1,6 +1,7 @@
 import { StockPageClient } from "@/features/stock/ui/stock-page-client";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
+import { getUsoDelPlanAction } from "@/features/planes/actions/uso-del-plan";
 
 export const dynamic = "force-dynamic";
 
@@ -18,5 +19,11 @@ export default async function StockPage() {
     if (rolActual) userRole = rolActual;
   }
 
-  return <StockPageClient userRole={userRole} />;
+  // Cuántos productos hay cargados, para el medidor del tope del plan. Se
+  // cuenta en el server con `head: true` (no trae filas) en vez de derivarlo
+  // de la lista de la pantalla, que viene filtrada y paginada — y que además
+  // topea en 1000 por el límite de PostgREST, justo el número del plan.
+  const uso = userRole === "ADMIN" ? await getUsoDelPlanAction() : null;
+
+  return <StockPageClient userRole={userRole} uso={uso} />;
 }

@@ -2,16 +2,44 @@ import type { ModoFacturacion, TipoComprobante } from "@/shared/lib/facturacion"
 
 export type RecargoMoraTipo = "NINGUNO" | "MONTO_FIJO" | "PORCENTAJE";
 
-/** Rubro del comercio. Decide qué columnas muestra Inventario: indumentaria
- * razona por talle/color (N variantes), electro por modelo/EAN. */
-export type Rubro = "indumentaria" | "electro" | "alimentos" | "farmacia" | "ferreteria" | "quioscos" | "otros";
+/**
+ * Rubro del comercio. Decide dos cosas: qué columnas trae la plantilla de
+ * mercadería (features/stock/lib/columnas-por-rubro.ts) y cómo se muestra la
+ * identidad del producto en Inventario — indumentaria razona por talle/color
+ * (N variantes), electro por modelo/EAN.
+ */
+export type Rubro =
+  | "indumentaria"
+  | "electro"
+  | "alimentos"
+  | "farmacia"
+  | "ferreteria"
+  | "quioscos"
+  | "otros";
+
+export const RUBROS_VALIDOS: readonly Rubro[] = [
+  "indumentaria",
+  "electro",
+  "alimentos",
+  "farmacia",
+  "ferreteria",
+  "quioscos",
+  "otros",
+] as const;
 
 export const RUBRO_DEFAULT: Rubro = "indumentaria";
 
-/** Fail-closed: un rubro desconocido (columna nueva, valor viejo, fila sin
- * config) cae a indumentaria, que es el comportamiento previo a T4. */
+/**
+ * Fail-closed: un rubro desconocido (valor viejo, fila sin config, typo) cae a
+ * indumentaria.
+ *
+ * Antes esto era `valor === "electro" ? "electro" : "indumentaria"`, o sea que
+ * los otros cinco rubros del tipo se leían como indumentaria aunque estuvieran
+ * bien guardados. Con la plantilla por rubro eso pasó de ser inofensivo a
+ * darle a una ferretería las columnas de una tienda de ropa.
+ */
 export function normalizarRubro(valor: unknown): Rubro {
-  return valor === "electro" ? "electro" : RUBRO_DEFAULT;
+  return RUBROS_VALIDOS.includes(valor as Rubro) ? (valor as Rubro) : RUBRO_DEFAULT;
 }
 
 export interface ConfiguracionPOS {

@@ -7,11 +7,21 @@ import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { StockView } from "@/features/stock/ui/stock-view";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { RUBRO_DEFAULT } from "@/entities/config/types";
+import { LimiteDelPlan } from "@/features/planes/ui/limite-del-plan";
+import { useContextoPlan } from "@/features/planes/ui/plan-provider";
+import type { UsoDelPlan } from "@/features/planes/actions/uso-del-plan";
 
 const CATALOG_STALE_TIME_MS = 3 * 60 * 1000;
 
-export function StockPageClient({ userRole }: { userRole: string }) {
+export function StockPageClient({
+  userRole,
+  uso,
+}: {
+  userRole: string;
+  uso?: UsoDelPlan | null;
+}) {
   const negocioActivo = useNegocioActivo();
+  const contextoPlan = useContextoPlan();
   const { data, isLoading, error } = useQuery({
     queryKey: conNegocio(queryKeys.stock.index, negocioActivo?.id),
     queryFn: getStockPageDataAction,
@@ -38,12 +48,30 @@ export function StockPageClient({ userRole }: { userRole: string }) {
 
   return (
     <div className="space-y-6 mx-auto">
+      {/* Medidor del tope de productos, siempre a la vista mientras el plan
+          tenga uno. El alta la frena la base (trg_limite_productos); esto
+          existe para que ese freno no llegue de sorpresa el día que se está
+          cargando mercadería nueva. */}
+      {uso ? (
+        <div className="px-2 pt-2 md:px-4">
+          <LimiteDelPlan
+            usado={uso.productos}
+            limite={contextoPlan?.reglasActuales?.max_productos}
+            singular="producto"
+            plural="productos"
+            claveLimite="max_productos"
+            siempreVisible
+          />
+        </div>
+      ) : null}
+
       <StockView
         productosIndice={data?.data?.productosIndice ?? []}
         userRole={userRole}
         nombreComercio={data?.data?.nombreComercio ?? "Tienda Online"}
         mostrarSinStock={data?.data?.mostrarSinStock ?? true}
         rubro={data?.data?.rubro ?? RUBRO_DEFAULT}
+        productosDelNegocio={uso?.productos}
       />
     </div>
   );

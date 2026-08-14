@@ -33,7 +33,7 @@ type ProductFiscalSectionProps = {
 };
 
 /**
- * Datos fiscales y de identidad del producto.
+ * Datos fiscales del producto: tratamiento de IVA y unidad de medida.
  *
  * Va COLAPSADA y es lo último del formulario a propósito: el 99% de las altas
  * no tiene que ver nada de esto. Una vendedora carga nombre y precio, el
@@ -45,6 +45,16 @@ type ProductFiscalSectionProps = {
  * miran `formData.has(...)`, así que un campo que no se muestra tampoco se
  * pisa. Un producto al 10,5% sigue al 10,5% después de que alguien le corrija
  * el precio desde la edición rápida.
+ *
+ * Marca y género NO se cargan acá, y por eso el alta ni los muestra: no son
+ * datos fiscales (no salen en ninguna factura) y meterlos en esta sección era
+ * pedirle a quien viene a tocar una alícuota que además clasifique el
+ * producto. Quien los quiera usar los modela como propiedad en Variantes, que
+ * es donde ya viven Talle y Color y donde además sirven para filtrar el
+ * catálogo. Los dos inputs siguen apareciendo SOLO al editar un producto que
+ * ya tenga alguno cargado: son datos reales que entraron por importación de
+ * planilla o por el catálogo maestro, y sacarles la única pantalla donde se
+ * corrigen los volvería incorregibles.
  */
 export function ProductFiscalSection({
   defaults,
@@ -66,6 +76,14 @@ export function ProductFiscalSection({
 
   const resumen = `${ETIQUETA_UNIDAD[unidad]} · IVA ${DEFINICION_TRATAMIENTO_IVA[tratamiento].label}`;
 
+  // Solo si el producto YA los trae: en el alta estas props ni se pasan, así
+  // que el bloque no existe. Se muestra el par completo aunque solo uno tenga
+  // valor — si aparece "Marca" sola, el que edita no tiene forma de saber que
+  // género también se puede corregir ahí.
+  const tieneIdentidadCargada = Boolean(
+    (marcaActual ?? "").trim() || (generoActual ?? "").trim(),
+  );
+
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden transition-all">
       <div
@@ -77,7 +95,7 @@ export function ProductFiscalSection({
             <Receipt className="w-4 h-4 text-muted-foreground" />
           </div>
           <div>
-            <p className="font-bold text-sm">Datos fiscales y de identidad</p>
+            <p className="font-bold text-sm">Datos fiscales</p>
             {!abierta && (
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {resumen}
@@ -142,30 +160,42 @@ export function ProductFiscalSection({
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-muted-foreground">
-                Marca
-              </Label>
-              <Input
-                name="marca"
-                defaultValue={marcaActual ?? ""}
-                placeholder="Opcional"
-                className="h-10 shadow-none rounded-lg"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-muted-foreground">
-                Género
-              </Label>
-              <Input
-                name="genero"
-                defaultValue={generoActual ?? ""}
-                placeholder="Ej: Mujer, Hombre, Unisex"
-                className="h-10 shadow-none rounded-lg"
-              />
-            </div>
           </div>
+
+          {tieneIdentidadCargada && (
+            <div className="mt-5 border-t border-border/50 pt-4">
+              <p className="text-[11px] text-muted-foreground">
+                Este producto trae marca y género de una importación. No son
+                datos fiscales — se pueden corregir o vaciar acá, y de ahora en
+                más se cargan como propiedad en Variantes.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-muted-foreground">
+                    Marca
+                  </Label>
+                  <Input
+                    name="marca"
+                    defaultValue={marcaActual ?? ""}
+                    placeholder="Opcional"
+                    className="h-10 shadow-none rounded-lg"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-muted-foreground">
+                    Género
+                  </Label>
+                  <Input
+                    name="genero"
+                    defaultValue={generoActual ?? ""}
+                    placeholder="Ej: Mujer, Hombre, Unisex"
+                    className="h-10 shadow-none rounded-lg"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

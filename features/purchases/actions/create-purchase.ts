@@ -22,6 +22,10 @@ export type RawOrderItem = {
   raw_genero?: string | null;
   raw_sku?: string | null;
   raw_marca?: string | null;
+  /** Número de serie de ESTA línea. Lo trae la planilla propia de electro
+   * (un aparato por fila); la planilla de un proveedor casi nunca. Viaja
+   * hasta `aprobar_orden_compra`, que crea la fila en `unidades_serie`. */
+  raw_imei?: string | null;
 };
 
 /** Agrega el género (vocabulario cerrado Ropa Bebé) al string de atributos
@@ -246,6 +250,7 @@ export async function procesarPedidoAction(
         raw_sku: item.raw_sku?.trim() || null,
         raw_marca: item.raw_marca?.trim() || null,
         raw_genero: item.raw_genero?.trim() || null,
+        raw_imei: item.raw_imei?.trim() || null,
         cantidad: isNaN(Number(item.cantidad)) ? 0 : Number(item.cantidad),
         precio_costo: isNaN(Number(item.precio_costo))
           ? 0

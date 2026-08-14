@@ -3,6 +3,7 @@ import {
   errorDeCuit,
   esCuitValido,
   formatearCuit,
+  formatearCuitParcial,
   normalizarCuit,
 } from "./cuit";
 
@@ -72,6 +73,30 @@ describe("formatearCuit", () => {
   });
 });
 
+describe("formatearCuitParcial", () => {
+  it("va metiendo los guiones a medida que se tipea", () => {
+    expect(formatearCuitParcial("3")).toBe("3");
+    expect(formatearCuitParcial("33")).toBe("33");
+    expect(formatearCuitParcial("336")).toBe("33-6");
+    expect(formatearCuitParcial("3369345023")).toBe("33-69345023");
+    expect(formatearCuitParcial("33693450239")).toBe("33-69345023-9");
+  });
+
+  it("corta en 11 dígitos: el doceavo no entra", () => {
+    expect(formatearCuitParcial("336934502391")).toBe("33-69345023-9");
+  });
+
+  it("reformatea lo que ya venía con guiones o pegado del portapapeles", () => {
+    expect(formatearCuitParcial("33-69345023-9")).toBe("33-69345023-9");
+    expect(formatearCuitParcial("CUIT 33.69345023.9")).toBe("33-69345023-9");
+  });
+
+  it("vacío se queda vacío: no puede aparecer un guión solo", () => {
+    expect(formatearCuitParcial("")).toBe("");
+    expect(formatearCuitParcial(null)).toBe("");
+  });
+});
+
 describe("errorDeCuit", () => {
   it("un campo vacío no es un error todavía", () => {
     // El CUIT es opcional para un cliente no fiscal: vacío es un estado
@@ -80,11 +105,30 @@ describe("errorDeCuit", () => {
     expect(errorDeCuit(null)).toBeNull();
   });
 
-  it("distingue incompleto de inválido", () => {
-    expect(errorDeCuit("306")).toBe("El CUIT tiene que tener 11 dígitos.");
-    expect(errorDeCuit("33693450238")).toBe(
-      "El CUIT no es válido: revisá los números.",
+  it("dice cuántos dígitos faltan, no solo que faltan", () => {
+    expect(errorDeCuit("306")).toBe("Faltan 8 dígitos: un CUIT tiene 11.");
+    expect(errorDeCuit("3369345023")).toBe("Falta 1 dígito: un CUIT tiene 11.");
+  });
+
+  it("avisa cuando sobran dígitos, concordando el singular", () => {
+    expect(errorDeCuit("336934502391")).toBe("Sobra 1 dígito: un CUIT tiene 11.");
+    expect(errorDeCuit("3369345023912")).toBe(
+      "Sobran 2 dígitos: un CUIT tiene 11.",
     );
+  });
+
+  it("con los 11 dígitos apunta al número, no al formato", () => {
+    // El mensaje viejo ("no es válido") mandaba a probar con y sin guiones,
+    // que nunca fue el problema.
+    expect(errorDeCuit("33693450238")).toBe(
+      "Los 11 dígitos están, pero no cierran entre sí. Revisá que no haya ninguno cambiado.",
+    );
+  });
+
+  it("los guiones no cambian el diagnóstico, estén donde estén", () => {
+    // El formato nunca fue el problema: lo que se mira son los dígitos.
+    expect(errorDeCuit("3-3693450-239")).toBeNull();
+    expect(errorDeCuit("33693450 239")).toBeNull();
   });
 
   it("no marca error cuando está bien", () => {

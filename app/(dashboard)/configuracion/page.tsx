@@ -9,6 +9,10 @@ import type {
   RolPermiso,
 } from "@/entities/roles/types";
 import type { InvitacionPendiente } from "@/features/config/ui/invitaciones-panel";
+import {
+  getUsoDelPlanAction,
+  type UsoDelPlan,
+} from "@/features/planes/actions/uso-del-plan";
 
 export const dynamic = "force-dynamic";
 
@@ -30,8 +34,12 @@ export default async function ConfiguracionPage() {
   let permisos: Permiso[] = [];
   let rolPermisos: RolPermiso[] = [];
   let invitaciones: InvitacionPendiente[] = [];
+  // Uso real de los límites del plan, contado igual que los triggers de la
+  // base. Solo para admin: es el único que ve la sección de equipo.
+  let uso: UsoDelPlan | null = null;
 
   if (isAdmin) {
+    uso = await getUsoDelPlanAction();
     const [
       empleadosRes,
       rolesRes,
@@ -127,6 +135,7 @@ export default async function ConfiguracionPage() {
           permisos={permisos}
           rolPermisos={rolPermisos}
           invitaciones={invitaciones}
+          uso={uso}
         />
       )}
     </div>

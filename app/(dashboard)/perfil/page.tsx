@@ -7,6 +7,7 @@ import {
   getPlanesCompletosAction,
 } from "@/features/admin/actions/planes-actions";
 import { getUsoDelPlanAction } from "@/features/planes/actions/uso-del-plan";
+import { getSolicitudPendienteAction } from "@/features/planes/actions/solicitud-plan";
 import { SuscripcionPanel } from "@/features/planes/ui/suscripcion/suscripcion-panel";
 
 export const dynamic = "force-dynamic";
@@ -26,12 +27,19 @@ const ProfilePage = async () => {
   // Las cuatro consultas van en paralelo: la pestaña de suscripción necesita
   // el plan del negocio, la lista de planes activos (para la comparativa) y el
   // uso real de los límites, y ninguna depende de otra.
-  const [{ data: perfil }, plan, planes, uso] = await Promise.all([
-    supabase.from("perfiles").select("nombre, email").eq("id", user.id).single(),
-    getPlanDelNegocioAction(),
-    getPlanesCompletosAction(),
-    getUsoDelPlanAction(),
-  ]);
+  const [{ data: perfil }, plan, planes, uso, solicitudPendiente] =
+    await Promise.all([
+      supabase
+        .from("perfiles")
+        .select("nombre, email")
+        .eq("id", user.id)
+        .single(),
+      getPlanDelNegocioAction(),
+      getPlanesCompletosAction(),
+      getUsoDelPlanAction(),
+      // Si ya pidió el cambio, el botón se reemplaza por el estado del pedido.
+      getSolicitudPendienteAction(),
+    ]);
 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden p-2 md:p-4 md:pl-0 h-screen">
@@ -43,7 +51,12 @@ const ProfilePage = async () => {
         }}
         plan={plan}
         suscripcion={
-          <SuscripcionPanel plan={plan} planes={planes} uso={uso} />
+          <SuscripcionPanel
+            plan={plan}
+            planes={planes}
+            uso={uso}
+            solicitudPendiente={solicitudPendiente}
+          />
         }
       />
     </div>

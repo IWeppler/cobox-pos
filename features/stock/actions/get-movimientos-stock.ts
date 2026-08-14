@@ -15,6 +15,9 @@ export interface MovimientoStock {
   cantidad: number;
   origen: string;
   usuario: string | null;
+  /** Solo en los ingresos por remito: con qué remito agrupar la fila. */
+  remitoId?: string;
+  proveedor?: string;
 }
 
 export interface FiltrosMovimientosStock {
@@ -53,13 +56,17 @@ async function obtenerIngresosRemitos(
   fechaDesde?: string,
   fechaHasta?: string,
 ): Promise<MovimientoCrudo[]> {
+  // Se filtra por `aprobado_en` y no por `creado_en`: el stock se mueve cuando
+  // el remito se APRUEBA, no cuando se carga. Filtrando por la carga, un
+  // remito cargado a fin de mes y conciliado a principios del siguiente no
+  // aparecía en ninguno de los dos períodos.
   let query = supabase
     .from("ordenes_compra")
-    .select("id, proveedor, creado_en")
+    .select("id, proveedor, creado_en, aprobado_en, fecha_remito")
     .eq("estado", "APROBADA");
 
-  if (fechaDesde) query = query.gte("creado_en", fechaDesde);
-  if (fechaHasta) query = query.lte("creado_en", fechaHasta);
+  if (fechaDesde) query = query.gte("aprobado_en", fechaDesde);
+  if (fechaHasta) query = query.lte("aprobado_en", fechaHasta);
 
   const { data: ordenes, error: ordenesError } = await query;
   if (ordenesError) {
@@ -93,7 +100,7 @@ async function obtenerIngresosRemitos(
     return [
       {
         id: `remito-${item.id}`,
-        fecha: orden.creado_en,
+        fecha: orden.aprobado_en ?? orden.creado_en,
         productoId: item.producto_id,
         producto: extraerNombreProducto(item.productos),
         variante: item.variante_match || item.raw_variante || "Único",
@@ -101,6 +108,9 @@ async function obtenerIngresosRemitos(
         cantidad: item.cantidad,
         origen: `Remito — ${orden.proveedor}`,
         usuarioId: null,
+        // Permite agrupar por remito en la vista y abrir su detalle.
+        remitoId: orden.id,
+        proveedor: orden.proveedor,
       },
     ];
   });

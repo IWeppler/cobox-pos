@@ -6,7 +6,7 @@
  * la modalidad de cobro.
  */
 
-export const DESCUENTO_SEMESTRAL = 0.15;
+export const DESCUENTO_SEMESTRAL = 0.2;
 
 export type Modalidad = "mensual" | "semestral";
 
@@ -14,6 +14,10 @@ export interface ReglasPlan {
   max_usuarios?: number | null;
   max_sucursales?: number | null;
   max_clientes_cuenta_corriente?: number | null;
+  /** Tope de productos del catálogo. Frena SOLO el alta: lo ya cargado se
+   * sigue vendiendo y editando aunque el comercio esté por encima (los que
+   * venían de antes conservan "sin límite" por `negocios.reglas_override`). */
+  max_productos?: number | null;
   features?: string[];
 }
 
@@ -76,6 +80,9 @@ export const NOMBRE_FEATURE: Record<string, string> = {
   cuenta_corriente_ilimitada: "Cuenta corriente ilimitada",
   tickets: "Tickets digitales",
   historial_ventas: "Historial completo de ventas",
+  insights_basico: "Comerz Insights (básico)",
+  resumen_semanal: "Resumen semanal por mail",
+  catalogo_sin_marca: "Catálogo sin marca Comerz",
   reportes: "Reportes de ventas y productos",
   reportes_exportar: "Exportación de reportes",
   multicaja: "Múltiples cajas",

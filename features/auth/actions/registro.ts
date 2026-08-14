@@ -3,7 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { COOKIE_NEGOCIO_ACTIVO } from "@/shared/lib/negocio-activo";
-import { SITE_URL } from "@/shared/lib/dominios";
+import { urlBaseDeLaRequest } from "@/shared/lib/url-base-request";
 
 export interface RegistroState {
   error: string;
@@ -57,17 +57,19 @@ export async function registrarseAction(
     password,
     options: {
       data: { nombre },
-      // A dónde vuelve después de confirmar. Se manda EXPLÍCITO y no se deja
-      // que Supabase caiga a su "Site URL": ese es un campo del dashboard que
-      // nadie mira, y quedó apuntando a http://localhost:3000 — o sea que el
-      // mail de confirmación de un usuario real lo mandaba a su propia
-      // computadora. Acá sale de la misma variable que ya usa el mail de
-      // recuperación, así que las dos puntas se mueven juntas.
+      // A dónde vuelve después de confirmar. Sale del host REAL del request y
+      // no de una constante de build: probando en localhost, el mail tiene que
+      // volver a localhost, no a producción.
+      //
+      // OJO: si esta URL no está en la lista de Redirect URLs de Supabase, el
+      // servidor la ignora EN SILENCIO y usa el "Site URL" del proyecto. Eso es
+      // lo que hacía que el mail llevara a localhost:3000 aunque acá se mandara
+      // otra cosa. Las dos puntas tienen que estar permitidas allá.
       //
       // Va a /auth/callback y no directo a /onboarding porque el link llega en
       // formato PKCE: lo que aterriza es un `code`, no una sesión, y alguien
       // tiene que canjearlo.
-      emailRedirectTo: `${SITE_URL}/auth/callback?next=/onboarding`,
+      emailRedirectTo: `${await urlBaseDeLaRequest()}/auth/callback?next=/onboarding`,
     },
   });
 

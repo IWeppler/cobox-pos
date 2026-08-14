@@ -154,13 +154,51 @@ tiene 11.
   tablas; las 88 políticas vivas nunca habían estado en git). Con
   multi-tenant la base tiene 44 tablas y 144 políticas: cada tabla nueva
   necesita su policy de negocio, no alcanza con la columna.
-- Ingreso de mercadería, DOS flujos que no se mezclan y los elige el rubro
-  (`features/stock/lib/ingreso-por-rubro.ts`): indumentaria entra por
-  "Ingresar Remito" (conciliación en /compras/merge, con alias y matching de
-  nombres del proveedor) y electro por "Importar Planilla" (CSV/XLSX con las
-  columnas del sistema, EAN e IMEI por fila). El toolbar monta SOLO el del
-  rubro activo; antes ofrecía los dos a todos.
-- Importación de planilla: TODA la escritura corre en la RPC
+- Ingreso de mercadería: UN solo camino, "Ingresar mercadería"
+  (`ingresar-mercaderia-modal.tsx`), igual para todos los rubros. Adentro se
+  elige el ORIGEN del archivo —planilla del proveedor o planilla propia— y las
+  dos terminan en la MISMA conciliación (/compras/merge). Antes eran dos
+  botones distintos elegidos por el rubro, y esa era la lectura equivocada: la
+  diferencia nunca fue el rubro sino quién escribió el archivo. Una tienda de
+  ropa también tiene planillas propias y una de electro también recibe
+  remitos.
+  Por qué la planilla propia TAMBIÉN se concilia (antes escribía derecho):
+  con 300 productos cargados nadie se acuerda si "Remera blanca talle M Levis"
+  ya existe o si la cargó escrita distinto, y esa pregunta sin responder es la
+  que produce el catálogo duplicado. Quién escribió el archivo no la cambia.
+  Como consecuencia hay UN solo motor de escritura de stock por ingreso
+  (`aprobar_orden_compra`), que ahora también crea las unidades de
+  `unidades_serie` cuando la línea trae IMEI.
+  El guard contra subir dos veces el mismo archivo es
+  `ordenes_compra.hash_planilla` (unique parcial por negocio, null en los
+  remitos de proveedor): la conciliación ya protegía contra aprobar dos veces
+  la misma orden, pero no contra crear dos órdenes desde el mismo archivo.
+- Lo que cambia por RUBRO son las COLUMNAS de la plantilla, no el flujo
+  (`features/stock/lib/columnas-por-rubro.ts`). Las columnas base —categoría,
+  producto, stock, costo, venta— son iguales en todos: es lo que hace a un
+  producto vendible y no depende de qué se vende. Lo específico se AGREGA y
+  nunca reemplaza, así una planilla de un rubro entra en otro perdiendo lo que
+  no aplica en vez de fallar entera. Cada columna declara si parte variantes
+  (talle, color, medida, material, peso, presentación sí; marca y modelo no),
+  y eso es lo que le permite a la conciliación agrupar filas del mismo
+  producto. El parser reconoce TODAS las columnas de TODOS los rubros a
+  propósito: una planilla armada con otra plantilla tiene que entrar igual.
+  Indumentaria NO lleva `codigo_barras`: la ropa de proveedor local rara vez
+  lo trae y una columna siempre vacía enseña a ignorar columnas.
+  NO existen `vencimiento` ni `lote` aunque alimentos y farmacia los
+  necesiten: el vencimiento es del LOTE, y esa tabla no existe todavía.
+  Ofrecer la columna y tirar el dato al importar es peor que no ofrecerla.
+- Los 7 rubros del tipo `Rubro` ahora son los 7 del CHECK. Hasta
+  `20260815100000` el CHECK aceptaba solo indumentaria y electro, y
+  `normalizarRubro` era `valor === "electro" ? ... : "indumentaria"`, o sea
+  que los otros cinco se leían como indumentaria aunque estuvieran bien
+  guardados. Inofensivo antes; con plantilla por rubro le daba a una
+  ferretería las columnas de una tienda de ropa.
+- Importación de planilla DIRECTA (`importar_productos_planilla` y su UI):
+  quedó SIN punto de entrada al unificar el ingreso, pero no se borró todavía
+  — el flujo nuevo tiene que probarse con planillas reales antes de tirar el
+  que funcionaba. Lo que sigue describe ese camino, hoy inactivo.
+  TODA la escritura corre en la RPC
   `importar_productos_planilla` (productos + variantes + relaciones de
   atributos + IMEI + stock + espejo legacy), en una transacción y en batch —
   antes era un `for` con await adentro, ~10.000 round-trips con el tope de

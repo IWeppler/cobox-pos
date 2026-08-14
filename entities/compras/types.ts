@@ -27,6 +27,8 @@ export interface ItemResuelto {
   raw_sku?: string | null;
   raw_marca?: string | null;
   raw_genero?: string | null;
+  /** Número de serie de esta línea (electro). Un aparato por fila. */
+  raw_imei?: string | null;
   variante_match: string;
   cantidad: number;
   precio_costo: number;

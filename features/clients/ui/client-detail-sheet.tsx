@@ -35,7 +35,10 @@ import { Cliente, CuentaCorrienteMovimiento } from "@/entities/clientes/type";
 import { MetodoPagoPOS } from "@/shared/components/cart-sidebar/types";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
 import { getSupabaseRelation, SupabaseRelation } from "@/entities/ventas/types";
-import { RecargoMoraConfig } from "../lib/calcular-saldo-con-recargo";
+import {
+  calcularSaldoConRecargo,
+  RecargoMoraConfig,
+} from "../lib/calcular-saldo-con-recargo";
 
 interface VentaResumen {
   id: string;
@@ -115,6 +118,17 @@ export function ClientDetailSheet({
 
   if (!cliente) return null;
   const saldo = Number(cliente.saldo_pendiente || 0);
+
+  // Mismo cálculo que hace el server al cobrar (registrarPagoDeudaAction):
+  // misma función, mismas dos entradas. Mostrar acá un número que el cobro
+  // después no respete es peor que no mostrarlo.
+  const { montoRecargo, saldoConRecargo } = calcularSaldoConRecargo(
+    {
+      monto_pendiente: cliente.saldo_pendiente,
+      fecha_vencimiento: cliente.fecha_vencimiento_deuda,
+    },
+    recargoMoraConfig,
+  );
 
   const fechaVencimiento = cliente.fecha_vencimiento_deuda ?? null;
   const diasVencido = calcularDiasVencido(fechaVencimiento);
@@ -237,16 +251,30 @@ export function ClientDetailSheet({
                     <div className="bg-card border border-border rounded-xl p-3 flex flex-col md:flex-row md:flex-wrap md:items-start md:justify-between gap-3">
                       <div className="order-1">
                         <p className="text-xs font-medium text-muted-foreground mb-1">
-                          Saldo Actual
+                          {montoRecargo > 0 ? "Saldo con recargo" : "Saldo Actual"}
                         </p>
                         <p className="text-2xl font-mono font-medium text-foreground">
-                          {formatearMoneda(saldo)}
+                          {formatearMoneda(
+                            montoRecargo > 0 ? saldoConRecargo : saldo,
+                          )}
                         </p>
+                        {/* El desglose solo aparece cuando hay mora: si el
+                            número grande ya incluye el recargo, hay que poder
+                            explicarle al cliente de dónde salió. */}
+                        {montoRecargo > 0 && (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {formatearMoneda(saldo)} de deuda{" "}
+                            <span className="text-danger font-medium">
+                              + {formatearMoneda(montoRecargo)} por mora
+                            </span>
+                          </p>
+                        )}
                       </div>
                       {saldo > 0 && (
                         <RegisterPaymentModal
                           cliente={cliente}
                           metodosPago={metodosPago}
+                          recargoMoraEstimado={montoRecargo}
                           className="w-full md:w-auto order-3 md:order-2"
                         />
                       )}

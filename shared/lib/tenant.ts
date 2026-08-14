@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { slugDesdeHost, HEADER_NEGOCIO_SLUG } from "@/shared/lib/negocio-slug";
 
@@ -64,10 +64,35 @@ export async function resolveTenant({
   if (!slugFinal) notFound();
 
   const negocio = await buscarPorSlug(slugFinal);
-  if (!negocio) notFound();
+  if (negocio) return { negocio_id: negocio.id, negocio };
 
-  return { negocio_id: negocio.id, negocio };
+  // El slug no resuelve: antes de dar 404, ver si es uno VIEJO de un negocio
+  // que cambió de link. Los catálogos se comparten por WhatsApp y quedan meses
+  // en chats y estados, así que un link viejo es tráfico real — mandarlo a un
+  // 404 es perder la venta sin que nadie se entere.
+  //
+  // La consulta va acá y no en el middleware a propósito: en el middleware
+  // costaría una ida a la base en CADA request del sitio, y esto solo hace
+  // falta en el caso raro. Es el camino del 404, no el normal.
+  const vigente = await buscarSlugHistorico(slugFinal);
+  if (vigente) redirect(`/store/${vigente}`);
+
+  notFound();
 }
+
+/** A qué slug vigente corresponde uno viejo, o null si nunca existió. */
+const buscarSlugHistorico = cache(async (slug: string) => {
+  const { data } = await clienteResolucion()
+    .from("slugs_historicos")
+    .select("negocios(slug, estado)")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  const negocio = Array.isArray(data?.negocios) ? data?.negocios[0] : data?.negocios;
+  // Un negocio dado de baja no redirige a ningún lado: sigue siendo 404.
+  if (!negocio || negocio.estado !== "activo") return null;
+  return negocio.slug as string;
+});
 
 /** Igual que resolveTenant pero sin 404: para decidir rutas, no para render. */
 export async function tenantOpcional({

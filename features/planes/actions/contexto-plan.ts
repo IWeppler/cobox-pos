@@ -7,6 +7,14 @@ import type { ReglasPlan } from "@/shared/lib/planes";
 export interface PlanMinimo {
   nombre: string;
   precio_mensual: number;
+  /** Las reglas COMPLETAS del plan destino, no solo su nombre y precio.
+   *
+   * Van acá porque el paywall arma con ellas lo que se gana al subir, y esa
+   * lista tiene que salir de la base y no de un texto escrito a mano: un
+   * beneficio redactado aparte se desactualiza en silencio. Pasó — el modal
+   * decía "cuenta corriente sin límites" para el plan Gestión, que en realidad
+   * tiene 250 clientes. La ilimitada es de Empresa. */
+  reglas: ReglasPlan;
 }
 
 export interface ContextoPlan {
@@ -25,6 +33,9 @@ export interface ContextoPlan {
    * comercios que ya venían trabajando no tienen plan cargado.
    */
   sinPlan: boolean;
+  /** Reglas del plan de HOY. El paywall las compara contra las del plan
+   * destino para decir "hasta 5 usuarios" en vez de "más usuarios". */
+  reglasActuales: ReglasPlan;
 }
 
 export async function getContextoPlanAction(): Promise<ContextoPlan> {
@@ -33,37 +44,48 @@ export async function getContextoPlanAction(): Promise<ContextoPlan> {
 
   const { data: negocioId } = await supabase.rpc("negocio_actual");
 
-  const [{ data: negocio }, { data: planes }] = await Promise.all([
-    negocioId
-      ? supabase
-          .from("negocios")
-          .select("plan_id, planes(nombre, reglas)")
-          .eq("id", negocioId)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    supabase
-      .from("planes")
-      .select("nombre, precio_mensual, reglas")
-      .eq("activo", true)
-      .order("precio_mensual", { ascending: true }),
-  ]);
+  // Las reglas EFECTIVAS salen del RPC `reglas_plan()`, que aplica
+  // `negocios.reglas_override` sobre las del plan. Leer `planes.reglas` derecho
+  // ignoraría el grandfathering: a los comercios que conservan 75 clientes de
+  // cuenta corriente les mostraría el 50 del plan nuevo, y el medidor diría que
+  // están llenos cuando la base los deja seguir.
+  const [{ data: negocio }, { data: reglasEfectivas }, { data: planes }] =
+    await Promise.all([
+      negocioId
+        ? supabase
+            .from("negocios")
+            .select("plan_id, planes(nombre)")
+            .eq("id", negocioId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      supabase.rpc("reglas_plan"),
+      // Estas SÍ son las del plan puro: es el catálogo comercial, lo que se
+      // ofrece al subir. Un override es una excepción de un negocio, no algo
+      // que se le pueda prometer a otro.
+      supabase
+        .from("planes")
+        .select("nombre, precio_mensual, reglas")
+        .eq("activo", true)
+        .order("precio_mensual", { ascending: true }),
+    ]);
 
   const planActivo = Array.isArray(negocio?.planes)
     ? negocio?.planes[0]
     : negocio?.planes;
 
-  const reglas = (planActivo?.reglas ?? {}) as ReglasPlan;
+  const reglas = (reglasEfectivas ?? {}) as ReglasPlan;
 
   // Los planes vienen del más barato al más caro, así que el primero que
   // incluye una feature es el mínimo necesario.
   const planMinimoPorFeature: Record<string, PlanMinimo> = {};
   for (const plan of planes ?? []) {
-    const features = ((plan.reglas ?? {}) as ReglasPlan).features ?? [];
-    for (const feature of features) {
+    const reglasPlan = (plan.reglas ?? {}) as ReglasPlan;
+    for (const feature of reglasPlan.features ?? []) {
       if (planMinimoPorFeature[feature]) continue;
       planMinimoPorFeature[feature] = {
         nombre: plan.nombre as string,
         precio_mensual: Number(plan.precio_mensual ?? 0),
+        reglas: reglasPlan,
       };
     }
   }
@@ -73,5 +95,6 @@ export async function getContextoPlanAction(): Promise<ContextoPlan> {
     features: reglas.features ?? [],
     planMinimoPorFeature,
     sinPlan: !negocio?.plan_id,
+    reglasActuales: reglas,
   };
 }

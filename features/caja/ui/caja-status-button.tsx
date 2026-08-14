@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Wallet } from "lucide-react";
 import { useCajaStatusStore } from "@/shared/store/caja-status-store";
+import { useCajaModalStore } from "@/shared/store/caja-modal-store";
 import { CajaQuickModal } from "./caja-quick-modal";
 import { EgresoModal } from "./egreso-modal";
 import {
@@ -32,7 +33,10 @@ export function CajaStatusButton({
 }: Readonly<CajaStatusButtonProps>) {
   const isCajaAbierta = useCajaStatusStore((state) => state.isCajaAbierta);
   const turno = useCajaStatusStore((state) => state.turno);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // En el store y no en un useState local: la guía de inicio abre este mismo
+  // modal desde el panel (ver caja-modal-store).
+  const isModalOpen = useCajaModalStore((state) => state.abierto);
+  const setIsModalOpen = useCajaModalStore((state) => state.setAbierto);
   // El egreso se dispara desde el modal de caja, pero se monta acá como
   // hermano: anidar un Dialog dentro de otro rompe foco y scroll-lock.
   const [isEgresoOpen, setIsEgresoOpen] = useState(false);

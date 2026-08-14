@@ -7,11 +7,19 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Button } from "@/shared/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
+import {
   registrarseAction,
   type RegistroState,
 } from "@/features/auth/actions/registro";
 import { crearNegocioAction } from "@/features/auth/actions/negocios";
 import { CONDICIONES_IVA, RUBROS, TAMANOS_EQUIPO } from "@/shared/lib/rubros";
+import { CuitInput } from "@/shared/components/cuit-input";
 
 const estadoRegistro: RegistroState = { error: "" };
 const estadoNegocio = { error: null as string | null, success: false };
@@ -52,6 +60,10 @@ export function OnboardingStepper({
     tamano_equipo: "",
     whatsapp: "",
   });
+
+  // Estado propio porque el Select de Radix no participa del FormData: el
+  // valor viaja por un input oculto en el paso 3.
+  const [condicionIva, setCondicionIva] = useState("");
 
   // Avanzar de paso cuando el registro salió bien se hace DURANTE el render y
   // no en un efecto: un setState dentro de useEffect dispara un render en
@@ -138,7 +150,7 @@ export function OnboardingStepper({
               onChange={(e) =>
                 setDatosNegocio((d) => ({ ...d, nombre: e.target.value }))
               }
-              placeholder="Evens Indumentaria"
+              placeholder="Nombre Comercio"
               className="h-11 bg-background shadow-none"
             />
             <p className="text-xs text-muted-foreground">
@@ -148,22 +160,28 @@ export function OnboardingStepper({
 
           <div className="space-y-2">
             <Label htmlFor="rubro">¿A qué se dedica?</Label>
-            <select
-              id="rubro"
-              required
+            {/* Controlado y no con `name`: el valor viaja en el hidden del paso
+                3, porque el negocio se crea de una sola vez al final. */}
+            <Select
               value={datosNegocio.rubro}
-              onChange={(e) =>
-                setDatosNegocio((d) => ({ ...d, rubro: e.target.value }))
+              onValueChange={(v) =>
+                setDatosNegocio((d) => ({ ...d, rubro: v }))
               }
-              className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
             >
-              <option value="">Elegí un rubro</option>
-              {RUBROS.map((r) => (
-                <option key={r.valor} value={r.valor}>
-                  {r.etiqueta}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id="rubro"
+                className="h-11 w-full rounded-lg bg-background shadow-none"
+              >
+                <SelectValue placeholder="Elegí un rubro" />
+              </SelectTrigger>
+              <SelectContent>
+                {RUBROS.map((r) => (
+                  <SelectItem key={r.valor} value={r.valor}>
+                    {r.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <fieldset className="space-y-2">
@@ -202,7 +220,7 @@ export function OnboardingStepper({
               onChange={(e) =>
                 setDatosNegocio((d) => ({ ...d, whatsapp: e.target.value }))
               }
-              placeholder="3492 000000"
+              placeholder="+54 9 11 1234-5678"
               className="h-11 bg-background shadow-none"
             />
             <p className="text-xs text-muted-foreground">
@@ -234,29 +252,34 @@ export function OnboardingStepper({
           <input type="hidden" name="whatsapp" value={datosNegocio.whatsapp} />
 
           <Campo id="razon_social" label="Razón social" disabled={cargando} />
-          <Campo
-            id="cuit"
-            label="CUIT"
-            disabled={cargando}
-            ayuda="Se valida el dígito verificador."
-          />
+          <CuitInput disabled={cargando} />
 
           <div className="space-y-2">
             <Label htmlFor="condicion_iva">Condición frente al IVA</Label>
-            <select
-              id="condicion_iva"
-              name="condicion_iva"
-              defaultValue=""
+            {/* El Select de Radix no es un control nativo, así que no aporta
+                nada al FormData por sí solo: el valor va por este hidden. Sin
+                él, el campo se manda siempre vacío y el dato se pierde en
+                silencio, que es peor que no tener el campo. */}
+            <input type="hidden" name="condicion_iva" value={condicionIva} />
+            <Select
+              value={condicionIva}
+              onValueChange={setCondicionIva}
               disabled={cargando}
-              className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
             >
-              <option value="">Prefiero cargarlo después</option>
-              {CONDICIONES_IVA.map((c) => (
-                <option key={c.valor} value={c.valor}>
-                  {c.etiqueta}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id="condicion_iva"
+                className="h-11 w-full rounded-lg bg-background shadow-none"
+              >
+                <SelectValue placeholder="Prefiero cargarlo después" />
+              </SelectTrigger>
+              <SelectContent>
+                {CONDICIONES_IVA.map((c) => (
+                  <SelectItem key={c.valor} value={c.valor}>
+                    {c.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <Error mensaje={negocio.error} />

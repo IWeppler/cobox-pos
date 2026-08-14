@@ -416,30 +416,25 @@ export async function registrarVentaAction(
   }
 
   // --- 2ter. TOPE DE CLIENTES CON CUENTA CORRIENTE DEL PLAN ---
-  // Se pregunta ACÁ y no al actualizar el saldo: la deuda se registra después
-  // de crear la venta y sin transacción, así que frenar más adelante dejaría
-  // la venta grabada como fiada y el saldo del cliente sin tocar. El trigger
-  // de la base sigue siendo la red para el resto de los caminos.
+  //
+  // El tope NO frena la venta, y es a propósito: una operación en curso no se
+  // rompe por un límite comercial. Hasta acá esto devolvía error y la venta no
+  // se hacía — con la clienta en el mostrador y la mercadería sobre el vidrio,
+  // por un cupo de facturación. Perder esa venta es un daño mucho peor que
+  // dejar pasar un cliente por encima del límite.
+  //
+  // El freno vive ahora en el alta MANUAL de deuda (trg_limite_cc_manual: un
+  // DEBITO sin venta_id ni pago_id). Acá solo se registra el exceso para poder
+  // verlo del lado de Comerz.
   if (isCuentaCorriente && montoPendiente > 0.05 && clienteId) {
-    const { data: puedeFiar, error: errorTope } = await supabase.rpc(
-      "puede_fiar",
-      { p_cliente: clienteId },
-    );
-
-    if (errorTope) {
-      console.error("[TOPE CUENTA CORRIENTE]", errorTope);
-      return {
-        error: "No se pudo verificar el límite de cuenta corriente del plan.",
-        success: false,
-      };
-    }
+    const { data: puedeFiar } = await supabase.rpc("puede_fiar", {
+      p_cliente: clienteId,
+    });
 
     if (puedeFiar === false) {
-      return {
-        error:
-          "El plan llegó al máximo de clientes con cuenta corriente. Cobrá alguna deuda o pasá a un plan mayor para seguir fiando.",
-        success: false,
-      };
+      console.warn(
+        `[TOPE CUENTA CORRIENTE] Venta fiada por encima del cupo del plan (cliente ${clienteId}). Se completa igual: el tope no frena ventas.`,
+      );
     }
   }
 

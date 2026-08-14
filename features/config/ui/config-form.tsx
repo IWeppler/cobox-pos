@@ -40,6 +40,7 @@ import {
   optimizarImagen,
 } from "@/shared/utils/image-optimizer";
 import { useRouter } from "next/navigation";
+import { CuitInput } from "@/shared/components/cuit-input";
 
 export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -196,16 +197,10 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="cuit">CUIT</Label>
-                <Input
-                  id="cuit"
-                  name="cuit"
-                  
-                  defaultValue={config.cuit || ""}
-                  placeholder="Ej: 30-12345678-9"
-                />
-              </div>
+              <CuitInput
+                defaultValue={config.cuit}
+                ayuda="Es el CUIT que sale impreso en tus comprobantes."
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="condicion_iva">Condición frente al IVA</Label>

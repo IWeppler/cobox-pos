@@ -1,7 +1,6 @@
-import { Check, CreditCard, Mail } from "lucide-react";
+import { Check } from "lucide-react";
 import type { PlanCompleto, PlanDelNegocio } from "@/features/admin/actions/planes-actions";
 import type { UsoDelPlan } from "@/features/planes/actions/uso-del-plan";
-import { Button } from "@/shared/ui/button";
 import {
   NOMBRE_FEATURE,
   precioMensualEfectivo,
@@ -13,7 +12,10 @@ import {
   diasHastaVencimiento,
   type UsoLimite,
 } from "@/shared/lib/suscripcion";
-import { mailtoComerz } from "@/shared/lib/contacto";
+import { EMAIL_COMERZ } from "@/shared/lib/contacto";
+import { CambiarPlanModal } from "./cambiar-plan-modal";
+import { MailCopiable } from "./mail-copiable";
+import type { SolicitudPlan } from "@/features/planes/actions/solicitud-plan";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { EstadoBadge } from "./estado-badge";
 import { AlertaSuscripcion } from "./alerta-suscripcion";
@@ -37,10 +39,13 @@ export function SuscripcionPanel({
   plan,
   planes,
   uso,
+  solicitudPendiente = null,
 }: {
   plan: PlanDelNegocio | null;
   planes: PlanCompleto[];
   uso: UsoDelPlan | null;
+  /** Pedido de cambio de plan ya enviado y sin resolver. */
+  solicitudPendiente?: SolicitudPlan | null;
 }) {
   const estado = derivarEstadoSuscripcion({
     estado: plan?.estado,
@@ -210,28 +215,22 @@ export function SuscripcionPanel({
           datos no se borran.
         </p>
 
+        {/* Ninguno de los dos es `mailto:` ya: ese abría el cliente de correo
+            del sistema, y en una PC de comercio con Outlook sin cuenta
+            configurada eso es un asistente de configuración, no un mail. El
+            pedido no llegaba nunca. */}
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-          <Button asChild className="h-11 sm:w-auto">
-            <a
-              href={mailtoComerz(
-                `Cambio de plan — ${plan?.negocio ?? "Mi comercio"}`,
-                `Hola, quiero cambiar el plan de ${plan?.negocio ?? "mi comercio"}.\n\nPlan actual: ${plan?.plan ?? "sin plan"}\nPlan que me interesa: \n`,
-              )}
-            >
-              <CreditCard className="mr-2 h-4 w-4" aria-hidden="true" />
-              Cambiar de plan
-            </a>
-          </Button>
-          <Button asChild variant="outline" className="h-11 sm:w-auto">
-            <a
-              href={mailtoComerz(
-                `Consulta de suscripción — ${plan?.negocio ?? "Mi comercio"}`,
-              )}
-            >
-              <Mail className="mr-2 h-4 w-4" aria-hidden="true" />
-              Consultar por mi suscripción
-            </a>
-          </Button>
+          <CambiarPlanModal
+            planActual={plan?.plan ?? null}
+            planes={planes.map((p) => ({
+              id: p.id,
+              nombre: p.nombre,
+              precio_mensual: p.precio_mensual,
+            }))}
+            modalidad={modalidad}
+            solicitudPendiente={solicitudPendiente}
+          />
+          <MailCopiable email={EMAIL_COMERZ} />
         </div>
       </section>
     </div>

@@ -6,10 +6,11 @@ import { revalidatePath } from "next/cache";
 import { calcularRecargoMonto } from "@/shared/lib/recargo-metodo";
 import { parseClientesCSV } from "@/features/clients/lib/parse-clientes-csv";
 import {
-  calcularRecargoMoraTotal,
+  calcularSaldoConRecargo,
   RecargoMoraConfig,
 } from "@/features/clients/lib/calcular-saldo-con-recargo";
 import { calcularFechaVencimiento } from "@/features/clients/lib/calcular-fecha-vencimiento";
+import { resolverVencimientoConPisoDeMora } from "@/features/clients/lib/vencimiento-con-piso-de-mora";
 import { esCuitValido, normalizarCuit } from "@/shared/lib/cuit";
 
 interface ClientActionState {
@@ -258,29 +259,39 @@ export async function registrarPagoDeudaAction(
   const montoNeto = montoBruto - comisionMonto;
 
   // C-bis. Recargo por mora — recalculado server-side, nunca confiar en
-  // lo que mande el cliente (mismo criterio que create-sale.ts con
-  // precios). "Recargo primero": si el monto cobrado no alcanza a cubrir
-  // base + recargo estimado, el recargo se salda antes que el capital.
-  const [{ data: configPos }, { data: ventasVencidas }] = await Promise.all([
+  // lo que mande el cliente (mismo criterio que create-sale.ts con precios).
+  //
+  // La fuente es el SALDO DEL CLIENTE (`saldo_pendiente` +
+  // `fecha_vencimiento_deuda`), no las ventas con saldo. Hasta acá esto
+  // recorría `ventas`, y eso dejaba afuera toda la deuda que no nace de una
+  // venta del POS: la importada por CSV y los ajustes manuales. En Evens eso
+  // era 17 de los 18 clientes vencidos — la mora del 15% configurada
+  // sencillamente no se cobraba. El caché del cliente ya lo mantiene esta
+  // misma action en cada movimiento, y es la fuente que usa el resto de la
+  // feature (getDeudaVencidaAction, la tabla y el detalle del cliente), así
+  // que además desaparece la doble fuente de verdad.
+  const [{ data: configPos }, { data: clienteDeuda }] = await Promise.all([
     supabase
       .from("configuracion_pos")
-      .select("recargo_mora_tipo, recargo_mora_valor")
+      .select("recargo_mora_tipo, recargo_mora_valor, cc_plazo_mora")
       .single(),
     supabase
-      .from("ventas")
-      .select("monto_pendiente, fecha_vencimiento")
-      .eq("cliente_id", clienteId)
-      .gt("monto_pendiente", 0),
+      .from("clientes")
+      .select("saldo_pendiente, fecha_vencimiento_deuda")
+      .eq("id", clienteId)
+      .single(),
   ]);
   const recargoConfig: RecargoMoraConfig = {
     recargo_mora_tipo: configPos?.recargo_mora_tipo ?? "NINGUNO",
     recargo_mora_valor: configPos?.recargo_mora_valor ?? 0,
   };
-  const { totalRecargo } = calcularRecargoMoraTotal(
-    ventasVencidas ?? [],
+  const { montoRecargo } = calcularSaldoConRecargo(
+    {
+      monto_pendiente: clienteDeuda?.saldo_pendiente,
+      fecha_vencimiento: clienteDeuda?.fecha_vencimiento_deuda,
+    },
     recargoConfig,
   );
-  const montoRecargoAplicado = Math.min(monto, totalRecargo);
 
   // D. Iniciar Transacción Manual
   // 1. Guardar en venta_pagos (Para que impacte en el Cierre Z de Caja)
@@ -308,23 +319,50 @@ export async function registrarPagoDeudaAction(
   if (pagoError || !pagoRegistrado)
     return { error: "Error al registrar pago en caja.", success: false };
 
-  // 2. Guardar en el Ledger de la Cuenta Corriente (Para que baje la deuda)
+  // 2. El recargo por mora se MATERIALIZA como un DEBITO propio antes de
+  // imputar el pago.
+  //
+  // Antes vivía solo como texto adentro de la descripción del pago y como
+  // `monto_recargo`, y el saldo bajaba por el monto entero: o sea que la mora
+  // se anunciaba pero no se cobraba nunca. Con el DEBITO, el recargo entra al
+  // capital y el pago se aplica sobre el total ya recargado — que es el
+  // "recargo primero" de verdad, y además le deja al comerciante una línea en
+  // el Libro Mayor para mostrarle al cliente de dónde salió el aumento.
+  //
+  // Va con `pago_id` a propósito: lo ata al cobro que lo generó y lo mantiene
+  // fuera del circuito de movimientos manuales (los que se editan/anulan son
+  // los que NO tienen ni venta_id ni pago_id — ver el bloque 8).
+  if (montoRecargo > 0) {
+    const detalleMora =
+      recargoConfig.recargo_mora_tipo === "PORCENTAJE"
+        ? `${recargoConfig.recargo_mora_valor}% sobre la deuda vencida`
+        : "monto fijo por deuda vencida";
+
+    const { error: moraError } = await supabase
+      .from("cuenta_corriente_movimientos")
+      .insert({
+        cliente_id: clienteId,
+        pago_id: pagoRegistrado.id,
+        tipo: "DEBITO",
+        monto: montoRecargo,
+        descripcion: `Recargo por mora (${detalleMora})`,
+        creado_por: user.id,
+      });
+
+    if (moraError) {
+      console.error("[PAGO DEUDA] No se pudo registrar la mora:", moraError);
+      return { error: "Error al registrar el recargo por mora.", success: false };
+    }
+  }
+
+  // 3. Guardar en el Ledger de la Cuenta Corriente (Para que baje la deuda)
   //
   // El movimiento va por la BASE, no por el bruto: el recargo por método es
   // plata del cobro, no capital amortizado. Si fuera por el bruto, la deuda
   // bajaría más de lo que el cliente realmente pagó a cuenta.
-  const detallesPago = [
-    montoRecargoAplicado > 0
-      ? `$${montoRecargoAplicado.toLocaleString("es-AR")} de recargo por mora`
-      : null,
-    recargoMetodoMonto > 0
-      ? `$${recargoMetodoMonto.toLocaleString("es-AR")} de recargo por ${metodo.nombre}`
-      : null,
-  ].filter(Boolean);
-
   const descripcionPago =
-    detallesPago.length > 0
-      ? `Pago a cuenta - ${metodo.nombre} (incluye ${detallesPago.join(" y ")})`
+    recargoMetodoMonto > 0
+      ? `Pago a cuenta - ${metodo.nombre} (incluye $${recargoMetodoMonto.toLocaleString("es-AR")} de recargo por ${metodo.nombre})`
       : `Pago a cuenta - ${metodo.nombre}`;
 
   const { error: ccError } = await supabase
@@ -334,7 +372,6 @@ export async function registrarPagoDeudaAction(
       pago_id: pagoRegistrado.id,
       tipo: "CREDITO",
       monto: monto,
-      monto_recargo: montoRecargoAplicado,
       descripcion: descripcionPago,
       creado_por: user.id,
     });
@@ -342,18 +379,60 @@ export async function registrarPagoDeudaAction(
   if (ccError)
     return { error: "Error al registrar movimiento en CC.", success: false };
 
-  // 3. Actualizar el caché de deuda en el Cliente
+  // 4. Actualizar el caché de deuda en el Cliente.
+  //
+  // El saldo se relee (no se reusa el de C-bis) porque entre medio pudo
+  // entrar otro movimiento; el orden es el mismo que el del ledger: primero
+  // se suma la mora, después se descuenta lo pagado.
   const { data: clienteActual } = await supabase
     .from("clientes")
     .select("saldo_pendiente")
     .eq("id", clienteId)
     .single();
   const saldoActual = Number(clienteActual?.saldo_pendiente || 0);
+  const saldoFinal = Math.max(0, saldoActual + montoRecargo - monto);
 
-  await supabase
+  // Vencimiento después de cobrar la mora:
+  //
+  // - Si quedó saldo y se cobró mora, el reloj arranca de nuevo (hoy + plazo).
+  //   Es lo que evita el interés sobre interés: como la mora ya entró al
+  //   capital, dejar la fecha vencida haría que el próximo cobro calcule el
+  //   porcentaje sobre un saldo que ya trae mora adentro. La penalidad se
+  //   cobra una vez por ciclo de atraso, no una vez por cobro.
+  // - Si no quedó saldo, no hay deuda que pueda vencer: la fecha se limpia.
+  // - Si no hubo mora, no se toca nada (un pago parcial de alguien al día no
+  //   tiene por qué mover su vencimiento).
+  const plazoMora = configPos?.cc_plazo_mora ?? 30;
+  const actualizacionCliente: {
+    saldo_pendiente: number;
+    fecha_vencimiento_deuda?: string | null;
+  } = { saldo_pendiente: saldoFinal };
+
+  if (saldoFinal === 0) {
+    actualizacionCliente.fecha_vencimiento_deuda = null;
+  } else if (montoRecargo > 0) {
+    actualizacionCliente.fecha_vencimiento_deuda = calcularFechaVencimiento(
+      new Date().toISOString().slice(0, 10),
+      plazoMora,
+    );
+  }
+
+  // El error del update SÍ se mira: el trigger de límite de cuenta corriente
+  // puede rechazarlo (23514) y hasta acá se ignoraba, así que el pago quedaba
+  // registrado en caja con la deuda intacta.
+  const { error: errorSaldoCliente } = await supabase
     .from("clientes")
-    .update({ saldo_pendiente: Math.max(0, saldoActual - monto) })
+    .update(actualizacionCliente)
     .eq("id", clienteId);
+
+  if (errorSaldoCliente) {
+    console.error("[PAGO DEUDA] No se pudo actualizar el saldo:", errorSaldoCliente);
+    return {
+      error:
+        "El pago quedó registrado en caja, pero no se pudo actualizar el saldo del cliente. Revisalo antes de seguir.",
+      success: false,
+    };
+  }
 
   revalidatePath("/clientes");
   revalidatePath("/caja");
@@ -797,31 +876,61 @@ async function esUsuarioAdmin(
  * lo hace menos urgente), acá el recálculo reemplaza el valor sin
  * comparar — una corrección tiene que poder mover el vencimiento en
  * cualquier dirección, es la parte que arregla una fecha mal cargada.
+ *
+ * Con UNA excepción: no puede quedar más urgente que la última mora cobrada
+ * (ver resolverVencimientoConPisoDeMora). Sin ese piso, editar un ajuste
+ * manual viejo después de haberle cobrado la mora al cliente lo devolvía a
+ * vencido sobre un saldo que ya tiene el recargo adentro — o sea recargo
+ * sobre recargo, que es justo lo que el corrimiento de fecha evita.
  */
 async function recalcularVencimientoDesdeMovimientosManuales(
   supabase: ReturnType<typeof createClient>,
   clienteId: string,
 ): Promise<string | null> {
-  const [{ data: movimientos }, { data: configPos }] = await Promise.all([
-    supabase
-      .from("cuenta_corriente_movimientos")
-      .select("fecha_origen, creado_en")
-      .eq("cliente_id", clienteId)
-      .is("venta_id", null)
-      .is("pago_id", null)
-      .eq("anulado", false),
-    supabase.from("configuracion_pos").select("cc_plazo_mora").single(),
-  ]);
-
-  if (!movimientos || movimientos.length === 0) return null;
+  const [{ data: movimientos }, { data: configPos }, { data: ultimaMora }] =
+    await Promise.all([
+      supabase
+        .from("cuenta_corriente_movimientos")
+        .select("fecha_origen, creado_en")
+        .eq("cliente_id", clienteId)
+        .is("venta_id", null)
+        .is("pago_id", null)
+        .eq("anulado", false),
+      supabase.from("configuracion_pos").select("cc_plazo_mora").single(),
+      // Un DEBITO con pago_id es, hoy, exactamente una mora cobrada: el cobro
+      // genera un CREDITO por el pago y este DEBITO por el recargo, y ningún
+      // otro camino escribe un DEBITO atado a un pago.
+      supabase
+        .from("cuenta_corriente_movimientos")
+        .select("creado_en")
+        .eq("cliente_id", clienteId)
+        .eq("tipo", "DEBITO")
+        .not("pago_id", "is", null)
+        .eq("anulado", false)
+        .order("creado_en", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
   const plazoMora = configPos?.cc_plazo_mora ?? 30;
-  const fechaMasAntigua = movimientos.reduce((min: string, mov) => {
-    const fecha = mov.fecha_origen || String(mov.creado_en).slice(0, 10);
-    return !min || fecha < min ? fecha : min;
-  }, "");
 
-  return calcularFechaVencimiento(fechaMasAntigua, plazoMora);
+  const pisoPorMora = ultimaMora
+    ? calcularFechaVencimiento(
+        String(ultimaMora.creado_en).slice(0, 10),
+        plazoMora,
+      )
+    : null;
+
+  let candidato: string | null = null;
+  if (movimientos && movimientos.length > 0) {
+    const fechaMasAntigua = movimientos.reduce((min: string, mov) => {
+      const fecha = mov.fecha_origen || String(mov.creado_en).slice(0, 10);
+      return !min || fecha < min ? fecha : min;
+    }, "");
+    candidato = calcularFechaVencimiento(fechaMasAntigua, plazoMora);
+  }
+
+  return resolverVencimientoConPisoDeMora(candidato, pisoPorMora);
 }
 
 export async function editarMovimientoManualAction(

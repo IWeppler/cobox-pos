@@ -35,6 +35,12 @@ import { CrmTab } from "@/features/reports/ui/crm-tab";
 import { VendedoresTab } from "@/features/reports/ui/vendedores-tab";
 import { Venta, VentaPago } from "@/entities/ventas/types";
 import { ConfiguracionPOS } from "@/entities/config/types";
+import { PaywallModulo } from "@/features/planes/ui/paywall-modulo";
+import { ReportesMaqueta } from "@/features/reports/ui/reportes-maqueta";
+import {
+  FEATURES,
+  tieneFeatureServer,
+} from "@/features/planes/lib/tiene-feature-server";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +58,24 @@ export default async function ReportesPage({
 
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
+
+  // El corte va ANTES de cualquier consulta: el módulo no se protege
+  // escondiendo el link del sidebar, porque la ruta sigue viva y tipearla a
+  // mano mostraba la facturación entera del comercio. Además evita cargar
+  // ventas, stock y CRM para después no mostrarlos.
+  if (!(await tieneFeatureServer(supabase, FEATURES.REPORTES))) {
+    // El fondo es una MAQUETA, no este módulo con los datos tapados: el blur
+    // es CSS y se saca desde las DevTools. Los beneficios los arma el propio
+    // modal desde las reglas del plan.
+    return (
+      <PaywallModulo
+        feature={FEATURES.REPORTES}
+        descripcion="Reportes te muestra de dónde sale la plata: qué se vende, qué deja margen y qué está quieto en el depósito."
+      >
+        <ReportesMaqueta />
+      </PaywallModulo>
+    );
+  }
 
   const { data: puedeVerVendedoresRaw } = await supabase.rpc("tiene_permiso", {
     clave: "reportes.ver_todos_empleados",

@@ -1,14 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/shared/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { Download, Sparkles } from "lucide-react";
 import { useInstalacionPwa } from "@/shared/lib/use-instalacion-pwa";
 import { InstruccionesInstalacion } from "./instrucciones-instalacion";
+import { Button } from "../ui/button";
 
 export function InstallAppWidget({
   isCollapsed,
@@ -34,7 +31,9 @@ export function InstallAppWidget({
   };
 
   const titulo =
-    metodo.tipo === "abrir-en-navegador" ? "Abrir para instalar" : "Instalar Comerz";
+    metodo.tipo === "abrir-en-navegador"
+      ? "Abrir para instalar"
+      : "Instalar Comerz";
   const detalle =
     metodo.tipo === "abrir-en-navegador"
       ? "Abrila en el navegador para poder instalarla."
@@ -77,13 +76,10 @@ export function InstallAppWidget({
             <p className="text-xs text-indigo-900/70 dark:text-indigo-200/70 mb-3 leading-snug">
               {detalle}
             </p>
-            <button
-              onClick={alTocar}
-              className="w-full flex items-center justify-center gap-2 bg-white dark:bg-indigo-600 text-indigo-600 dark:text-white border border-indigo-200 dark:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500 rounded-lg py-1.5 text-sm font-bold transition-colors shadow-sm active:scale-[0.98]"
-            >
+            <Button onClick={alTocar} variant="secondary">
               <Download className="w-4 h-4" />
               {textoBoton}
-            </button>
+            </Button>
           </>
         )}
       </div>

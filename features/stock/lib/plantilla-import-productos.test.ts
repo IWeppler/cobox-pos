@@ -4,6 +4,20 @@ import {
   plantillaImportProductos,
 } from "./plantilla-import-productos";
 import { parseProductosSheet } from "./parse-productos-csv";
+import type { Rubro } from "@/entities/config/types";
+
+/** Todos los rubros que el sistema declara. Si se agrega uno al tipo y no
+ * acá, el test de cobertura deja de cubrirlo — por eso está escrito a mano
+ * y no derivado del catálogo que se está probando. */
+const RUBROS: Rubro[] = [
+  "indumentaria",
+  "electro",
+  "alimentos",
+  "farmacia",
+  "ferreteria",
+  "quioscos",
+  "otros",
+];
 
 /** Split naíf, alcanza porque la plantilla no tiene celdas con coma. */
 function comoMatriz(csv: string): string[][] {
@@ -63,10 +77,61 @@ describe("plantillaImportProductos", () => {
 
   it("el nombre del archivo dice el rubro", () => {
     expect(nombreArchivoPlantilla("electro")).toBe(
-      "plantilla-productos-electro.csv",
+      "plantilla-mercaderia-electro.csv",
     );
-    expect(nombreArchivoPlantilla("indumentaria")).toBe(
-      "plantilla-productos-indumentaria.csv",
+    expect(nombreArchivoPlantilla("carniceria" as never)).toBe(
+      "plantilla-mercaderia-carniceria.csv",
     );
+  });
+
+  it("TODOS los rubros generan una plantilla que el parser entiende", () => {
+    // Es la garantía que sostiene el catálogo por rubro: si alguien agrega una
+    // columna a un rubro y el parser no la conoce, el comercio baja una
+    // plantilla que su propia importación descarta. Acá salta.
+    for (const rubro of RUBROS) {
+      const res = parseProductosSheet(comoMatriz(plantillaImportProductos(rubro)));
+
+      expect(res.error, `rubro ${rubro}`).toBeNull();
+      expect(res.columnasIgnoradas, `rubro ${rubro}`).toEqual([]);
+      expect(res.invalidas, `rubro ${rubro}`).toEqual([]);
+      expect(res.filas.length, `rubro ${rubro}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("cada rubro trae SUS columnas y no las del otro", () => {
+    const ferreteria = plantillaImportProductos("ferreteria").split("\r\n")[0];
+    const indumentaria = plantillaImportProductos("indumentaria").split("\r\n")[0];
+
+    expect(ferreteria).toContain("medida");
+    expect(ferreteria).toContain("material");
+    expect(ferreteria).not.toContain("talle");
+    // La ropa de proveedor local rara vez trae EAN: una columna que siempre va
+    // vacía enseña a ignorar columnas.
+    expect(indumentaria).not.toContain("codigo_barras");
+    expect(indumentaria).toContain("talle");
+  });
+
+  it("las columnas de variante se convierten en atributos", () => {
+    const { filas } = parseProductosSheet(
+      comoMatriz(plantillaImportProductos("ferreteria")),
+    );
+
+    expect(filas[0].atributos.Medida).toBeTruthy();
+    expect(filas[0].atributos.Material).toBeTruthy();
+  });
+
+  it("un producto en dos variantes son dos filas con el mismo nombre", () => {
+    // Es la regla que la plantilla tiene que enseñar sola, en todos los rubros
+    // que tienen variantes.
+    for (const rubro of ["indumentaria", "ferreteria", "farmacia"] as const) {
+      const { filas } = parseProductosSheet(
+        comoMatriz(plantillaImportProductos(rubro)),
+      );
+      const nombres = filas.map((f) => f.producto);
+      const repetido = nombres.find(
+        (n, i) => nombres.indexOf(n) !== i,
+      );
+      expect(repetido, `rubro ${rubro}`).toBeTruthy();
+    }
   });
 });

@@ -20,6 +20,18 @@ const ALIASES = {
   producto: ["producto", "nombre", "descripcion", "descripción", "articulo", "artículo"],
   color: ["color", "colores"],
   memoria: ["memoria", "almacenamiento", "capacidad"],
+  // Columnas de los otros rubros (ver columnas-por-rubro.ts). Se reconocen
+  // TODAS acá y no según el rubro del comercio a propósito: una planilla
+  // armada con la plantilla de otro rubro, o antes de cambiar de rubro, tiene
+  // que entrar igual. Una columna de más nunca es un error.
+  talle: ["talle", "talles", "tamaño", "tamano", "size"],
+  medida: ["medida", "medidas", "dimension", "dimensión"],
+  material: ["material", "materiales"],
+  peso: ["peso", "volumen", "contenido", "gramaje"],
+  presentacion: ["presentacion", "presentación", "formato"],
+  marca: ["marca", "fabricante", "laboratorio"],
+  modelo: ["modelo"],
+  unidadMedida: ["unidad_medida", "unidad", "unidad de medida"],
   stock: ["stock", "cantidad", "cant", "unidades"],
   imei: ["imei", "serie", "numero_serie", "nro_serie", "n_serie", "serial"],
   precioCosto: ["precio_costo", "preciocosto", "costo", "precio de costo", "precio compra", "precio_compra"],
@@ -56,8 +68,15 @@ const ALIASES_NORMALIZADOS: Record<Columna, string[]> = Object.fromEntries(
  * hace normalizarAtributoKeyValor del lado del server.
  */
 export const COLUMNAS_ATRIBUTO: { columna: Columna; nombreAtributo: string }[] = [
+  // El orden es el de lectura de una etiqueta: primero cómo se ve, después
+  // cuánto mide, después de qué está hecho.
+  { columna: "talle", nombreAtributo: "Talle" },
   { columna: "color", nombreAtributo: "Color" },
   { columna: "memoria", nombreAtributo: "Memoria" },
+  { columna: "medida", nombreAtributo: "Medida" },
+  { columna: "peso", nombreAtributo: "Peso" },
+  { columna: "presentacion", nombreAtributo: "Presentación" },
+  { columna: "material", nombreAtributo: "Material" },
 ];
 
 export interface FilaImport {
@@ -70,6 +89,10 @@ export interface FilaImport {
   atributos: Record<string, string>;
   stock: number;
   imei: string | null;
+  /** Datos que describen el producto sin partirlo en variantes. */
+  marca: string | null;
+  modelo: string | null;
+  unidadMedida: string | null;
   precioCosto: number | null;
   precioVenta: number | null;
 }
@@ -269,6 +292,11 @@ export function parseProductosSheet(rows: string[][]): ParseProductosResult {
       atributos,
       stock,
       imei,
+      // Datos del PRODUCTO, no de la variante: no parten el producto en dos,
+      // lo describen. Por eso no van a `atributos`.
+      marca: leer("marca") || null,
+      modelo: leer("modelo") || null,
+      unidadMedida: leer("unidadMedida") || null,
       precioCosto: precioCostoRaw ? parseNumeroLocal(precioCostoRaw) : null,
       precioVenta: precioVentaRaw ? parseNumeroLocal(precioVentaRaw) : null,
     });

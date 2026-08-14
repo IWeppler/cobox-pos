@@ -62,19 +62,25 @@ export async function getPlanDelNegocioAction(): Promise<PlanDelNegocio | null> 
   const { data: negocioId } = await supabase.rpc("negocio_actual");
   if (!negocioId) return null;
 
-  const [{ data: negocio }, { count }] = await Promise.all([
-    supabase
-      .from("negocios")
-      .select(
-        "nombre, estado, modalidad, plan_vencimiento, planes(nombre, descripcion, precio_mensual, reglas)",
-      )
-      .eq("id", negocioId)
-      .single(),
-    supabase
-      .from("usuarios_negocios")
-      .select("id", { count: "exact", head: true })
-      .eq("negocio_id", negocioId),
-  ]);
+  const [{ data: negocio }, { count }, { data: reglasEfectivas }] =
+    await Promise.all([
+      supabase
+        .from("negocios")
+        .select(
+          "nombre, estado, modalidad, plan_vencimiento, planes(nombre, descripcion, precio_mensual)",
+        )
+        .eq("id", negocioId)
+        .single(),
+      supabase
+        .from("usuarios_negocios")
+        .select("id", { count: "exact", head: true })
+        .eq("negocio_id", negocioId),
+      // Las reglas que de verdad rigen para ESTE negocio, con su override
+      // aplicado. Mostrar las del plan a secas le diría "50 clientes" a un
+      // comercio que conserva 75 por grandfathering, y le haría reclamar un
+      // límite que no tiene.
+      supabase.rpc("reglas_plan"),
+    ]);
 
   if (!negocio) return null;
 
@@ -88,7 +94,7 @@ export async function getPlanDelNegocioAction(): Promise<PlanDelNegocio | null> 
     modalidad: (negocio.modalidad as Modalidad) ?? "mensual",
     vencimiento: (negocio.plan_vencimiento as string | null) ?? null,
     estado: negocio.estado as string,
-    reglas: (plan?.reglas ?? {}) as ReglasPlan,
+    reglas: (reglasEfectivas ?? {}) as ReglasPlan,
     usuariosUsados: count ?? 0,
   };
 }
