@@ -44,6 +44,7 @@ import {
   calcularPagosConRecargo,
   etiquetaRecargo,
 } from "@/shared/lib/recargo-metodo";
+import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 
 const subscribeToClientMount = () => () => {};
 const getClientSnapshot = () => true;
@@ -62,6 +63,7 @@ export function CartPanelAdmin({
     getTotalPrice,
     getTotalItems,
     clearCart,
+    sincronizarNegocio,
   } = useCartStore(
     useShallow((state) => ({
       items: state.items,
@@ -72,10 +74,22 @@ export function CartPanelAdmin({
       getTotalPrice: state.getTotalPrice,
       getTotalItems: state.getTotalItems,
       clearCart: state.clearCart,
+      sincronizarNegocio: state.sincronizarNegocio,
     })),
   );
 
   const router = useRouter();
+
+  // Negocio activo, resuelto por el layout en el server desde la membresía —
+  // no desde la cookie leída acá. Todo lo que este panel consulta (config,
+  // métodos de pago, promociones) es POR NEGOCIO, y el cambio de comercio es
+  // una navegación blanda: sin esta dependencia los datos del comercio
+  // anterior sobreviven al cambio. Ver el comentario del efecto de abajo.
+  const negocioId = useNegocioActivo()?.id ?? null;
+
+  useEffect(() => {
+    sincronizarNegocio(negocioId);
+  }, [negocioId, sincronizarNegocio]);
 
   // --- UNIDADES SERIALIZADAS (IMEI / número de serie) ---
   // `variantesSerializadas` son las variantes del carrito que tienen al
@@ -177,9 +191,33 @@ export function CartPanelAdmin({
   );
   const [isPending, startTransition] = useTransition();
 
-  const [branding, setBranding] = useState<ConfiguracionPOS | null>(null);
+  // Los datos por negocio se guardan JUNTO AL negocio del que salieron, y se
+  // leen solo si coinciden con el activo. Un `setBranding(null)` al cambiar de
+  // comercio no alcanzaría: entre que arranca el efecto y vuelve la consulta
+  // hay renders en los que el estado viejo todavía está montado, y en esos
+  // renders se calcula el recargo. Acá el dato ajeno directamente no se puede
+  // leer, no importa en qué momento del ciclo estemos.
+  const [configCargada, setConfigCargada] = useState<{
+    negocioId: string | null;
+    config: ConfiguracionPOS;
+  } | null>(null);
+  const branding =
+    configCargada && configCargada.negocioId === negocioId
+      ? configCargada.config
+      : null;
+
   const [vendedorNombre, setVendedorNombre] = useState("Tú");
-  const [metodosPagoDB, setMetodosPagoDB] = useState<MetodoPago[]>([]);
+  const [metodosCargados, setMetodosCargados] = useState<{
+    negocioId: string | null;
+    metodos: MetodoPago[];
+  } | null>(null);
+  const metodosPagoDB = useMemo(
+    () =>
+      metodosCargados && metodosCargados.negocioId === negocioId
+        ? metodosCargados.metodos
+        : [],
+    [metodosCargados, negocioId],
+  );
   const [pagos, setPagos] = useState<CreateSalePaymentInput[]>([]);
   const [modoMixto, setModoMixto] = useState(false);
   const [isCuentaCorriente, setIsCuentaCorriente] = useState(false);
@@ -196,7 +234,17 @@ export function CartPanelAdmin({
   const [isPhoneLayout, setIsPhoneLayout] = useState(false);
   const [phoneCartOpen, setPhoneCartOpen] = useState(false);
 
-  const [promocionesDB, setPromocionesDB] = useState<PromocionDB[]>([]);
+  const [promosCargadas, setPromosCargadas] = useState<{
+    negocioId: string | null;
+    promociones: PromocionDB[];
+  } | null>(null);
+  const promocionesDB = useMemo(
+    () =>
+      promosCargadas && promosCargadas.negocioId === negocioId
+        ? promosCargadas.promociones
+        : [],
+    [promosCargadas, negocioId],
+  );
   const [promocionId, setPromocionId] = useState("ninguna");
   const [ventaExitosa, setVentaExitosa] = useState<TicketData | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("CART");
@@ -208,7 +256,17 @@ export function CartPanelAdmin({
   const effectiveCheckoutStep: CheckoutStep =
     items.length === 0 ? "CART" : checkoutStep;
 
+  // Se vuelve a pedir cada vez que cambia el negocio activo. Antes las deps
+  // eran `[]` y esta consulta corría UNA sola vez por montaje: al cambiar de
+  // comercio con router.refresh() (navegación blanda, el componente no se
+  // desmonta) el POS seguía cobrando con la configuración del comercio
+  // anterior. Incidente 15/8 en Evens: el recargo de cuenta corriente se
+  // mostró al 5% (el de ClickTostado) sobre una venta que la base cobra al
+  // 15%, y el pago viajó con un metodo_pago_id de otro negocio, así que la
+  // venta terminó rebotando con "Método de pago inválido".
   useEffect(() => {
+    let cancelado = false;
+
     const fetchConfig = async () => {
       const supabase = createClient();
       const { data } = await supabase
@@ -216,13 +274,16 @@ export function CartPanelAdmin({
         .select("*")
         .single();
 
-      if (data) {
-        setBranding(data as ConfiguracionPOS);
-      }
+      if (cancelado || !data) return;
+      setConfigCargada({ negocioId, config: data as ConfiguracionPOS });
     };
 
     fetchConfig();
-  }, []);
+
+    return () => {
+      cancelado = true;
+    };
+  }, [negocioId]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
@@ -286,7 +347,13 @@ export function CartPanelAdmin({
           )
           .eq("activa", true);
 
-        if (promos) setPromocionesDB(promos as unknown as PromocionDB[]);
+        if (!isMounted) return;
+        if (promos) {
+          setPromosCargadas({
+            negocioId,
+            promociones: promos as unknown as PromocionDB[],
+          });
+        }
 
         const { data: metodos } = await supabase
           .from("metodos_pago")
@@ -294,8 +361,12 @@ export function CartPanelAdmin({
           .eq("activo", true)
           .order("comision", { ascending: true });
 
+        if (!isMounted) return;
         if (metodos) {
-          setMetodosPagoDB(metodos as unknown as MetodoPago[]);
+          setMetodosCargados({
+            negocioId,
+            metodos: metodos as unknown as MetodoPago[],
+          });
         }
       }
     };
@@ -305,7 +376,10 @@ export function CartPanelAdmin({
     return () => {
       isMounted = false;
     };
-  }, []);
+    // Promociones y métodos de pago son por negocio, igual que la config de
+    // arriba: sin `negocioId` en las deps el POS ofrece los métodos del
+    // comercio anterior y el server rechaza la venta.
+  }, [negocioId]);
 
   const promocionesElegibles = useMemo(() => {
     return getPromocionesElegibles({
@@ -513,6 +587,18 @@ export function CartPanelAdmin({
     if (lineasSerializadas.some((l) => !imeisParaVenta[l.varianteId])) {
       setAnticipoPendiente(montoAnticipoModal);
       setModalUnidades("CONFIRMAR");
+      return;
+    }
+
+    // Sin la configuración del negocio activo no se cobra. Con `branding` en
+    // null el recargo de cuenta corriente se calcula en 0 y los métodos de
+    // pago vienen vacíos: la vendedora vería un total que no es el que la base
+    // va a cobrar. Pasa en la ventana entre cambiar de comercio y que vuelvan
+    // las consultas — corta, pero es plata.
+    if (!branding || metodosPagoDB.length === 0) {
+      toast.error("Todavía se está cargando la configuración del comercio.", {
+        description: "Esperá un segundo y volvé a confirmar.",
+      });
       return;
     }
 

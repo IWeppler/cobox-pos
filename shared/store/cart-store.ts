@@ -5,6 +5,8 @@ import { CartItemStore } from "@/entities/cart/types";
 interface CartState {
   items: CartItemStore[];
   isOpen: boolean;
+  /** Negocio al que pertenece el carrito guardado. Ver `sincronizarNegocio`. */
+  negocioId: string | null;
 
   addItem: (item: CartItemStore) => void;
   removeItem: (productoId: string, variante: string) => void;
@@ -14,6 +16,7 @@ interface CartState {
     cantidad: number,
   ) => void;
   clearCart: () => void;
+  sincronizarNegocio: (negocioId: string | null) => void;
 
   toggleCart: () => void;
   setIsOpen: (isOpen: boolean) => void;
@@ -27,6 +30,7 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
       isOpen: false,
+      negocioId: null,
 
       addItem: (newItem) => {
         set((state) => {
@@ -94,6 +98,32 @@ export const useCartStore = create<CartState>()(
 
       clearCart: () => set({ items: [] }),
 
+      /**
+       * Deja el carrito atado al negocio activo, y lo vacía si venía de otro.
+       *
+       * El carrito se persiste en localStorage y el cambio de negocio es una
+       * navegación blanda (router.refresh()), así que sin esto los productos
+       * de un comercio sobreviven al cambio y se intentan vender en el otro:
+       * precios, variantes y stock de un negocio ajeno, que la RLS ni siquiera
+       * deja leer. Vaciar es la única lectura segura — un carrito a medias es
+       * mercadería sobre el mostrador, no un dato que se pueda traducir.
+       *
+       * `negocioId` null (carrito guardado antes de que existiera este campo)
+       * cuenta como "de otro": no hay forma de saber de quién era.
+       */
+      sincronizarNegocio: (negocioId) => {
+        set((state) => {
+          if (state.negocioId === negocioId) return {};
+          // Sin negocio activo no se decide nada: es el estado en tránsito de
+          // un render antes de que el layout resuelva la membresía, no un
+          // cambio de comercio. Borrar el sello acá haría que la próxima
+          // sincronización vaciara un carrito que estaba bien.
+          if (!negocioId) return {};
+          if (state.items.length === 0) return { negocioId };
+          return { negocioId, items: [] };
+        });
+      },
+
       toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
 
       setIsOpen: (isOpen) => set({ isOpen }),
@@ -111,7 +141,10 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: "vivero-tostado-storage",
-      partialize: (state) => ({ items: state.items }),
+      partialize: (state) => ({
+        items: state.items,
+        negocioId: state.negocioId,
+      }),
     },
   ),
 );
