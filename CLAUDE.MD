@@ -154,6 +154,28 @@ tiene 11.
   tablas; las 88 políticas vivas nunca habían estado en git). Con
   multi-tenant la base tiene 44 tablas y 144 políticas: cada tabla nueva
   necesita su policy de negocio, no alcanza con la columna.
+  **Cómo se escribe la policy importa tanto como qué dice**: va
+  `negocio_id = (select security.current_negocio_id())`, NUNCA
+  `security.same_negocio(negocio_id)`. Dan el mismo resultado fila por fila,
+  pero la segunda recibe la columna como argumento, así que Postgres la ejecuta
+  UNA VEZ POR FILA y el predicado queda como `Filter` en vez de `Index Cond`
+  — o sea que el índice de negocio_id ni se usa. Medido con un usuario real
+  sobre producto_variantes: 132 ms contra 4 ms. Era la causa de que los
+  listados de productos promediaran entre 663 y 2.372 ms y de que
+  producto_variantes acumulara 14.700 millones de filas leídas sobre una tabla
+  de 4.951. Corregido en `20260816100000`, que además deja un guard: la
+  migración falla si queda alguna policy con la forma vieja.
+  `same_negocio()` sigue existiendo para las migraciones que ya la usan, con
+  un COMMENT que avisa que no va adentro de una policy.
+- Índices: toda tabla del camino de la venta necesita índice por sus FK, no
+  solo por `negocio_id` (`20260816110000`). Antes, `venta_pagos` leía 92
+  millones de filas sobre una tabla de 623 para armar los tickets y el arqueo.
+  Los compuestos arrancan por `negocio_id` porque, con la RLS ya resuelta por
+  statement, ese es el primer filtro de toda consulta.
+  OJO con `producto_variantes.sku`: tiene índice pero NO es único, y no puede
+  serlo — en electro guarda el EAN de la unidad y en indumentaria el código del
+  MODELO, que todos los talles comparten (Estilo Bonito tiene hasta 9 variantes
+  con el mismo). Son dos semánticas en una columna; separarlas es otro cambio.
 - Ingreso de mercadería: UN solo camino, "Ingresar mercadería"
   (`ingresar-mercaderia-modal.tsx`), igual para todos los rubros. Adentro se
   elige el ORIGEN del archivo —planilla del proveedor o planilla propia— y las
