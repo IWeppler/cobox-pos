@@ -5,7 +5,6 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { CreateSalePaymentInput } from "@/entities/ventas/types";
 import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
-import { calcularFechaVencimiento } from "@/features/clients/lib/calcular-fecha-vencimiento";
 import { calcularPagosConRecargo } from "@/shared/lib/recargo-metodo";
 import { emitirComprobante } from "../lib/emitir-comprobante";
 
@@ -319,7 +318,10 @@ export async function registrarVentaAction(
     .select(
       // Las 4 últimas son para el comprobante del paso 11. Viajan en esta
       // consulta y no en una propia: es la misma fila y ya la estamos trayendo.
-      "permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante, cc_recargo_default, modo_facturacion, comprobante_defecto, condicion_iva, punto_venta",
+      // `cc_plazo_mora` viaja acá y ya no en una consulta propia más abajo: es
+      // la misma fila que esta consulta ya trae, y pedirla dos veces era un
+      // round-trip entero por venta para leer una columna.
+      "permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante, cc_recargo_default, cc_plazo_mora, modo_facturacion, comprobante_defecto, condicion_iva, punto_venta",
     )
     .single();
   const permitirVentaSinStock = configVenta?.permitir_venta_sin_stock ?? false;
@@ -665,107 +667,20 @@ export async function registrarVentaAction(
     estado_pago: estadoPago,
   };
 
-  // --- 4. CREAR LA CABECERA (ventas) ---
-  const { data: nuevaVenta, error: ventaError } = await supabase
-    .from("ventas")
-    .insert(payloadVentas)
-    .select("id, fecha_venta")
-    .single();
-  if (ventaError || !nuevaVenta) {
-    // La venta no existe: hay que devolver el stock y liberar los aparatos,
-    // que a esta altura ya están marcados como vendidos.
-    await revertirStockDescontado();
-    await liberarUnidades();
-    return { error: `Fallo en BD: ${ventaError?.message}`, success: false };
-  }
-
-  // --- 5. REGISTRAR DEUDA EN CUENTA CORRIENTE ---
-  if (isCuentaCorriente && montoPendiente > 0.05 && clienteId) {
-    const { error: ccError } = await supabase
-      .from("cuenta_corriente_movimientos")
-      .insert({
-        cliente_id: clienteId,
-        venta_id: nuevaVenta.id,
-        tipo: "DEBITO",
-        monto: montoPendiente,
-        descripcion: `Compra Fiada - Ticket #${nuevaVenta.id.split("-")[0].toUpperCase()}`,
-        creado_por: user.id,
-      });
-    if (ccError) console.error("Error al registrar deuda en CC:", ccError);
-
-    const [{ data: clienteActual }, { data: configPos }] = await Promise.all([
-      supabase
-        .from("clientes")
-        .select("saldo_pendiente")
-        .eq("id", clienteId)
-        .single(),
-      supabase.from("configuracion_pos").select("cc_plazo_mora").single(),
-    ]);
-
-    if (clienteActual) {
-      const plazoMora = configPos?.cc_plazo_mora ?? 30;
-      const fechaVencimientoDeuda = calcularFechaVencimiento(
-        nuevaVenta.fecha_venta,
-        plazoMora,
-      );
-
-      await supabase
-        .from("clientes")
-        .update({
-          saldo_pendiente:
-            Number(clienteActual.saldo_pendiente || 0) + montoPendiente,
-          fecha_vencimiento_deuda: fechaVencimientoDeuda,
-        })
-        .eq("id", clienteId);
-
-      // Vencimiento propio de ESTE ticket, independiente del campo
-      // agregado de clientes (que solo refleja el ticket más reciente).
-      await supabase
-        .from("ventas")
-        .update({ fecha_vencimiento: fechaVencimientoDeuda })
-        .eq("id", nuevaVenta.id);
-    }
-  }
-
-  // --- 6. REGISTRAR EL DESGLOSE DE PAGOS ---
-  if (pagosValidos.length > 0) {
-    const pagosToInsert = ventaPagosPayloads.map((p) => ({
-      ...p,
-      venta_id: nuevaVenta.id,
-    }));
-    const { error: pagoError } = await supabase
-      .from("venta_pagos")
-      .insert(pagosToInsert);
-    if (pagoError)
-      return {
-        error: `Fallo guardando pago: ${pagoError.message}`,
-        success: false,
-      };
-  }
-
-  // --- 7. TRAZABILIDAD DEL DESCUENTO ---
-  if (
-    promocionId &&
-    promocionId !== "ninguna" &&
-    descuentoMonto > 0 &&
-    promoData
-  ) {
-    await supabase.from("ventas_descuentos").insert({
-      venta_id: nuevaVenta.id,
-      promocion_id: promocionId,
-      promocion_nombre: promoData.nombre,
-      tipo_descuento: promoData.tipo_descuento,
-      monto_descontado: descuentoMonto,
-    });
-    await supabase
-      .from("promociones")
-      .update({ usos_actuales: (promoData.usos_actuales || 0) + 1 })
-      .eq("id", promocionId);
-  }
-
-  // --- 8. CREAR LOS DETALLES (ventas_items) ---
+  // --- 4. ESCRIBIR LA VENTA ENTERA, EN UNA TRANSACCIÓN ---
+  //
+  // Cabecera, pagos, renglones, descuento, deuda de cuenta corriente, espejo
+  // legacy de stock y reservas van juntos en la RPC `registrar_venta`. Antes
+  // eran seis escrituras sueltas y cualquiera podía fallar dejando hechas a las
+  // anteriores: el caso peor era el insert de pagos, que devolvía error sin
+  // revertir nada y dejaba una venta CONFIRMADA sin un solo pago — arqueo que
+  // no cierra y mercadería fuera del inventario.
+  //
+  // Lo que queda afuera de la transacción es el stock y las unidades
+  // serializadas, que ya son atómicos por su cuenta. Si la RPC falla, se
+  // revierten los dos acá: es el mismo camino que usan todos los cortes de
+  // arriba, y ahora no queda ningún punto entre medio.
   const insertItems = itemsProcesados.map((item) => ({
-    venta_id: nuevaVenta.id,
     producto_id: item.productoId,
     variante: item.variante,
     // Cierra la cadena venta > ventas_items > unidad_serie > variante.
@@ -785,38 +700,70 @@ export async function registrarVentaAction(
       promoData && item.descuentoMonto > 0 ? promoData.nombre : null,
   }));
 
-  await supabase.from("ventas_items").insert(insertItems);
+  // El espejo legacy va por DELTA (cuánto restarle), no con el valor final: el
+  // valor que se mandaba antes salía de una lectura hecha al principio de la
+  // venta y dos cajas concurrentes escribían las dos sobre la misma foto.
+  const stockLegacy = itemsProcesados.map((item) => ({
+    stock_id: item.stockId,
+    cantidad: item.cantidad,
+  }));
 
-  // --- 9. ESPEJAR EL DESCUENTO EN productos_stock (legacy) ---
-  // La validación real de stock ya se hizo en el paso 1bis (atómica, por
-  // variante_id) antes de crear la venta — este UPDATE es solo el mismo
-  // patrón de sincronización que ya usan merge-purchase.ts y
-  // cancel-sale.ts, sin su propio chequeo de suficiencia.
-  for (const item of itemsProcesados) {
-    await supabase
-      .from("productos_stock")
-      .update({ cantidad: item.stockOriginal - item.cantidad })
-      .eq("id", item.stockId);
+  const ticketCorto = ventaId.split("-")[0].toUpperCase();
+
+  const { data: resultadoVenta, error: ventaError } = await supabase.rpc(
+    "registrar_venta",
+    {
+      p_venta: payloadVentas,
+      p_pagos: ventaPagosPayloads,
+      p_items: insertItems,
+      p_stock_legacy: stockLegacy,
+      p_descuento:
+        promoData && promocionId && promocionId !== "ninguna" && descuentoMonto > 0
+          ? {
+              promocion_id: promocionId,
+              promocion_nombre: promoData.nombre,
+              tipo_descuento: promoData.tipo_descuento,
+              monto_descontado: descuentoMonto,
+            }
+          : null,
+      p_cc:
+        isCuentaCorriente && clienteId
+          ? {
+              cliente_id: clienteId,
+              monto_pendiente: montoPendiente,
+              plazo_mora: Number(configVenta?.cc_plazo_mora ?? 30),
+              descripcion: `Compra Fiada - Ticket #${ticketCorto}`,
+            }
+          : null,
+      p_reserva_ids: reservaIds,
+    },
+  );
+
+  if (ventaError || !resultadoVenta) {
+    // Nada de la venta quedó escrito: la transacción entera se deshizo. Solo
+    // hay que devolver lo que se hizo ANTES de ella.
+    console.error("[VENTA] Error registrando la venta:", ventaError);
+    await revertirStockDescontado();
+    await liberarUnidades();
+
+    // `VENTA_SIN_RENGLONES` es el freno de la RPC contra una venta cobrada sin
+    // saber qué se vendió. No debería pasar nunca; si pasa, el mensaje tiene
+    // que decirle a la vendedora que puede reintentar sin miedo, porque no
+    // quedó nada a medias.
+    const sinRenglones = ventaError?.message?.includes("VENTA_SIN_RENGLONES");
+    return {
+      error: sinRenglones
+        ? "No se pudo registrar el detalle de la venta. No se cobró nada ni se descontó stock: volvé a intentar."
+        : `Fallo en BD: ${ventaError?.message}`,
+      success: false,
+    };
   }
 
-  // --- 10. RESOLVER RESERVAS QUE ESTA VENTA CONFIRMA ---
-  // Si el carrito venía precargado desde "Reservas activas", esas filas
-  // pasan de ACTIVA a CONFIRMADA recién acá — nunca antes, porque hasta
-  // este punto la venta podía fallar (caja cerrada, stock, pagos, etc.) y
-  // la reserva debe seguir intacta si eso pasa.
-  if (reservaIds.length > 0) {
-    const { error: reservaError } = await supabase
-      .from("reservas")
-      .update({
-        estado: "CONFIRMADA",
-        venta_id: nuevaVenta.id,
-        resuelto_en: new Date().toISOString(),
-      })
-      .in("id", reservaIds)
-      .eq("estado", "ACTIVA");
-    if (reservaError)
-      console.error("Error al confirmar reservas de la venta:", reservaError);
-  }
+  const nuevaVenta = resultadoVenta as {
+    venta_id: string;
+    fecha_venta: string;
+    fecha_vencimiento: string | null;
+  };
 
   // --- 11. EMITIR EL COMPROBANTE ---
   // Va último y NO puede voltear la venta: a esta altura la plata ya se cobró
@@ -849,7 +796,7 @@ export async function registrarVentaAction(
   }
 
   const comprobante = await emitirComprobante(supabase, {
-    ventaId: nuevaVenta.id,
+    ventaId: nuevaVenta.venta_id,
     config: configComprobante,
     receptor,
     // El mismo número que `ventas.total`, recargos incluidos: si difirieran,
@@ -862,7 +809,7 @@ export async function registrarVentaAction(
   return {
     error: null,
     success: true,
-    ventaId: nuevaVenta.id,
+    ventaId: nuevaVenta.venta_id,
     // Viaja al POS para imprimirlo en el ticket sin una consulta extra. Va
     // null si la emisión falló: el ticket cae al identificador de la venta,
     // que es lo que mostraba antes de que existieran los comprobantes.

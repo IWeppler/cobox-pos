@@ -733,7 +733,7 @@ export function CartPanelAdmin({
           formatearNumeroComprobante(
             result.comprobante?.puntoVenta,
             result.comprobante?.numero,
-          ) ?? result.ventaId.split("-")[0].toUpperCase();
+          ) ?? (result.ventaId ?? "").split("-")[0].toUpperCase();
         const montoPendiente = isCuentaCorriente
           ? Math.max(0, totalFinal - montoRealAsignado)
           : 0;

@@ -55,6 +55,18 @@ tiene 11.
   mantiene sincronizado en cada escritura, NUNCA se normaliza su texto.
 - Stock se descuenta con UPDATE atómico condicional vía RPC
   `ajustar_stock_variante` (por variante_id, nunca por nombre).
+- La venta se ESCRIBE en una transacción: cabecera + pagos + renglones +
+  descuento + deuda de CC + espejo legacy de stock + reservas van juntos en la
+  RPC `registrar_venta` (`20260816120000`). Antes eran seis escrituras sueltas
+  y el insert de pagos devolvía error SIN revertir nada: quedaba una venta
+  CONFIRMADA sin un solo pago, con el stock ya descontado. El de `ventas_items`
+  ni se chequeaba. Quedan AFUERA a propósito el descuento de stock y las
+  unidades serializadas: ya son atómicos y fallan por otro motivo (no hay
+  mercadería, que es una respuesta al usuario, no una rotura). Si la RPC falla,
+  create-sale revierte esos dos y no queda ningún punto intermedio.
+  SECURITY INVOKER, no DEFINER: el aislamiento tiene que seguir siendo la RLS
+  del que llama. Verificado que un usuario apuntando a un negocio ajeno no
+  escribe nada.
 - Precios se revalidan server-side en create-sale.ts (nunca confiar en
   el precio que manda el cliente). Mismo criterio para todo lo que toque
   plata: validación espejo en el server siempre.
