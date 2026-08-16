@@ -94,6 +94,18 @@ tiene 11.
   resolver.
 - El espejo legacy `productos_stock` se mueve con `ajustar_stock_legacy`
   (delta en un statement), nunca leyendo y escribiendo después.
+- Dos columnas de `ventas` que se leyeron mal durante mucho tiempo:
+  `cantidad` es UNIDADES (suma de `ventas_items.cantidad`), no renglones —
+  guardaba `items.length`, así que 3 remeras en una línea contaban 1, y el
+  gráfico del panel, la tarjeta de rendimiento y la columna "Unidades" de la
+  exportación al contador venían subcontando. Corregido y backfilleado en
+  `20260816170000`.
+  `precio_costo` es el costo TOTAL de la venta (cada renglón ya entra
+  multiplicado por su cantidad), NO unitario. crm-tab.tsx y
+  scoring-desde-cliente.ts lo multiplicaban otra vez por `cantidad`: sobre las
+  226 ventas de más de un renglón daba $25.386.500 de costo contra $6.323.000
+  real, hundiendo el margen justo de los clientes que más compran. Las dos
+  columnas tienen COMMENT en la base para que no vuelva a pasar.
 - Precios se revalidan server-side en create-sale.ts (nunca confiar en
   el precio que manda el cliente). Mismo criterio para todo lo que toque
   plata: validación espejo en el server siempre.

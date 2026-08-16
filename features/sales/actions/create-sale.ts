@@ -90,16 +90,43 @@ export async function registrarVentaAction(
   // que define el margen reportado) que efectivamente se cobra y persiste
   // sale siempre de la variante o, si esta no tiene su propio valor, del
   // producto — nunca del payload del cliente.
+  // DOS consultas para todo el carrito, no dos por renglón. Antes esto era un
+  // `for` con dos `await` adentro: un ticket de 10 renglones eran 20 viajes a
+  // la base, en fila, con la clienta esperando en el mostrador. Es el mismo
+  // criterio que ya se aplicó en `aprobar_orden_compra` e
+  // `importar_productos_planilla`.
+  const productoIds = [
+    ...new Set(items.map((item) => item.productoId ?? item.id)),
+  ];
+
+  const [{ data: stockFilas }, { data: variantesFilas }] = await Promise.all([
+    supabase
+      .from("productos_stock")
+      .select("cantidad, id, producto_id, variante, producto:productos(precio, precio_costo)")
+      .in("producto_id", productoIds),
+    supabase
+      .from("producto_variantes")
+      .select("id, precio, costo, producto_id, nombre_display")
+      .in("producto_id", productoIds),
+  ]);
+
+  // La clave compuesta reproduce el `.eq().eq()` que hacía cada iteración.
+  const stockPorClave = new Map(
+    (stockFilas ?? []).map((fila) => [
+      `${fila.producto_id}|${fila.variante}`,
+      fila,
+    ]),
+  );
+  const variantePorId = new Map((variantesFilas ?? []).map((v) => [v.id, v]));
+  const variantePorNombre = new Map(
+    (variantesFilas ?? []).map((v) => [`${v.producto_id}|${v.nombre_display}`, v]),
+  );
+
   const itemsResueltos = [];
   for (const item of items) {
     const productoIdReal = item.productoId ?? item.id;
 
-    const { data: stockActual } = await supabase
-      .from("productos_stock")
-      .select("cantidad, id, producto:productos(precio, precio_costo)")
-      .eq("producto_id", productoIdReal)
-      .eq("variante", item.variante)
-      .single();
+    const stockActual = stockPorClave.get(`${productoIdReal}|${item.variante}`);
 
     if (!stockActual)
       return { error: `Error de stock en ${item.variante}.`, success: false };
@@ -113,34 +140,24 @@ export async function registrarVentaAction(
     // en localStorage, o producto sin variante real — caemos al match por
     // nombre_display; si tampoco encuentra nada ahí, dejamos rastro en vez
     // de heredar el precio de producto en silencio.
-    let varianteData: {
-      id: string;
-      precio: number | null;
-      costo: number | null;
-    } | null = null;
-    if (item.varianteId) {
-      const { data } = await supabase
-        .from("producto_variantes")
-        .select("id, precio, costo")
-        .eq("id", item.varianteId)
-        .maybeSingle();
-      varianteData = data;
-    } else {
-      const { data } = await supabase
-        .from("producto_variantes")
-        .select("id, precio, costo")
-        .eq("producto_id", productoIdReal)
-        .eq("nombre_display", item.variante)
-        .maybeSingle();
-      varianteData = data;
+    //
+    // Al batchear, las variantes se traen POR PRODUCTO, así que un varianteId
+    // que no pertenece a este producto ya no matchea. Antes se buscaba por PK
+    // suelta y se usaba su precio sin comprobar de qué producto era: un
+    // carrito manipulado podía traer el id de una variante barata de otro
+    // producto. Ahora eso cae al precio del producto, que es server-side.
+    const varianteData =
+      (item.varianteId ? variantePorId.get(item.varianteId) : null) ??
+      variantePorNombre.get(`${productoIdReal}|${item.variante}`) ??
+      null;
 
-      if (!varianteData) {
-        console.warn("[VENTA VARIANTE SIN MATCH]", {
-          vendedorId: user.id,
-          productoId: productoIdReal,
-          variante: item.variante,
-        });
-      }
+    if (!varianteData) {
+      console.warn("[VENTA VARIANTE SIN MATCH]", {
+        vendedorId: user.id,
+        productoId: productoIdReal,
+        variante: item.variante,
+        varianteIdDelCarrito: item.varianteId ?? null,
+      });
     }
 
     const precioServer =
@@ -655,8 +672,15 @@ export async function registrarVentaAction(
     // (monto_pendiente) sigue calculándose sobre bases, así que el recargo de
     // la entrega no le baja la deuda al cliente ni se la sube.
     total: totalConRecargoMetodo,
+    // Costo TOTAL de la venta (ya viene multiplicado por las cantidades de
+    // cada renglón), no unitario. Ver el comentario de `cantidad` acá abajo.
     precio_costo: isNaN(costoTotalVenta) ? 0 : costoTotalVenta,
-    cantidad: items.length,
+    // UNIDADES vendidas, no renglones. Guardaba `items.length`, así que vender
+    // 3 remeras iguales en una línea contaba 1: el gráfico del panel, la
+    // columna "Unidades" de la exportación al contador y el detalle de ventas
+    // venían subcontando. Las 226 ventas históricas de más de un renglón
+    // quedaron corregidas en la migración 20260816170000.
+    cantidad: itemsProcesados.reduce((acc, item) => acc + item.cantidad, 0),
     total_bruto: totalConRecargoMetodo,
     recargo_metodo_total: recargoMetodoTotal,
     comision_total: comisionTotalGeneral,

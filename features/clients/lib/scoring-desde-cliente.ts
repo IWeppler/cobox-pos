@@ -15,8 +15,12 @@ import {
 
 interface VentaFila {
   total?: number | string | null;
-  /** Costo UNITARIO de lo vendido. El margen se calcula con la cantidad. */
+  /** Costo TOTAL de la venta: cada renglón ya viene multiplicado por su
+   * cantidad. NO multiplicar por `cantidad` — ese comentario decía "unitario"
+   * y por eso se hacía. */
   precio_costo?: number | string | null;
+  /** Unidades del ticket. No entra en el margen; queda porque la consulta la
+   * trae y otras vistas la usan. */
   cantidad?: number | string | null;
   fecha_venta?: string | null;
 }
@@ -97,11 +101,16 @@ function tuvoRecargoDeMora(movimientos: MovimientoFila[]): boolean {
 
 function margenDeVenta(venta: VentaFila): number {
   const total = Number(venta.total) || 0;
-  const costoUnitario = Number(venta.precio_costo) || 0;
-  const cantidad = Number(venta.cantidad) || 1;
+  // `ventas.precio_costo` es el costo TOTAL de la venta, no el unitario: cada
+  // renglón ya entra multiplicado por su cantidad. Acá se llamaba
+  // "costoUnitario" y se volvía a multiplicar por `venta.cantidad`, así que el
+  // costo quedaba inflado tantas veces como renglones tuviera el ticket — y el
+  // margen, hundido. Afectaba a las 226 ventas de más de un renglón, que son
+  // justo las de los clientes que más compran.
+  const costoTotal = Number(venta.precio_costo) || 0;
   // Sin costo cargado el margen es el total: es optimista, pero puntuar en
   // cero a todo un catálogo sin costos haría que el valor no sirva para nada.
-  return costoUnitario > 0 ? total - costoUnitario * cantidad : total;
+  return costoTotal > 0 ? total - costoTotal : total;
 }
 
 export function scoringDesdeCliente(
@@ -114,7 +123,8 @@ export function scoringDesdeCliente(
     .map((v) => ({
       fecha: v.fecha_venta as string,
       total: Number(v.total) || 0,
-      costo: (Number(v.precio_costo) || 0) * (Number(v.cantidad) || 1),
+      // Total, no unitario — mismo motivo que en `margenDeVenta`.
+      costo: Number(v.precio_costo) || 0,
     }));
 
   const movimientos = (cliente.cuenta_corriente_movimientos ?? [])

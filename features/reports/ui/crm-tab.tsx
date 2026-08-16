@@ -87,7 +87,13 @@ export function CrmTab({
             0,
           );
         } else {
-          costo = Number(v.precio_costo || 0) * Number(v.cantidad || 1);
+          // `ventas.precio_costo` YA es el costo total de la venta: cada
+          // renglon entra multiplicado por su cantidad. Multiplicarlo otra vez
+          // por `cantidad` lo inflaba tantas veces como renglones tuviera el
+          // ticket. Sobre las 226 ventas de mas de un renglon daba $25.386.500
+          // de costo contra $6.323.000 real, o sea una ganancia mucho menor a
+          // la verdadera en todo el CRM.
+          costo = Number(v.precio_costo || 0);
         }
         gananciaAClientes += total - costo;
       }
@@ -164,7 +170,13 @@ export function CrmTab({
             0,
           );
         } else {
-          costo = Number(v.precio_costo || 0) * Number(v.cantidad || 1);
+          // `ventas.precio_costo` YA es el costo total de la venta: cada
+          // renglon entra multiplicado por su cantidad. Multiplicarlo otra vez
+          // por `cantidad` lo inflaba tantas veces como renglones tuviera el
+          // ticket. Sobre las 226 ventas de mas de un renglon daba $25.386.500
+          // de costo contra $6.323.000 real, o sea una ganancia mucho menor a
+          // la verdadera en todo el CRM.
+          costo = Number(v.precio_costo || 0);
         }
 
         const pendiente = Number(v.monto_pendiente || 0);
