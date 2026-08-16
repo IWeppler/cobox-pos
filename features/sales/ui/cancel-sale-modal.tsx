@@ -44,21 +44,33 @@ export function AnularVentaModal({
 
       if (result.success) {
         setIsOpen(false);
-        if (isProductoEliminado) {
-          toast.success(
-            "Venta anulada. El dinero se restó de la caja de hoy.",
-            {
-              description:
-                "Stock no restaurado porque el producto fue eliminado del catálogo.",
-            },
-          );
-        } else {
-          toast.success("Venta anulada y dinero reintegrado a caja.", {
-            description:
-              motivo === "RESTAURAR_STOCK"
-                ? `Se devolvieron ${cantidad}u al inventario.`
-                : `Se registró como Baja (pérdida).`,
-          });
+
+        // El título ya no promete que salió plata de la caja: ahora solo sale
+        // la porción que se había cobrado en EFECTIVO, y puede ser cero (una
+        // venta con débito no toca el cajón). Decirlo mal era peor que no
+        // decirlo: la vendedora contaba un egreso que no existía.
+        const efectivo = result.efectivoDevuelto ?? 0;
+        const detalleCaja =
+          efectivo > 0
+            ? `Salieron $${Math.round(efectivo).toLocaleString("es-AR")} de la caja.`
+            : "No salió efectivo de la caja.";
+
+        const detalleStock = isProductoEliminado
+          ? "Stock no restaurado porque el producto fue eliminado del catálogo."
+          : motivo === "RESTAURAR_STOCK"
+            ? `Se devolvieron ${cantidad}u al inventario.`
+            : "Se registró como Baja (pérdida).";
+
+        toast.success("Venta anulada.", {
+          description: `${detalleCaja} ${detalleStock}`,
+        });
+
+        // Lo que la anulación no resuelve sola va en avisos APARTE y sin
+        // autocierre: son cosas que alguien tiene que hacer a mano (devolver
+        // por el posnet, reintegrar lo ya pagado del fiado, cargar stock).
+        // Metidos en el toast de éxito se leen como decoración y se pierden.
+        for (const aviso of result.avisos ?? []) {
+          toast.warning(aviso, { duration: Infinity, closeButton: true });
         }
       } else if (result.error) {
         toast.error(result.error);

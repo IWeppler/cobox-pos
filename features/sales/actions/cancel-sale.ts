@@ -29,7 +29,7 @@ export async function anularVentaAction(
         monto_cobrado,
         monto_pendiente,
         cliente_id,
-        ventas_items ( producto_id, variante, cantidad ),
+        ventas_items ( producto_id, variante, variante_id, cantidad ),
         comprobantes ( tipo )
       `,
       )
@@ -86,139 +86,114 @@ export async function anularVentaAction(
       turnoDevolucionId = turnoId;
     }
 
-    const { data: ventaAnulada, error: updateVentaError } = await supabase
-      .from("ventas")
-      .update({
-        estado_operacion: "ANULADA",
-        estado_pago: "ANULADA",
-        motivo_anulacion: motivoDevolucion,
-      })
-      .eq("id", ventaId)
-      .select("id")
-      .maybeSingle();
-
-    if (updateVentaError) {
-      console.error(updateVentaError);
-      return {
-        error: "Error de BD al intentar anular la venta.",
-        success: false,
-      };
-    }
-
-    // RLS (ventas_update_propia_o_admin) exige ser dueño de la venta o
-    // tener ventas.ver_todas, Y tener ventas.anular. Si el UPDATE de
-    // arriba afectó 0 filas, esa policy lo bloqueó — cortamos ACÁ, antes
-    // de generar cualquier efecto secundario (egreso, stock, cta. cte.).
-    if (!ventaAnulada) {
-      return {
-        error: "No tenés permiso para anular esta venta.",
-        success: false,
-      };
-    }
-
-    const { error: updatePagosError } = await supabase
-      .from("venta_pagos")
-      .update({ estado_pago_operacion: "ANULADO" })
-      .eq("venta_id", ventaId);
-
-    if (updatePagosError) {
-      console.error(updatePagosError);
-      return {
-        error: "Error de BD al intentar anular los pagos de la venta.",
-        success: false,
-      };
-    }
-
-    // 3. Registrar el egreso de dinero de la caja (SÓLO lo que se pagó realmente)
-    if (venta.monto_cobrado > 0) {
-      await supabase.from("egresos").insert({
-        concepto: `Devolución Venta #${ventaId.split("-")[0].toUpperCase()}`,
-        monto: venta.monto_cobrado,
-        creado_por: user.id,
-        turno_caja_id: turnoDevolucionId,
+    // 2bis. TODO EL MOVIMIENTO DE PLATA, EN UNA TRANSACCIÓN
+    //
+    // Estado de la venta, marcado de los cobros, egreso de caja y crédito de
+    // cuenta corriente van juntos en la RPC. Antes eran cuatro escrituras
+    // sueltas con dos errores adentro:
+    //
+    // - El egreso salía por `monto_cobrado` entero, sin mirar el medio de pago:
+    //   una venta cobrada con débito sacaba efectivo de un cajón donde esa
+    //   plata nunca estuvo, y el turno cerraba con faltante.
+    // - El crédito de cuenta corriente usaba `monto_pendiente`, que quedó
+    //   congelado en el momento de la venta. Si el cliente ya había pagado
+    //   parte del fiado, se le perdonaba lo pagado.
+    //
+    // El guard de permiso sigue siendo el mismo y sigue yendo primero: la RPC
+    // hace el UPDATE condicional y, si la RLS lo niega o la venta ya estaba
+    // anulada, lanza sin haber tocado plata ni stock.
+    const { data: resultadoAnulacion, error: anulacionError } =
+      await supabase.rpc("anular_venta", {
+        p_venta_id: ventaId,
+        p_motivo: motivoDevolucion,
+        p_turno_id: turnoDevolucionId,
       });
+
+    if (anulacionError || !resultadoAnulacion) {
+      console.error("[ANULACION] Error anulando la venta:", anulacionError);
+      const noAnulable = anulacionError?.message?.includes("VENTA_NO_ANULABLE");
+      return {
+        error: noAnulable
+          ? "No se pudo anular: o ya estaba anulada, o no tenés permiso."
+          : "Error de BD al intentar anular la venta.",
+        success: false,
+      };
     }
 
-    // 4. Si la venta tenía deuda (Fiado), restarle esa deuda al cliente porque se anuló el ticket
-    if (venta.monto_pendiente > 0 && venta.cliente_id) {
-      const { data: cli } = await supabase
-        .from("clientes")
-        .select("saldo_pendiente")
-        .eq("id", venta.cliente_id)
-        .single();
-      if (cli) {
-        await supabase
-          .from("clientes")
-          .update({
-            saldo_pendiente: Math.max(
-              0,
-              Number(cli.saldo_pendiente) - venta.monto_pendiente,
-            ),
-          })
-          .eq("id", venta.cliente_id);
-      }
-
-      const { error: ccError } = await supabase
-        .from("cuenta_corriente_movimientos")
-        .insert({
-          cliente_id: venta.cliente_id,
-          venta_id: ventaId,
-          tipo: "CREDITO",
-          monto: venta.monto_pendiente,
-          descripcion: `Anulación de Venta #${ventaId}`,
-          creado_por: user.id,
-        });
-
-      if (ccError) {
-        console.error(ccError);
-        return {
-          error: "Error al registrar el movimiento de cuenta corriente.",
-          success: false,
-        };
-      }
-    }
+    const anulacion = resultadoAnulacion as {
+      efectivo_devuelto: number;
+      no_efectivo_a_devolver: number;
+      credito_aplicado: number;
+      excedente_ya_pagado: number;
+    };
 
     // 5. Manejo del Stock para TODOS los items del carrito de compras
     const items = venta.ventas_items || [];
+
+    /** Renglones cuya mercadería volvió al local pero no se pudo sumar al
+     * stock. No frena la anulación (la plata ya se movió), pero tiene que
+     * llegar a la pantalla: es inventario que quedó sin contar. */
+    const itemsSinRestaurar: string[] = [];
 
     for (const item of items) {
       if (!item.producto_id) continue;
 
       if (motivoDevolucion === "RESTAURAR_STOCK") {
-        // Restauramos en la tabla principal de JSONB
-        const { data: varNueva } = await supabase
-          .from("producto_variantes")
-          .select("id, stock")
-          .eq("producto_id", item.producto_id)
-          .eq("nombre_display", item.variante)
-          .maybeSingle();
-        if (varNueva) {
-          await supabase
+        // La variante sale de `ventas_items.variante_id`, congelado en el
+        // momento de la venta. Antes se buscaba por `nombre_display`, y eso
+        // fallaba en silencio cada vez que el talle se había renombrado
+        // después: 117 de los 1.032 renglones vendidos ya no matchean por
+        // nombre, o sea que anular cualquiera de esas ventas devolvía el stock
+        // a ningún lado. El match por nombre queda solo como respaldo para los
+        // renglones viejos que el backfill no pudo resolver.
+        let varianteId: string | null = item.variante_id ?? null;
+
+        if (!varianteId) {
+          const { data: porNombre } = await supabase
             .from("producto_variantes")
-            .update({ stock: varNueva.stock + item.cantidad })
-            .eq("id", varNueva.id);
+            .select("id")
+            .eq("producto_id", item.producto_id)
+            .eq("nombre_display", item.variante)
+            .maybeSingle();
+          varianteId = porNombre?.id ?? null;
         }
 
-        // Restauramos también en la tabla Legacy (Retrocompatibilidad)
-        const { data: stockViejo } = await supabase
-          .from("productos_stock")
-          .select("id, cantidad")
-          .eq("producto_id", item.producto_id)
-          .eq("variante", item.variante)
-          .maybeSingle();
-        if (stockViejo) {
-          await supabase
-            .from("productos_stock")
-            .update({ cantidad: stockViejo.cantidad + item.cantidad })
-            .eq("id", stockViejo.id);
-        } else if (!varNueva) {
-          // Si no existía en ningún lado, la creamos
-          await supabase.from("productos_stock").insert({
-            producto_id: item.producto_id,
-            variante: item.variante,
-            cantidad: item.cantidad,
-          });
+        if (varianteId) {
+          // Delta atómico por la misma RPC que usa la venta para descontar.
+          // Antes era leer el stock y después escribir la suma, que es el
+          // patrón que ya costó plata dos veces en este proyecto: entre la
+          // lectura y la escritura entra una venta de esa variante y el
+          // update la pisa.
+          const { error: stockError } = await supabase.rpc(
+            "ajustar_stock_variante",
+            { p_variante_id: varianteId, p_delta: item.cantidad },
+          );
+
+          if (stockError) {
+            console.error(
+              `[ANULACION] No se pudo devolver el stock de "${item.variante}" (venta ${ventaId}):`,
+              stockError,
+            );
+            itemsSinRestaurar.push(item.variante);
+          }
+        } else {
+          // Sin variante no hay a qué devolverle el stock. Antes esto pasaba
+          // sin dejar rastro; ahora se avisa, porque es mercadería que volvió
+          // al local y no está contada en ningún lado.
+          console.error(
+            `[ANULACION] Renglón sin variante resoluble, stock NO devuelto: "${item.variante}" (venta ${ventaId})`,
+          );
+          itemsSinRestaurar.push(item.variante);
         }
+
+        // Espejo legacy, también como delta y con la misma RPC de siempre no
+        // disponible acá: se resuelve con un update condicional por la clave
+        // única (producto_id, variante), que es atómico a nivel de fila.
+        await supabase.rpc("ajustar_stock_legacy", {
+          p_producto_id: item.producto_id,
+          p_variante: item.variante,
+          p_delta: item.cantidad,
+        });
       } else if (motivoDevolucion === "BAJA") {
         // La planta volvió rota o seca
         await supabase.from("bajas").insert({
@@ -267,7 +242,40 @@ export async function anularVentaAction(
     revalidatePath("/caja");
     revalidatePath("/clientes");
 
-    return { error: null, success: true };
+    // Lo que la anulación NO resuelve sola tiene que llegar al mostrador. Son
+    // tres cosas distintas y ninguna es un error: la venta se anuló bien.
+    //
+    // - `noEfectivo`: se cobró por tarjeta/transferencia, así que se devuelve
+    //   por donde entró. La caja no lo toca.
+    // - `yaPagado`: lo que el cliente ya había amortizado de ESTE fiado. No se
+    //   devuelve solo porque los pagos de cuenta corriente no están imputados a
+    //   una venta: la base no sabe cuánto de ese pago era de este ticket ni con
+    //   qué medio se cobró. Adivinarlo sería mover plata por una suposición.
+    // - `sinStock`: mercadería que volvió y no se pudo sumar al inventario.
+    const avisos: string[] = [];
+
+    if (anulacion.no_efectivo_a_devolver > 0) {
+      avisos.push(
+        `$${Math.round(anulacion.no_efectivo_a_devolver).toLocaleString("es-AR")} se cobraron por tarjeta o transferencia: devolvelos por ese medio, no salen de la caja.`,
+      );
+    }
+    if (anulacion.excedente_ya_pagado > 0) {
+      avisos.push(
+        `El cliente ya había pagado $${Math.round(anulacion.excedente_ya_pagado).toLocaleString("es-AR")} de esta cuenta. Eso hay que devolvérselo aparte.`,
+      );
+    }
+    if (itemsSinRestaurar.length > 0) {
+      avisos.push(
+        `No se pudo devolver al stock: ${itemsSinRestaurar.join(", ")}. Cargalo a mano.`,
+      );
+    }
+
+    return {
+      error: null,
+      success: true,
+      efectivoDevuelto: anulacion.efectivo_devuelto,
+      avisos,
+    };
   } catch (err) {
     console.error("Error in anularVentaAction:", err);
     return {

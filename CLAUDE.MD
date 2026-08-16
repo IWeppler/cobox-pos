@@ -67,6 +67,33 @@ tiene 11.
   SECURITY INVOKER, no DEFINER: el aislamiento tiene que seguir siendo la RLS
   del que llama. Verificado que un usuario apuntando a un negocio ajeno no
   escribe nada.
+- Anular también corre en una transacción (`anular_venta`, `20260816150000`),
+  con el mismo corte: estado + cobros + egreso + crédito de CC adentro; stock y
+  unidades serializadas afuera (son compensaciones y no pueden voltear una
+  anulación ya hecha). Arregla dos cosas que movían plata mal:
+  1. El egreso de caja sale SOLO por la porción cobrada en EFECTIVO. Antes
+     salía por `monto_cobrado` entero: una venta con débito sacaba plata de un
+     cajón donde nunca estuvo, y el turno cerraba con faltante. No es raro —
+     43% de los cobros de venta no son efectivo. Lo cobrado por otros medios
+     vuelve como aviso: se devuelve por donde entró.
+  2. El crédito de cuenta corriente es `least(deuda de la venta, saldo actual)`,
+     no `ventas.monto_pendiente`, que quedó CONGELADO en el momento de la venta
+     — los pagos de CC bajan `clientes.saldo_pendiente` y nunca esa columna.
+     Anular un fiado a medio pagar le perdonaba al cliente lo ya pagado, y el
+     `max(0, ...)` tapaba que el libro y el saldo decían cosas distintas.
+     Lo que el cliente YA pagó no se devuelve solo y es a propósito: los pagos
+     de CC no están imputados a una venta, así que la base no sabe cuánto era
+     de ese ticket ni con qué medio se cobró. Vuelve como aviso para resolverlo
+     a mano en vez de mover plata por una suposición.
+- `ventas_items.variante_id` (`20260816130000`): sin él la anulación tenía que
+  buscar la variante por `nombre_display` para devolver el stock, contra la
+  regla de mover stock por id. 117 de 1.032 renglones ya no matcheaban por
+  nombre (talles renombrados), o sea que anular esas ventas devolvía el stock a
+  ningún lado, sin error. Sin FK: el historial sobrevive a que la variante se
+  borre. El match por nombre queda de respaldo para los que el backfill no pudo
+  resolver.
+- El espejo legacy `productos_stock` se mueve con `ajustar_stock_legacy`
+  (delta en un statement), nunca leyendo y escribiendo después.
 - Precios se revalidan server-side en create-sale.ts (nunca confiar en
   el precio que manda el cliente). Mismo criterio para todo lo que toque
   plata: validación espejo en el server siempre.
