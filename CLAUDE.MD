@@ -2,6 +2,20 @@
 
 POS + catálogo público, SaaS multi-tenant. Next.js + TypeScript + Supabase.
 Deploy: Vercel, branch main.
+
+**La región importa y es la latencia más grande del sistema.** La base está en
+San Pablo (`gru1`). Hasta el 17/8 no había `vercel.json`, así que las funciones
+corrían en el default `iad1` (Washington): la cabecera `x-vercel-id` decía
+`gru1::iad1::...`, o sea que la request entraba por el edge de San Pablo, se
+ejecutaba en Washington y desde ahí consultaba la base de vuelta en San Pablo.
+Cada consulta cruzaba el continente dos veces (~120 ms), y una venta hace del
+orden de 15. Medido: 430-540 ms de primer byte en `/auth` contra 110-140 ms
+yendo directo a Supabase. `vercel.json` fija `regions: ["gru1"]`.
+El middleware NO se ve afectado (runtime edge: siempre corre cerca del usuario);
+lo que se mueve son los Server Components y las Server Actions, que es
+exactamente donde vive el camino de la venta.
+Regla que se desprende: cualquier optimización de SQL rinde menos que un viaje
+de red ahorrado. Antes de indexar algo, contar los round-trips.
 EN PRODUCCIÓN REAL: en Evens la dueña (Evelyn, admin) y 3 vendedoras (Mara,
 Brisa, Zunilda) lo usan a diario. Cualquier cambio que toque ventas/caja/stock
 es plata real.
