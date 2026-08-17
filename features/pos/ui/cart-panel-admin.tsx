@@ -314,6 +314,7 @@ export function CartPanelAdmin({
     let isMounted = true;
 
     const checkUserAndFetchData = async () => {
+      // `getSession()` lee la sesión guardada localmente, no sale a la red.
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -321,12 +322,43 @@ export function CartPanelAdmin({
       if (!isMounted) return;
 
       if (session) {
-        const { data: perfil } = await supabase
-          .from("perfiles")
-          .select("nombre")
-          .eq("id", session.user.id)
-          .maybeSingle();
         const metadata = session.user.user_metadata;
+
+        // Las tres consultas EN PARALELO. Iban una atrás de otra, esperando la
+        // anterior para nada: no dependen entre sí. Desde el navegador cada
+        // una es un viaje a Supabase (~30 ms desde Argentina), así que
+        // encadenarlas era triplicar la espera de la pantalla donde se cobra.
+        //
+        // Van desde el navegador y no por una server action a propósito: la
+        // función de Vercel está en otro continente que el usuario, así que
+        // meterla en el medio agregaría un salto en vez de sacarlo. Cuando el
+        // cómputo pase a San Pablo se puede reconsiderar.
+        const [{ data: perfil }, { data: promos }, { data: metodos }] =
+          await Promise.all([
+            supabase
+              .from("perfiles")
+              .select("nombre")
+              .eq("id", session.user.id)
+              .maybeSingle(),
+            supabase
+              .from("promociones")
+              .select(
+                `
+              *,
+              promociones_metodos_pago ( metodo_pago ),
+              promociones_categorias ( categoria_nombre )
+            `,
+              )
+              .eq("activa", true),
+            supabase
+              .from("metodos_pago")
+              .select("id, nombre, tipo, comision, recargo_porcentaje")
+              .eq("activo", true)
+              .order("comision", { ascending: true }),
+          ]);
+
+        if (!isMounted) return;
+
         setVendedorNombre(
           perfil?.nombre ||
             metadata?.nombre ||
@@ -336,18 +368,6 @@ export function CartPanelAdmin({
             "Tú",
         );
 
-        const { data: promos } = await supabase
-          .from("promociones")
-          .select(
-            `
-              *,
-              promociones_metodos_pago ( metodo_pago ),
-              promociones_categorias ( categoria_nombre )
-            `,
-          )
-          .eq("activa", true);
-
-        if (!isMounted) return;
         if (promos) {
           setPromosCargadas({
             negocioId,
@@ -355,13 +375,6 @@ export function CartPanelAdmin({
           });
         }
 
-        const { data: metodos } = await supabase
-          .from("metodos_pago")
-          .select("id, nombre, tipo, comision, recargo_porcentaje")
-          .eq("activo", true)
-          .order("comision", { ascending: true });
-
-        if (!isMounted) return;
         if (metodos) {
           setMetodosCargados({
             negocioId,

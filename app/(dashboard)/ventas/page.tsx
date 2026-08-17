@@ -4,6 +4,7 @@ import { VentasTable } from "@/features/sales/ui/sale-table";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { Venta } from "@/entities/ventas/types";
+import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +12,7 @@ export default async function VentasPage() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getUsuarioActual();
 
   // 2. Obtener su rol de la tabla perfiles (queda como está — todavía
   // gatea el orden "Mayor ganancia neta", fuera del alcance de este cableado)

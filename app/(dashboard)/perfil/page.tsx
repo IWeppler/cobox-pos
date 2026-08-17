@@ -9,6 +9,7 @@ import {
 import { getUsoDelPlanAction } from "@/features/planes/actions/uso-del-plan";
 import { getSolicitudPendienteAction } from "@/features/planes/actions/solicitud-plan";
 import { SuscripcionPanel } from "@/features/planes/ui/suscripcion/suscripcion-panel";
+import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +17,7 @@ const ProfilePage = async () => {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getUsuarioActual();
   if (!user) redirect("/auth");
 
   // La página venía con todo en blanco (id, nombre, email y plan hardcodeados

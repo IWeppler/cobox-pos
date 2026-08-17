@@ -4,6 +4,7 @@ import { createClient } from "@/shared/config/supabase/server";
 import { getStockAction } from "@/features/stock/actions/get-product";
 import { normalizarRubro } from "@/entities/config/types";
 import { CargaRapidaPageClient } from "@/features/carga-rapida/ui/carga-rapida-page-client";
+import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +12,7 @@ export default async function CargaRapidaPage() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getUsuarioActual();
   if (!user) redirect("/auth");
 
   const [{ data: productos }, { data: config }] = await Promise.all([

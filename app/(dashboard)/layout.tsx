@@ -17,6 +17,7 @@ import { PlanProvider } from "@/features/planes/ui/plan-provider";
 import { getContextoPlanAction } from "@/features/planes/actions/contexto-plan";
 import { leerConfigPos } from "@/entities/config/lib/leer-config-pos";
 import { etiquetaPlan } from "@/shared/lib/planes";
+import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
 
 export default async function DashboardLayout({
   children,
@@ -26,10 +27,7 @@ export default async function DashboardLayout({
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  const { user, error } = await getUsuarioActual();
 
   if (error || !user) {
     redirect("/auth");

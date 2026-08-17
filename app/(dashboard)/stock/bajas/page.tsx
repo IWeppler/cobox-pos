@@ -6,6 +6,7 @@ import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
 import { revalidatePath } from "next/cache";
+import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
 
 export const dynamic = "force-dynamic";
 
@@ -88,9 +89,7 @@ export default async function BajasPage({
   const supabase = createClient(cookieStore);
 
   // 1. Verificación estricta de Admin
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getUsuarioActual();
   if (!user) redirect("/auth");
 
   const { data: rolActual } = await supabase.rpc("rol_actual");

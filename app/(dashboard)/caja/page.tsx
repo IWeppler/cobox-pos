@@ -19,6 +19,7 @@ import {
   EgresoCaja,
 } from "@/entities/caja/types";
 import { VentaPago } from "@/entities/ventas/types";
+import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
 
 export const dynamic = "force-dynamic";
 
@@ -32,9 +33,7 @@ export default async function CajaPage() {
   const supabase = createClient(cookieStore);
 
   // 1. Verificación de permisos y perfil
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getUsuarioActual();
   if (!user) redirect("/auth");
 
   // El rol es por negocio (usuarios_negocios), el nombre es del perfil global.

@@ -2,6 +2,7 @@ import { StockPageClient } from "@/features/stock/ui/stock-page-client";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { getUsoDelPlanAction } from "@/features/planes/actions/uso-del-plan";
+import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
 
 export const dynamic = "force-dynamic";
 
@@ -9,9 +10,7 @@ export default async function StockPage() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getUsuarioActual();
 
   let userRole = "VENDEDOR";
   if (user) {
