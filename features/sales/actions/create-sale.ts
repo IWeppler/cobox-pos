@@ -707,6 +707,11 @@ export async function registrarVentaAction(
   const insertItems = itemsProcesados.map((item) => ({
     producto_id: item.productoId,
     variante: item.variante,
+    // La variante vendida, congelada en el renglón. Es por acá que la
+    // anulación devuelve el stock con `ajustar_stock_variante`; sin esto cae al
+    // match por `nombre_display`, que falla en silencio cuando el talle se
+    // renombró después de la venta.
+    variante_id: item.varianteId,
     // Cierra la cadena venta > ventas_items > unidad_serie > variante.
     // Se lee de `unidadesVendidasPorVariante`, no del payload del cliente:
     // solo se enlaza la unidad que la RPC efectivamente marcó como vendida.
