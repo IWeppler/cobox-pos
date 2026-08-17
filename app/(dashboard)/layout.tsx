@@ -15,6 +15,7 @@ import { BannerImpersonation } from "@/features/admin/ui/banner-impersonation";
 import { NegocioActivoProvider } from "@/shared/components/negocio-activo-provider";
 import { PlanProvider } from "@/features/planes/ui/plan-provider";
 import { getContextoPlanAction } from "@/features/planes/actions/contexto-plan";
+import { leerConfigPos } from "@/entities/config/lib/leer-config-pos";
 import { etiquetaPlan } from "@/shared/lib/planes";
 
 export default async function DashboardLayout({
@@ -35,12 +36,19 @@ export default async function DashboardLayout({
   }
 
   // El rol es por negocio (usuarios_negocios), el nombre es del perfil global.
-  const [{ data: perfil }, { data: rolActual }, negocios, contextoPlan] =
+  //
+  // La configuración entra en esta misma tanda. Antes se leía DESPUÉS del
+  // Promise.all, o sea un viaje de red entero en fila detrás de los otros
+  // cuatro, en cada navegación del panel. Y `leerConfigPos` además la comparte
+  // con el `generateMetadata` del layout raíz: si aquel ya la resolvió en este
+  // mismo render, acá no cuesta nada.
+  const [{ data: perfil }, { data: rolActual }, negocios, contextoPlan, config] =
     await Promise.all([
       supabase.from("perfiles").select("nombre").eq("id", user.id).single(),
       supabase.rpc("rol_actual"),
       listarMisNegociosAction(),
       getContextoPlanAction(),
+      leerConfigPos(),
     ]);
 
   const userRole = rolActual || "VENDEDOR";
@@ -48,11 +56,7 @@ export default async function DashboardLayout({
   // Modo dios: el super admin mirando el negocio de un cliente.
   const impersonando = Boolean(cookieStore.get(COOKIE_IMPERSONATE)?.value);
 
-  const { data: settings } = await supabase
-    .from("configuracion_pos")
-    .select("id, posName, posLogo, modo_caja")
-    .limit(1)
-    .single();
+  const settings = config;
 
   const systemBranding: ConfiguracionPOS = {
     id: settings?.id || "1",

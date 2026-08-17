@@ -2,8 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/shared/ui/sonner";
-import { createClient } from "@/shared/config/supabase/server";
-import { cookies } from "next/headers";
+import { leerConfigPos } from "@/entities/config/lib/leer-config-pos";
 import { Geist_Mono, Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { InstalacionPwaListener } from "@/shared/components/instalacion-pwa-listener";
@@ -33,18 +32,16 @@ export const viewport: Viewport = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-  const { data } = await supabase
-    .from("configuracion_pos")
-    .select("posName")
-    .limit(1)
-    .single();
+  // Pasa por `leerConfigPos`, que deduplica con el layout del dashboard dentro
+  // del mismo render y no consulta nada cuando no hay negocio elegido. Antes
+  // esta función hacía su propia consulta en CADA request —2.384 por día,
+  // medidas— para poner el título de la pestaña.
+  const config = await leerConfigPos();
 
   // Fuera de un negocio (login, recuperar contraseña, landing) no hay
   // configuración que leer: ahí la marca es la de la plataforma, no la de un
   // comercio. Sin este fallback el título salía "undefined | Gestión POS".
-  const posName = data?.posName || "Comerz";
+  const posName = config?.posName || "Comerz";
 
   return {
     title: `${posName} | Gestión POS`,
