@@ -45,11 +45,22 @@ export const leerConfigPos = cache(
     if (!cookieStore.get(COOKIE_NEGOCIO_ACTIVO)?.value) return null;
 
     const supabase = createClient(cookieStore);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("configuracion_pos")
       .select("id, posName, posLogo, modo_caja")
       .limit(1)
       .maybeSingle();
+
+    // Devolver null y seguir es lo correcto —el layout tiene fallbacks y una
+    // pestaña sin el nombre del comercio no justifica una pantalla de error—
+    // pero NO puede ser silencioso: uno de los campos que se pierde es
+    // `modo_caja`, y el fallback es "UNICA". O sea que un fallo de lectura no
+    // deja al panel sin marca, deja a un negocio POR_USUARIO comportándose
+    // como caja única, donde una vendedora ve y cierra el turno de otra.
+    // Si esto aparece en el log, no es cosmético.
+    if (error) {
+      console.error("[CONFIG] No se pudo leer configuracion_pos:", error);
+    }
 
     return (data as ConfigPosDeLaRequest | null) ?? null;
   },
