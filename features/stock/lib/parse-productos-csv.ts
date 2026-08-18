@@ -15,7 +15,16 @@
 
 /** Headers reconocidos por columna. El primero es el nombre "oficial". */
 const ALIASES = {
-  categoria: ["categoria", "categoría", "rubro"],
+  // "subcategoria" es la MISMA columna: en un catálogo por audiencia
+  // (Hombre > Camperas) lo que el comercio escribe en su planilla es el hijo,
+  // y llamarlo "categoría" en la plantilla lo hace dudar de si va el padre.
+  categoria: [
+    "categoria",
+    "categoría",
+    "subcategoria",
+    "subcategoría",
+    "rubro",
+  ],
   codigoBarras: ["codigo_barras", "codigo de barras", "codigobarras", "ean", "ean13", "codigo", "código"],
   producto: ["producto", "nombre", "descripcion", "descripción", "articulo", "artículo"],
   color: ["color", "colores"],

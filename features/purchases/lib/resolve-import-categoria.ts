@@ -121,6 +121,32 @@ function resolverPorArbolDeAudiencia(
 }
 
 /**
+ * De varias categorías que se llaman igual, la que cuelga del padre de esa
+ * audiencia. Devuelve null si el género no viene, no se entiende, o ninguna
+ * (o más de una) candidata cuelga de ese padre — cualquiera de esos tres es
+ * "no lo sé", y con nombres repetidos entre audiencias equivocarse es colgar
+ * mercadería de mujer abajo de hombre.
+ */
+function filtrarPorAudiencia(
+  candidatas: CategoriaReal[],
+  rawGeneroCanonico: string | null,
+  categoriasPorId: Map<string, CategoriaReal>,
+): CategoriaReal | null {
+  if (candidatas.length === 0 || !rawGeneroCanonico) return null;
+
+  const audiencia = detectarGenero(normalizar(rawGeneroCanonico));
+  if (!audiencia) return null;
+
+  const slugsPadre = SLUGS_POR_AUDIENCIA[audiencia];
+  const bajoEsePadre = candidatas.filter((c) => {
+    const padre = c.parent_id ? categoriasPorId.get(c.parent_id) : null;
+    return padre ? slugsPadre.some((slug) => padre.slug.includes(slug)) : false;
+  });
+
+  return bajoEsePadre.length === 1 ? bajoEsePadre[0] : null;
+}
+
+/**
  * Resuelve la categoría destino de una fila del import de remitos contra
  * el árbol REAL de categorías (padre + subcategoría) — nunca inventa una
  * categoría nueva ni cae a un fallback adivinado. Dos niveles de
@@ -145,9 +171,21 @@ export function resolverCategoriaImport(
   const categoriasPorId = new Map(categoriasReales.map((c) => [c.id, c]));
 
   if (rawCategoria) {
-    const exacta = categoriasReales.find(
+    // El nombre de subcategoría se REPITE entre audiencias: Evens tiene
+    // ZAPATILLAS y ROPA INTERIOR colgando de HOMBRE, MUJER, NENA y NIÑOS. Un
+    // `find` devuelve la primera y la fila termina bajo el padre equivocado,
+    // en silencio. Con varias candidatas manda el género; sin género que
+    // desempate no se elige ninguna y la conciliación la pide a mano, que es
+    // la regla de este módulo: no adivinar.
+    const exactas = categoriasReales.filter(
       (c) => normalizarNombre(c.nombre) === normalizarNombre(rawCategoria),
     );
+
+    const exacta =
+      exactas.length === 1
+        ? exactas[0]
+        : filtrarPorAudiencia(exactas, rawGeneroCanonico, categoriasPorId);
+
     if (exacta) {
       return {
         categoriaId: exacta.id,

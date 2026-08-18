@@ -74,6 +74,18 @@ describe("parseProductosSheet — columnas opcionales", () => {
     expect(res.columnasIgnoradas).toEqual([]);
   });
 
+  it("'subcategoria' es la misma columna que 'categoria'", () => {
+    // En un catálogo por audiencia lo que el comercio escribe es el hijo
+    // (CAMPERAS), y llamarlo "categoría" en la plantilla lo hace dudar de si
+    // ahí va el padre.
+    const res = parseProductosSheet([
+      ["Subcategoria", "Producto", "Stock"],
+      ["CAMPERAS", "Puffer larga", "2"],
+    ]);
+    expect(res.filas[0].categoria).toBe("CAMPERAS");
+    expect(res.columnasIgnoradas).toEqual([]);
+  });
+
   it("acepta 'género' con tilde y sus sinónimos de mostrador", () => {
     for (const header of ["género", "Sexo", "PUBLICO", "audiencia"]) {
       const res = parseProductosSheet([

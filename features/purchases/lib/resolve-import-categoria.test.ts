@@ -24,6 +24,47 @@ describe("resolverCategoriaImport", () => {
     expect(r?.categoriaNombre).toBe("CAMISAS ");
   });
 
+  describe("el mismo nombre de subcategoría en varias audiencias", () => {
+    // Evens tiene ZAPATILLAS y ROPA INTERIOR colgando de HOMBRE, MUJER, NENA
+    // y NIÑOS. Un `find` devolvía la primera, así que una planilla con
+    // "subcategoria: ZAPATILLAS" colgaba todo del mismo padre.
+    const arbol = [
+      categoria("p-h", "HOMBRE", "hombre"),
+      categoria("p-m", "MUJER", "mujer"),
+      categoria("h-h", "ZAPATILLAS", "zapatillas-hombre", "p-h"),
+      categoria("h-m", "ZAPATILLAS", "zapatillas-mujer", "p-m"),
+    ];
+
+    it("el género desempata y elige la que cuelga de su padre", () => {
+      expect(
+        resolverCategoriaImport("Zapatilla urbana", "ZAPATILLAS", "Mujer", arbol)
+          ?.categoriaId,
+      ).toBe("h-m");
+      expect(
+        resolverCategoriaImport("Zapatilla urbana", "ZAPATILLAS", "Hombre", arbol)
+          ?.categoriaId,
+      ).toBe("h-h");
+    });
+
+    it("sin género no elige ninguna: la pide a mano en vez de adivinar", () => {
+      // Colgarla del padre equivocado es peor que dejarla sin categoría — lo
+      // segundo se ve en la conciliación, lo primero no se ve nunca.
+      expect(
+        resolverCategoriaImport("Zapatilla urbana", "ZAPATILLAS", null, arbol),
+      ).toBeNull();
+    });
+
+    it("con un solo candidato el género no hace falta", () => {
+      const unica = [
+        categoria("p-h", "HOMBRE", "hombre"),
+        categoria("h-h", "BOTINES", "botines", "p-h"),
+      ];
+      expect(
+        resolverCategoriaImport("Botín", "BOTINES", null, unica)?.categoriaId,
+      ).toBe("h-h");
+    });
+  });
+
   it("sin columna Categoría (o sin match exacto), usa el diccionario de keywords ya existente (sugerirCategoria) contra el nombre del producto", () => {
     const categorias = [
       categoria("c1", "ZAPATILLAS MUJER", "zapatillas-mujer"),
