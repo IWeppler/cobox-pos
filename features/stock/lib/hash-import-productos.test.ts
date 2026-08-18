@@ -13,6 +13,7 @@ function fila(parcial: Partial<FilaImport> = {}): FilaImport {
     imei: null,
     marca: null,
     modelo: null,
+    genero: null,
     unidadMedida: null,
     precioCosto: 100,
     precioVenta: 200,

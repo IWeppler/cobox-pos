@@ -55,6 +55,35 @@ describe("parseProductosSheet — columnas opcionales", () => {
     expect(res.columnasDetectadas).not.toContain("imei");
   });
 
+  it("el género se reconoce y NO entra como atributo de variante", () => {
+    // En indumentaria el género es la categoría de arriba (Hombre > Camperas),
+    // no un eje que parta el producto. Si entrara en `atributos`, dos filas de
+    // la misma prenda para distinto público serían dos variantes en vez de dos
+    // productos colgados de padres distintos.
+    const rows = [
+      ["Genero", "Producto", "Talle", "Color", "Stock"],
+      ["Nena", "Campera puffer", "8", "Rosa", "4"],
+    ];
+
+    const res = parseProductosSheet(rows);
+
+    expect(res.filas[0]).toMatchObject({
+      genero: "Nena",
+      atributos: { Talle: "8", Color: "Rosa" },
+    });
+    expect(res.columnasIgnoradas).toEqual([]);
+  });
+
+  it("acepta 'género' con tilde y sus sinónimos de mostrador", () => {
+    for (const header of ["género", "Sexo", "PUBLICO", "audiencia"]) {
+      const res = parseProductosSheet([
+        [header, "Producto", "Stock"],
+        ["Hombre", "Camisa", "2"],
+      ]);
+      expect(res.filas[0].genero).toBe("Hombre");
+    }
+  });
+
   it("importa una planilla de electro con todas las columnas", () => {
     const rows = [
       [

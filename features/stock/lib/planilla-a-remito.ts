@@ -32,8 +32,20 @@ export interface LineaRemito {
 }
 
 /**
- * El texto de variante que ve la conciliación, armado con los atributos de la
- * fila: "M / Negro", "128GB", '1/2" / PVC'.
+ * El texto de variante que ve la conciliación: "Talle: M / Color: Negro".
+ *
+ * Va CON etiqueta, no con los valores pelados, y esa es la diferencia entre
+ * que los atributos lleguen a la base o se pierdan. La conciliación lee este
+ * texto con `parseVarianteAtributos`, que parte por " / " y descarta todo
+ * segmento sin ":" (parse-variant-attributes.ts) — o sea que un "M / Negro"
+ * llegaba a `producto_variantes.atributos` como `{}`. La variante quedaba sin
+ * talle ni color, invisible para los filtros y para el selector del POS, y
+ * `aprobar_orden_compra` además pisaba con ese `{}` los atributos de la
+ * variante que ya existía.
+ *
+ * Es el mismo formato que ya produce el remito de proveedor
+ * (`conGeneroAgregado` en create-purchase.ts): un solo vocabulario para los
+ * dos orígenes, que es la razón de ser de la conciliación única.
  *
  * Sin atributos devuelve "Unico" —no cadena vacía— porque es el mismo valor
  * que usa el resto del sistema para el producto sin variantes, y una variante
@@ -42,11 +54,12 @@ export interface LineaRemito {
 export function varianteDesdeAtributos(
   atributos: Record<string, string>,
 ): string {
-  const valores = Object.values(atributos)
-    .map((v) => v.trim())
-    .filter(Boolean);
+  const segmentos = Object.entries(atributos)
+    .map(([nombre, valor]) => [nombre.trim(), valor.trim()] as const)
+    .filter(([nombre, valor]) => nombre && valor)
+    .map(([nombre, valor]) => `${nombre}: ${valor}`);
 
-  return valores.length > 0 ? valores.join(" / ") : "Unico";
+  return segmentos.length > 0 ? segmentos.join(" / ") : "Unico";
 }
 
 export function planillaALineasDeRemito(filas: FilaImport[]): LineaRemito[] {
@@ -59,7 +72,12 @@ export function planillaALineasDeRemito(filas: FilaImport[]): LineaRemito[] {
     // otro label).
     raw_sku: fila.codigoBarras?.trim() || null,
     raw_marca: fila.marca?.trim() || null,
-    raw_genero: null,
+    // El género de la planilla resuelve la categoría PADRE (Hombre > Camperas,
+    // Nena > Remeras): `resolverCategoriaImport` cruza este eje con el tipo de
+    // prenda que sale del nombre. Estaba fijo en null, así que una planilla
+    // propia entraba sin ese eje y la fila caía sin categoría —o peor, en la
+    // subcategoría de otra audiencia, que es el único "Remeras" que encuentra.
+    raw_genero: fila.genero?.trim() || null,
     raw_imei: fila.imei?.trim() || null,
     cantidad: fila.stock,
     precio_costo: fila.precioCosto ?? 0,

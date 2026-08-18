@@ -15,6 +15,7 @@ function fila(over: Partial<FilaImport> & { fila: number; producto: string }): F
     imei: null,
     marca: null,
     modelo: null,
+    genero: null,
     unidadMedida: null,
     precioCosto: null,
     precioVenta: 1000,

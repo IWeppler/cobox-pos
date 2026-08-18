@@ -5,6 +5,7 @@ import {
   varianteDesdeAtributos,
 } from "./planilla-a-remito";
 import type { FilaImport } from "./parse-productos-csv";
+import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-attributes";
 
 function fila(over: Partial<FilaImport> = {}): FilaImport {
   return {
@@ -17,6 +18,7 @@ function fila(over: Partial<FilaImport> = {}): FilaImport {
     imei: null,
     marca: null,
     modelo: null,
+    genero: null,
     unidadMedida: null,
     precioCosto: 6000,
     precioVenta: 14900,
@@ -25,10 +27,26 @@ function fila(over: Partial<FilaImport> = {}): FilaImport {
 }
 
 describe("varianteDesdeAtributos", () => {
-  it("une los valores en el orden en que vinieron", () => {
+  it("etiqueta cada valor con su atributo, en el orden en que vinieron", () => {
+    // Con etiqueta y no "M / Negro": la conciliación descarta todo segmento
+    // sin ":", así que los valores pelados llegaban a la base como {} y la
+    // variante se guardaba sin talle ni color.
     expect(varianteDesdeAtributos({ Talle: "M", Color: "Negro" })).toBe(
-      "M / Negro",
+      "Talle: M / Color: Negro",
     );
+  });
+
+  it("lo que sale se puede volver a leer como atributos", () => {
+    // El contrato real: este texto es lo único que viaja hasta
+    // producto_variantes.atributos. Si no cierra el ida y vuelta, la variante
+    // nace sin sus atributos y no hay error que lo diga.
+    const atributos = { Talle: "M", Color: "Negro" };
+    const leido: Record<string, string> = {};
+    for (const segmento of varianteDesdeAtributos(atributos).split(" / ")) {
+      const parsed = parseAttributeSegment(segmento);
+      if (parsed) leido[parsed.nombre] = parsed.valor;
+    }
+    expect(leido).toEqual(atributos);
   });
 
   it("sin atributos devuelve 'Unico', no vacío", () => {
@@ -38,7 +56,7 @@ describe("varianteDesdeAtributos", () => {
   });
 
   it("ignora los valores en blanco", () => {
-    expect(varianteDesdeAtributos({ Talle: "M", Color: "  " })).toBe("M");
+    expect(varianteDesdeAtributos({ Talle: "M", Color: "  " })).toBe("Talle: M");
   });
 });
 
@@ -49,10 +67,26 @@ describe("planillaALineasDeRemito", () => {
     ]);
 
     expect(linea.raw_nombre).toBe("Remera lisa");
-    expect(linea.raw_variante).toBe("M / Negro");
+    expect(linea.raw_variante).toBe("Talle: M / Color: Negro");
     expect(linea.raw_sku).toBe("7791234567890");
     expect(linea.cantidad).toBe(3);
     expect(linea.precio_venta).toBe(14900);
+  });
+
+  it("el género viaja como raw_genero, no como atributo de variante", () => {
+    // En un catálogo de indumentaria el género es el nivel de arriba del árbol
+    // (Hombre > Camperas, Nena > Remeras). Estaba fijo en null, así que la
+    // planilla propia entraba sin ese eje: la fila se quedaba sin categoría o
+    // caía bajo la audiencia equivocada.
+    const [linea] = planillaALineasDeRemito([fila({ genero: "Nena" })]);
+
+    expect(linea.raw_genero).toBe("Nena");
+    expect(linea.raw_variante).toBe("Talle: M / Color: Negro");
+  });
+
+  it("sin columna género la línea entra en null", () => {
+    const [linea] = planillaALineasDeRemito([fila()]);
+    expect(linea.raw_genero).toBeNull();
   });
 
   it("el IMEI viaja en la línea", () => {

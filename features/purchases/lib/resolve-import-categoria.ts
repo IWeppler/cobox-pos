@@ -56,8 +56,13 @@ const SLUGS_POR_AUDIENCIA: Record<Exclude<GeneroDetectado, null>, string[]> = {
 };
 
 /** ¿El comercio organiza su catálogo por audiencia? (al menos un padre
- * con hijos cuyo slug sea una audiencia conocida). Evens es plano —
- * 28 categorías sin padre — así que da false y conserva el diccionario. */
+ * con hijos cuyo slug sea una audiencia conocida). El comercio que NO lo
+ * organiza así da false y conserva el diccionario plano.
+ *
+ * Ojo: esto cambia solo, sin tocar código. Evens era plano cuando se escribió
+ * esta función y hoy tiene el árbol (HOMBRE / MUJER / NENA / NIÑOS / BEBES,
+ * con el tipo de prenda como hijo), así que pasó a resolver por audiencia el
+ * día que alguien armó las categorías. */
 export function tieneArbolDeAudiencia(
   categoriasReales: CategoriaReal[],
 ): boolean {

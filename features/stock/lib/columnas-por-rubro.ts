@@ -53,6 +53,13 @@ const CODIGO_BARRAS: ColumnaPlantilla = {
 
 const ESPECIFICAS: Record<Rubro, ColumnaPlantilla[]> = {
   indumentaria: [
+    // El género NO parte variantes: es la categoría de arriba del árbol
+    // (Hombre > Camperas, Nena > Remeras). Marcarlo `esVariante` duplicaría
+    // cada prenda por audiencia en vez de colgarla del padre correcto.
+    {
+      clave: "genero",
+      descripcion: "Hombre, Mujer, Nena, Niño, Bebé — define la categoría",
+    },
     { clave: "talle", descripcion: "S, M, L, 38, 40…", esVariante: true },
     { clave: "color", descripcion: "Color de esta fila", esVariante: true },
   ],

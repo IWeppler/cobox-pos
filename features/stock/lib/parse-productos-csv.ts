@@ -31,6 +31,13 @@ const ALIASES = {
   presentacion: ["presentacion", "presentación", "formato"],
   marca: ["marca", "fabricante", "laboratorio"],
   modelo: ["modelo"],
+  // El género NO es un atributo de variante: es a QUIÉN está destinada la
+  // prenda, y en un catálogo de indumentaria eso es el nivel de arriba del
+  // árbol de categorías (Hombre > Camperas, Nena > Remeras). Por eso viaja
+  // como `raw_genero` hasta `resolverCategoriaImport`, que cruza género
+  // (padre) con el tipo de prenda (hijo) — y no a `atributos`, donde
+  // partiría cada producto en una variante por género.
+  genero: ["genero", "género", "sexo", "publico", "público", "audiencia"],
   unidadMedida: ["unidad_medida", "unidad", "unidad de medida"],
   stock: ["stock", "cantidad", "cant", "unidades"],
   imei: ["imei", "serie", "numero_serie", "nro_serie", "n_serie", "serial"],
@@ -92,6 +99,9 @@ export interface FilaImport {
   /** Datos que describen el producto sin partirlo en variantes. */
   marca: string | null;
   modelo: string | null;
+  /** A quién va destinada la prenda (Hombre, Mujer, Nena, Niño, Bebé). No es
+   * atributo de variante: resuelve la categoría PADRE. */
+  genero: string | null;
   unidadMedida: string | null;
   precioCosto: number | null;
   precioVenta: number | null;
@@ -296,6 +306,7 @@ export function parseProductosSheet(rows: string[][]): ParseProductosResult {
       // lo describen. Por eso no van a `atributos`.
       marca: leer("marca") || null,
       modelo: leer("modelo") || null,
+      genero: leer("genero") || null,
       unidadMedida: leer("unidadMedida") || null,
       precioCosto: precioCostoRaw ? parseNumeroLocal(precioCostoRaw) : null,
       precioVenta: precioVentaRaw ? parseNumeroLocal(precioVentaRaw) : null,
