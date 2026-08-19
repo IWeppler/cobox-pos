@@ -57,6 +57,9 @@ const EJEMPLOS: Record<Rubro, FilaEjemplo[]> = {
   quioscos: [
     { categoria: "Golosinas", codigo_barras: "7790040111222", producto: "Chocolate con leche 100g", marca: "Águila", unidad_medida: "Unidad", stock: "36", precio_costo: "900", precio_venta: "1600" },
     { categoria: "Bebidas", codigo_barras: "7790895000123", producto: "Gaseosa cola 500ml", marca: "Coca-Cola", unidad_medida: "Unidad", stock: "48", precio_costo: "1200", precio_venta: "2000" },
+    // Lo mismo suelto: el peso va en la fila y la unidad deja de ser "Unidad".
+    // Es el ejemplo que explica la columna sin tener que leer la ayuda.
+    { categoria: "Golosinas", producto: "Caramelos surtidos", marca: "Arcor", peso: "500g", unidad_medida: "Kilogramo", stock: "4", precio_costo: "3200", precio_venta: "5800" },
   ],
   otros: [
     { categoria: "General", codigo_barras: "7790000000001", producto: "Producto de ejemplo", stock: "10", precio_costo: "1000", precio_venta: "2000" },

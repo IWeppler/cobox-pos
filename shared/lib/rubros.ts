@@ -50,27 +50,80 @@ export function etiquetaRubro(valor: string | null | undefined) {
 }
 
 /**
- * Rubros comerciales cuya mercadería se identifica por MODELO + código, no por
- * talle y color. Son los que arrancan en la vista `electro`.
+ * Traducción de los 15 rubros comerciales a los 7 operativos.
  *
- * El criterio no es "qué vende" sino "cómo se distingue una unidad de otra":
- * dos celulares del mismo modelo se distinguen por IMEI, dos remeras del mismo
- * modelo por talle. Ferretería entra acá porque un tornillo se pide por medida
- * y código, no por color.
+ * El criterio NO es "qué vende" sino "cómo se identifica su mercadería y qué
+ * columnas necesita la planilla de ingreso": dos celulares del mismo modelo se
+ * distinguen por IMEI, dos remeras por talle, dos fiambres por peso. Por eso
+ * ferretería es su propio operativo (medida + material) y no "electro", y por
+ * eso cosmética y suplementos caen en `farmacia`, que es el que aporta
+ * `presentacion` (50ml, x60 cápsulas) — que es exactamente cómo se pide esa
+ * mercadería.
+ *
+ * El Record es EXHAUSTIVO a propósito: agregar un rubro comercial a `RUBROS`
+ * sin decidir su operativo es un error de compilación, no un valor que cae en
+ * silencio a indumentaria. Ese silencio es justo lo que estuvo roto: hasta acá
+ * el mapa era un Set de dos valores y TODO lo demás —farmacia, almacén,
+ * panadería, gastronomía, bebidas, mascotas, bazar, librería, juguetería,
+ * cosmética y suplementos— se configuraba como indumentaria y recibía la
+ * plantilla de ropa, con columnas de talle y color.
+ *
+ * OJO: hoy NINGÚN rubro comercial mapea al operativo `quioscos`, así que sus
+ * columnas (`columnas-por-rubro.ts`) son inalcanzables. Falta el valor
+ * comercial "Kiosco / autoservicio" en `RUBROS`; hasta que exista, un kiosco
+ * se da de alta como "Almacén" y cae en `alimentos`, que es un SUPERCONJUNTO
+ * de las columnas de quioscos (agrega `peso`) — o sea que le sobra una columna,
+ * no le falta ninguna. Mandar `almacen` a `quioscos` sería el error caro: le
+ * sacaría el peso a las dietéticas, que lo usan de verdad.
  */
-const RUBROS_TIPO_ELECTRO = new Set<RubroComercial>([
-  "electronica",
-  "ferreteria",
-]);
+const OPERATIVO_POR_COMERCIAL: Record<RubroComercial, Rubro> = {
+  indumentaria: "indumentaria",
 
-/** Traduce el rubro comercial al operativo. Fail-safe a indumentaria, que es
- * el comportamiento por defecto del POS. */
+  // Identidad por modelo + código, con unidades trazables una por una.
+  electronica: "electro",
+
+  // Medida y material son lo que distingue un tornillo de otro. Antes caía en
+  // `electro`, que no tiene ninguna de las dos columnas.
+  ferreteria: "ferreteria",
+
+  // Presentación + laboratorio/marca. No es por peso: es por envase.
+  farmacia: "farmacia",
+  cosmetica: "farmacia",
+  suplementos: "farmacia",
+
+  // Todo lo que se pide por peso o por envase con contenido declarado.
+  // `mascotas` entra acá porque el grueso de la facturación es alimento
+  // balanceado en bolsas de x kg, no los accesorios.
+  almacen: "alimentos",
+  panaderia: "alimentos",
+  gastronomia: "alimentos",
+  bebidas: "alimentos",
+  mascotas: "alimentos",
+
+  // Sin columnas propias que agregar: se identifican por nombre y código de
+  // barras, que es lo que ya trae `otros`. Inventarles una columna sería peor
+  // que no dársela — una columna siempre vacía enseña a ignorar columnas.
+  bazar: "otros",
+  libreria: "otros",
+  jugueteria: "otros",
+  otro: "otros",
+};
+
+/**
+ * Traduce el rubro comercial al operativo.
+ *
+ * Fail-safe a indumentaria (no a `otros`) para un valor desconocido —fila
+ * vieja, typo, alta hecha antes de que el rubro existiera—: es el mismo default
+ * que `RUBRO_DEFAULT` y `normalizarRubro`, y tener dos fallbacks distintos para
+ * la misma pregunta termina en dos configuraciones distintas para el mismo
+ * comercio.
+ */
 export function rubroOperativoDesde(
   rubroComercial: string | null | undefined,
 ): Rubro {
-  return RUBROS_TIPO_ELECTRO.has(rubroComercial as RubroComercial)
-    ? "electro"
-    : "indumentaria";
+  return (
+    OPERATIVO_POR_COMERCIAL[rubroComercial as RubroComercial] ?? "indumentaria"
+  );
 }
 
 /**

@@ -156,18 +156,55 @@ export interface DefaultsFiscales {
   tratamiento_iva: TratamientoIva;
 }
 
-const DEFAULTS_POR_RUBRO: Partial<Record<Rubro, DefaultsFiscales>> = {
+/**
+ * EXHAUSTIVO (`Record`, no `Partial`) a propósito: sumar un rubro al tipo
+ * `Rubro` sin decidir con qué nace su mercadería tiene que ser un error de
+ * compilación. Con `Partial` el rubro nuevo caía al fallback sin que nadie
+ * tomara la decisión, que es como farmacia y alimentos llegaron hasta hoy
+ * heredando los defaults de una tienda de ropa.
+ *
+ * Los 7 arrancan igual —unidad + 21%— y eso es una decisión, no un pendiente:
+ *
+ * - **La unidad no puede ser KG todavía.** Toda la cadena de cantidad es
+ *   `integer` en la base (`producto_variantes.stock`, `ventas_items.cantidad`,
+ *   `ajustar_stock_variante`), así que hoy no hay forma de vender 0,750 kg.
+ *   Un producto que nace en KG con stock entero y sin teclado de peso es peor
+ *   que uno en UNIDAD: dice una cosa y se comporta como otra. `alimentos` pasa
+ *   a KG el día que exista la venta por peso, no antes
+ *   (ver ROADMAP-VENTA-POR-PESO.md, fases 1 y 2).
+ *
+ * - **La alícuota se queda en 21% por el mismo criterio fail-closed de
+ *   `normalizarTratamientoIva`**: cobrar IVA de más se corrige, facturar sin el
+ *   impuesto que había que liquidar se paga con intereses.
+ *
+ *   La celda que MÁS discute con eso es `farmacia`: en una farmacia el grueso
+ *   de la facturación son medicamentos de uso humano, que van EXENTOS, y solo
+ *   la perfumería y la higiene van al 21%. Queda igual en 21% hasta
+ *   confirmarlo con el contador — mismo tratamiento que `RI_A_MONOTRIBUTO` en
+ *   `determinar-comprobante.ts`. Hoy no cambia nada en producción (los 4
+ *   negocios emiten TICKET interno y esta columna no se imprime), pero el día
+ *   que se prenda ARCA sale en el papel: **confirmar antes de facturar.**
+ *
+ *   Misma discusión, más chica, en `alimentos`: carne, pan común, harina,
+ *   leche, frutas y verduras van al 10,5%, y casi todo lo envasado al 21%. Es
+ *   mezcla dentro del mismo comercio, así que ningún default acierta siempre y
+ *   el 21% es el lado barato de equivocarse.
+ */
+const DEFAULTS_POR_RUBRO: Record<Rubro, DefaultsFiscales> = {
   indumentaria: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
   electro: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
+  ferreteria: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
+  quioscos: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
+  // Las dos que hay que revisar antes de facturar con ARCA. Ver arriba.
+  farmacia: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
+  alimentos: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
+  otros: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
 };
 
 /**
- * Fail-closed a unidad + 21%, que es lo correcto para los rubros que hoy
- * existen. Cuando se sumen rubros con otra realidad (una carnicería vende por
- * kg y buena parte de la carne va al 10,5%) alcanza con agregar su fila
- * arriba — pero antes hay que unificar el vocabulario de rubros, que hoy son
- * tres listas distintas que no coinciden (ver configuracion_pos.rubro,
- * solicitudes_comercio.rubro y el tipo Rubro).
+ * Fail-closed a unidad + 21% para lo que no es un rubro conocido: fila sin
+ * config, valor viejo o typo. Los 7 rubros válidos tienen su fila propia
+ * arriba.
  */
 export function defaultsFiscalesPorRubro(rubro: unknown): DefaultsFiscales {
   return (

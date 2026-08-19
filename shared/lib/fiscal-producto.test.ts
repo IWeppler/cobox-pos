@@ -6,6 +6,7 @@ import {
   normalizarTratamientoIva,
   normalizarUnidadMedida,
 } from "./fiscal-producto";
+import { RUBROS_VALIDOS } from "@/entities/config/types";
 
 describe("normalizarTratamientoIva", () => {
   it("acepta los cinco tratamientos", () => {
@@ -80,20 +81,21 @@ describe("normalizarUnidadMedida", () => {
 });
 
 describe("defaultsFiscalesPorRubro", () => {
-  it("indumentaria y electro nacen en unidad + 21%", () => {
-    expect(defaultsFiscalesPorRubro("indumentaria")).toEqual({
-      unidad_medida: "UNIDAD",
-      tratamiento_iva: "GRAVADO_21",
-    });
-    expect(defaultsFiscalesPorRubro("electro")).toEqual({
-      unidad_medida: "UNIDAD",
-      tratamiento_iva: "GRAVADO_21",
-    });
+  it("los 7 rubros válidos tienen fila propia y nacen en unidad + 21%", () => {
+    // Unidad y no KG porque la cadena de cantidad todavía es integer: un
+    // producto que nace en KG con stock entero dice una cosa y se comporta como
+    // otra. 21% por el mismo fail-closed de normalizarTratamientoIva.
+    for (const rubro of RUBROS_VALIDOS) {
+      expect(defaultsFiscalesPorRubro(rubro)).toEqual({
+        unidad_medida: "UNIDAD",
+        tratamiento_iva: "GRAVADO_21",
+      });
+    }
   });
 
-  it("un rubro sin fila propia cae al default general", () => {
-    // Hoy pasa con todo lo que no sea indumentaria/electro: son los únicos
-    // dos valores que la base acepta en configuracion_pos.rubro.
+  it("un valor que no es rubro cae al default general", () => {
+    // "carniceria" no es un rubro operativo: la base solo acepta los 7 de
+    // RUBROS_VALIDOS en configuracion_pos.rubro.
     expect(defaultsFiscalesPorRubro("carniceria")).toEqual({
       unidad_medida: "UNIDAD",
       tratamiento_iva: "GRAVADO_21",

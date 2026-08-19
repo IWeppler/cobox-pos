@@ -6,6 +6,11 @@ import { revalidatePath } from "next/cache";
 import { CreateSalePaymentInput } from "@/entities/ventas/types";
 import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
 import { calcularPagosConRecargo } from "@/shared/lib/recargo-metodo";
+import {
+  esFraccionable,
+  normalizarCantidadVendible,
+  redondearCantidad,
+} from "@/shared/lib/unidad-venta";
 import { emitirComprobante } from "../lib/emitir-comprobante";
 
 export async function registrarVentaAction(
@@ -102,7 +107,12 @@ export async function registrarVentaAction(
   const [{ data: stockFilas }, { data: variantesFilas }] = await Promise.all([
     supabase
       .from("productos_stock")
-      .select("cantidad, id, producto_id, variante, producto:productos(precio, precio_costo)")
+      // `unidad_medida` viaja acá y no en una consulta propia: es la misma
+      // fila que ya estamos trayendo. Decide si este producto se puede vender
+      // fraccionado (0,750 kg) o solo de a enteros.
+      .select(
+        "cantidad, id, producto_id, variante, producto:productos(precio, precio_costo, unidad_medida)",
+      )
       .in("producto_id", productoIds),
     supabase
       .from("producto_variantes")
@@ -178,12 +188,43 @@ export async function registrarVentaAction(
       });
     }
 
+    // La cantidad se valida server-side por el mismo motivo que el precio: la
+    // manda el cliente. Hasta acá era `Number(item.cantidad ?? 1)` sin
+    // chequear nada, y eso dejaba pasar una cantidad NEGATIVA — que no es un
+    // error de tipeo sino un request modificado: más abajo se descuenta con
+    // `p_delta: -item.cantidad`, así que en negativo AGREGA stock y baja el
+    // total del ticket.
+    //
+    // Con la cantidad decimal el chequeo además tiene que saber QUÉ producto
+    // es: 0,750 es una venta válida de fiambre y una imposible de remeras.
+    const unidadMedida = productoData?.unidad_medida;
+    const cantidadValidada = normalizarCantidadVendible(
+      item.cantidad ?? 1,
+      unidadMedida,
+    );
+
+    if (cantidadValidada === null) {
+      console.error("[VENTA CANTIDAD INVALIDA]", {
+        vendedorId: user.id,
+        productoId: productoIdReal,
+        variante: item.variante,
+        cantidadRecibida: item.cantidad,
+        unidadMedida,
+      });
+      return {
+        error: esFraccionable(unidadMedida)
+          ? `Cantidad inválida para "${item.variante}".`
+          : `"${item.variante}" se vende por unidad: la cantidad tiene que ser un número entero.`,
+        success: false,
+      };
+    }
+
     itemsResueltos.push({
       productoIdReal,
       variante: item.variante,
       varianteId: item.varianteId ?? varianteData?.id ?? null,
       tipo: item.tipo,
-      cantidad: Number(item.cantidad ?? 1),
+      cantidad: cantidadValidada,
       stockActual,
       precioServer,
       costoServer,
@@ -680,7 +721,13 @@ export async function registrarVentaAction(
     // columna "Unidades" de la exportación al contador y el detalle de ventas
     // venían subcontando. Las 226 ventas históricas de más de un renglón
     // quedaron corregidas en la migración 20260816170000.
-    cantidad: itemsProcesados.reduce((acc, item) => acc + item.cantidad, 0),
+    // Redondeado a 3 decimales antes de mandarlo: sumar decimales en binario
+    // deja colas (0,1 + 0,2 = 0,30000000000000004). La columna es
+    // numeric(12,3) y lo redondearía igual, pero mandar el número limpio evita
+    // que el valor que se loguea difiera del que se guarda.
+    cantidad: redondearCantidad(
+      itemsProcesados.reduce((acc, item) => acc + item.cantidad, 0),
+    ),
     total_bruto: totalConRecargoMetodo,
     recargo_metodo_total: recargoMetodoTotal,
     comision_total: comisionTotalGeneral,

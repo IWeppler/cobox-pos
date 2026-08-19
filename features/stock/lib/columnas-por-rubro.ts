@@ -100,9 +100,16 @@ const ESPECIFICAS: Record<Rubro, ColumnaPlantilla[]> = {
     { clave: "medida", descripcion: '1/2", 10mm, 3 metros…', esVariante: true },
     { clave: "material", descripcion: "Acero, bronce, PVC…", esVariante: true },
   ],
+  // El peso está acá aunque un kiosco venda casi todo por unidad: también hay
+  // golosinas en bolsita, fiambre al corte y frutos secos sueltos. Una columna
+  // de más que se deja vacía cuesta mucho menos que no tener dónde poner el
+  // dato — y el criterio de que UN comercio vende por unidad Y por peso a la
+  // vez es justo el que hace que "vender por peso" sea del PRODUCTO y no del
+  // rubro (ver ROADMAP-VENTA-POR-PESO.md).
   quioscos: [
     CODIGO_BARRAS,
     { clave: "marca", descripcion: "Marca del fabricante" },
+    { clave: "peso", descripcion: "100g, 500g, 1kg… si se vende suelto", esVariante: true },
     { clave: "unidad_medida", descripcion: "Unidad, Paquete, Caja…" },
   ],
   // "Otros" no inventa columnas: no se sabe qué vende. Se queda con la base y
