@@ -4,17 +4,107 @@ import {
   MAX_BYTES_MASTER,
   MAX_IMAGENES_PRODUCTO,
 } from "@/shared/utils/limites-imagen";
+import {
+  esUrlImagenPropia,
+  type UrlsImagenesProducto,
+} from "./imagenes-producto-comun";
 
 type SupabaseServerClient = ReturnType<typeof createClient>;
 
-export type UrlsImagenesProducto = {
-  mains: string[];
-  thumbs: string[];
-  grids: string[];
-  /** Alineado por índice con los otros tres. `null` = el master no subió; la
-   * foto se muestra igual, pero esa no se va a poder regenerar. */
-  masters: (string | null)[];
-};
+export type { UrlsImagenesProducto };
+
+/**
+ * Resuelve las URLs de las imágenes de un producto, por CUALQUIERA de los dos
+ * caminos que pueden llegar hoy.
+ *
+ * 1. `imagenes_urls` — el camino nuevo: el navegador ya subió a Storage y solo
+ *    manda URLs. Es el que hace que el guardado no dependa de que varios MB
+ *    sobrevivan un POST desde un celular.
+ * 2. `imagenes` (los binarios) — el camino viejo, que se mantiene porque
+ *    `skipWaiting: false` deja service workers anteriores vivos hasta que se
+ *    cierran todas las pestañas. Un cliente cacheado sigue mandando archivos y
+ *    tiene que poder guardar igual. Cuando no queden clientes viejos, esta
+ *    rama y `subirImagenesProducto` se pueden borrar.
+ *
+ * Las URLs del camino 1 se VALIDAN una por una: las manda el navegador, así
+ * que se comprueba que apunten al bucket de este negocio y no a cualquier
+ * lado. Una URL inválida invalida el juego entero — descartar solo esa dejaría
+ * los cuatro arrays desalineados, que es el bug que este módulo ya arregló una
+ * vez.
+ */
+export function leerUrlsDeImagenes(
+  formData: FormData,
+  negocioId: string,
+  contexto: "CREATE PRODUCT" | "EDIT PRODUCT",
+  /** Cuántas imágenes más admite este producto. El cliente ya lo respeta, pero
+   * acá no se confía en el cliente: es el mismo espejo server-side que hace la
+   * rama de archivos. */
+  cupoDisponible: number = MAX_IMAGENES_PRODUCTO,
+): UrlsImagenesProducto | null {
+  const crudo = formData.get("imagenes_urls");
+  if (typeof crudo !== "string" || crudo === "") return null;
+
+  let payload: UrlsImagenesProducto;
+  try {
+    payload = JSON.parse(crudo) as UrlsImagenesProducto;
+  } catch {
+    console.error(`[${contexto}] imagenes_urls ilegible, se ignora.`);
+    return null;
+  }
+
+  const { mains, thumbs, grids, masters } = payload ?? {};
+  if (!Array.isArray(mains) || mains.length === 0) return null;
+
+  // El largo tiene que coincidir: los cuatro arrays se leen por índice.
+  if (
+    !Array.isArray(thumbs) ||
+    !Array.isArray(grids) ||
+    !Array.isArray(masters) ||
+    thumbs.length !== mains.length ||
+    grids.length !== mains.length ||
+    masters.length !== mains.length
+  ) {
+    console.error(`[${contexto}] imagenes_urls desalineado, se ignora.`, {
+      mains: mains.length,
+      thumbs: Array.isArray(thumbs) ? thumbs.length : null,
+      grids: Array.isArray(grids) ? grids.length : null,
+      masters: Array.isArray(masters) ? masters.length : null,
+    });
+    return null;
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const propia = (u: unknown) => esUrlImagenPropia(u, negocioId, supabaseUrl);
+
+  const tope = Math.max(0, Math.min(cupoDisponible, MAX_IMAGENES_PRODUCTO));
+  if (tope === 0) {
+    console.warn(`[${contexto}] Sin cupo para imágenes nuevas, se descartan.`);
+    return null;
+  }
+
+  const limitadas = mains.slice(0, tope);
+  for (let i = 0; i < limitadas.length; i++) {
+    // El master puede ser null legítimamente; el resto no.
+    if (
+      !propia(mains[i]) ||
+      !propia(thumbs[i]) ||
+      !propia(grids[i]) ||
+      (masters[i] !== null && !propia(masters[i]))
+    ) {
+      console.error(`[${contexto}] URL de imagen ajena o inválida, descartadas todas.`, {
+        indice: i,
+      });
+      return null;
+    }
+  }
+
+  return {
+    mains: limitadas,
+    thumbs: thumbs.slice(0, tope),
+    grids: grids.slice(0, tope),
+    masters: masters.slice(0, tope),
+  };
+}
 
 /**
  * Sube los tríos (main + thumbnail + grid) de un producto a Storage y

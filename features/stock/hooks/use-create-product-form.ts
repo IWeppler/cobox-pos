@@ -12,6 +12,10 @@ import {
 } from "@/shared/utils/image-optimizer";
 import { crearProductoAction } from "../actions/create-product";
 import { esErrorDeRed, mensajeErrorDeRed } from "@/shared/lib/error-de-red";
+import { subirImagenesProductoDesdeCliente } from "../lib/subir-imagenes-cliente";
+import type { UrlsImagenesProducto } from "../lib/imagenes-producto-comun";
+import { MAX_IMAGENES_PRODUCTO } from "@/shared/utils/limites-imagen";
+import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { useVariantSelection } from "./use-variant-selection";
 import { queryKeys } from "@/shared/lib/query-keys";
 import {
@@ -38,7 +42,19 @@ export function useCreateProductForm(control?: ControlDeApertura) {
   const [isOpenInterno, setIsOpenInterno] = useState(false);
   const esControlado = control?.open !== undefined;
   const isOpen = esControlado ? control.open! : isOpenInterno;
+  const negocioId = useNegocioActivo()?.id ?? null;
   const [archivos, setArchivos] = useState<File[]>([]);
+  /**
+   * Fotos YA subidas a Storage, esperando a que el producto exista.
+   *
+   * En el alta no hay a qué colgarlas todavía, así que no se pueden guardar en
+   * el momento como en la edición. Lo que sí se puede —y es de donde sale casi
+   * toda la mejora— es SUBIRLAS apenas se eligen: para cuando toca Guardar,
+   * los bytes ya viajaron y lo único que falta es un POST de unas pocas URLs.
+   */
+  const [urlsSubidas, setUrlsSubidas] = useState<UrlsImagenesProducto | null>(
+    null,
+  );
   const [isCompressing, setIsCompressing] = useState(false);
 
   const [showPrice, setShowPrice] = useState(false);
@@ -85,6 +101,7 @@ export function useCreateProductForm(control?: ControlDeApertura) {
     control?.onOpenChange?.(open);
     if (!open) {
       setArchivos([]);
+      setUrlsSubidas(null);
       setShowPrice(false);
       setShowInventory(false);
       setShowVariants(false);
@@ -144,6 +161,63 @@ export function useCreateProductForm(control?: ControlDeApertura) {
     { error: null, success: false },
   );
 
+  /**
+   * Comprime y sube las fotos apenas se eligen, sin esperar a Guardar.
+   *
+   * En el alta no se pueden "guardar" todavía —el producto no existe— pero sí
+   * viajar: para cuando toca Guardar, los bytes ya están en Storage y el POST
+   * es de unas pocas URLs. Si abandona el alta, esos archivos quedan
+   * huérfanos; a este volumen es más barato que perderle la carga.
+   */
+  const subirFotosElegidas = async (nuevos: File[]) => {
+    setArchivos(nuevos);
+
+    if (nuevos.length === 0) {
+      setUrlsSubidas(null);
+      return;
+    }
+
+    if (!negocioId) return; // Sin negocio resuelto: se suben al guardar.
+
+    setIsCompressing(true);
+    marcarInicioOperacion("crear-producto:subir-fotos", {
+      cantidadImagenes: nuevos.length,
+      bytesTotales: nuevos.reduce((acc, f) => acc + f.size, 0),
+    });
+
+    try {
+      const optimizadas = await optimizarImagenesProducto(
+        nuevos.slice(0, MAX_IMAGENES_PRODUCTO),
+      );
+      const urls = await subirImagenesProductoDesdeCliente(
+        negocioId,
+        optimizadas,
+        MAX_IMAGENES_PRODUCTO,
+      );
+
+      if (urls.mains.length === 0) {
+        toast.error(mensajeErrorDeRed("subir las fotos"));
+        return;
+      }
+
+      setUrlsSubidas(urls);
+    } catch (error) {
+      if (esErrorDeRed(error)) {
+        toast.error(mensajeErrorDeRed("subir las fotos"));
+        return;
+      }
+      toast.error(
+        error instanceof ImagenError
+          ? error.message
+          : "No se pudieron procesar las fotos. Probá con una a la vez.",
+      );
+      setArchivos([]);
+    } finally {
+      setIsCompressing(false);
+      marcarFinOperacion();
+    }
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -181,45 +255,39 @@ export function useCreateProductForm(control?: ControlDeApertura) {
       return;
     }
 
-    if (archivos.length > 0) {
+    // Las fotos ya se subieron a Storage cuando se eligieron: acá solo viajan
+    // sus URLs. Es lo que hace que el guardado sea un POST chico en vez de
+    // varios MB que en el celular se mueren a mitad de camino.
+    formData.delete("imagenes");
+    formData.delete("thumbnails");
+    formData.delete("grids");
+    formData.delete("masters");
+
+    if (urlsSubidas && urlsSubidas.mains.length > 0) {
+      formData.append("imagenes_urls", JSON.stringify(urlsSubidas));
+    } else if (archivos.length > 0) {
+      // Red de seguridad: se eligieron fotos pero no llegaron a subir (no
+      // había negocio resuelto al elegirlas). Se comprimen y viajan como
+      // antes, en el mismo POST. Es más lento y más frágil, pero es mucho
+      // mejor que crear el producto sin fotos sin decir nada.
       setIsCompressing(true);
-      // Miga de pan: si la pestaña muere acá (el crash por memoria no tira
-      // excepción), al recargar se reporta como "posible-crash-renderer" con
-      // cuántas imágenes había. Sin esto no queda rastro en ningún lado.
-      marcarInicioOperacion("crear-producto:comprimir-imagenes", {
-        cantidadImagenes: archivos.length,
-        bytesTotales: archivos.reduce((acc, f) => acc + f.size, 0),
-      });
-      formData.delete("imagenes");
-      formData.delete("thumbnails");
-      formData.delete("grids");
-      formData.delete("masters");
-
-      // Secuencial a propósito (ver optimizarImagenesProducto): en paralelo
-      // el pico de memoria mataba la pestaña en mobile.
       try {
-        const imagenesOptimizadas = await optimizarImagenesProducto(archivos);
-
-        imagenesOptimizadas.forEach(({ main, thumbnail, grid, master }) => {
+        const optimizadas = await optimizarImagenesProducto(archivos);
+        optimizadas.forEach(({ main, thumbnail, grid, master }) => {
           formData.append("imagenes", main);
           formData.append("thumbnails", thumbnail);
           formData.append("grids", grid);
           formData.append("masters", master);
         });
       } catch (error) {
-        // Cortamos el guardado: mandar el archivo sin comprimir era lo que
-        // hacía explotar el límite de body de la Server Action en silencio.
         toast.error(
           error instanceof ImagenError
             ? error.message
-            : "No se pudieron procesar las imágenes. Probá con menos fotos o volvé a intentar.",
+            : "No se pudieron procesar las fotos.",
         );
         return;
       } finally {
-        // finally y no una línea suelta: si la compresión tira, el form
-        // quedaba trabado en "comprimiendo" para siempre.
         setIsCompressing(false);
-        marcarFinOperacion();
       }
     }
 
@@ -230,7 +298,7 @@ export function useCreateProductForm(control?: ControlDeApertura) {
     isOpen,
     handleOpenChange,
     archivos,
-    setArchivos,
+    setArchivos: subirFotosElegidas,
     isCompressing,
     showPrice,
     setShowPrice,

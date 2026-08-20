@@ -10,7 +10,10 @@ import {
   construirCacheAtributos,
 } from "@/features/stock/lib/normalize-atributo";
 import { obtenerAtributosRequeridosFaltantes } from "@/features/stock/lib/validate-required-atributos";
-import { subirImagenesProducto } from "@/features/stock/lib/subir-imagenes-producto";
+import {
+  leerUrlsDeImagenes,
+  subirImagenesProducto,
+} from "@/features/stock/lib/subir-imagenes-producto";
 import {
   defaultsFiscalesPorRubro,
   normalizarTratamientoIva,
@@ -129,22 +132,29 @@ export async function crearProductoAction(
   let grid_url = null;
   let master_url = null;
 
-  if (archivos.some((f) => f.size > 0)) {
+  // Camino nuevo: el navegador ya subió a Storage y solo mandó URLs. Camino
+  // viejo (cliente cacheado por el service worker): llegan los binarios y se
+  // suben acá, como siempre.
+  const urlsDelCliente = leerUrlsDeImagenes(formData, negocioId, "CREATE PRODUCT");
+
+  if (urlsDelCliente || archivos.some((f) => f.size > 0)) {
     const {
       mains,
       thumbs,
       grids: gridUrls,
       masters: masterUrls,
-    } = await subirImagenesProducto(
-      supabase,
-      negocioId,
-      archivos,
-      thumbnails,
-      grids,
-      "CREATE PRODUCT",
-      undefined,
-      masters,
-    );
+    } =
+      urlsDelCliente ??
+      (await subirImagenesProducto(
+        supabase,
+        negocioId,
+        archivos,
+        thumbnails,
+        grids,
+        "CREATE PRODUCT",
+        undefined,
+        masters,
+      ));
 
     if (mains.length > 0) {
       imagen_url = JSON.stringify(mains);

@@ -10,7 +10,10 @@ import {
 } from "@/features/stock/lib/normalize-atributo";
 import { parseProductImages } from "@/features/stock/lib/stock-product-utils";
 import { obtenerAtributosRequeridosFaltantes } from "@/features/stock/lib/validate-required-atributos";
-import { subirImagenesProducto } from "@/features/stock/lib/subir-imagenes-producto";
+import {
+  leerUrlsDeImagenes,
+  subirImagenesProducto,
+} from "@/features/stock/lib/subir-imagenes-producto";
 import { MAX_IMAGENES_PRODUCTO } from "@/shared/utils/limites-imagen";
 import {
   normalizarTratamientoIva,
@@ -173,6 +176,7 @@ export async function editarProductoAction(
     grids,
     masters,
     imagenesAEliminar,
+    formData,
   });
 
   // (b) Variantes, con su guard intacto — corre después, y su resultado
@@ -212,6 +216,9 @@ async function actualizarImagenesYCabecera(
     imagenesAEliminar: string[];
     /** Columnas de cabecera que solo se tocan si el form las mandó. */
     camposOpcionales: Record<string, string | null>;
+    /** Para leer `imagenes_urls`, el camino nuevo en el que el navegador ya
+     * subió las fotos a Storage y solo manda las URLs. */
+    formData: FormData;
   },
 ): Promise<ImagenesResult> {
   const {
@@ -229,6 +236,7 @@ async function actualizarImagenesYCabecera(
     masters,
     imagenesAEliminar,
     camposOpcionales,
+    formData,
   } = params;
 
   // Subir imágenes nuevas y mergear contra el imagen_url REAL en base. No
@@ -297,18 +305,22 @@ async function actualizarImagenesYCabecera(
       thumbs: urlsThumb,
       grids: urlsGrid,
       masters: urlsMaster,
-    } = hayArchivosNuevos
-      ? await subirImagenesProducto(
-          supabase,
-          negocioId,
-          archivos,
-          thumbnails,
-          grids,
-          "EDIT PRODUCT",
-          cupoDisponible,
-          masters,
-        )
-      : { mains: [], thumbs: [], grids: [], masters: [] };
+    } =
+      // Camino nuevo: el navegador ya subió a Storage y mandó URLs. El cupo se
+      // vuelve a aplicar acá aunque el cliente ya lo haya respetado.
+      leerUrlsDeImagenes(formData, negocioId, "EDIT PRODUCT", cupoDisponible) ??
+      (hayArchivosNuevos
+        ? await subirImagenesProducto(
+            supabase,
+            negocioId,
+            archivos,
+            thumbnails,
+            grids,
+            "EDIT PRODUCT",
+            cupoDisponible,
+            masters,
+          )
+        : { mains: [], thumbs: [], grids: [], masters: [] });
 
     imagen_url = JSON.stringify(imagenesFinal.concat(urls));
     thumbnail_url = JSON.stringify(thumbnailsFinal.concat(urlsThumb));

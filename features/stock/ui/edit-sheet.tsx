@@ -2,6 +2,9 @@
 
 import { parsearCantidadDeEntrada } from "@/shared/lib/unidad-venta";
 import { esErrorDeRed, mensajeErrorDeRed } from "@/shared/lib/error-de-red";
+import { subirImagenesProductoDesdeCliente } from "../lib/subir-imagenes-cliente";
+import { MAX_IMAGENES_PRODUCTO } from "@/shared/utils/limites-imagen";
+import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import {
   startTransition,
   useActionState,
@@ -40,6 +43,7 @@ import {
   type EditarProductoResult,
 } from "../actions/edit-product";
 import { getStockDetalleProductoAction } from "../actions/get-product";
+import { actualizarFotosProductoAction } from "../actions/actualizar-fotos-producto";
 import { useVariantSelection } from "../hooks/use-variant-selection";
 import type { CategoriaOption } from "../types";
 import {
@@ -227,7 +231,6 @@ function EditProductForm({
     [producto, isSimpleProduct],
   );
 
-  const [archivos, setArchivos] = useState<File[]>([]);
   // Espejo local de imagen_url — arranca desde el producto cargado, pero
   // se actualiza apenas el servidor confirma un guardado de imágenes
   // exitoso (ver el success handler de formAction más abajo). Es la
@@ -236,6 +239,7 @@ function EditProductForm({
   // después de corregir, esto evita que el formulario crea que las fotos
   // ya guardadas siguen pendientes y las vuelva a subir — la causa exacta
   // de la duplicación del incidente original.
+  const negocioId = useNegocioActivo()?.id ?? null;
   const [imagenesActuales, setImagenesActuales] = useState<string[]>(() =>
     parseProductImages(producto.imagen_url),
   );
@@ -243,9 +247,6 @@ function EditProductForm({
   // edición. No tocamos producto.imagen_url localmente: el servidor arma
   // el resultado final partiendo del imagen_url real en base (ver
   // editarProductoAction), esta lista solo indica la intención del click.
-  const [imagenesExistentesAQuitar, setImagenesExistentesAQuitar] = useState<
-    string[]
-  >([]);
   const [isCompressing, setIsCompressing] = useState(false);
   // Última barrera antes de guardar un producto con variantes: comparamos
   // el payload que se va a mandar contra lo que HOY existe en base (no
@@ -315,12 +316,6 @@ function EditProductForm({
     ): Promise<EditarProductoResult> => {
       formData.append("id", producto.id);
       formData.append("tieneVariantes", showVariants.toString());
-      if (imagenesExistentesAQuitar.length > 0) {
-        formData.append(
-          "imagenesAEliminar",
-          JSON.stringify(imagenesExistentesAQuitar),
-        );
-      }
       if (showVariants) {
         formData.append("opciones", JSON.stringify(variantSelection.opciones));
         formData.append(
@@ -359,8 +354,6 @@ function EditProductForm({
         // las variantes se bloquean y el usuario corrige y vuelve a
         // guardar) para no volver a subir los mismos binarios ni volver a
         // pedir el borrado de fotos que ya no existen.
-        setArchivos([]);
-        setImagenesExistentesAQuitar([]);
         if (result.imagenes.urls?.imagen_url !== undefined) {
           setImagenesActuales(
             parseProductImages(result.imagenes.urls.imagen_url),
@@ -433,46 +426,10 @@ function EditProductForm({
       return;
     }
 
-    if (archivos.length > 0) {
-      setIsCompressing(true);
-      // Miga de pan: ver el comentario equivalente en use-create-product-form.
-      marcarInicioOperacion("editar-producto:comprimir-imagenes", {
-        cantidadImagenes: archivos.length,
-        bytesTotales: archivos.reduce((acc, f) => acc + f.size, 0),
-      });
-      formData.delete("imagenes");
-      formData.delete("thumbnails");
-      formData.delete("grids");
-      formData.delete("masters");
+    // Las fotos NO pasan por este submit: se subieron y se guardaron cuando
+    // se eligieron (ver subirFotosAhora). Este formulario guarda nombre,
+    // precio, categoría y variantes.
 
-      // Secuencial a propósito (ver optimizarImagenesProducto): en paralelo
-      // el pico de memoria mataba la pestaña en mobile.
-      try {
-        const imagenesOptimizadas = await optimizarImagenesProducto(archivos);
-
-        // Desestructuramos el main, el thumbnail y el grid de cada iteración
-        imagenesOptimizadas.forEach(({ main, thumbnail, grid, master }) => {
-          formData.append("imagenes", main);
-          formData.append("thumbnails", thumbnail);
-          formData.append("grids", grid);
-          formData.append("masters", master);
-        });
-      } catch (error) {
-        // Cortamos el guardado: mandar el archivo sin comprimir era lo que
-        // hacía explotar el límite de body de la Server Action en silencio.
-        toast.error(
-          error instanceof ImagenError
-            ? error.message
-            : "No se pudieron procesar las imágenes. Probá con menos fotos o volvé a intentar.",
-        );
-        return;
-      } finally {
-        // finally y no una línea suelta: si la compresión tira, el form
-        // quedaba trabado en "comprimiendo" para siempre.
-        setIsCompressing(false);
-        marcarFinOperacion();
-      }
-    }
 
     if (showVariants) {
       await abrirConfirmacionVariantes(formData);
@@ -481,9 +438,112 @@ function EditProductForm({
     }
   };
 
+  /**
+   * Sube las fotos elegidas y las deja guardadas en el producto, ya.
+   *
+   * No espera al botón Guardar: si el guardado fallaba por red, antes se
+   * perdía la foto junto con todo el formulario. Ahora la foto es su propia
+   * operación y lo único que puede fallar es la foto.
+   */
+  const subirFotosAhora = async (nuevos: File[]) => {
+    if (nuevos.length === 0) return;
+
+    if (!negocioId) {
+      toast.error("Todavía no se resolvió el comercio activo. Probá de nuevo.");
+      return;
+    }
+
+    const cupo = Math.max(0, MAX_IMAGENES_PRODUCTO - imagenesActuales.length);
+    if (cupo === 0) {
+      toast.error(`Este producto ya tiene ${MAX_IMAGENES_PRODUCTO} fotos.`);
+      return;
+    }
+
+    setIsCompressing(true);
+    marcarInicioOperacion("editar-producto:subir-fotos", {
+      cantidadImagenes: nuevos.length,
+      bytesTotales: nuevos.reduce((acc, f) => acc + f.size, 0),
+    });
+
+    try {
+      const optimizadas = await optimizarImagenesProducto(nuevos.slice(0, cupo));
+      const urls = await subirImagenesProductoDesdeCliente(
+        negocioId,
+        optimizadas,
+        cupo,
+      );
+
+      if (urls.mains.length === 0) {
+        toast.error(mensajeErrorDeRed("subir las fotos"));
+        return;
+      }
+
+      const res = await actualizarFotosProductoAction(producto.id, {
+        agregar: urls,
+      });
+
+      if (!res.success) {
+        toast.error(res.error ?? "No se pudieron guardar las fotos.");
+        return;
+      }
+
+      // La galería se sincroniza con lo que devolvió el server, no con lo que
+      // creemos localmente: es la misma razón por la que la action parte de la
+      // base y no de una lista del cliente.
+      if (res.imagenes) setImagenesActuales(res.imagenes);
+      queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+      toast.success(urls.mains.length === 1 ? "Foto guardada" : "Fotos guardadas");
+    } catch (error) {
+      if (esErrorDeRed(error)) {
+        toast.error(mensajeErrorDeRed("subir las fotos"));
+        return;
+      }
+      toast.error(
+        error instanceof ImagenError
+          ? error.message
+          : "No se pudieron procesar las fotos. Probá con una a la vez.",
+      );
+    } finally {
+      setIsCompressing(false);
+      marcarFinOperacion();
+    }
+  };
+
+  /** Quita una foto del producto al instante. El archivo NO se borra de
+   * Storage — ver el comentario de `actualizarFotosProductoAction`. */
+  const quitarFotoAhora = async (url: string) => {
+    const previas = imagenesActuales;
+    // Optimista: la cruz tiene que responder al toque. Si el server rechaza,
+    // se vuelve atrás.
+    setImagenesActuales((prev) => prev.filter((u) => u !== url));
+
+    const res = await actualizarFotosProductoAction(producto.id, {
+      quitar: [url],
+    });
+
+    if (!res.success) {
+      setImagenesActuales(previas);
+      toast.error(res.error ?? "No se pudo quitar la foto.");
+      return;
+    }
+
+    if (res.imagenes) setImagenesActuales(res.imagenes);
+    queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+    queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+  };
+
   const abrirConfirmacionVariantes = async (formData: FormData) => {
     setPendingFormData(formData);
-    setConfirmModalOpen(true);
+    // El modal NO se abre acá. Antes se abría antes de calcular el diff y se
+    // cerraba solo si no había cambios, así que en TODO guardado de un
+    // producto con variantes parpadeaba una confirmación que no había que
+    // confirmar — incluso cambiando únicamente una foto. Un cartel que
+    // aparece cuando no corresponde es un cartel que se aprende a ignorar, y
+    // este existe para frenar borrados de mercadería.
+    //
+    // Ahora primero se calcula, y el modal se abre solo si hay algo que
+    // confirmar. `isLoadingDiff` sostiene el botón mientras tanto.
     setIsLoadingDiff(true);
 
     // Re-fetch obligatorio contra la base real al momento de confirmar —
@@ -581,7 +641,6 @@ function EditProductForm({
     // Si de verdad no cambia nada, el modal no aporta nada — guardamos
     // directo en vez de mostrar una tabla vacía sin explicación.
     if (filas.length === 0) {
-      setConfirmModalOpen(false);
       setIsLoadingDiff(false);
       setPendingFormData(null);
       startTransition(() => formAction(formData));
@@ -590,6 +649,8 @@ function EditProductForm({
 
     setDiffFilas(filas);
     setIsLoadingDiff(false);
+    // Recién ahora: hay algo concreto que confirmar.
+    setConfirmModalOpen(true);
   };
 
   const handleConfirmSave = () => {
@@ -623,15 +684,14 @@ function EditProductForm({
           id="edit-product-form"
           className="max-w-3xl mx-auto space-y-6"
         >
+          {/* Las fotos ya NO son un campo de este formulario: se guardan al
+              subirlas y se quitan al tocar la cruz. `Cancelar` cancela el
+              resto (nombre, precio, variantes), no las fotos. */}
           <ProductMediaSection
-            archivos={archivos}
-            onArchivosChange={setArchivos}
-            existingImages={imagenesActuales.filter(
-              (url) => !imagenesExistentesAQuitar.includes(url),
-            )}
-            onRemoveExistingImage={(url) =>
-              setImagenesExistentesAQuitar((prev) => [...prev, url])
-            }
+            archivos={[]}
+            onArchivosChange={subirFotosAhora}
+            existingImages={imagenesActuales}
+            onRemoveExistingImage={quitarFotoAhora}
             inputId={`imagenes-edit-${producto.id}`}
           />
 
@@ -716,7 +776,10 @@ function EditProductForm({
       </div>
 
       <CreateProductFooter
-        isPending={isPending}
+        // El diff de variantes ahora se calcula ANTES de abrir el modal, así
+        // que hay un tramo con el botón activo y nada en pantalla. Sin esto,
+        // dos toques disparan dos consultas y dos guardados.
+        isPending={isPending || isLoadingDiff}
         isCompressing={isCompressing}
         onCancel={onSaved}
         formId="edit-product-form"
