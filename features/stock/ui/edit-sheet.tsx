@@ -1,6 +1,7 @@
 "use client";
 
 import { parsearCantidadDeEntrada } from "@/shared/lib/unidad-venta";
+import { esErrorDeRed, mensajeErrorDeRed } from "@/shared/lib/error-de-red";
 import {
   startTransition,
   useActionState,
@@ -328,7 +329,29 @@ function EditProductForm({
         );
       }
 
-      const result = await editarProductoAction(prevState, formData);
+      // Un corte de red acá NO puede escalar al error boundary. La Server
+      // Action viaja por el mismo `fetch` que el router de Next, así que
+      // subiendo una foto por datos móviles el POST se muere y tira
+      // `TypeError: Failed to fetch`. Sin este catch, React lo manda al
+      // boundary y —como el único que había era `global-error`— la app entera
+      // se ponía en negro con "la aplicación se cortó inesperadamente", con el
+      // formulario lleno y la foto elegida perdidos.
+      //
+      // Devolver un estado de error en vez de relanzar deja el sheet abierto y
+      // todo cargado: se toca Guardar de nuevo y listo.
+      let result: EditarProductoResult;
+      try {
+        result = await editarProductoAction(prevState, formData);
+      } catch (error) {
+        if (!esErrorDeRed(error)) throw error;
+
+        const mensaje = mensajeErrorDeRed("guardar el producto");
+        toast.error(mensaje);
+        return {
+          imagenes: { success: false, error: mensaje },
+          variantes: { success: false, error: mensaje },
+        };
+      }
 
       if (result.imagenes.success) {
         // Las fotos ya quedaron guardadas en el servidor — sincronizamos

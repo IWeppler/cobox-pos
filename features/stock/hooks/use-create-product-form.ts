@@ -11,6 +11,7 @@ import {
   optimizarImagenesProducto,
 } from "@/shared/utils/image-optimizer";
 import { crearProductoAction } from "../actions/create-product";
+import { esErrorDeRed, mensajeErrorDeRed } from "@/shared/lib/error-de-red";
 import { useVariantSelection } from "./use-variant-selection";
 import { queryKeys } from "@/shared/lib/query-keys";
 import {
@@ -109,7 +110,25 @@ export function useCreateProductForm(control?: ControlDeApertura) {
         );
       }
 
-      const result = await crearProductoAction(prevState, formData);
+      // Mismo blindaje que en la edición: un corte de red subiendo fotos no
+      // puede tumbar la app entera. Ver el comentario largo en edit-sheet.tsx.
+      //
+      // Diferencia importante con la edición: acá el reintento puede DUPLICAR.
+      // `Failed to fetch` no distingue "no llegó" de "llegó y se perdió la
+      // respuesta", así que el producto pudo haberse creado igual. Por eso el
+      // mensaje avisa que revise antes de reintentar, en vez de invitar a
+      // apretar Guardar otra vez a ciegas.
+      let result: ProductActionState;
+      try {
+        result = await crearProductoAction(prevState, formData);
+      } catch (error) {
+        if (!esErrorDeRed(error)) throw error;
+
+        const mensaje = `${mensajeErrorDeRed("crear el producto")} Antes de volver a guardarlo, fijate en la lista si quedó creado.`;
+        toast.error(mensaje);
+        return { error: mensaje, success: false };
+      }
+
       if (result.success) {
         toast.success("Producto creado con éxito");
         handleOpenChange(false);

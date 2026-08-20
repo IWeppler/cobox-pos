@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { esErrorDeRed } from "@/shared/lib/error-de-red";
 import { reportarErrorCliente } from "@/shared/lib/reportar-error-cliente";
 
 /**
@@ -19,14 +20,19 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Un corte de red no es un crash, y decirle que "la aplicación se cortó
+  // inesperadamente" cuando lo único que pasó fue un parpadeo de señal le
+  // enseña a desconfiar del sistema justo cuando el sistema estaba bien.
+  const esDeRed = esErrorDeRed(error);
+
   useEffect(() => {
     reportarErrorCliente({
       tipo: "react-error-boundary",
       mensaje: error.message,
       stack: error.stack,
-      detalle: { digest: error.digest },
+      detalle: { digest: error.digest, esDeRed, alcance: "global" },
     });
-  }, [error]);
+  }, [error, esDeRed]);
 
   return (
     <html lang="es">
@@ -45,7 +51,7 @@ export default function GlobalError({
       >
         <div style={{ maxWidth: "28rem", textAlign: "center" }}>
           <h1 style={{ fontSize: "1.25rem", fontWeight: 600, margin: 0 }}>
-            Algo salió mal
+            {esDeRed ? "Se cortó la conexión" : "Algo salió mal"}
           </h1>
           <p
             style={{
@@ -55,8 +61,9 @@ export default function GlobalError({
               color: "#a1a1aa",
             }}
           >
-            La aplicación se cortó inesperadamente. Ya quedó registrado para
-            revisarlo. Podés reintentar sin perder la sesión.
+            {esDeRed
+              ? "No se pudo hablar con el servidor. No cerraste sesión: revisá la señal y tocá Reintentar."
+              : "La aplicación se cortó inesperadamente. Ya quedó registrado para revisarlo. Podés reintentar sin perder la sesión."}
           </p>
           <button
             type="button"
@@ -75,7 +82,9 @@ export default function GlobalError({
           >
             Reintentar
           </button>
-          {error.digest && (
+          {/* En un corte de red el digest no identifica nada del lado del
+              servidor: el request nunca llegó. */}
+          {!esDeRed && error.digest && (
             <p
               style={{
                 marginTop: "1rem",
