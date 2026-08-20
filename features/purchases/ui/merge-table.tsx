@@ -73,7 +73,7 @@ import { parseAttributeSegment } from "@/entities/productos/lib/parse-variant-at
 import { ProductMediaSection } from "@/features/stock/ui/create-product/product-media-section";
 import { ProgresoOverlay } from "./progreso-overlay";
 import {
-  ImagenNoProcesableError,
+  ImagenError,
   optimizarImagenesProducto,
 } from "@/shared/utils/image-optimizer";
 import {
@@ -834,7 +834,7 @@ export function MergeTable({
       // congelaba sin decir nada.
       console.error("[MERGE] Error creando producto al vuelo", error);
       setCrearError(
-        error instanceof ImagenNoProcesableError
+        error instanceof ImagenError
           ? error.message
           : "No se pudo crear el producto. Revisá las imágenes y volvé a intentar.",
       );

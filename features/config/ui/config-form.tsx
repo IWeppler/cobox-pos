@@ -36,7 +36,7 @@ import {
   CardTitle,
 } from "@/shared/ui/card";
 import {
-  ImagenNoProcesableError,
+  ImagenError,
   optimizarImagen,
 } from "@/shared/utils/image-optimizer";
 import { useRouter } from "next/navigation";
@@ -85,7 +85,7 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
         // optimizarImagen ya no devuelve el original cuando falla: cortamos
         // el guardado en vez de subir el archivo crudo.
         toast.error(
-          error instanceof ImagenNoProcesableError
+          error instanceof ImagenError
             ? error.message
             : "No se pudo procesar el logo. Probá con otra imagen.",
         );

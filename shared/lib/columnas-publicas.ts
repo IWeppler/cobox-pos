@@ -16,9 +16,12 @@
  * interpolación le da ParserError.
  */
 
-/** Ojo: sin `precio_costo`. El margen no sale al catálogo. */
+/** Ojo: sin `precio_costo` ni `tratamiento_iva`. Ni el margen ni la situación
+ * fiscal salen al catálogo. `unidad_medida` SÍ sale (GRANT en
+ * 20260819140000): sin ella, "$8.500" en una carnicería es un precio
+ * equivocado, no uno incompleto. */
 export const COLUMNAS_PRODUCTO_PUBLICO =
-  "id, negocio_id, nombre, slug, tipo, categoria_id, precio, descripcion, cuidados, marca, modelo, genero, atributos_globales, imagen_url, thumbnail_url, grid_url, publicado, creado_en";
+  "id, negocio_id, nombre, slug, tipo, categoria_id, precio, unidad_medida, descripcion, cuidados, marca, modelo, genero, atributos_globales, imagen_url, thumbnail_url, grid_url, publicado, creado_en";
 
 /** Ojo: sin `costo` ni `stock_minimo`. */
 export const COLUMNAS_VARIANTE_PUBLICA =

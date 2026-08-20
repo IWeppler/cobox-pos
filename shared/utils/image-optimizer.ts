@@ -1,5 +1,7 @@
 import imageCompression from "browser-image-compression";
 import {
+  MAX_BYTES_GUARDADOS,
+  MAX_BYTES_MASTER,
   MAX_BYTES_POR_IMAGEN,
   MAX_IMAGENES_PRODUCTO,
 } from "@/shared/utils/limites-imagen";
@@ -20,9 +22,20 @@ export interface ProductoOptimizado {
   master: File;
 }
 
+/**
+ * Base de los errores de imagen cuyo `message` YA está escrito para que lo lea
+ * la persona que subió la foto.
+ *
+ * Existe para que los consumidores hagan UN solo `instanceof` y muestren el
+ * mensaje. Sin base, cada error nuevo hay que agregarlo a mano en las cinco
+ * pantallas que suben imágenes, y el que se olvida cae al texto genérico — que
+ * es justo el que no dice qué hacer.
+ */
+export class ImagenError extends Error {}
+
 /** Error de compresión con el nombre del archivo, para poder avisar cuál falló
  * en vez de mostrar un mensaje genérico. */
-export class ImagenNoProcesableError extends Error {
+export class ImagenNoProcesableError extends ImagenError {
   constructor(
     readonly archivo: string,
     readonly causaOriginal: unknown,
@@ -32,6 +45,88 @@ export class ImagenNoProcesableError extends Error {
     );
     this.name = "ImagenNoProcesableError";
   }
+}
+
+/**
+ * La imagen se pudo procesar, pero no se logró dejarla en un tamaño que el
+ * servidor acepte.
+ *
+ * Es un error DISTINTO de `ImagenNoProcesableError` porque la causa y lo que
+ * puede hacer la persona son distintos: acá el archivo no está dañado ni en un
+ * formato raro, simplemente este navegador no sabe comprimir bien (típicamente
+ * un WebView que ignora el formato pedido y devuelve PNG). Mezclarlos le diría
+ * "puede estar dañada" sobre una foto que está perfecta.
+ */
+export class ImagenNoOptimizableError extends ImagenError {
+  constructor(
+    readonly archivo: string,
+    readonly bytesLogrados: number,
+    readonly formatoLogrado: string,
+  ) {
+    super(
+      `No se pudo comprimir "${archivo}" lo suficiente (quedó en ${(bytesLogrados / 1024 / 1024).toFixed(1)}MB). Suele pasar en el navegador del celular: probá subirla desde otro navegador (Chrome), o sacarle una captura de pantalla y subir esa.`,
+    );
+    this.name = "ImagenNoOptimizableError";
+  }
+}
+
+/**
+ * Formatos que de verdad comprimen una foto.
+ *
+ * PNG y BMP son SIN PÉRDIDA: `quality` no les hace nada, así que una foto de
+ * celular reencodeada a PNG sale igual o MÁS PESADA que el original. Es la
+ * causa del incidente del 19/8 — una foto de 2,6MB llegó al server "ya
+ * optimizada" y el guard la descartó.
+ */
+export function esFormatoConPerdida(mime: string): boolean {
+  return mime === "image/webp" || mime === "image/jpeg";
+}
+
+/**
+ * Cuánto puede pesar CADA versión, en dos niveles:
+ *
+ * - `presupuesto`: lo que consideramos "bien optimizado". Pasarse no es un
+ *   error, es la señal para insistir con otra calidad. Va holgado respecto del
+ *   objetivo (`maxSizeMB`) para no reencodear de más una foto normal.
+ * - `limiteServidor`: lo que la Server Action acepta. Pasarse de acá es
+ *   inútil: el archivo se va a descartar igual, así que conviene fallar en el
+ *   navegador con un mensaje que se entienda en vez de subirlo para nada.
+ */
+export function presupuestoDe(tipo: TipoImagen): {
+  presupuesto: number;
+  limiteServidor: number;
+} {
+  const MB = 1024 * 1024;
+  if (tipo === "master") {
+    return { presupuesto: 3 * MB, limiteServidor: MAX_BYTES_MASTER };
+  }
+  const presupuesto =
+    tipo === "thumbnail" ? 0.15 * MB : tipo === "grid" ? 0.4 * MB : 0.8 * MB;
+  return { presupuesto, limiteServidor: MAX_BYTES_GUARDADOS };
+}
+
+/**
+ * Si este navegador sabe codificar WebP por canvas. Se aprende del primer
+ * intento y vale para toda la sesión.
+ *
+ * No es una micro-optimización: `optimizarImagenProducto` genera CUATRO
+ * versiones por foto, y cada intento decodifica la imagen entera a un bitmap
+ * RGBA (~48MB en una foto de 12MP). En un WebView que no sabe hacer WebP,
+ * pedirlo igual en cada versión son cuatro decodificaciones garantizadas al
+ * pedo, en el dispositivo que menos memoria tiene — el mismo pico que ya mató
+ * pestañas antes (ver el comentario de optimizarImagenProducto).
+ *
+ * `null` = todavía no sabemos.
+ */
+let navegadorCodificaWebp: boolean | null = null;
+
+/** Un resultado sirve si comprime de verdad y entra en el presupuesto. */
+export function resultadoAceptable(
+  mime: string,
+  bytes: number,
+  tipo: TipoImagen,
+): boolean {
+  return esFormatoConPerdida(mime) && bytes <= presupuestoDe(tipo).presupuesto;
 }
 
 // 1. Para logos o imágenes individuales
@@ -68,30 +163,95 @@ export async function optimizarImagen(
     initialQuality: isMaster ? 0.9 : 0.7,
   };
 
-  try {
-    let compressedBlob = await imageCompression(file, {
-      ...baseOptions,
-      fileType: "image/webp",
-    });
+  // Escalera de intentos. Se corta en el PRIMERO cuyo resultado sea aceptable
+  // de verdad (formato con pérdida + dentro del presupuesto), no en el primero
+  // que no tire excepción.
+  //
+  // Por qué hace falta una escalera y no un solo reintento: hasta el 19/8 esto
+  // pedía WebP y, si el navegador devolvía otra cosa, reintentaba UNA vez como
+  // JPEG **sin volver a mirar el resultado**. Los WebViews que ignoran
+  // `fileType` lo ignoran las dos veces, así que quedaba un PNG — sin pérdida,
+  // más pesado que el original — y se subía como "ya optimizado".
+  //
+  // El segundo motivo es que `maxSizeMB` de la librería es un OBJETIVO, no un
+  // tope: después de `maxIteration` se rinde y devuelve lo mejor que consiguió,
+  // que en una foto con mucho detalle puede quedar muy por encima.
+  //
+  // Los intentos bajan calidad y recién después resignan dimensión, en ese
+  // orden: bajar calidad en una foto se nota mucho menos que perder píxeles, y
+  // acá el que mira es un cliente decidiendo si compra.
+  const { presupuesto, limiteServidor } = presupuestoDe(tipo);
+  const intentos: { fileType: string; quality: number; escala: number }[] = [
+    // WebP primero: pesa ~30% menos que JPEG a igual calidad. Se saltea si ya
+    // sabemos que este navegador no lo sabe codificar.
+    ...(navegadorCodificaWebp === false
+      ? []
+      : [
+          {
+            fileType: "image/webp",
+            quality: baseOptions.initialQuality,
+            escala: 1,
+          },
+        ]),
+    // JPEG es el único que TODO canvas sabe codificar.
+    { fileType: "image/jpeg", quality: baseOptions.initialQuality, escala: 1 },
+    { fileType: "image/jpeg", quality: 0.55, escala: 1 },
+    { fileType: "image/jpeg", quality: 0.45, escala: 0.75 },
+  ];
 
-    // Algunos navegadores/WebViews (Safari y varios Android viejos) no
-    // saben codificar WebP por canvas: ignoran el mimeType pedido y
-    // devuelven PNG en silencio, sin tirar error. Como PNG no tiene
-    // pérdida, `quality` no reduce nada ahí — la librería termina
-    // compensando el peso encogiendo dimensiones (hasta ~70% del tamaño
-    // pedido), la causa real detrás de las fotos borrosas en tablet que
-    // midió el diagnóstico. JPEG sí tiene soporte universal de
-    // codificación por canvas, así que ahí `quality` vuelve a reducir
-    // peso de verdad en vez de resignar dimensión.
-    if (compressedBlob.type !== "image/webp") {
-      console.warn(
-        `[image-optimizer] El navegador no devolvió WebP para "${tipo}" (devolvió "${compressedBlob.type}") — reintentando como JPEG.`,
-        { archivo: file.name, tipo },
-      );
-      compressedBlob = await imageCompression(file, {
+  try {
+    let compressedBlob: Blob | null = null;
+
+    for (const [indice, intento] of intentos.entries()) {
+      const candidato = await imageCompression(file, {
         ...baseOptions,
-        fileType: "image/jpeg",
+        fileType: intento.fileType,
+        initialQuality: intento.quality,
+        maxWidthOrHeight: Math.round(
+          baseOptions.maxWidthOrHeight * intento.escala,
+        ),
       });
+
+      // Lo que devolvió cuando pedimos WebP es la única forma de saber si este
+      // navegador lo sabe codificar: los que no, ignoran `fileType` y
+      // responden PNG sin tirar error.
+      if (intento.fileType === "image/webp") {
+        navegadorCodificaWebp = candidato.type === "image/webp";
+      }
+
+      // Se guarda el más liviano visto hasta ahora: si ningún intento entra en
+      // el presupuesto, igual queremos subir el mejor y no el último.
+      if (!compressedBlob || candidato.size < compressedBlob.size) {
+        compressedBlob = candidato;
+      }
+
+      if (resultadoAceptable(candidato.type, candidato.size, tipo)) {
+        compressedBlob = candidato;
+        break;
+      }
+
+      console.warn(
+        `[image-optimizer] Intento ${indice + 1}/${intentos.length} insuficiente para "${tipo}": ${(candidato.size / 1024 / 1024).toFixed(2)}MB en ${candidato.type} (presupuesto ${(presupuesto / 1024 / 1024).toFixed(2)}MB).`,
+        { archivo: file.name, tipo, pedido: intento.fileType },
+      );
+    }
+
+    if (!compressedBlob) {
+      throw new Error("La compresión no devolvió ningún resultado");
+    }
+
+    // Última red: si ni el mejor intento entra en lo que el servidor acepta, no
+    // tiene sentido subirlo — se descartaría igual y en silencio, que es
+    // exactamente lo que pasó el 19/8. Mejor cortar acá con un mensaje.
+    if (
+      !esFormatoConPerdida(compressedBlob.type) ||
+      compressedBlob.size > limiteServidor
+    ) {
+      throw new ImagenNoOptimizableError(
+        file.name,
+        compressedBlob.size,
+        compressedBlob.type,
+      );
     }
 
     // El nombre/extensión final tiene que reflejar el contenido real — no
@@ -112,6 +272,20 @@ export async function optimizarImagen(
       lastModified: Date.now(),
     });
   } catch (error) {
+    // "No entró en el presupuesto" ya es un error con su propio mensaje y su
+    // propia causa: si se lo envolviera en ImagenNoProcesableError, la persona
+    // leería "puede estar dañada" sobre una foto que está perfecta.
+    if (error instanceof ImagenNoOptimizableError) {
+      console.error("[image-optimizer] No se pudo optimizar lo suficiente:", {
+        archivo: file.name,
+        tipo,
+        tamanoOriginal: file.size,
+        bytesLogrados: error.bytesLogrados,
+        formatoLogrado: error.formatoLogrado,
+      });
+      throw error;
+    }
+
     // NO devolver el original. Antes este catch hacía `return file`, y como
     // optimizarImagenProducto llama tres veces, un solo fallo mandaba el
     // archivo crudo TRES veces al server: una foto de 4MB se volvía un body

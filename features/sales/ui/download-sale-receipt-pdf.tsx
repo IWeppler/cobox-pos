@@ -10,6 +10,7 @@ import {
   StyleSheet,
   pdf,
 } from "@react-pdf/renderer";
+import { esFraccionable, formatearCantidad } from "@/shared/lib/unidad-venta";
 
 // Estilos específicos para el PDF
 const styles = StyleSheet.create({
@@ -195,7 +196,9 @@ const ReceiptDocument = ({
             return (
               <View style={styles.tableRow} key={idx}>
                 <Text style={[styles.colQty, styles.rowTextBold]}>
-                  {item.cantidad}
+                  {esFraccionable(item.unidadMedida)
+                    ? formatearCantidad(item.cantidad, item.unidadMedida)
+                    : item.cantidad}
                 </Text>
                 <View style={styles.colDesc}>
                   <Text style={styles.rowTextBold}>{item.nombre}</Text>

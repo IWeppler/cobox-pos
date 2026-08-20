@@ -286,6 +286,31 @@ Esto es lo que ya le sirve a una carnicería chica el primer día.
 **Riesgo:** medio. Todo lo nuevo está detrás de `esFraccionable`, que es false
 para los 1.765 productos existentes.
 
+#### Estado al 19/8: implementada, sin deploy
+
+Migración aplicada (`20260819140000`); el código sigue en el working tree.
+
+- **`unidad_medida` viaja hasta el carrito.** Hizo falta un GRANT para `anon`:
+  `COLUMNAS_PRODUCTO_PUBLICO` la comparten el catálogo público y el POS, y con
+  GRANT por columna pedir una no concedida devuelve 403 — la tienda se cae
+  entera, no se degrada. La migración lleva un guard que además verifica que
+  `precio_costo` y `tratamiento_iva` NO quedaron expuestos.
+- **`CantidadControl`** (`shared/components/cart-sidebar/`) es dos controles
+  en uno: stepper -/+ por unidad, teclado por peso. Sin stepper en peso a
+  propósito — con paso de un gramo harían falta 750 clicks para vender 750 g.
+- **Cobrar por importe**: se tipea "$2000" y el peso se despeja solo. Es como
+  se pide de verdad en un mostrador.
+- **`parsear-numero-es.ts`**: dos parsers, no uno. `"1.500"` es **1,5 kg** en
+  un campo de peso y **$1.500** en uno de importe; el mismo texto significa
+  cosas distintas y elegir mal es cobrar mil veces de más.
+- **Ticket, PDF, carrito, grilla del POS e Inventario** muestran la unidad.
+  El ticket pasa de `"0.75x Jamón"` a `"0,75 kg Jamón"`, y el `c/u` a `/kg`.
+- **Los 11 `parseInt`/`Math.trunc` de la Fase 1 quedaron todos resueltos** —
+  eran el motivo por el que no había de dónde sacar stock decimal.
+
+Los productos por unidad no cambian en nada: `esFraccionable` es false y cada
+pantalla cae al camino de siempre.
+
 #### Checklist heredado de la Fase 1: los `parseInt` que quedaron
 
 La Fase 1 dejó la BASE en decimal pero **no tocó las pantallas de carga**, a

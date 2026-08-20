@@ -13,6 +13,8 @@
  * no aplica a ese rubro.
  */
 
+import { redondearCantidad } from "@/shared/lib/unidad-venta";
+
 /** Headers reconocidos por columna. El primero es el nombre "oficial". */
 const ALIASES = {
   // "subcategoria" es la MISMA columna: en un catálogo por audiencia
@@ -289,7 +291,9 @@ export function parseProductosSheet(rows: string[][]): ParseProductosResult {
       // import sin nada vendible.
       stock = 1;
     } else {
-      stock = Math.trunc(stockParseado);
+      // Era `Math.trunc`, que convertía "12,5 kg" en 12 sin decir nada. Ahora
+      // se redondea al gramo, que es la resolución que guarda la base.
+      stock = redondearCantidad(stockParseado);
     }
 
     if (!imei && stock < 0) {

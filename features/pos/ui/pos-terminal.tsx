@@ -14,6 +14,7 @@ import { QuickAddModal } from "@/features/pos/ui/quick-add-modal";
 import Image from "next/image";
 import { StockFiltersToolbar } from "@/features/stock/ui/stock-filters-toolbar";
 import { formatearMoneda } from "@/shared/utils/formatters";
+import { sufijoPrecioPorUnidad } from "@/shared/lib/unidad-venta";
 import { ShareButton } from "@/shared/components/share-button";
 import {
   armarMensajeProducto,
@@ -187,6 +188,7 @@ export function PosTerminal({
       varianteId: variante.varianteId,
       precio: variante.precio ?? producto.precio,
       cantidad: 1,
+      unidadMedida: producto.unidad_medida,
       imagenUrl: resolverImagenPrincipal(producto),
       stockMaximo: variante.cantidad,
     });
@@ -415,6 +417,9 @@ export function PosTerminal({
                         </p>
                         <p className="font-mono font-semibold tracking-tight text-sm sm:text-base text-muted-foreground">
                           {formatearMoneda(producto.precio)}
+                          <span className="text-[10px] font-normal">
+                            {sufijoPrecioPorUnidad(producto.unidad_medida)}
+                          </span>
                         </p>
                       </div>
                     </button>

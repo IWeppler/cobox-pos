@@ -17,11 +17,23 @@ const NINGUNO: RecargoMoraConfig = {
   recargo_mora_valor: 0,
 };
 
-/** Fechas relativas a hoy, en ISO — es lo que guarda fecha_vencimiento_deuda. */
+/**
+ * Fechas relativas a hoy, en ISO — es lo que guarda fecha_vencimiento_deuda.
+ *
+ * La fecha se arma con los componentes LOCALES, no con `toISOString()`.
+ * `calcularDiasVencido` compara contra el calendario local
+ * (`hoy.getFullYear/getMonth/getDate`), así que el helper tiene que hablar el
+ * mismo idioma: con `toISOString()`, en Argentina (UTC−3) a partir de las
+ * 21:00 el instante ya cayó en el día siguiente en UTC y `haceDias(1)`
+ * devolvía HOY. El test daba 0 de recargo y fallaba — todas las noches, y solo
+ * de noche.
+ */
 function haceDias(dias: number): string {
   const f = new Date();
   f.setDate(f.getDate() - dias);
-  return f.toISOString().slice(0, 10);
+  const mes = String(f.getMonth() + 1).padStart(2, "0");
+  const dia = String(f.getDate()).padStart(2, "0");
+  return `${f.getFullYear()}-${mes}-${dia}`;
 }
 
 describe("calcularSaldoConRecargo", () => {

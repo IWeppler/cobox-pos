@@ -239,6 +239,8 @@ export function VentasTable({
           cantidad: item.cantidad,
           precioUnitario: item.precio_unitario,
           imei: getSupabaseRelation(item.unidad_serie)?.imei ?? null,
+          unidadMedida:
+            getSupabaseRelation(item.producto)?.unidad_medida ?? null,
         }),
       ),
       total: venta.total,

@@ -16,6 +16,7 @@ import {
   normalizarTratamientoIva,
   normalizarUnidadMedida,
 } from "@/shared/lib/fiscal-producto";
+import { parsearCantidadDeEntrada } from "@/shared/lib/unidad-venta";
 
 type SupabaseServerClient = ReturnType<typeof createClient>;
 
@@ -78,9 +79,7 @@ export async function editarProductoAction(
   const publicado = formData.get("publicado") === "true";
 
   const tieneVariantes = formData.get("tieneVariantes") === "true";
-  const stockBase = Number.parseInt(
-    (formData.get("stockBase") as string) || "0",
-  );
+  const stockBase = parsearCantidadDeEntrada(formData.get("stockBase"));
 
   const archivos = formData.getAll("imagenes") as File[];
   const thumbnails = formData.getAll("thumbnails") as File[];

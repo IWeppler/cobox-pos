@@ -2,7 +2,13 @@
 
 import { CartItemStore } from "@/entities/cart/types";
 import { Button } from "@/shared/ui/button";
-import { Barcode, Minus, Plus, ShoppingBag, X } from "lucide-react";
+import { Barcode, ShoppingBag, X } from "lucide-react";
+import { CantidadControl } from "./cantidad-control";
+import { esFraccionable, formatearCantidad } from "@/shared/lib/unidad-venta";
+import {
+  ABREVIATURA_UNIDAD,
+  normalizarUnidadMedida,
+} from "@/shared/lib/fiscal-producto";
 
 interface CartStepItemsProps {
   items: CartItemStore[];
@@ -116,43 +122,41 @@ export function CartStepItems({
                     </div>
 
                     <div className="flex items-end justify-between gap-3">
-                      <div className="flex h-8 items-center border border-border">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onUpdateQuantity(
-                              item.productoId,
-                              item.variante,
-                              item.cantidad - 1,
-                            )
-                          }
-                          disabled={item.cantidad <= 1}
-                          className="flex h-full w-8 items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-40"
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </button>
-                        <span className="w-8 text-center font-mono text-xs font-medium text-foreground">
-                          {item.cantidad}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onUpdateQuantity(
-                              item.productoId,
-                              item.variante,
-                              item.cantidad + 1,
-                            )
-                          }
-                          disabled={item.cantidad >= item.stockMaximo}
-                          className="flex h-full w-8 items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-40"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      <CantidadControl
+                        cantidad={item.cantidad}
+                        precio={item.precio}
+                        unidadMedida={item.unidadMedida}
+                        stockMaximo={item.stockMaximo}
+                        onChange={(cantidad) =>
+                          onUpdateQuantity(
+                            item.productoId,
+                            item.variante,
+                            cantidad,
+                          )
+                        }
+                      />
 
-                      <p className="font-mono text-sm font-medium text-foreground">
-                        ${lineSubtotal.toLocaleString("es-AR")}
-                      </p>
+                      <div className="text-right">
+                        {/* El precio por unidad de medida solo se muestra
+                            cuando se vende fraccionado: en una remera "x u."
+                            es ruido, en un fiambre es el dato que explica de
+                            dónde sale el subtotal. */}
+                        {esFraccionable(item.unidadMedida) && (
+                          <p className="font-mono text-[10px] text-muted-foreground">
+                            {formatearCantidad(
+                              item.cantidad,
+                              item.unidadMedida,
+                            )}{" "}
+                            × ${item.precio.toLocaleString("es-AR")}/
+                            {ABREVIATURA_UNIDAD[
+                              normalizarUnidadMedida(item.unidadMedida)
+                            ]}
+                          </p>
+                        )}
+                        <p className="font-mono text-sm font-medium text-foreground">
+                          ${lineSubtotal.toLocaleString("es-AR")}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>

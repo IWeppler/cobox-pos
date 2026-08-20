@@ -16,6 +16,7 @@ import {
   normalizarTratamientoIva,
   normalizarUnidadMedida,
 } from "@/shared/lib/fiscal-producto";
+import { parsearCantidadDeEntrada } from "@/shared/lib/unidad-venta";
 
 export async function crearProductoAction(
   prevState: { error: string | null; success: boolean },
@@ -95,9 +96,7 @@ export async function crearProductoAction(
     : defaults.unidad_medida;
 
   const tieneVariantes = formData.get("tieneVariantes") === "true";
-  const stockBase = Number.parseInt(
-    (formData.get("stockBase") as string) || "0",
-  );
+  const stockBase = parsearCantidadDeEntrada(formData.get("stockBase"));
 
   const archivos = formData.getAll("imagenes") as File[];
   const thumbnails = formData.getAll("thumbnails") as File[];
@@ -369,7 +368,7 @@ export async function crearProductoAction(
 
       const vPrecio = v.precio ? Number.parseFloat(v.precio) : null;
       const vCosto = v.precio_costo ? Number.parseFloat(v.precio_costo) : null;
-      const vStock = Number.parseInt(v.stock || "0");
+      const vStock = parsearCantidadDeEntrada(v.stock);
 
       variantesToInsert.push({
         negocio_id: negocioId,

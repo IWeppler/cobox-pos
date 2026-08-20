@@ -13,6 +13,11 @@ import {
   TableRow,
 } from "@/shared/ui/table";
 import { Button } from "@/shared/ui/button";
+import { formatearNumeroCantidad } from "@/shared/lib/unidad-venta";
+import {
+  ABREVIATURA_UNIDAD,
+  normalizarUnidadMedida,
+} from "@/shared/lib/fiscal-producto";
 import {
   Edit2,
   ImageIcon,
@@ -497,9 +502,18 @@ export function StockTable({
                       <div className="flex items-center justify-center gap-1.5">
                         <div className={`w-2 h-2 rounded-full ${dotColor}`} />
                         <span className="font-mono font-medium text-foreground">
-                          {totalUnidades}{" "}
+                          {/* La unidad ya no está clavada en "u.": en una
+                              carnicería el inventario dice 12,5 kg, no 12. */}
+                          {formatearNumeroCantidad(
+                            totalUnidades,
+                            producto.unidad_medida,
+                          )}{" "}
                           <span className="text-[10px] font-medium opacity-70 uppercase tracking-widest">
-                            u.
+                            {
+                              ABREVIATURA_UNIDAD[
+                                normalizarUnidadMedida(producto.unidad_medida)
+                              ]
+                            }
                           </span>
                         </span>
                       </div>

@@ -32,6 +32,11 @@ export interface VentaProducto {
   nombre?: string;
   tipo?: string;
   precio_costo?: number;
+  /** Para reimprimir el ticket con la unidad correcta. Se lee del producto y
+   * no de una columna congelada en el renglón: cambiar la unidad de venta de
+   * un producto es tan raro, y tan claramente un error de carga cuando pasa,
+   * que no justifica una columna más en `ventas_items`. */
+  unidad_medida?: string | null;
 }
 
 export interface VentaDescuento {
@@ -121,6 +126,9 @@ export interface TicketItemData {
   /** IMEI / número de serie del aparato vendido. El ticket lo imprime
    * porque es el comprobante que el cliente presenta en una garantía. */
   imei?: string | null;
+  /** Unidad en la que se vendió. Sin esto el ticket imprime "0.75x Jamón",
+   * que no es una cantidad que alguien pueda controlar contra la balanza. */
+  unidadMedida?: string | null;
 }
 
 export interface TicketData {

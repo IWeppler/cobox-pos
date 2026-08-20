@@ -216,6 +216,7 @@ export function ProductDetail({
       variante: stockDeVariante ? stockDeVariante.variante : "Unico",
       precio: stockDeVariante?.precio ?? producto.precio,
       cantidad: 1,
+      unidadMedida: producto.unidad_medida,
       imagenUrl: imagenes[0] || null,
       stockMaximo: stockMaximo,
     });

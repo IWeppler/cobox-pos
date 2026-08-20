@@ -3,6 +3,7 @@ import {
   normalizarUnidadMedida,
   type UnidadMedida,
 } from "./fiscal-producto";
+import { parsearCantidadEs } from "./parsear-numero-es";
 
 /**
  * Qué cantidad es válida para vender, según la unidad del producto.
@@ -86,6 +87,45 @@ export function normalizarCantidadVendible(
 }
 
 /**
+ * Cantidad tipeada en un formulario o traída de una planilla.
+ *
+ * Reemplaza a los `Number.parseInt` que había repartidos por las pantallas de
+ * carga. Ese parseInt no era un redondeo: `parseInt("12,5")` devuelve 12 y
+ * `parseInt("0,75")` devuelve 0, o sea que la carga por peso entraba mal y sin
+ * un solo aviso.
+ *
+ * Acepta coma o punto como decimal (`parsearCantidadEs`) y cae al `fallback`
+ * cuando el texto no es un número: nunca lanza, porque estos llamadores están
+ * en el medio de un formulario que tiene que poder seguir.
+ */
+export function parsearCantidadDeEntrada(valor: unknown, fallback = 0): number {
+  if (typeof valor === "number") {
+    return Number.isFinite(valor) ? redondearCantidad(valor) : fallback;
+  }
+  if (typeof valor !== "string") return fallback;
+
+  const parseado = parsearCantidadEs(valor);
+  return parseado === null ? fallback : redondearCantidad(parseado);
+}
+
+/**
+ * Sufijo del PRECIO: "/kg" en lo que se vende por peso, vacío en lo que se
+ * vende por pieza.
+ *
+ * Va vacío y no "/u." en los productos por unidad a propósito: "$12.000" en
+ * una remera ya se entiende, y "/u." en toda la grilla de una tienda de ropa
+ * es ruido en 1.765 productos para aclarar algo que nadie estaba dudando. En
+ * una carnicería, en cambio, "$8.500" sin el "/kg" no es un precio incompleto:
+ * es un precio equivocado.
+ */
+export function sufijoPrecioPorUnidad(unidad: unknown): string {
+  const normalizada = normalizarUnidadMedida(unidad);
+  return esFraccionable(normalizada)
+    ? `/${ABREVIATURA_UNIDAD[normalizada]}`
+    : "";
+}
+
+/**
  * Cómo se escribe la cantidad en el ticket, el carrito y el inventario.
  *
  * Por unidad se muestra sin decimales ("3 u."); por peso, con los que tenga y
@@ -94,14 +134,19 @@ export function normalizarCantidadVendible(
  */
 export function formatearCantidad(cantidad: number, unidad: unknown): string {
   const unidadNormalizada = normalizarUnidadMedida(unidad);
-  const abreviatura = ABREVIATURA_UNIDAD[unidadNormalizada];
+  return `${formatearNumeroCantidad(cantidad, unidadNormalizada)} ${ABREVIATURA_UNIDAD[unidadNormalizada]}`;
+}
 
-  const texto = esFraccionable(unidadNormalizada)
+/** Solo el número, sin la unidad. Para las pantallas que maquetan la
+ * abreviatura aparte (Inventario la muestra más chica y en versalitas). */
+export function formatearNumeroCantidad(
+  cantidad: number,
+  unidad: unknown,
+): string {
+  return esFraccionable(unidad)
     ? redondearCantidad(cantidad).toLocaleString("es-AR", {
         minimumFractionDigits: 0,
         maximumFractionDigits: DECIMALES_CANTIDAD,
       })
     : String(Math.round(cantidad));
-
-  return `${texto} ${abreviatura}`;
 }

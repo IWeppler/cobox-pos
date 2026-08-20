@@ -135,6 +135,8 @@ export type ProductoIndice = Pick<
   | "grid_url"
   | "slug"
   | "publicado"
+  // Sin esto, Inventario muestra "12 u." de un producto que se vende por kilo.
+  | "unidad_medida"
 > & {
   categoria?: CategoriaRelacion | null;
   producto_variantes?: Pick<

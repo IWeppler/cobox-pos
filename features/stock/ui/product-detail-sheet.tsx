@@ -118,6 +118,7 @@ export function ProductDetailSheet({
       variante: varianteSeleccionada,
       cantidad: 1,
       precio: precioPorVariante.get(varianteSeleccionada) ?? producto.precio,
+      unidadMedida: producto.unidad_medida,
       imagenUrl: primeraImagen,
       stockMaximo: stockDeVariante,
     });

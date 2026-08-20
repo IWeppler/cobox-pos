@@ -218,6 +218,7 @@ function QuickAddModalContent({
             varianteId: stockDeVariante.varianteId,
             precio: stockDeVariante.precio ?? producto.precio,
             cantidad: 1,
+            unidadMedida: producto.unidad_medida,
             imagenUrl: resolverImagenPrincipal(producto),
             stockMaximo: stockDeVariante.cantidad,
           });

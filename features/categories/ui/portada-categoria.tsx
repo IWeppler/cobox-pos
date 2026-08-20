@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import {
-  ImagenNoProcesableError,
+  ImagenError,
   optimizarImagen,
 } from "@/shared/utils/image-optimizer";
 import { subirImagenCategoriaAction } from "../actions/manage-categories";
@@ -63,7 +63,7 @@ export function PortadaCategoria({
       toast.success("Portada lista. Acordate de guardar los cambios.");
     } catch (error) {
       toast.error(
-        error instanceof ImagenNoProcesableError
+        error instanceof ImagenError
           ? error.message
           : "No se pudo procesar la imagen.",
       );

@@ -38,7 +38,7 @@ export async function getVentasAction(opts?: { soloPropias?: boolean }) {
           descuento_monto,
           precio_final,
           promocion_nombre,
-          producto:productos(nombre, imagen_url),
+          producto:productos(nombre, imagen_url, unidad_medida),
           unidad_serie:unidades_serie(id, imei, fecha_venta)
         ),
         ventas_descuentos (

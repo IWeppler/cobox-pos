@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { CartItemStore } from "@/entities/cart/types";
+import { pasoCantidad, redondearCantidad } from "@/shared/lib/unidad-venta";
 
 interface CartState {
   items: CartItemStore[];
@@ -44,9 +45,14 @@ export const useCartStore = create<CartState>()(
             const updatedItems = [...state.items];
             const currentItem = updatedItems[existingItemIndex];
 
-            const newQuantity = Math.min(
-              currentItem.cantidad + newItem.cantidad,
-              currentItem.stockMaximo,
+            // Redondeado a 3 decimales: sumar pesos en binario deja colas
+            // (0,1 + 0,2 = 0,30000000000000004) y esa cola se arrastraría
+            // hasta el subtotal de la línea.
+            const newQuantity = redondearCantidad(
+              Math.min(
+                currentItem.cantidad + newItem.cantidad,
+                currentItem.stockMaximo,
+              ),
             );
 
             updatedItems[existingItemIndex] = {
@@ -84,10 +90,13 @@ export const useCartStore = create<CartState>()(
         set((state) => ({
           items: state.items.map((item) => {
             if (item.productoId === productoId && item.variante === variante) {
-              // Nos aseguramos de no pasar el stock máximo ni bajar de 1
-              const safeQuantity = Math.max(
-                1,
-                Math.min(cantidad, item.stockMaximo),
+              // No pasar el stock máximo ni bajar del mínimo vendible. Ese
+              // mínimo YA NO es siempre 1: en un producto por peso es un
+              // gramo, y clavarlo en 1 obligaría a vender de a kilos enteros
+              // justo en el rubro donde nadie compra un kilo redondo.
+              const minimo = pasoCantidad(item.unidadMedida);
+              const safeQuantity = redondearCantidad(
+                Math.max(minimo, Math.min(cantidad, item.stockMaximo)),
               );
               return { ...item, cantidad: safeQuantity };
             }

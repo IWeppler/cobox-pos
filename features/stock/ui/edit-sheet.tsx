@@ -1,5 +1,6 @@
 "use client";
 
+import { parsearCantidadDeEntrada } from "@/shared/lib/unidad-venta";
 import {
   startTransition,
   useActionState,
@@ -17,7 +18,7 @@ import type { Producto, ProductoIndice } from "@/entities/productos/types";
 import { Button } from "@/shared/ui/button";
 import { createClient } from "@/shared/config/supabase/client";
 import {
-  ImagenNoProcesableError,
+  ImagenError,
   optimizarImagenesProducto,
 } from "@/shared/utils/image-optimizer";
 import {
@@ -437,7 +438,7 @@ function EditProductForm({
         // Cortamos el guardado: mandar el archivo sin comprimir era lo que
         // hacía explotar el límite de body de la Server Action en silencio.
         toast.error(
-          error instanceof ImagenNoProcesableError
+          error instanceof ImagenError
             ? error.message
             : "No se pudieron procesar las imágenes. Probá con menos fotos o volvé a intentar.",
         );
@@ -513,7 +514,7 @@ function EditProductForm({
       }
 
       const stockDespues = enPayload.stock?.trim()
-        ? Number.parseInt(enPayload.stock)
+        ? parsearCantidadDeEntrada(enPayload.stock)
         : ex.stock;
       const precioDespues = enPayload.precio?.trim()
         ? Number.parseFloat(enPayload.precio)
@@ -546,7 +547,7 @@ function EditProductForm({
             .join(" / ") || "Variante",
         tipo: "nueva",
         stockAntes: null,
-        stockDespues: v.stock?.trim() ? Number.parseInt(v.stock) : 0,
+        stockDespues: v.stock?.trim() ? parsearCantidadDeEntrada(v.stock) : 0,
         precioAntes: null,
         precioDespues: v.precio?.trim() ? Number.parseFloat(v.precio) : null,
       });

@@ -82,7 +82,7 @@ export async function getStockIndexAction(): Promise<{
         .select(
           `
         id, nombre, tipo, precio, precio_costo, categoria_id, marca, modelo,
-        imagen_url, thumbnail_url, grid_url, slug, publicado,
+        imagen_url, thumbnail_url, grid_url, slug, publicado, unidad_medida,
         categoria:categorias(id, nombre, slug),
         producto_variantes(
           id, sku, nombre_display, precio, costo, stock, atributos,

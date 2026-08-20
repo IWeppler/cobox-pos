@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, FormEvent, useRef } from "react";
+import { parsearCantidadDeEntrada } from "@/shared/lib/unidad-venta";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
@@ -328,7 +329,9 @@ export function ImportarPedidoModal({
             raw_genero: generoFinal,
             raw_sku: sku || null,
             raw_marca: marca || null,
-            cantidad: Math.max(0, parseInt(String(cant)) || 0),
+            // parseInt truncaba "12,5" a 12: un remito de carne entraba con
+            // medio kilo de menos, sin aviso.
+            cantidad: Math.max(0, parsearCantidadDeEntrada(cant)),
             precio_costo: Math.max(0, parseNumber(precio)),
             // null (no 0) cuando la planilla no trae la columna: 0 querría
             // decir "vender a $0" y en la conciliación pisaría el precio que

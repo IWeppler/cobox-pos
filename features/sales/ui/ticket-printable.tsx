@@ -5,6 +5,11 @@ import {
   getTicketFinancialSummary,
   getTicketSubtotal,
 } from "./ticket-utils";
+import { esFraccionable, formatearCantidad } from "@/shared/lib/unidad-venta";
+import {
+  ABREVIATURA_UNIDAD,
+  normalizarUnidadMedida,
+} from "@/shared/lib/fiscal-producto";
 
 interface TicketPrintableProps {
   ticket: TicketData | null;
@@ -61,8 +66,14 @@ export function TicketPrintable({
             return (
               <div key={idx} className="flex flex-col">
                 <p className="font-bold uppercase leading-tight text-sm">
-                  {item.cantidad}x {item.nombre}{" "}
-                  {item.variante && `(${item.variante})`}
+                  {/* Por unidad: "3x Remera". Por peso: "0,75 kg Jamón" — sin
+                      la "x", porque el cliente controla ese número contra lo
+                      que marcó la balanza y "0.75x" no se parece a nada de lo
+                      que vio en el mostrador. */}
+                  {esFraccionable(item.unidadMedida)
+                    ? `${formatearCantidad(item.cantidad, item.unidadMedida)} `
+                    : `${item.cantidad}x `}
+                  {item.nombre} {item.variante && `(${item.variante})`}
                 </p>
                 {/* El IMEI va en el ticket porque es el comprobante con el
                     que el cliente reclama la garantía del aparato. */}
@@ -72,7 +83,16 @@ export function TicketPrintable({
                   </p>
                 )}
                 <div className="flex justify-between items-center text-gray-700 text-xs mt-0.5">
-                  <span>{formatTicketMoney(precioUnitario)} c/u</span>
+                  {/* "c/u" es correcto solo si la unidad es la pieza. En un
+                      producto por peso el precio es por kilo, y decir "c/u"
+                      sobre $8.500 hace parecer que ese es el precio de lo que
+                      se llevó. */}
+                  <span>
+                    {formatTicketMoney(precioUnitario)}{" "}
+                    {esFraccionable(item.unidadMedida)
+                      ? `/${ABREVIATURA_UNIDAD[normalizarUnidadMedida(item.unidadMedida)]}`
+                      : "c/u"}
+                  </span>
                   <span className="font-bold text-black text-sm">
                     {formatTicketMoney(totalItem)}
                   </span>

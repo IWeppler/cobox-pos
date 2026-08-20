@@ -38,6 +38,7 @@ export function useStockCartActions(userRole: string) {
       varianteId: varianteData?.id,
       cantidad: 1,
       precio: varianteData?.precio ?? producto.precio,
+      unidadMedida: producto.unidad_medida,
       imagenUrl: obtenerPrimeraImagen(producto.imagen_url),
       stockMaximo: stockMax,
     });
