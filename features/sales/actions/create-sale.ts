@@ -53,9 +53,23 @@ export async function registrarVentaAction(
 
   if (authError || !user) return { error: "No autorizado.", success: false };
 
+  // La configuración del comercio, UNA vez por venta.
+  //
+  // Antes se leía dos veces la MISMA fila: acá adentro de `resolverTurnoActivo`
+  // y otra vez más abajo para las columnas de pagos y comprobante. Medido en
+  // la traza de una venta real, ese duplicado era un round-trip entero.
+  const { data: configVenta } = await supabase
+    .from("configuracion_pos")
+    .select(
+      // `modo_caja` y `requiere_caja_abierta` son para el turno; el resto para
+      // los pagos y para el comprobante del paso 11. Misma fila, una consulta.
+      "modo_caja, requiere_caja_abierta, permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante, cc_recargo_default, cc_plazo_mora, modo_facturacion, comprobante_defecto, condicion_iva, punto_venta",
+    )
+    .single();
+
   // BLOQUEO Y ASIGNACIÓN DE CAJA (MODO DINÁMICO)
   const { turnoId: turnoAbiertoId, requiereCajaAbierta: requiereCaja } =
-    await resolverTurnoActivo(supabase, user.id);
+    await resolverTurnoActivo(supabase, user.id, configVenta);
 
   if (requiereCaja && !turnoAbiertoId) {
     return { error: "CAJA_CERRADA", success: false };
@@ -371,17 +385,8 @@ export async function registrarVentaAction(
   // stock atómico. Antes este bloque corría después del descuento de
   // stock, dejando la puerta abierta a decrementar stock real para una
   // venta que después se rechazaba por sumaPagos/monto.
-  const { data: configVenta } = await supabase
-    .from("configuracion_pos")
-    .select(
-      // Las 4 últimas son para el comprobante del paso 11. Viajan en esta
-      // consulta y no en una propia: es la misma fila y ya la estamos trayendo.
-      // `cc_plazo_mora` viaja acá y ya no en una consulta propia más abajo: es
-      // la misma fila que esta consulta ya trae, y pedirla dos veces era un
-      // round-trip entero por venta para leer una columna.
-      "permitir_venta_sin_stock, cc_anticipo_default, entrega_minima_bloqueante, cc_recargo_default, cc_plazo_mora, modo_facturacion, comprobante_defecto, condicion_iva, punto_venta",
-    )
-    .single();
+  // `configVenta` ya se trajo arriba, junto con lo del turno: es la misma fila
+  // y antes se pedía dos veces en la misma venta.
   const permitirVentaSinStock = configVenta?.permitir_venta_sin_stock ?? false;
 
   const configComprobante = configVenta

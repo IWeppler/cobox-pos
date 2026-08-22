@@ -18,6 +18,7 @@ import { getContextoPlanAction } from "@/features/planes/actions/contexto-plan";
 import { leerConfigPos } from "@/entities/config/lib/leer-config-pos";
 import { etiquetaPlan } from "@/shared/lib/planes";
 import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
+import { getRolActual } from "@/shared/config/supabase/contexto-actual";
 
 export default async function DashboardLayout({
   children,
@@ -40,10 +41,12 @@ export default async function DashboardLayout({
   // cuatro, en cada navegación del panel. Y `leerConfigPos` además la comparte
   // con el `generateMetadata` del layout raíz: si aquel ya la resolvió en este
   // mismo render, acá no cuesta nada.
-  const [{ data: perfil }, { data: rolActual }, negocios, contextoPlan, config] =
+  const [{ data: perfil }, rolActual, negocios, contextoPlan, config] =
     await Promise.all([
       supabase.from("perfiles").select("nombre").eq("id", user.id).single(),
-      supabase.rpc("rol_actual"),
+      // Cacheado por request: la página de abajo lo vuelve a pedir en el mismo
+      // render y ahí ya no cuesta un viaje. Ver `getRolActual`.
+      getRolActual(),
       listarMisNegociosAction(),
       getContextoPlanAction(),
       leerConfigPos(),

@@ -20,6 +20,7 @@ import {
 } from "@/entities/caja/types";
 import { VentaPago } from "@/entities/ventas/types";
 import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
+import { getRolActual } from "@/shared/config/supabase/contexto-actual";
 
 export const dynamic = "force-dynamic";
 
@@ -37,9 +38,9 @@ export default async function CajaPage() {
   if (!user) redirect("/auth");
 
   // El rol es por negocio (usuarios_negocios), el nombre es del perfil global.
-  const [{ data: perfil }, { data: rolActual }] = await Promise.all([
+  const [{ data: perfil }, rolActual] = await Promise.all([
     supabase.from("perfiles").select("nombre").eq("id", user.id).single(),
-    supabase.rpc("rol_actual"),
+    getRolActual(),
   ]);
 
   const userRole = rolActual || "VENDEDOR";

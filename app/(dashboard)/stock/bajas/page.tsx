@@ -7,6 +7,7 @@ import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
 import { revalidatePath } from "next/cache";
 import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
+import { getRolActual } from "@/shared/config/supabase/contexto-actual";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +93,7 @@ export default async function BajasPage({
   const { user } = await getUsuarioActual();
   if (!user) redirect("/auth");
 
-  const { data: rolActual } = await supabase.rpc("rol_actual");
+  const rolActual = await getRolActual();
 
   if (rolActual !== "ADMIN") {
     redirect("/stock"); // Si un vendedor se cuela por URL, lo pateamos al inventario

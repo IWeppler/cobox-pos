@@ -5,6 +5,7 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { Venta } from "@/entities/ventas/types";
 import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
+import { getRolActual } from "@/shared/config/supabase/contexto-actual";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function VentasPage() {
   // gatea el orden "Mayor ganancia neta", fuera del alcance de este cableado)
   let userRole = "VENDEDOR";
   if (user) {
-    const { data: rolActual } = await supabase.rpc("rol_actual");
+    const rolActual = await getRolActual();
     if (rolActual) userRole = rolActual;
   }
 

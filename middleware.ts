@@ -181,11 +181,31 @@ export async function middleware(request: NextRequest) {
 
   // 1. Rol del usuario EN EL NEGOCIO ACTIVO (ya no es un dato del perfil: el
   // mismo usuario puede ser ADMIN en un negocio y VENDEDOR en otro).
+  //
+  // UNA sola llamada para rol y super admin (`contexto_sesion`), no dos.
+  // Este archivo corre en CADA request del panel, así que cada viaje que hace
+  // se paga en cada navegación, cada prefetch y cada server action. Medido
+  // sobre una venta real: `rol_actual` + `is_super_admin` eran 543 ms de los
+  // 1.048 ms de la venta, antes de que create-sale empezara.
+  //
+  // Y es el costo que NO baja moviendo la región de las funciones: el
+  // middleware es runtime edge, corre cerca del usuario y lejos de la base
+  // siempre. Lo único que se puede hacer es ir menos veces.
   let rolActual: string | null = null;
   let rol = null;
+  let esSuperAdmin = false;
   if (user) {
-    const { data } = await supabase.rpc("rol_actual");
-    rolActual = data ?? null;
+    // El cast es porque `contexto_sesion` es nueva y todavía no está en los
+    // tipos generados de Supabase. La forma la fija la migración
+    // 20260822170000.
+    const { data } = await supabase.rpc("contexto_sesion").maybeSingle();
+    const contexto = data as {
+      rol: string | null;
+      es_super_admin: boolean | null;
+    } | null;
+
+    rolActual = contexto?.rol ?? null;
+    esSuperAdmin = contexto?.es_super_admin ?? false;
 
     // Si por algún motivo falla, asumimos el rol más restrictivo (VENDEDOR)
     rol = rolActual || "VENDEDOR";
@@ -210,7 +230,8 @@ export async function middleware(request: NextRequest) {
 
   // 3. Super admin de comerz: no pertenece a ningún negocio, así que queda
   // fuera de todo el control por rol y negocio activo. Su lugar es /admincomerz.
-  const { data: esSuperAdmin } = await supabase.rpc("is_super_admin");
+  // `esSuperAdmin` ya vino con el rol, arriba: era un segundo viaje a la base
+  // por request para leer un booleano de la misma sesión.
   if (esSuperAdmin) {
     if (isAuthRoute || pathname === "/") {
       const url = request.nextUrl.clone();
