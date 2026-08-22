@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import Link from "next/link";
 import {
@@ -38,11 +39,52 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
-import { ImportarPedidoModal } from "@/features/purchases/ui/create-purchase-modal";
+/**
+ * Los modales pesados se cargan cuando se abren, no cuando se monta la barra.
+ *
+ * Esta toolbar la usa /stock pero TAMBIÉN la terminal de venta (/pos la
+ * importa a través de PosTerminal), así que su bundle lo pagaba cada vendedora
+ * en cada carga del POS. Lo que arrastraba:
+ *
+ *   ImportarPedidoModal ....... xlsx (311 kB, 108 kB gzip)
+ *   IngresarMercaderiaModal ... xlsx, por leerPlanillaProductos
+ *   CrearProductoSheet ........ el compresor de imágenes del navegador
+ *
+ * Nada de eso se usa vendiendo. `ssr: false` porque son modales de navegador
+ * puros: no aportan nada al HTML del server.
+ *
+ * OJO: `dynamic()` sola no alcanzaba. Los tres se montaban SIEMPRE (con
+ * `isAdmin`) y solo se abrían por prop `open`, así que el chunk se pedía igual
+ * al montar la barra. Por eso abajo además se renderizan recién cuando su
+ * estado de apertura es true.
+ */
+const ImportarPedidoModal = dynamic(
+  () =>
+    import("@/features/purchases/ui/create-purchase-modal").then(
+      (m) => m.ImportarPedidoModal,
+    ),
+  { ssr: false },
+);
 import type { Rubro } from "@/entities/config/types";
-import { CrearProductoSheet } from "@/features/stock/ui/create-sheet";
-import { IngresarMercaderiaModal } from "./ingresar-mercaderia-modal";
-import { UpdatePricesModal } from "./update-prices-modal";
+const CrearProductoSheet = dynamic(
+  () =>
+    import("@/features/stock/ui/create-sheet").then((m) => m.CrearProductoSheet),
+  { ssr: false },
+);
+
+const IngresarMercaderiaModal = dynamic(
+  () =>
+    import("./ingresar-mercaderia-modal").then((m) => m.IngresarMercaderiaModal),
+  { ssr: false },
+);
+
+// Este vive adentro del DropdownMenu, y Radix desmonta el contenido cerrado,
+// así que no hace falta gatearlo a mano: no se renderiza hasta que se abre el
+// menú.
+const UpdatePricesModal = dynamic(
+  () => import("./update-prices-modal").then((m) => m.UpdatePricesModal),
+  { ssr: false },
+);
 import { PriceHistoryModal } from "./price-history-modal";
 import { ShareButton } from "@/shared/components/share-button";
 import {
@@ -183,26 +225,31 @@ export function StockFiltersToolbar({
             plantilla se baja. Antes se montaba uno solo —remito para
             indumentaria, planilla para electro— como si una tienda de ropa no
             pudiera tener una planilla propia. */}
-        {isAdmin && (
+        {/* Se montan recién cuando se abren. Los tres ya venían con `open`
+            controlado desde afuera y trigger propio (`hideTrigger`), así que
+            el único cambio es que el código llega en ese momento en vez de en
+            cada carga de la barra — y de la terminal de venta, que la
+            comparte. */}
+        {isAdmin && isImportModalOpen && (
           <ImportarPedidoModal
-            open={isImportModalOpen}
+            open
             onOpenChange={setIsImportModalOpen}
             hideTrigger
           />
         )}
 
-        {isAdmin && (
+        {isAdmin && isCrearProductoOpen && (
           <CrearProductoSheet
-            open={isCrearProductoOpen}
+            open
             onOpenChange={setIsCrearProductoOpen}
             hideTrigger
             rubro={rubro}
           />
         )}
 
-        {isAdmin && (
+        {isAdmin && isIngresoOpen && (
           <IngresarMercaderiaModal
-            open={isIngresoOpen}
+            open
             onOpenChange={setIsIngresoOpen}
             rubro={rubro}
             onAbrirRemitoProveedor={() => setIsImportModalOpen(true)}

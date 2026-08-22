@@ -25,7 +25,6 @@ import {
 import { TicketData } from "@/entities/ventas/types";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { TicketPrintable } from "./ticket-printable";
-import { downloadSaleReceiptPdf } from "./download-sale-receipt-pdf";
 import { buildWhatsappMessage } from "../utils/whatsapp-helper";
 import {
   formatTicketMoney,
@@ -73,10 +72,29 @@ export function TicketSheet({
     window.open(url, "_blank");
   };
 
+  /**
+   * `@react-pdf/renderer` se carga recién cuando hace falta.
+   *
+   * Es la dependencia más pesada de la app —342 kB gzip entre sus dos chunks—
+   * y entraba al bundle de /pos por esta pantalla, o sea que TODA vendedora la
+   * bajaba en cada carga de la terminal por si alguna vez tocaba este botón.
+   * Con el import acá adentro, la paga solo quien descarga un comprobante.
+   *
+   * `precargarPdf` la trae al pasar el mouse o al enfocar el botón: en desktop
+   * llega antes del click y en mobile arranca con el primer toque. El módulo
+   * queda cacheado, así que llamarlo dos veces no lo baja dos veces.
+   */
+  const precargarPdf = () => {
+    void import("./download-sale-receipt-pdf");
+  };
+
   const handleDownloadPDF = async () => {
     if (!ticket) return;
 
     setIsDownloading(true);
+    const { downloadSaleReceiptPdf } = await import(
+      "./download-sale-receipt-pdf"
+    );
     const success = await downloadSaleReceiptPdf(ticket, config);
     setIsDownloading(false);
 
@@ -358,6 +376,8 @@ export function TicketSheet({
                   variant="outline"
                   className="flex-1 gap-2 h-11 text-sm font-semibold"
                   onClick={handleDownloadPDF}
+                  onPointerEnter={precargarPdf}
+                  onFocus={precargarPdf}
                   disabled={isDownloading || !ticket}
                 >
                   {isDownloading ? (
