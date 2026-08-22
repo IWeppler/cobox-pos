@@ -16,6 +16,10 @@ import {
   type PadreConHijos,
   type CategoriaConCount,
 } from "@/shared/utils/category-tree";
+import {
+  crearPasaFiltroStock,
+  crearResolverCategoriaId,
+} from "../lib/catalogo-core";
 
 export const DEFAULT_TIPO = "todos";
 export const DEFAULT_ORDEN = "mas_vendidos";
@@ -148,49 +152,17 @@ export function useCatalogFilters({
     [searchQuery, filtrosVariantes],
   );
 
-  // Filtro de stock (visibilidad), compartido entre conteos y filtrado —
-  // antes vivía copiado 2 veces, ahora 3 (se suma matchesFueraDeCategoria).
-  const pasaFiltroStock = useCallback(
-    (p: Producto) => {
-      const stockViejos = p.stock?.reduce((acc, s) => acc + s.cantidad, 0) || 0;
-      const stockNuevos =
-        p.producto_variantes?.reduce(
-          (acc, v) => acc + (v.stock_disponible ?? v.stock),
-          0,
-        ) || 0;
-      const stockTotal = stockViejos + stockNuevos;
-      return !(config?.mostrar_sin_stock === false && stockTotal <= 0);
-    },
+  // Filtro de stock (visibilidad) y resolución de categoría: la definición
+  // vive en `catalogo-core.ts` porque el SERVER también las necesita para
+  // armar la portada sin mandar el catálogo entero. Acá solo se memorizan.
+  const pasaFiltroStock = useMemo(
+    () => crearPasaFiltroStock(config),
     [config],
   );
 
-  // Lookup id/slug/nombre (lowercased) -> id real de categoría. Permite
-  // creditar tanto productos con categoria_id real (ya arreglado en
-  // getProductosAction) como los legacy que solo traen `tipo` (texto
-  // libre) matcheando el nombre/slug de una categoría real.
-  const categoriaIdPorClave = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const cat of categorias) {
-      map.set(cat.id.toLowerCase(), cat.id);
-      if (cat.slug) map.set(cat.slug.toLowerCase(), cat.id);
-      if (cat.nombre) map.set(cat.nombre.toLowerCase(), cat.id);
-    }
-    return map;
-  }, [categorias]);
-
-  const resolverCategoriaIdDeProducto = useCallback(
-    (p: Producto): string => {
-      const porId = p.categoria_id
-        ? categoriaIdPorClave.get(p.categoria_id.toLowerCase())
-        : undefined;
-      if (porId) return porId;
-      const porTipo = p.tipo
-        ? categoriaIdPorClave.get(p.tipo.toLowerCase())
-        : undefined;
-      if (porTipo) return porTipo;
-      return (p.categoria_id || p.tipo || "sin-categoria").toLowerCase();
-    },
-    [categoriaIdPorClave],
+  const resolverCategoriaIdDeProducto = useMemo(
+    () => crearResolverCategoriaId(categorias),
+    [categorias],
   );
 
   // conteosTotales: solo el filtro de stock — decide qué categorías existen

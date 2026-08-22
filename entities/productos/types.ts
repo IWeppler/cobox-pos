@@ -78,7 +78,10 @@ export interface Producto {
   /** NO lo trae el catálogo público: es el margen del comercio y anon no lo tiene concedido (20260811140000). Solo por caminos autenticados. */
   precio_costo?: number;
   imagen_url: string | null;
-  thumbnail_url: string | null;
+  /** Opcional porque la LISTA del catálogo público no lo trae: la grilla usa
+   * `grid_url` y la miniatura solo hace falta en /stock y en la ficha, que la
+   * piden con su propia consulta. Ver COLUMNAS_PRODUCTO_LISTA. */
+  thumbnail_url?: string | null;
   grid_url: string | null;
   creado_en: string;
   publicado: boolean;

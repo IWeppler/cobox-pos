@@ -2,6 +2,8 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { Producto } from "@/entities/productos/types";
+import { getIndiceCatalogoPublicoAction } from "@/shared/actions/store-actions";
+import type { PortadaCatalogo } from "../lib/catalogo-core";
 import { Button } from "@/shared/ui/button";
 import { Plus, SearchX, ShoppingBag } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -46,7 +48,12 @@ interface CategoriaProp {
 }
 
 interface StoreCatalogProps {
-  productos: Producto[];
+  /**
+   * La portada YA calculada por el server: tarjetas de categoría y 8 recién
+   * llegados. Es lo único que viaja en el HTML — el catálogo completo lo pide
+   * este componente aparte. Ver `calcularPortada`.
+   */
+  portadaInicial: PortadaCatalogo | null;
   config?: ConfiguracionPOS | null;
   categorias?: CategoriaProp[];
 }
@@ -58,6 +65,16 @@ const ordenOptions: OrdenOption[] = [
   { value: "mayor_precio", label: "Mayor precio" },
 ];
 const ORDEN_VALIDOS = new Set(ordenOptions.map((o) => o.value));
+
+/**
+ * Los params que `generateMetadata` de la página lee para armar título,
+ * canonical y preview del link. Cambiar uno de estos obliga a volver al
+ * server; el resto se resuelve entero en el navegador.
+ *
+ * Si algún día `generateMetadata` empieza a mirar otro param, va acá también
+ * — si no, ese link compartido va a mostrar el título de otra cosa.
+ */
+const PARAMS_CON_METADATA = new Set(["categoria", "sub", "productos"]);
 
 const PARAMS_RESERVADOS = new Set([
   "q",
@@ -71,7 +88,7 @@ const PARAMS_RESERVADOS = new Set([
 ]);
 
 export function StoreCatalog({
-  productos,
+  portadaInicial,
   config,
   categorias,
 }: Readonly<StoreCatalogProps>) {
@@ -84,7 +101,7 @@ export function StoreCatalog({
       }
     >
       <CatalogContent
-        productos={productos}
+        portadaInicial={portadaInicial}
         config={config}
         categorias={categorias}
       />
@@ -93,10 +110,42 @@ export function StoreCatalog({
 }
 
 function CatalogContent({
-  productos,
+  portadaInicial,
   config,
   categorias,
 }: Readonly<StoreCatalogProps>) {
+  /**
+   * El índice completo, que ya no viene en el HTML.
+   *
+   * `null` = todavía no llegó. Mientras tanto la portada se dibuja con lo que
+   * calculó el server (`portadaInicial`), así que el visitante que entra a la
+   * home ve el catálogo sin esperar nada; el índice se usa recién cuando hay
+   * que filtrar, buscar o entrar a una categoría.
+   *
+   * Se pide siempre, no solo al salir de la portada: el que va a filtrar
+   * empieza a moverse en el primer segundo, y esperar a su primer click para
+   * recién ahí arrancar la descarga le suma el viaje entero a esa interacción.
+   */
+  const [indice, setIndice] = useState<Producto[] | null>(null);
+
+  useEffect(() => {
+    let vigente = true;
+    getIndiceCatalogoPublicoAction()
+      .then((res) => {
+        if (vigente && res.data) setIndice(res.data as Producto[]);
+      })
+      .catch((e) => {
+        // Sin índice el catálogo queda en la portada, que es una degradación
+        // legible; que no sea silenciosa igual, porque significa que no se
+        // puede buscar ni filtrar.
+        console.error("[CATALOGO] No se pudo cargar el índice:", e);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, []);
+
+  const productos = indice ?? [];
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -268,14 +317,18 @@ function CatalogContent({
   // ninguno visible (todo sin stock con `mostrar_sin_stock: false`), la
   // portada quedaría en una pantalla con un botón que dice "Ver los 0
   // productos". Ahí conviene caer al estado vacío de la grilla.
-  const modoPortada =
-    esModoPortada({
-      modoSeleccion,
-      tipo,
-      searchQuery,
-      verTodo,
-      cantidadFiltrosVariante: Object.keys(filtrosVariantes).length,
-    }) && productosFiltrados.length > 0;
+  // Separado en dos: `modoPortadaUrl` depende SOLO de la URL, así que se puede
+  // responder antes de que llegue el índice — es lo que permite dibujar la
+  // portada del server sin tener el catálogo todavía. El de abajo le suma la
+  // condición de datos, que recién se puede evaluar con el índice cargado.
+  const modoPortadaUrl = esModoPortada({
+    modoSeleccion,
+    tipo,
+    searchQuery,
+    verTodo,
+    cantidadFiltrosVariante: Object.keys(filtrosVariantes).length,
+  });
+  const modoPortada = modoPortadaUrl && productosFiltrados.length > 0;
 
   // `productosFiltrados` en la portada equivale a "todo lo visible" (sin
   // categoría, sin búsqueda, sin filtros), así que sirve de base tanto para
@@ -331,8 +384,33 @@ function CatalogContent({
     }
 
     const url = params.toString() ? `${pathname}?${params}` : pathname;
-    if (mode === "push") router.push(url, { scroll: false });
-    else router.replace(url, { scroll: false });
+
+    // Filtrar NO es navegar.
+    //
+    // Todo esto pasaba por el router, o sea un viaje al server por cada tap
+    // de talle o de orden: la ruta es `force-dynamic`, así que reejecutaba el
+    // tenant, la config, las categorías y el render entero para responder algo
+    // que el cliente ya sabe — el filtrado vive acá, en `useCatalogFilters`.
+    //
+    // El corte no es una preferencia: son exactamente los params que lee
+    // `generateMetadata` de la página (`categoria`, `sub`, `productos`). Esos
+    // cambian el título, el canonical y el preview del link compartido, así
+    // que tienen que pasar por el router para que el server los regenere.
+    // El resto —talles, color, orden, `ver`, la búsqueda— no aparece en
+    // ninguna metadata, y la History API alcanza: Next actualiza
+    // `useSearchParams` sin volver a pedir la página.
+    const tocaMetadata = Object.keys(entries).some((name) =>
+      PARAMS_CON_METADATA.has(name),
+    );
+
+    if (tocaMetadata) {
+      if (mode === "push") router.push(url, { scroll: false });
+      else router.replace(url, { scroll: false });
+      return;
+    }
+
+    if (mode === "push") window.history.pushState(null, "", url);
+    else window.history.replaceState(null, "", url);
   };
 
   // Canonicaliza links viejos: si `categoria` resolvió directo a lo que
@@ -432,6 +510,35 @@ function CatalogContent({
     }
     updateParams(aBorrar, "replace");
   };
+
+  // --- Todavía sin índice ---
+  // En la portada no se nota: se dibuja con lo que ya calculó el server, que
+  // es exactamente lo mismo que dibujaría el cliente. Fuera de la portada
+  // (una categoría, una búsqueda, un link compartido) hace falta el catálogo
+  // para responder, y ahí sí se espera.
+  //
+  // El chequeo de "catálogo vacío" va DESPUÉS de este: sin índice `productos`
+  // es un array vacío, y sin esta guarda toda visita mostraría "Catálogo
+  // vacío" por un instante antes de dibujar la tienda.
+  if (indice === null) {
+    if (modoPortadaUrl && portadaInicial && portadaInicial.totalProductos > 0) {
+      return (
+        <StoreHome
+          categorias={portadaInicial.categorias}
+          recientes={portadaInicial.recientes}
+          totalProductos={portadaInicial.totalProductos}
+          onSelectCategoria={handleSelectCategoria}
+          onVerTodo={handleVerTodo}
+        />
+      );
+    }
+
+    return (
+      <div className="flex justify-center items-center py-24">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
 
   if (productos.length === 0) {
     return (

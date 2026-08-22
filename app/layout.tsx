@@ -9,16 +9,24 @@ import { InstalacionPwaListener } from "@/shared/components/instalacion-pwa-list
 import { ClientErrorReporter } from "@/shared/components/client-error-reporter";
 
 
+/**
+ * Las dos son fuentes VARIABLES, así que no llevan `weight`.
+ *
+ * Con un array de pesos, `next/font` no baja la variable: instancia una fuente
+ * estática por peso. Eran 12 archivos (7 de Geist + 5 de Geist Mono) para
+ * cubrir un rango que un solo woff2 variable cubre entero, y el catálogo los
+ * descubre recién cuando el CSS los pide. Sin `weight` queda un archivo por
+ * familia y cualquier peso intermedio sigue disponible — `font-semibold` y
+ * compañía siguen funcionando igual.
+ */
 const geistMono = Geist_Mono({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
   style: ["normal"],
   variable: "--font-mono",
 });
 
 const geist = Geist({
   subsets: ["latin"],
-  weight: ["200", "300", "400", "500", "600", "700", "800"],
   style: ["normal"],
   variable: "--font-sans",
 });
@@ -69,14 +77,11 @@ export default async function RootLayout({
       )}
       suppressHydrationWarning
     >
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-      </head>
+      {/* Sin `preconnect` a fonts.googleapis.com / fonts.gstatic.com:
+          `next/font/google` descarga las fuentes en tiempo de BUILD y las
+          sirve desde este mismo dominio, así que el navegador nunca pide
+          nada a Google. Eran dos handshakes contra origins que no se usan,
+          compitiendo con la carga real justo al principio del head. */}
       <body className="min-h-full flex flex-col font-sans text-foreground">
         <ThemeProvider
           attribute="class"

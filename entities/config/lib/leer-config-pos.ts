@@ -34,6 +34,40 @@ export interface ConfigPosDeLaRequest {
  * el cliente de service_role justamente por eso: el aislamiento entre negocios
  * es la policy, no el código que la llama.
  */
+/**
+ * Si el navegador trae la cookie de sesión de Supabase.
+ *
+ * Es una comprobación de PRESENCIA, no de validez —el token puede estar
+ * vencido— y alcanza para lo único que decide acá: si vale la pena pagar el
+ * viaje a la base. Quien manda sigue siendo la RLS; esto no autoriza nada.
+ *
+ * Se mira la cookie en vez de llamar a `auth.getUser()` porque eso serían dos
+ * viajes en lugar del que se quiere evitar.
+ *
+ * El corte es por el prefijo `sb-` a secas y NO por el nombre completo
+ * (`sb-<ref>-auth-token`, que además se numera `.0`, `.1` cuando el token no
+ * entra en una cookie): el error de los dos lados no cuesta lo mismo. De más
+ * es una consulta que sobraba, o sea lo que ya pasaba. De menos es la config
+ * en null con sesión válida, y ahí `modo_caja` cae al fallback "UNICA" y una
+ * vendedora ve y cierra el turno de otra. Un cambio de nomenclatura de
+ * supabase-js tiene que costar lo primero, nunca lo segundo.
+ *
+ * Queda afuera `-code-verifier`, que existe durante el login en /auth y
+ * todavía no es una sesión.
+ */
+function haySesion(
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+): boolean {
+  return cookieStore
+    .getAll()
+    .some(
+      ({ name, value }) =>
+        name.startsWith("sb-") &&
+        !name.includes("code-verifier") &&
+        Boolean(value),
+    );
+}
+
 export const leerConfigPos = cache(
   async (): Promise<ConfigPosDeLaRequest | null> => {
     const cookieStore = await cookies();
@@ -43,6 +77,16 @@ export const leerConfigPos = cache(
     // pasan por el layout raíz. Antes cada una de esas pagaba una consulta que
     // la RLS iba a responder vacía de todos modos.
     if (!cookieStore.get(COOKIE_NEGOCIO_ACTIVO)?.value) return null;
+
+    // Tener negocio elegido no implica estar logueado: la cookie dura 30 días
+    // y sobrevive a que la sesión expire o a que el refresh falle, y este
+    // layout es el RAÍZ, así que también corre en el catálogo público, donde
+    // el visitante es `anon` a propósito. `anon` tiene GRANT solo sobre las
+    // columnas públicas de `configuracion_pos` —`modo_caja` NO está entre
+    // ellas—, así que la consulta volvía 42501 y llenaba el log del error de
+    // abajo, que existe para avisar de otra cosa. Sin sesión no hay panel que
+    // configurar: no se consulta.
+    if (!haySesion(cookieStore)) return null;
 
     const supabase = createClient(cookieStore);
     const { data, error } = await supabase

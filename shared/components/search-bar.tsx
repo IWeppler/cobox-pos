@@ -56,10 +56,19 @@ export function SearchBar() {
       if (rutaDelCatalogo === "#") return;
 
       if (pathname.includes("/store")) {
-        router.replace(`${rutaDelCatalogo}?${params.toString()}`, {
-          scroll: false,
-        });
+        // History API y no `router.replace`: `q` no lo mira `generateMetadata`
+        // —solo `categoria`, `sub` y `productos`— así que el server no tiene
+        // nada nuevo que decir, y la ruta es `force-dynamic`. Antes cada pausa
+        // de tipeo pedía la página entera de vuelta a San Pablo para filtrar
+        // algo que el navegador ya tenía. Next actualiza `useSearchParams` con
+        // esto igual, así que el filtrado reacciona lo mismo.
+        window.history.replaceState(
+          null,
+          "",
+          `${rutaDelCatalogo}?${params.toString()}`,
+        );
       } else {
+        // Fuera del catálogo, buscar SÍ es navegar: se entra a la tienda.
         router.push(`${rutaDelCatalogo}?${params.toString()}`);
       }
     }, 400);

@@ -21,7 +21,36 @@
  * 20260819140000): sin ella, "$8.500" en una carnicería es un precio
  * equivocado, no uno incompleto. */
 export const COLUMNAS_PRODUCTO_PUBLICO =
-  "id, negocio_id, nombre, slug, tipo, categoria_id, precio, unidad_medida, descripcion, cuidados, marca, modelo, genero, atributos_globales, imagen_url, thumbnail_url, grid_url, publicado, creado_en";
+  "id, negocio_id, nombre, slug, tipo, categoria_id, precio, unidad_medida, descripcion, marca, modelo, genero, atributos_globales, imagen_url, thumbnail_url, grid_url, publicado, creado_en";
+
+/**
+ * Las de arriba menos lo que la LISTA no dibuja.
+ *
+ * El catálogo manda el array entero de productos al cliente (es prop de
+ * `StoreCatalog`, que es un componente de cliente), así que cada columna de
+ * más viaja multiplicada por la cantidad de productos publicados. Medido en el
+ * build servido: la portada de Evens son 1.183 productos y 1,99 MB de HTML, de
+ * los cuales 36 kB son HTML y el resto payload RSC.
+ *
+ * Qué se saca y por qué se puede:
+ *
+ * - `descripcion`: solo la dibuja la ficha del producto, que tiene su propia
+ *   consulta (`getProductoBySlugAction`) y sigue usando
+ *   `COLUMNAS_PRODUCTO_PUBLICO`. Ninguna vista de lista la lee.
+ * - `thumbnail_url`: la grilla usa `grid_url` y la portada de categorías lo
+ *   tiene como fallback del medio (`imagenDePortada`: grid → thumb → imagen).
+ *   Verificado contra producción: de 1.804 productos publicados hay CERO cuya
+ *   única imagen sea la miniatura, así que sacarlo no deja ninguna tarjeta sin
+ *   foto. La ficha lo sigue recibiendo por su consulta.
+ *
+ * `imagen_url` SE QUEDA aunque parezca redundante: 268 publicados no tienen
+ * `grid_url` y para 34 de ellos es la única imagen que hay.
+ *
+ * No hay que tocar los GRANT: esto pide MENOS columnas de las concedidas, y la
+ * regla del comentario de arriba es sobre agregar, no sobre sacar.
+ */
+export const COLUMNAS_PRODUCTO_LISTA =
+  "id, negocio_id, nombre, slug, tipo, categoria_id, precio, unidad_medida, marca, modelo, genero, atributos_globales, imagen_url, grid_url, publicado, creado_en";
 
 /** Ojo: sin `costo` ni `stock_minimo`. */
 export const COLUMNAS_VARIANTE_PUBLICA =

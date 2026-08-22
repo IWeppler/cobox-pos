@@ -9,6 +9,7 @@ import {
 } from "@/entities/productos/lib/stock-disponible";
 import {
   COLUMNAS_CATEGORIA_PUBLICA,
+  COLUMNAS_PRODUCTO_LISTA,
   COLUMNAS_PRODUCTO_PUBLICO,
   COLUMNAS_VARIANTE_PUBLICA,
 } from "@/shared/lib/columnas-publicas";
@@ -54,7 +55,10 @@ export async function traerProductosPublicos(
   // por carga de catálogo, el 28% del payload. Los consumidores lo leen con
   // `p.stock?.` como fallback para productos sin variantes, y no queda ninguno:
   // de 1.727 publicados hay 7 sin variantes y ninguno tiene filas en el espejo.
-  const SELECT_PUBLICO = `${COLUMNAS_PRODUCTO_PUBLICO}, producto_variantes(${COLUMNAS_VARIANTE_PUBLICA})`;
+  // La vidriera pide MENOS columnas que la ficha: ver COLUMNAS_PRODUCTO_LISTA.
+  // Este array se serializa entero al cliente, así que acá una columna de más
+  // se paga 1.183 veces en el catálogo más grande.
+  const SELECT_PUBLICO = `${COLUMNAS_PRODUCTO_LISTA}, producto_variantes(${COLUMNAS_VARIANTE_PUBLICA})`;
   const SELECT_CON_COSTOS = `${COLUMNAS_PRODUCTO_PUBLICO}, precio_costo, producto_variantes(${COLUMNAS_VARIANTE_PUBLICA}, costo)`;
 
   // Sin paginar, con 1.116 productos publicados PostgREST devolvía 1.000 y los
@@ -101,6 +105,69 @@ export async function traerProductosPublicos(
 export async function getProductosAction({ conCostos = false } = {}) {
   const supabase = await createPublicClient();
   return traerProductosPublicos(supabase, { conCostos });
+}
+
+/**
+ * Los "también te puede gustar" de una ficha.
+ *
+ * Antes esto se resolvía trayendo TODO el catálogo y quedándose con 4:
+ * `getProductosAction()` completo, con sus variantes, serializado en el HTML
+ * de cada ficha de producto para mostrar cuatro tarjetas. La consulta acotada
+ * hace exactamente lo mismo —mismo criterio, mismo orden de llegada— pidiendo
+ * 4 filas.
+ *
+ * `tipo` es la categoría legacy de texto libre; se mantiene ese criterio a
+ * propósito para no cambiar QUÉ se recomienda mientras se cambia CÓMO se
+ * consigue.
+ */
+export async function getProductosSimilaresAction(
+  tipo: string | null | undefined,
+  excluirId: string,
+  limite = 4,
+) {
+  if (!tipo) return { data: [], error: null };
+
+  const supabase = await createPublicClient();
+  const { data, error } = await supabase
+    .from("productos")
+    .select(`${COLUMNAS_PRODUCTO_LISTA}, producto_variantes(${COLUMNAS_VARIANTE_PUBLICA})`)
+    .eq("publicado", true)
+    .eq("tipo", tipo)
+    .neq("id", excluirId)
+    .order("creado_en", { ascending: false })
+    .limit(limite);
+
+  if (error) {
+    console.error("[CATALOGO] No se pudieron traer los similares:", error);
+    return { data: [], error: "No se pudieron cargar los productos similares." };
+  }
+
+  return { data: (data ?? []) as unknown as Producto[], error: null };
+}
+
+/**
+ * El índice del catálogo para filtrar en el navegador.
+ *
+ * Existe para sacar el catálogo del HTML. Antes la página se lo pasaba como
+ * prop a `StoreCatalog`, que es un componente de CLIENTE: eso serializa el
+ * array entero adentro del documento, y en Evens eran 1,99 MB de los cuales 34
+ * kB terminaban siendo markup — el resto viajaba solo para que el navegador
+ * pudiera filtrar después de hidratar. Pedido por acá, el documento arranca
+ * chico y esto llega en paralelo, sin bloquear el primer pintado.
+ *
+ * SIN parámetros a propósito. `getProductosAction` acepta `conCostos`, y todo
+ * lo exportado de un archivo "use server" es un endpoint que el navegador
+ * puede llamar con los argumentos que quiera. Hoy la base lo frena igual (anon
+ * no tiene concedido `precio_costo` desde 20260811140000, así que pedirlo es
+ * un 403 y no una fuga), pero el catálogo público no tiene por qué ofrecer
+ * siquiera la puerta.
+ */
+export async function getIndiceCatalogoPublicoAction() {
+  const supabase = await createPublicClient();
+  const { data, error } = await traerProductosPublicos(supabase, {
+    conCostos: false,
+  });
+  return { data, error };
 }
 
 // Combina productos + categorías + config para la terminal VENDER en un

@@ -4,18 +4,39 @@ POS + catálogo público, SaaS multi-tenant. Next.js + TypeScript + Supabase.
 Deploy: Vercel, branch main.
 
 **La región importa y es la latencia más grande del sistema.** La base está en
-San Pablo (`gru1`). Hasta el 17/8 no había `vercel.json`, así que las funciones
-corrían en el default `iad1` (Washington): la cabecera `x-vercel-id` decía
-`gru1::iad1::...`, o sea que la request entraba por el edge de San Pablo, se
-ejecutaba en Washington y desde ahí consultaba la base de vuelta en San Pablo.
-Cada consulta cruzaba el continente dos veces (~120 ms), y una venta hace del
-orden de 15. Medido: 430-540 ms de primer byte en `/auth` contra 110-140 ms
-yendo directo a Supabase. `vercel.json` fija `regions: ["gru1"]`.
+**Ohio (`us-east-2`)**, y las funciones en `cle1` (Cleveland), que es la MISMA
+región de AWS: función y base a milisegundos.
+
+Esto estuvo mal escrito acá hasta el 22/8/2026, y el error costó caro. Este
+archivo decía que la base estaba en San Pablo, y sobre esa premisa `vercel.json`
+fijaba `regions: ["gru1"]` para "acercar las funciones a la base". Lo que hacía
+en realidad era lo contrario: dejaba las funciones en San Pablo y la base en
+Ohio, o sea que CADA consulta cruzaba el continente (~120 ms). Con ~15 consultas
+por venta eran ~1.800 ms de red por ticket.
+
+Verificado por dos caminos independientes: el dashboard de Supabase, y el IPv6
+de `db.<ref>.supabase.co` (`2600:1f16:…`) contra el registro oficial de AWS,
+donde `2600:1f16::/34` es us-east-2. San Pablo sería `2600:1f2e::/36`.
+
+La medición vieja que justificaba el pin —"430-540 ms de primer byte en `/auth`
+contra 110-140 ms yendo directo a Supabase"— no probaba lo que parecía: el
+segundo número es una máquina argentina contra el edge de Cloudflare que
+Supabase tiene adelante, no contra Postgres. Síntoma real, causa equivocada.
+
 El middleware NO se ve afectado (runtime edge: siempre corre cerca del usuario);
 lo que se mueve son los Server Components y las Server Actions, que es
-exactamente donde vive el camino de la venta.
-Regla que se desprende: cualquier optimización de SQL rinde menos que un viaje
-de red ahorrado. Antes de indexar algo, contar los round-trips.
+exactamente donde vive el camino de la venta. Por eso `cle1` es la elección
+correcta MIENTRAS la base siga en Ohio: paga un viaje largo (usuario → función)
+una vez, en lugar de quince.
+
+La configuración ideal sigue siendo base en San Pablo + funciones en `gru1`
+(~125 ms por venta contra ~350 ms hoy), pero la región de un proyecto Supabase
+no se puede cambiar: hay que crear uno nuevo y migrar. Está pendiente.
+
+Regla que se desprende, y que sigue valiendo: cualquier optimización de SQL
+rinde menos que un viaje de red ahorrado. Antes de indexar algo, contar los
+round-trips. Y antes de razonar sobre latencia, VERIFICAR dónde está cada cosa
+en vez de confiar en lo que dice un documento.
 EN PRODUCCIÓN REAL: en Evens la dueña (Evelyn, admin) y 3 vendedoras (Mara,
 Brisa, Zunilda) lo usan a diario. Cualquier cambio que toque ventas/caja/stock
 es plata real.

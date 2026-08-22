@@ -1,5 +1,7 @@
 Ayudar a vender más, estar organizado y prever qué está pasando en el negocio.
 
+estudiar las ventas realizadas, metodo de pago mas rentable, mejores productos, oportunidades de crear combos, etc...
+
 ## EPIC 4 — Facturación Electrónica (ARCA)
 Esta es una épica enorme.
 

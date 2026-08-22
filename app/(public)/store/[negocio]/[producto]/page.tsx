@@ -1,6 +1,6 @@
 import {
   getProductoBySlugAction,
-  getProductosAction,
+  getProductosSimilaresAction,
 } from "@/shared/actions/store-actions";
 import { ProductDetail } from "@/features/store/components/product-detail";
 import { RelatedProducts } from "@/features/store/components/related-products";
@@ -103,15 +103,14 @@ export default async function ProductoPage({ params }: Readonly<PageProps>) {
   const headersDelRequest = await headers();
   await resolveTenant({ hostname: headersDelRequest.get("host"), slug: negocio });
 
-  // Hacemos fetch en paralelo del producto actual, TODO el catálogo (para buscar similares) y la configuración.
-  const [productoRes, catalogoRes, config] = await Promise.all([
+  // El producto y la config van en paralelo; los similares NO pueden ir acá
+  // porque dependen del `tipo` del producto, que todavía no se conoce.
+  const [productoRes, config] = await Promise.all([
     getProductoBySlugAction(slug),
-    getProductosAction(),
     getConfigPublica(),
   ]);
 
   const { data: producto, error } = productoRes;
-  const { data: todosLosProductos } = catalogoRes;
 
   //  Bloquear acceso si la tienda está desactivada
   if (config && config.catalogo_activo === false) {
@@ -132,9 +131,14 @@ export default async function ProductoPage({ params }: Readonly<PageProps>) {
     notFound();
   }
 
-  const productosSimilares = (todosLosProductos || [])
-    .filter((p) => p.tipo === producto.tipo && p.id !== producto.id)
-    .slice(0, 4);
+  // Se pide DESPUÉS del producto porque necesita su `tipo`. Antes esto no
+  // costaba un viaje extra —salía de filtrar el catálogo entero, que ya se
+  // había traído— pero ese catálogo entero terminaba serializado en el HTML de
+  // la ficha. Un viaje acotado de 4 filas cuesta mucho menos que eso.
+  const { data: productosSimilares } = await getProductosSimilaresAction(
+    producto.tipo,
+    producto.id,
+  );
 
   const NUMERO_WHATSAPP = config?.whatsapp;
 

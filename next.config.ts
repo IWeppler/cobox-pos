@@ -112,6 +112,17 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
+    // Sigue apagado, y a propósito: las fotos de producto y los logos ya
+    // salen del pipeline de subida en webp y del tamaño de su lugar en
+    // pantalla (13,6 kB un logo, 10,9 kB un grid), así que el optimizador no
+    // tendría nada que mejorarles y sí un costo — `next/image` emite un
+    // `srcset` de 8 URLs por imagen, ~1,2 kB de markup cada una, que en la
+    // portada serían ~18 kB sobre un documento de 21.
+    //
+    // La única imagen que se sube CRUDA es el banner del catálogo, y encima es
+    // el LCP. Ese caso se resuelve en su propio componente con
+    // `shared/lib/banner-optimizado.ts`, sin tocar las otras 27 pantallas que
+    // usan `next/image`.
     unoptimized: true,
     remotePatterns: [
       {

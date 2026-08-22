@@ -1,6 +1,7 @@
-import { getProductosAction } from "@/shared/actions/store-actions";
+import { BannerCatalogo } from "@/features/store/components/banner-catalogo";
 import { getProductosPublicosCacheados } from "@/shared/lib/cache-catalogo";
 import { StoreCatalog } from "@/features/store/components/store-catalog";
+import { calcularPortada } from "@/features/store/lib/catalogo-core";
 import { createPublicClient } from "@/shared/config/supabase/server";
 import { headers } from "next/headers";
 import { resolveTenant } from "@/shared/lib/tenant";
@@ -262,6 +263,21 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
   const config = configRes.data;
   const categoriasDB = categoriasRes.data || [];
 
+  // La portada se calcula ACÁ y viaja sola. Antes se mandaba el catálogo
+  // entero al cliente —prop de `StoreCatalog`, que es de cliente— para que el
+  // navegador dibujara con él exactamente esto: unas tarjetas de categoría y 8
+  // recién llegados. En Evens eran 1.183 productos con 3.164 variantes para
+  // pintar 8. El índice completo, que sí hace falta para filtrar, lo pide el
+  // cliente aparte (`getIndiceCatalogoPublicoAction`) sin bloquear el pintado.
+  const portadaInicial = calcularPortada({
+    productos,
+    categorias: categoriasDB,
+    config,
+    imagenPorCategoriaId: new Map(
+      categoriasDB.map((c) => [c.id, c.imagen_url ?? null]),
+    ),
+  });
+
   if (config && config.catalogo_activo === false) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -281,12 +297,13 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
       <main className="flex-1 mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6 w-full">
         {config?.banner_activo && config.banner_imagen && (
           <div className="relative w-full aspect-16/12 sm:aspect-[3/1] rounded-2xl overflow-hidden mb-6 lg:mb-8 group">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={config.banner_imagen}
-              alt="Banner Promocional"
-              className="w-full h-full object-cover"
-            />
+            {/* El LCP de la portada en mobile. Pasó de `<img>` crudo a
+                `next/image` cuando se prendió el optimizador: el banner NO
+                pasa por el pipeline de derivadas de producto, así que se venía
+                sirviendo tal cual lo subió el comercio — el de Evens, 1.321 kB.
+                Con el loader de Supabase son 68 kB a 640px, en webp.
+                `priority` emite el preload y le pone fetchPriority alto. */}
+            <BannerCatalogo src={config.banner_imagen} />
             <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-center p-6">
               {config.banner_titulo && (
                 <h2 className="text-2xl md:text-4xl font-black text-white uppercase tracking-tight mb-2">
@@ -317,7 +334,7 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
           </div>
         ) : (
           <StoreCatalog
-            productos={productos || []}
+            portadaInicial={portadaInicial}
             config={config}
             categorias={categoriasDB}
           />
