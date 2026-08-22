@@ -118,6 +118,50 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // ─── PREFETCH: se corta acá, sin tocar la base ───────────────────────────
+  //
+  // Cada `<Link>` visible dispara un prefetch, y el sidebar tiene 8 links
+  // siempre a la vista: eran 8 ejecuciones completas del middleware por
+  // pantalla del panel, cada una con `getUser()` + `contexto_sesion()`.
+  // 16 viajes a Ohio por entrar a cualquier pantalla.
+  //
+  // Y no compraban nada. Medido contra producción, sobre una ruta
+  // force-dynamic (no hay un solo `loading.tsx` en la app):
+  //
+  //   documento normal ....... 52.093 bytes
+  //   RSC de navegación ...... 23.716 bytes
+  //   RSC de PREFETCH ........      330 bytes
+  //
+  // Sin loading boundary, Next no puede precargar contenido dinámico: el
+  // prefetch devuelve una cáscara de ruteo. La navegación real hace igual el
+  // RSC completo, y esa SÍ pasa por todo lo de abajo. Por eso esto no cambia
+  // la velocidad de navegar — saca trabajo, no beneficio.
+  //
+  // POR QUÉ ACÁ Y NO EN EL `matcher`: excluir el prefetch desde el matcher
+  // también se salta el rewrite del catálogo de arriba, y entonces cada
+  // tarjeta de producto de una tienda prefetchea un 404 (probado). Cortando en
+  // este punto el rewrite ya ocurrió y las tiendas quedan intactas.
+  //
+  // SEGURIDAD: la navegación real —sin este header— sigue pasando por los
+  // gates de abajo. Y desde el 22/8/2026 `/`, `/configuracion` y `/compras/*`
+  // tienen además su propio `bloquearVendedor()` en la página, así que
+  // ninguna ruta depende solo de esto para autorizar.
+  //
+  // SESIÓN: `getUser()` de abajo también refresca la cookie. Se sigue
+  // refrescando en cada navegación real y en cada server action, y el cliente
+  // de navegador (`createBrowserClient`) renueva el token por su cuenta. El
+  // prefetch no era el único camino ni el principal.
+  //
+  // Van los dos headers porque conviven dos convenciones: Next manda
+  // `Next-Router-Prefetch` y algunos agentes usan `purpose: prefetch`.
+  const esPrefetch =
+    request.headers.get("next-router-prefetch") === "1" ||
+    request.headers.get("purpose") === "prefetch";
+
+  if (esPrefetch) {
+    return NextResponse.next({ request: conNegocio() });
+  }
+
   let supabaseResponse = NextResponse.next({
     request: conNegocio(),
   });

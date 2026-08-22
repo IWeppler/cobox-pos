@@ -2,6 +2,7 @@ import { ItemResuelto, SugerenciaSimilitud } from "@/entities/compras/types";
 import { Producto } from "@/entities/productos/types";
 import { getOrdenParaMergeAction } from "@/features/purchases/actions/merge-purchase";
 import { MergeTable } from "@/features/purchases/ui/merge-table";
+import { bloquearVendedor } from "@/shared/config/supabase/guard-rol";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,11 @@ interface PageProps {
 }
 
 export default async function MergePage({ params }: Readonly<PageProps>) {
+  // Esta página no tenía NINGÚN control propio: ni de sesión ni de rol. La
+  // sesión la cubre el layout del dashboard; el rol, hasta ahora, solo el
+  // middleware. Ver `bloquearVendedor`.
+  await bloquearVendedor();
+
   const { id } = await params;
 
   const { orden, items, productos, sugerenciasSimilitud, error } =

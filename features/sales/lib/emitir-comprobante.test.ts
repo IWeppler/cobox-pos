@@ -1,33 +1,32 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { emitirComprobante } from "./emitir-comprobante";
 
-/** Supabase mínimo: solo lo que toca emitirComprobante (rpc + insert). */
-function fakeSupabase(opts: {
-  numero?: number | null;
-  errorNumero?: unknown;
-  errorInsert?: unknown;
-}) {
-  const insertados: Record<string, unknown>[] = [];
-  const rpcLlamadas: { fn: string; args: unknown }[] = [];
+/**
+ * Supabase mínimo: solo la RPC, que es lo único que toca `emitirComprobante`.
+ *
+ * Antes esto mockeaba `rpc` + `from().insert()`, porque numerar y grabar eran
+ * dos viajes. Ahora los hace `emitir_comprobante_venta` en uno solo, así que
+ * los casos se afirman sobre los ARGUMENTOS de la RPC en vez de sobre la fila
+ * insertada: es el mismo contrato, visto desde el otro lado.
+ */
+function fakeSupabase(opts: { numero?: number | null; error?: unknown }) {
+  const rpcLlamadas: { fn: string; args: Record<string, unknown> }[] = [];
 
   const supabase = {
-    rpc: vi.fn(async (fn: string, args: unknown) => {
+    rpc: vi.fn(async (fn: string, args: Record<string, unknown>) => {
       rpcLlamadas.push({ fn, args });
+      // `"numero" in opts` y no `?? 1`: hay un caso que necesita distinguir
+      // "no me pasaron número" de "la RPC devolvió null", y el `??` los
+      // colapsaba en 1.
       return {
-        data: opts.errorNumero ? null : (opts.numero ?? 1),
-        error: opts.errorNumero ?? null,
+        data: opts.error ? null : "numero" in opts ? opts.numero : 1,
+        error: opts.error ?? null,
       };
     }),
-    from: vi.fn(() => ({
-      insert: async (fila: Record<string, unknown>) => {
-        insertados.push(fila);
-        return { error: opts.errorInsert ?? null };
-      },
-    })),
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { supabase: supabase as any, insertados, rpcLlamadas };
+  return { supabase: supabase as any, rpcLlamadas };
 }
 
 const BASE = {
@@ -46,48 +45,47 @@ afterEach(() => {
 });
 
 describe("emitirComprobante", () => {
-  it("emite TICKET y pide el número a la RPC, no a un max()", () => {
-    const { supabase, insertados, rpcLlamadas } = fakeSupabase({ numero: 7 });
+  it("emite TICKET en UNA sola llamada, y el número lo pone la base", async () => {
+    const { supabase, rpcLlamadas } = fakeSupabase({ numero: 7 });
 
-    return emitirComprobante(supabase, { ...BASE, config: {} }).then((r) => {
-      expect(r).toMatchObject({
-        ok: true,
-        tipo: "TICKET",
-        numero: 7,
-        puntoVenta: 1,
-      });
-      // El motivo viaja para poder explicar después por qué salió esto.
-      expect(r.motivo).toBeTruthy();
-      expect(rpcLlamadas).toEqual([
-        {
-          fn: "siguiente_numero_comprobante",
-          args: { p_punto_venta: 1, p_tipo: "TICKET" },
-        },
-      ]);
-      expect(insertados[0]).toMatchObject({
-        venta_id: "venta-1",
-        tipo: "TICKET",
-        punto_venta: 1,
-        numero: 7,
-        total: 15000,
-        emitido_por: "user-1",
-      });
+    const r = await emitirComprobante(supabase, { ...BASE, config: {} });
+
+    expect(r).toMatchObject({
+      ok: true,
+      tipo: "TICKET",
+      numero: 7,
+      puntoVenta: 1,
     });
+    // El motivo viaja para poder explicar después por qué salió esto.
+    expect(r.motivo).toBeTruthy();
+
+    // UN viaje, no dos: es el punto del cambio.
+    expect(rpcLlamadas).toHaveLength(1);
+    expect(rpcLlamadas[0].fn).toBe("emitir_comprobante_venta");
+    expect(rpcLlamadas[0].args).toMatchObject({
+      p_venta_id: "venta-1",
+      p_tipo: "TICKET",
+      p_punto_venta: 1,
+      p_total: 15000,
+      p_emitido_por: "user-1",
+    });
+    // El número NO lo manda el cliente: lo devuelve la RPC.
+    expect(rpcLlamadas[0].args).not.toHaveProperty("p_numero");
   });
 
   it("usa el punto de venta configurado cuando existe", async () => {
-    const { supabase, insertados } = fakeSupabase({ numero: 1 });
+    const { supabase, rpcLlamadas } = fakeSupabase({ numero: 1 });
 
     await emitirComprobante(supabase, {
       ...BASE,
       config: { punto_venta: 4 },
     });
 
-    expect(insertados[0]).toMatchObject({ punto_venta: 4 });
+    expect(rpcLlamadas[0].args).toMatchObject({ p_punto_venta: 4 });
   });
 
   it("cae a la serie interna 1 si el punto de venta guardado es inválido", async () => {
-    const { supabase, insertados } = fakeSupabase({ numero: 1 });
+    const { supabase, rpcLlamadas } = fakeSupabase({ numero: 1 });
 
     await emitirComprobante(supabase, {
       ...BASE,
@@ -96,11 +94,11 @@ describe("emitirComprobante", () => {
       config: { punto_venta: 0 },
     });
 
-    expect(insertados[0]).toMatchObject({ punto_venta: 1 });
+    expect(rpcLlamadas[0].args).toMatchObject({ p_punto_venta: 1 });
   });
 
   it("congela los datos del receptor en la fila", async () => {
-    const { supabase, insertados } = fakeSupabase({ numero: 1 });
+    const { supabase, rpcLlamadas } = fakeSupabase({ numero: 1 });
 
     await emitirComprobante(supabase, {
       ...BASE,
@@ -113,16 +111,16 @@ describe("emitirComprobante", () => {
       },
     });
 
-    expect(insertados[0]).toMatchObject({
-      cliente_id: "cli-1",
-      receptor_razon_social: "Comercio SA",
-      receptor_cuit: "30111111118",
-      receptor_condicion_iva: "Responsable Inscripto",
+    expect(rpcLlamadas[0].args).toMatchObject({
+      p_cliente_id: "cli-1",
+      p_receptor_razon_social: "Comercio SA",
+      p_receptor_cuit: "30111111118",
+      p_receptor_condicion_iva: "Responsable Inscripto",
     });
   });
 
   it("emite TICKET aunque el comercio haya elegido facturar con ARCA", async () => {
-    const { supabase, insertados } = fakeSupabase({ numero: 1 });
+    const { supabase, rpcLlamadas } = fakeSupabase({ numero: 1 });
 
     const r = await emitirComprobante(supabase, {
       ...BASE,
@@ -136,46 +134,46 @@ describe("emitirComprobante", () => {
     // Sin conexión real a ARCA no hay CAE, y una FACTURA_A sin CAE es un
     // comprobante inválido. La base además lo rechazaría por CHECK.
     expect(r.tipo).toBe("TICKET");
-    expect(insertados[0]).toMatchObject({ tipo: "TICKET" });
-    expect(insertados[0].cae).toBeUndefined();
+    expect(rpcLlamadas[0].args).toMatchObject({ p_tipo: "TICKET" });
+    // El CAE no se manda nunca desde acá.
+    expect(rpcLlamadas[0].args).not.toHaveProperty("p_cae");
   });
 
-  it("NO lanza si falla la numeración: la venta ya se cobró", async () => {
-    const { supabase, insertados } = fakeSupabase({
-      errorNumero: { message: "boom" },
-    });
+  it("NO lanza si falla la emisión, y deja rastro en los logs", async () => {
+    const { supabase } = fakeSupabase({ error: { message: "rls" } });
+
+    const r = await emitirComprobante(supabase, { ...BASE, config: {} });
+
+    // La venta ya se cobró y el stock ya se descontó: hacerla rebotar acá
+    // sería el incidente, no la protección.
+    expect(r.ok).toBe(false);
+    expect(r.numero).toBeNull();
+    // Una venta sin comprobante es un hueco contable: tiene que poder
+    // encontrarse después buscando en los logs.
+    expect(console.error).toHaveBeenCalledWith(
+      "[COMPROBANTE] No se pudo emitir",
+      expect.objectContaining({ etapa: "emision", ventaId: "venta-1" }),
+    );
+  });
+
+  it("NO lanza si la RPC no devuelve número", async () => {
+    const { supabase } = fakeSupabase({ numero: null });
 
     const r = await emitirComprobante(supabase, { ...BASE, config: {} });
 
     expect(r.ok).toBe(false);
     expect(r.numero).toBeNull();
-    // Sin número no se intenta insertar nada.
-    expect(insertados).toHaveLength(0);
-  });
-
-  it("NO lanza si falla el insert, y deja rastro en los logs", async () => {
-    const { supabase } = fakeSupabase({
-      numero: 3,
-      errorInsert: { message: "rls" },
-    });
-
-    const r = await emitirComprobante(supabase, { ...BASE, config: {} });
-
-    expect(r.ok).toBe(false);
-    // Una venta sin comprobante es un hueco contable: tiene que poder
-    // encontrarse después buscando en los logs.
-    expect(console.error).toHaveBeenCalledWith(
-      "[COMPROBANTE] No se pudo emitir",
-      expect.objectContaining({ etapa: "insert", ventaId: "venta-1" }),
-    );
   });
 
   it("tolera config nula sin romper la venta", async () => {
-    const { supabase, insertados } = fakeSupabase({ numero: 1 });
+    const { supabase, rpcLlamadas } = fakeSupabase({ numero: 1 });
 
     const r = await emitirComprobante(supabase, { ...BASE, config: null });
 
     expect(r.ok).toBe(true);
-    expect(insertados[0]).toMatchObject({ tipo: "TICKET", punto_venta: 1 });
+    expect(rpcLlamadas[0].args).toMatchObject({
+      p_tipo: "TICKET",
+      p_punto_venta: 1,
+    });
   });
 });

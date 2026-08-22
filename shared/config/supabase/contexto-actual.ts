@@ -28,9 +28,35 @@ import { createClient } from "./server";
  * Solo para Server Components. Las server actions son otro request y vuelven a
  * preguntar, que es lo correcto: cada una es su propia puerta.
  */
-export const getRolActual = cache(async (): Promise<string | null> => {
+export interface ContextoSesion {
+  rol: string | null;
+  esSuperAdmin: boolean;
+}
+
+/**
+ * Rol + super admin, UNA sola vez por request y en UN solo viaje.
+ *
+ * Usa la misma `contexto_sesion()` que el middleware (migración
+ * 20260822170000). El cast es porque la función es nueva y todavía no está en
+ * los tipos generados de Supabase.
+ */
+export const getContextoSesion = cache(async (): Promise<ContextoSesion> => {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
-  const { data } = await supabase.rpc("rol_actual");
-  return (data as string | null) ?? null;
+  const { data } = await supabase.rpc("contexto_sesion").maybeSingle();
+  const fila = data as {
+    rol: string | null;
+    es_super_admin: boolean | null;
+  } | null;
+
+  return {
+    rol: fila?.rol ?? null,
+    esSuperAdmin: fila?.es_super_admin ?? false,
+  };
+});
+
+/** Solo el rol. Comparte el viaje con `getContextoSesion` en el mismo render. */
+export const getRolActual = cache(async (): Promise<string | null> => {
+  const { rol } = await getContextoSesion();
+  return rol;
 });

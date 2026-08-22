@@ -13,10 +13,15 @@ import {
   getUsoDelPlanAction,
   type UsoDelPlan,
 } from "@/features/planes/actions/uso-del-plan";
+import { bloquearVendedor } from "@/shared/config/supabase/guard-rol";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracionPage() {
+  // Antes esta página solo se protegía desde el middleware: acá adentro
+  // `is_admin()` esconde secciones, pero no impedía entrar. Ver `bloquearVendedor`.
+  await bloquearVendedor();
+
   const { data: config, error: configError } = await getConfiguracionAction();
 
   const cookieStore = await cookies();

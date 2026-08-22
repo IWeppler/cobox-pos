@@ -53,6 +53,7 @@ import { ChecklistActivacion } from "@/features/onboarding/ui/checklist-activaci
 import { Button } from "@/shared/ui/button";
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { bloquearVendedor } from "@/shared/config/supabase/guard-rol";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,10 @@ export default async function DashboardPage({
 }: Readonly<{
   searchParams: Promise<{ periodo?: string }>;
 }>) {
+  // El panel es la vista de gestión: un VENDEDOR va al POS. Hasta ahora eso
+  // lo decidía solo el middleware. Ver `bloquearVendedor`.
+  await bloquearVendedor();
+
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
   const { periodo: periodoParam } = await searchParams;
