@@ -39,6 +39,10 @@ export interface VentaCaja {
   monto_cobrado?: number | null;
   monto_pendiente?: number | null;
   estado_pago?: string | null;
+  /** 'ANULADA' cambia cómo cuenta la venta en caja: su efectivo sigue sumando
+   * al arqueo (lo saca el egreso de devolución) pero NO al total facturado.
+   * Ver el comentario de `getDetallesTurnoAction`. */
+  estado_operacion?: string | null;
   clientes?:
     | {
         nombre?: string | null;

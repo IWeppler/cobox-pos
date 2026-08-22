@@ -22,6 +22,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { abrirTurnoAction, cerrarTurnoAction } from "../actions/caja-action";
 import { etiquetaTipoEgreso } from "../lib/tipo-egreso";
+import { calcularTotalesTurno } from "../lib/totales-turno";
 import { useCajaStatusStore } from "@/shared/store/caja-status-store";
 import { toast } from "sonner";
 import {
@@ -63,6 +64,9 @@ type MovimientoExtendido = {
   neto: number;
   fecha: string;
   usuario: string;
+  /** La venta se anuló. Sigue siendo un movimiento real del turno —la plata
+   * entró— pero no es facturación. Ver `totales` más abajo. */
+  anulada?: boolean;
 };
 
 export function CajaDashboard({
@@ -160,13 +164,18 @@ export function CajaDashboard({
       const primerItem = v.ventas_items?.[0];
       const primerProducto = getSupabaseRelation(primerItem?.producto);
       const vendedor = getSupabaseRelation(v.perfiles);
-      const conceptoVenta = `Venta: ${primerProducto?.nombre || "Varios"}`;
+      const anulada = v.estado_operacion === "ANULADA";
+      // Se marca en el texto porque abajo aparece su egreso de devolución: sin
+      // esto se ve una salida de plata sin la entrada que la explica.
+      const conceptoVenta = `${anulada ? "Venta anulada" : "Venta"}: ${
+        primerProducto?.nombre || "Varios"
+      }`;
 
       if (pagos.length > 0) {
         return pagos.map((pago) => ({
           id: `${v.id}-${pago.id || Math.random()}`,
-          tipo: "INGRESO",
-          origen: "VENTA",
+          tipo: "INGRESO" as const,
+          origen: "VENTA" as const,
           concepto: conceptoVenta,
           metodo: pago.metodo_nombre,
           metodo_tipo: pago.metodo_tipo,
@@ -175,6 +184,7 @@ export function CajaDashboard({
           neto: Number(pago.monto_neto),
           fecha: v.fecha_venta,
           usuario: vendedor?.nombre || "Vendedor",
+          anulada,
         }));
       }
 
@@ -182,8 +192,8 @@ export function CajaDashboard({
       return [
         {
           id: v.id,
-          tipo: "INGRESO",
-          origen: "VENTA",
+          tipo: "INGRESO" as const,
+          origen: "VENTA" as const,
           concepto: conceptoVenta,
           metodo: v.metodo_pago || "EFECTIVO",
           metodo_tipo: isEfectivo ? "EFECTIVO" : "TARJETA",
@@ -192,6 +202,7 @@ export function CajaDashboard({
           neto: Number(v.total),
           fecha: v.fecha_venta,
           usuario: vendedor?.nombre || "Vendedor",
+          anulada,
         },
       ];
     });
@@ -236,39 +247,11 @@ export function CajaDashboard({
       ...egresosMapeados,
     ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
-    const ingresosEfectivo = todos
-      .filter((m) => m.tipo === "INGRESO" && m.metodo_tipo === "EFECTIVO")
-      .reduce((acc, m) => acc + m.monto, 0);
-
-    const digitales = todos.filter(
-      (m) => m.tipo === "INGRESO" && m.metodo_tipo !== "EFECTIVO",
-    );
-    const ingresosDigitalesBruto = digitales.reduce(
-      (acc, m) => acc + m.monto,
-      0,
-    );
-    const comisionesRetenidas = digitales.reduce(
-      (acc, m) => acc + m.comision,
-      0,
-    );
-    const ingresosDigitalesNeto = digitales.reduce((acc, m) => acc + m.neto, 0);
-
-    const totalEgresos = egresosMapeados.reduce((acc, m) => acc + m.monto, 0);
-    const fondoInicial = Number(turno.monto_inicial);
-    const efectivoEsperado = fondoInicial + ingresosEfectivo - totalEgresos;
-
+    // La cuenta vive en `lib/totales-turno.ts`, con tests: es la que decide si
+    // a una vendedora le falta plata en el cajón.
     return {
       movimientos: todos,
-      totales: {
-        fondoInicial,
-        ingresosEfectivo,
-        ingresosDigitalesBruto,
-        comisionesRetenidas,
-        ingresosDigitalesNeto,
-        totalEgresos,
-        efectivoEsperado,
-        totalFacturado: ingresosEfectivo + ingresosDigitalesBruto,
-      },
+      totales: calcularTotalesTurno(todos, Number(turno.monto_inicial)),
     };
   }, [ventas, pagosSueltos, egresos, turno]);
 

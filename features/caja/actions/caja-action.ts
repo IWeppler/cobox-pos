@@ -200,13 +200,27 @@ export async function getDetallesTurnoAction(turnoId: string) {
         .select(
           `
           id, total, metodo_pago, fecha_venta, cliente_id, clientes(nombre),
-          monto_cobrado, monto_pendiente, estado_pago, perfiles(nombre),
+          monto_cobrado, monto_pendiente, estado_pago, estado_operacion, perfiles(nombre),
           ventas_items(producto:productos(nombre)),
           venta_pagos(metodo_nombre, metodo_tipo, monto_base, recargo_porcentaje, recargo_monto, monto_bruto, comision_porcentaje, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)
         `,
         )
         .eq("turno_caja_id", turnoId)
-        .neq("estado_operacion", "ANULADA")
+        // Las ANULADAS vienen TAMBIÉN, y es la corrección de un bug que mostró
+        // −320.000 de efectivo esperado en un cajón al que le faltaban 25.000.
+        //
+        // Acá había un `.neq("estado_operacion", "ANULADA")`, pero los egresos
+        // de abajo se traen sin filtro. Anular una venta en efectivo genera un
+        // egreso "Devolución en efectivo" (ver `anular_venta`), así que con el
+        // filtro puesto la misma anulación pegaba DOS veces contra el arqueo:
+        // una porque se le quitaba el ingreso y otra porque se le restaba el
+        // egreso. Con 6 devoluciones seguidas en Ninja Camisetas eso fueron
+        // 295.000 de más.
+        //
+        // El ingreso de una venta anulada tiene que seguir contando: la plata
+        // entró al cajón de verdad, y lo que la saca es su egreso. Quien
+        // decide qué hacer con cada una es el consumidor —el arqueo las suma,
+        // el total facturado no— y para eso viaja `estado_operacion`.
         .order("fecha_venta", { ascending: false }),
       supabase
         .from("venta_pagos")

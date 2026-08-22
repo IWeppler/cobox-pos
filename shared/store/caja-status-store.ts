@@ -72,8 +72,15 @@ export const useCajaStatusStore = create<CajaStatusState>((set) => ({
         .from("venta_pagos")
         .select("monto_bruto")
         .eq("turno_caja_id", data.id)
-        .eq("metodo_tipo", "EFECTIVO")
-        .neq("estado_pago_operacion", "ANULADO"),
+        .eq("metodo_tipo", "EFECTIVO"),
+      // Los pagos ANULADOS se cuentan IGUAL, y no es un descuido.
+      //
+      // `estado_pago_operacion = 'ANULADO'` lo pone solo `anular_venta`, que
+      // en el mismo movimiento genera el egreso "Devolución en efectivo" por
+      // la porción cobrada en efectivo. Ese egreso ya está en el SUM de abajo.
+      // Con el filtro puesto, la misma anulación se restaba dos veces y el
+      // indicador de caja del navbar mostraba menos plata de la que había —
+      // el mismo bug que dejó a Ninja Camisetas en −320.000 el 22/8/2026.
       supabase.rpc("calcular_egresos_turno", { p_turno_id: data.id }),
     ]);
 

@@ -105,10 +105,13 @@ export default async function CajaPage() {
       supabase
         .from("ventas")
         .select(
-          "id, total, metodo_pago, fecha_venta, turno_caja_id, cliente_id, clientes(nombre), monto_cobrado, monto_pendiente, estado_pago, perfiles(nombre), ventas_items(producto:productos(nombre)), venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)",
+          "id, total, metodo_pago, fecha_venta, turno_caja_id, cliente_id, clientes(nombre), monto_cobrado, monto_pendiente, estado_pago, estado_operacion, perfiles(nombre), ventas_items(producto:productos(nombre)), venta_pagos(metodo_nombre, metodo_tipo, monto_bruto, comision_monto, monto_neto, acreditacion_dias, tipo_movimiento)",
         )
         .eq("turno_caja_id", turnoPropio.id)
-        .neq("estado_operacion", "ANULADA")
+        // Las ANULADAS entran: su efectivo lo saca el egreso de devolución, no
+        // hay que sacarlo de nuevo acá. Ver `calcularTotalesTurno` y el
+        // comentario largo en `getDetallesTurnoAction`. Este es el fetch que
+        // alimenta el arqueo que ve la vendedora.
         .order("fecha_venta", { ascending: false }),
       supabase
         .from("venta_pagos")
