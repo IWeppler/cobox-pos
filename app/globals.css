@@ -55,6 +55,10 @@
 }
 
 :root {
+  /* Barra de scroll: gris tenue, apenas visible sobre fondo claro. */
+  --scroll-thumb: oklch(0.7 0 0 / 0.35);
+  --scroll-thumb-hover: oklch(0.6 0 0 / 0.55);
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.16 0 0);
 
@@ -100,6 +104,11 @@
 }
 
 .dark {
+  /* Blanco a muy baja opacidad: sobre negro, un gris claro se lee como un
+     borde y le compite al contenido. */
+  --scroll-thumb: oklch(1 0 0 / 0.18);
+  --scroll-thumb-hover: oklch(1 0 0 / 0.32);
+
   --background: oklch(17.808% 0.00205 286.051);
   --foreground: oklch(0.985 0 0);
 
@@ -159,6 +168,47 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* Barra de scroll acorde al tema.
+ *
+ * El default del navegador es claro SIEMPRE, así que sobre cualquier fondo
+ * oscuro aparece una franja gris que no pertenece al diseño — se notaba en el
+ * panel de /admincomerz, que es oscuro fijo, y en la lista de notificaciones.
+ *
+ * Va con las DOS sintaxis a propósito: `scrollbar-color` es el estándar (lo
+ * entienden Firefox y Chrome 121+) y `::-webkit-scrollbar` cubre el Safari y
+ * los Chrome viejos, que en un local con celulares que nadie actualiza no son
+ * un caso hipotético.
+ *
+ * Los colores salen de tokens y no de un gris fijo: así el mismo scroll se ve
+ * bien en el catálogo claro y en el panel oscuro sin escribirlo dos veces.
+ * `--scroll-thumb` se define abajo para cada tema, y como se resuelve contra
+ * el elemento que scrollea, un contenedor con `.dark` adentro de una página
+ * clara igual toma la versión oscura. */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-thumb-hover);
   }
 }
 

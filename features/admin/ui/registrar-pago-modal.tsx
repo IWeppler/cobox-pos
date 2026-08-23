@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/shared/ui/button";
@@ -16,26 +16,44 @@ import {
   registrarPagoAction,
   type ResultadoAccion,
 } from "@/features/admin/actions/acciones-comercio";
+import {
+  calcularPeriodoPago,
+  type ModalidadPago,
+} from "@/features/admin/lib/periodo-pago";
+import { CLASE_PORTAL_OSCURO } from "@/features/admin/lib/tema-portal";
+import { SelectSimple } from "./select-simple";
+import { formatearMoneda } from "@/shared/utils/formatters";
 
 const estadoInicial: ResultadoAccion = { error: null, success: false };
 
-/** Un mes desde `desde`, en ISO. UTC de punta a punta: con getMonth() local un
- * período que arranca el día 1 se corre al mes anterior. */
-function unMesDespues(desde: string): string {
-  const f = new Date(desde);
-  const siguiente = new Date(
-    Date.UTC(f.getUTCFullYear(), f.getUTCMonth() + 1, f.getUTCDate()),
-  );
-  return siguiente.toISOString().slice(0, 10);
-}
+const MEDIOS = [
+  { valor: "transferencia", etiqueta: "Transferencia" },
+  { valor: "efectivo", etiqueta: "Efectivo" },
+  { valor: "mercadopago", etiqueta: "Mercado Pago" },
+  { valor: "otro", etiqueta: "Otro" },
+];
+
+const MODALIDADES = [
+  { valor: "mensual", etiqueta: "Mensual" },
+  { valor: "semestral", etiqueta: "Semestral" },
+];
 
 /**
  * Carga de un cobro.
  *
- * El período se pide explícito y no se asume "hoy + 30": si el pago entra
- * tarde, el mes cubierto sigue siendo el que se pagó. Asumir la fecha de carga
- * le regalaría los días de atraso a quien paga tarde y se los sacaría a quien
- * paga antes.
+ * Tres datos: cuánto, cada cuánto y por qué medio. Nada más.
+ *
+ * Antes se pedían además la fecha del pago y el período que cubre (desde y
+ * hasta, a mano). Las tres se sacaron porque el sistema ya las sabe:
+ *
+ * - La fecha es HOY. Un pago se registra cuando entra la plata, así que
+ *   elegirla era ofrecer equivocarse en el único dato que no hace falta pedir.
+ * - El período sale de la modalidad. Dos fechas para decir "un mes más" es una
+ *   forma complicada de decirlo, y dejaba escribir un rango de 45 días sin que
+ *   nada lo frenara.
+ *
+ * El período calculado se muestra abajo antes de guardar: se deduce, pero no
+ * se esconde.
  */
 export function RegistrarPagoModal({
   open,
@@ -43,112 +61,121 @@ export function RegistrarPagoModal({
   negocioId,
   nombre,
   precioSugerido,
+  vencimientoActual,
 }: Readonly<{
   open: boolean;
   onOpenChange: (v: boolean) => void;
   negocioId: string;
   nombre: string;
   precioSugerido: number;
+  /** Para poder mostrar hasta cuándo va a quedar cubierto. */
+  vencimientoActual: string | null;
 }>) {
-  const hoy = new Date().toISOString().slice(0, 10);
-  const [desde, setDesde] = useState(hoy);
+  const [modalidad, setModalidad] = useState<string>("mensual");
+  const [medio, setMedio] = useState<string>("transferencia");
   const [estado, accion, enviando] = useActionState(
     registrarPagoAction,
     estadoInicial,
   );
 
-  const [consumido, setConsumido] = useState(false);
-  if (estado.success && !consumido) {
-    setConsumido(true);
-    onOpenChange(false);
-    toast.success("Pago registrado y vencimiento actualizado");
+  // Cerrar es estado derivado del resultado, así que se ajusta DURANTE el
+  // render; el toast va en el efecto, que es donde corresponde un efecto.
+  const [ultimoOk, setUltimoOk] = useState(false);
+  if (estado.success !== ultimoOk) {
+    setUltimoOk(estado.success);
+    if (estado.success) onOpenChange(false);
   }
+
+  useEffect(() => {
+    if (estado.success) {
+      toast.success("Pago registrado y vencimiento actualizado");
+    }
+  }, [estado.success]);
+
+  // La MISMA función que usa el server para decidir el período. Si acá se
+  // calculara distinto, la previsualización mentiría.
+  const hoy = new Date().toISOString().slice(0, 10);
+  const periodo = calcularPeriodoPago({
+    hoy,
+    vencimientoActual: vencimientoActual?.slice(0, 10) ?? null,
+    modalidad: modalidad as ModalidadPago,
+  });
+
+  const formatearFecha = (iso: string) =>
+    new Date(`${iso}T12:00:00Z`).toLocaleDateString("es-AR");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={`sm:max-w-md ${CLASE_PORTAL_OSCURO}`}>
         <DialogTitle>Registrar pago</DialogTitle>
-        <DialogDescription>
-          {nombre}. Al guardar, el vencimiento pasa al final del período que
-          cubre este pago.
-        </DialogDescription>
+        <DialogDescription>{nombre}</DialogDescription>
 
         <form action={accion} className="space-y-4">
           <input type="hidden" name="negocio_id" value={negocioId} />
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="monto">Monto</Label>
-              <Input
-                id="monto"
-                name="monto"
-                type="number"
-                min="0"
-                step="any"
-                required
-                defaultValue={precioSugerido || ""}
-                className="h-10 font-mono"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="fecha_pago">Fecha del pago</Label>
-              <Input
-                id="fecha_pago"
-                name="fecha_pago"
-                type="date"
-                defaultValue={hoy}
-                className="h-10"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="periodo_desde">Cubre desde</Label>
-              <Input
-                id="periodo_desde"
-                name="periodo_desde"
-                type="date"
-                required
-                value={desde}
-                onChange={(e) => setDesde(e.target.value)}
-                className="h-10"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="periodo_hasta">Hasta</Label>
-              <Input
-                id="periodo_hasta"
-                name="periodo_hasta"
-                type="date"
-                required
-                // Se re-siembra con `key` cuando cambia el inicio: el default
-                // de un input no controlado no se actualiza solo.
-                key={desde}
-                defaultValue={unMesDespues(desde)}
-                className="h-10"
-              />
-            </div>
-          </div>
+          <input type="hidden" name="modalidad" value={modalidad} />
+          <input type="hidden" name="medio" value={medio} />
 
           <div className="space-y-2">
-            <Label htmlFor="medio">Medio</Label>
-            <select
+            <Label htmlFor="monto">Monto pagado</Label>
+            <Input
+              id="monto"
+              name="monto"
+              type="number"
+              min="0"
+              step="any"
+              required
+              defaultValue={precioSugerido || undefined}
+              className="h-10 font-mono"
+            />
+            {precioSugerido > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Precio del plan: {formatearMoneda(precioSugerido)}
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <SelectSimple
+              id="modalidad"
+              etiqueta="Modalidad"
+              valor={modalidad}
+              onChange={setModalidad}
+              opciones={MODALIDADES}
+            />
+            <SelectSimple
               id="medio"
-              name="medio"
-              defaultValue="transferencia"
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
-            >
-              <option value="transferencia">Transferencia</option>
-              <option value="mercadopago">Mercado Pago</option>
-              <option value="efectivo">Efectivo</option>
-              <option value="otro">Otro</option>
-            </select>
+              etiqueta="Medio"
+              valor={medio}
+              onChange={setMedio}
+              opciones={MEDIOS}
+            />
+          </div>
+
+          {/* El período se deduce, pero se muestra: deducir un dato no es
+              motivo para esconderlo, sobre todo cuando de él depende hasta
+              cuándo el comercio queda habilitado. */}
+          <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
+            <p className="text-muted-foreground">
+              Cubre del{" "}
+              <span className="font-medium text-foreground">
+                {formatearFecha(periodo.desde)}
+              </span>{" "}
+              al{" "}
+              <span className="font-medium text-foreground">
+                {formatearFecha(periodo.hasta)}
+              </span>
+            </p>
+            {vencimientoActual && periodo.desde !== hoy && (
+              <p className="mt-0.5 text-muted-foreground">
+                Arranca en el vencimiento actual, así pagar antes no le cuesta
+                días.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="nota">Nota (opcional)</Label>
-            <Input id="nota" name="nota" className="h-10" />
+            <Input id="nota" name="nota" maxLength={200} className="h-10" />
           </div>
 
           {estado.error && (

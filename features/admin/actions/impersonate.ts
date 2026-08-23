@@ -37,5 +37,7 @@ export async function iniciarImpersonationAction(negocioId: string) {
 export async function terminarImpersonationAction() {
   const cookieStore = await cookies();
   cookieStore.delete(COOKIE_IMPERSONATE);
-  redirect("/admincomerz/negocios");
+  // Al panel y no a /admincomerz/negocios: esa página se borró cuando la tabla
+  // de comercios del dashboard pasó a hacer todo lo que hacía.
+  redirect("/admincomerz");
 }

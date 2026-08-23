@@ -113,8 +113,8 @@ describe("resumirCostos", () => {
   it("calcula margen y costo por comercio", () => {
     const resumen = resumirCostos(
       [
-        { proveedor: "Vercel", monto: 20_000 },
-        { proveedor: "Supabase", monto: 25_000 },
+        { concepto: "Vercel", monto: 20_000 },
+        { concepto: "Supabase", monto: 25_000 },
       ],
       200_000,
       4,
@@ -128,14 +128,14 @@ describe("resumirCostos", () => {
 
   it("el margen negativo se muestra, no se esconde", () => {
     // Es el número que dice si el precio alcanza.
-    const resumen = resumirCostos([{ proveedor: "Supabase", monto: 90_000 }], 60_000, 2);
+    const resumen = resumirCostos([{ concepto: "Supabase", monto: 90_000 }], 60_000, 2);
     expect(resumen.margen).toBe(-30_000);
     expect(resumen.margenPorcentaje).toBeCloseTo(-50, 5);
   });
 
   it("sin ingresos no hay porcentaje de margen", () => {
     // Dividir por cero daría -Infinity, que no le dice nada a nadie.
-    const resumen = resumirCostos([{ proveedor: "Vercel", monto: 20_000 }], 0, 0);
+    const resumen = resumirCostos([{ concepto: "Vercel", monto: 20_000 }], 0, 0);
     expect(resumen.margenPorcentaje).toBeNull();
     expect(resumen.porComercio).toBeNull();
     expect(resumen.margen).toBe(-20_000);

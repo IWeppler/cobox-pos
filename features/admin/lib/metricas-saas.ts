@@ -119,7 +119,9 @@ export function calcularLtv(
 }
 
 export interface CostoInfra {
-  proveedor: string;
+  /** Qué se gastó. Antes era el proveedor (Vercel, Supabase); ahora es
+   * cualquier concepto, porque los gastos dejaron de ser solo infra. */
+  concepto: string;
   monto: number;
 }
 

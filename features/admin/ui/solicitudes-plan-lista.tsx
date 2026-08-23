@@ -73,7 +73,10 @@ export function SolicitudesPlanLista({
 
             <div className="flex shrink-0 items-center gap-1.5">
               <Button asChild size="sm" variant="outline" className="h-8">
-                <Link href="/admincomerz/negocios">Cambiar plan</Link>
+                {/* Al panel: el plan se cambia desde el menú de acciones de
+                    la tabla de comercios. La página /admincomerz/negocios se
+                    borró y este link quedaba en un 404. */}
+                <Link href="/admincomerz">Cambiar plan</Link>
               </Button>
               <Button
                 size="sm"

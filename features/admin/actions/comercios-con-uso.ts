@@ -22,6 +22,12 @@ export interface ComercioConUso {
   maxUsuarios: number | null;
   maxClientesCuentaCorriente: number | null;
   maxProductos: number | null;
+  /** 'indumentaria' | 'electro' | … Null si el negocio no tiene config. */
+  rubro: string | null;
+  /** Actividad de los últimos 7 días, sin contar anuladas. Es la señal de si
+   * el comercio USA el sistema, que no es lo mismo que si paga. */
+  ventas7d: number;
+  monto7d: number;
 }
 
 /**
@@ -72,6 +78,9 @@ export async function getComerciosConUsoAction(): Promise<ComercioConUso[]> {
           fila.max_clientes_cc === null ? null : Number(fila.max_clientes_cc),
         maxProductos:
           fila.max_productos === null ? null : Number(fila.max_productos),
+        rubro: (fila.rubro as string | null) ?? null,
+        ventas7d: Number(fila.ventas_7d ?? 0),
+        monto7d: Number(fila.monto_7d ?? 0),
       };
     },
   );

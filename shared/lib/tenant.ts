@@ -1,3 +1,4 @@
+import { negocioHabilitado } from "@/shared/lib/estado-negocio";
 import "server-only";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
@@ -89,8 +90,9 @@ const buscarSlugHistorico = cache(async (slug: string) => {
     .maybeSingle();
 
   const negocio = Array.isArray(data?.negocios) ? data?.negocios[0] : data?.negocios;
-  // Un negocio dado de baja no redirige a ningún lado: sigue siendo 404.
-  if (!negocio || negocio.estado !== "activo") return null;
+  // Un negocio dado de baja no redirige a ningún lado: sigue siendo 404. El
+  // que está en prueba SÍ, que para eso está probando el producto.
+  if (!negocio || !negocioHabilitado(negocio.estado)) return null;
   return negocio.slug as string;
 });
 

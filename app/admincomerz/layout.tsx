@@ -1,10 +1,10 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { LayoutDashboard, Building2, CreditCard, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { logoutAction } from "@/features/auth/actions/logout";
 import Image from "next/image";
+import { AdminNav } from "@/features/admin/ui/admin-nav";
 
 export default async function AdminComerzLayout({
   children,
@@ -31,13 +31,10 @@ export default async function AdminComerzLayout({
     // dropdowns y los dialogs de acá adentro) tomen su versión oscura; el resto
     // de la UI usa colores explícitos sobre negro.
     <div className="dark flex min-h-screen flex-col bg-zinc-950 text-white md:flex-row">
-      {/* En mobile es una barra de una línea, no una columna: siendo
-          `w-full` + `flex-col`, el logo, los tres links apilados y el logout
-          se comían media pantalla antes de que empezara el contenido. Acá el
-          eje cambia con el breakpoint —fila arriba en mobile, columna al
-          costado en desktop— y los links van en scroll horizontal, así sumar
-          uno nuevo no vuelve a hacer crecer la barra. */}
-      <aside className="flex shrink-0 flex-row items-center justify-between gap-3 border-b border-white/10 bg-zinc-900/50 px-4 py-3 md:w-64 md:flex-col md:items-stretch md:border-b-0 md:border-r md:p-6">
+      {/* En mobile es una barra de una línea con el menú detrás de la
+          hamburguesa (ver AdminNav); en desktop, la columna de siempre.
+          `relative` porque el panel desplegable se ancla a su borde inferior. */}
+      <aside className="relative z-40 flex shrink-0 flex-row items-center justify-between gap-3 border-b border-white/10 bg-zinc-900 px-4 py-2 md:static md:w-64 md:flex-col md:items-stretch md:border-b-0 md:border-r md:bg-zinc-900/50 md:p-6">
         <div className="flex min-w-0 flex-1 items-center gap-3 md:block md:space-y-6">
           <div className="flex shrink-0 items-center gap-2 md:gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white">
@@ -56,33 +53,7 @@ export default async function AdminComerzLayout({
             </span>
           </div>
 
-          {/* El link a /admincomerz/solicitudes se sacó: esa ruta no existe y
-              daba 404. Lo que iba a mostrar —los pedidos de cambio de plan—
-              ahora entra por Notificaciones, junto con vencimientos, altas y
-              pagos, que es donde se mira todo junto. */}
-          <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible [&::-webkit-scrollbar]:hidden">
-            <Link
-              href="/admincomerz"
-              className="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white md:gap-3"
-            >
-              <LayoutDashboard className="h-4 w-4 shrink-0" />
-              Dashboard
-            </Link>
-            <Link
-              href="/admincomerz/negocios"
-              className="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white md:gap-3"
-            >
-              <Building2 className="h-4 w-4 shrink-0" />
-              Comercios
-            </Link>
-            <Link
-              href="/admincomerz/planes"
-              className="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white md:gap-3"
-            >
-              <CreditCard className="h-4 w-4 shrink-0" />
-              Planes
-            </Link>
-          </nav>
+          <AdminNav />
         </div>
 
         {/* En mobile es solo el ícono, alineado a la derecha; el mail y el

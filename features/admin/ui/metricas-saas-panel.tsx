@@ -1,36 +1,10 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { Pencil, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import { Button } from "@/shared/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/shared/ui/dialog";
-import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
-import {
-  guardarCostoInfraAction,
-  type CostoInfraFila,
-  type EstadoCosto,
-} from "@/features/admin/actions/costos-infra";
 import type {
   MetricaConMotivo,
   ResumenCostos,
 } from "@/features/admin/lib/metricas-saas";
 import { formatearMoneda } from "@/shared/utils/formatters";
-
-const estadoInicial: EstadoCosto = { error: null, success: false };
-
-const ETIQUETA_PROVEEDOR: Record<string, string> = {
-  vercel: "Vercel",
-  supabase: "Supabase",
-  dominio: "Dominio",
-  otro: "Otro",
-};
 
 /**
  * Una métrica que puede no existir todavía.
@@ -80,29 +54,15 @@ export function MetricasSaasPanel({
   churn,
   ltv,
   costos,
-  costosDelMes,
 }: Readonly<{
   arpu: MetricaConMotivo;
   churn: MetricaConMotivo;
   ltv: MetricaConMotivo;
   costos: ResumenCostos;
-  costosDelMes: CostoInfraFila[];
 }>) {
-  const [abierto, setAbierto] = useState(false);
-  const [estado, accion, guardando] = useActionState(
-    guardarCostoInfraAction,
-    estadoInicial,
-  );
-
-  const [consumido, setConsumido] = useState(false);
-  if (estado.success && !consumido) {
-    setConsumido(true);
-    setAbierto(false);
-    toast.success("Costo guardado");
-  }
-
+  // Solo las cuatro métricas. Los gastos tienen su propio bloque, con su
+  // lista editable: ver GastosDelMes.
   return (
-    <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metrica
           titulo="ARPU"
@@ -133,118 +93,5 @@ export function MetricasSaasPanel({
           }
         />
       </div>
-
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-white/90">
-              Infraestructura: {formatearMoneda(costos.total)}
-            </p>
-            <p className="text-xs text-white/40">
-              {costos.porComercio !== null
-                ? `${formatearMoneda(costos.porComercio)} por comercio activo`
-                : "Sin comercios activos para repartirlo"}
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 gap-1.5 text-xs text-white/60 hover:text-white"
-            onClick={() => setAbierto(true)}
-          >
-            <Pencil className="size-3" />
-            Cargar costo
-          </Button>
-        </div>
-
-        {costosDelMes.length > 0 ? (
-          <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
-            {costosDelMes.map((c) => (
-              <li key={c.id} className="text-xs text-white/50">
-                {ETIQUETA_PROVEEDOR[c.proveedor] ?? c.proveedor}{" "}
-                <span className="font-mono text-white/80 tabular-nums">
-                  {formatearMoneda(c.monto)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-3 text-xs text-white/30">
-            Todavía no cargaste los costos de este mes: el margen de arriba está
-            contando la infraestructura en cero.
-          </p>
-        )}
-      </div>
-
-      <Dialog open={abierto} onOpenChange={setAbierto}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogTitle>Costo del mes</DialogTitle>
-          <DialogDescription>
-            Se guarda uno por proveedor y por mes. Cargarlo de nuevo lo corrige,
-            no lo suma.
-          </DialogDescription>
-
-          <form action={accion} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="proveedor">Proveedor</Label>
-              <select
-                id="proveedor"
-                name="proveedor"
-                defaultValue="vercel"
-                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
-              >
-                <option value="vercel">Vercel</option>
-                <option value="supabase">Supabase</option>
-                <option value="dominio">Dominio</option>
-                <option value="otro">Otro</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="monto">Monto del mes</Label>
-              <Input
-                id="monto"
-                name="monto"
-                type="number"
-                min="0"
-                step="any"
-                required
-                className="h-10 font-mono"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="nota">Nota (opcional)</Label>
-              <Input id="nota" name="nota" className="h-10" />
-            </div>
-
-            {estado.error && (
-              <p className="text-sm text-destructive" role="alert">
-                {estado.error}
-              </p>
-            )}
-
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                onClick={() => setAbierto(false)}
-                disabled={guardando}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" className="flex-1" disabled={guardando}>
-                {guardando ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  "Guardar"
-                )}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
   );
 }

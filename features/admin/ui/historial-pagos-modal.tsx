@@ -13,6 +13,7 @@ import {
   type PagoDelNegocio,
 } from "@/features/admin/actions/acciones-comercio";
 import { formatearMoneda } from "@/shared/utils/formatters";
+import { CLASE_PORTAL_OSCURO } from "@/features/admin/lib/tema-portal";
 
 const ETIQUETA_MEDIO: Record<string, string> = {
   transferencia: "Transferencia",
@@ -70,7 +71,7 @@ export function HistorialPagosModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={`sm:max-w-lg ${CLASE_PORTAL_OSCURO}`}>
         <DialogTitle>Pagos de {nombre}</DialogTitle>
         <DialogDescription>
           {pagos === null

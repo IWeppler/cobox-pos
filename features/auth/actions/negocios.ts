@@ -1,5 +1,6 @@
 "use server";
 
+import { negocioHabilitado } from "@/shared/lib/estado-negocio";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -63,7 +64,9 @@ export async function listarMisNegociosAction(): Promise<MembresiaNegocio[]> {
         estado: negocio?.estado ?? "activo",
       };
     })
-    .filter((m) => m.estado === "activo");
+    // Incluye los de prueba: si no, el dueño de un comercio recién dado de
+    // alta no lo ve en su propio selector y no puede entrar a nada.
+    .filter((m) => negocioHabilitado(m.estado));
 }
 
 /**

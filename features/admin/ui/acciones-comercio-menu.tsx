@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { MoreHorizontal, Ban, Link2, Play, Receipt, Wallet } from "lucide-react";
+import {
+  MoreHorizontal,
+  Ban,
+  Link2,
+  LogIn,
+  Play,
+  Receipt,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/shared/ui/button";
 import {
@@ -18,6 +26,9 @@ import {
 } from "@/features/admin/actions/acciones-comercio";
 import { RegistrarPagoModal } from "./registrar-pago-modal";
 import { HistorialPagosModal } from "./historial-pagos-modal";
+import { iniciarImpersonationAction } from "@/features/admin/actions/impersonate";
+import { CLASE_PORTAL_OSCURO } from "@/features/admin/lib/tema-portal";
+import { negocioHabilitado } from "@/shared/lib/estado-negocio";
 
 export interface PlanOpcion {
   id: string;
@@ -39,6 +50,7 @@ export function AccionesComercioMenu({
   slug,
   estado,
   planId,
+  planVencimiento,
   planes,
 }: Readonly<{
   negocioId: string;
@@ -46,6 +58,8 @@ export function AccionesComercioMenu({
   slug: string;
   estado: string;
   planId: string | null;
+  /** Para que el modal de pago pueda mostrar desde cuándo cuenta el período. */
+  planVencimiento: string | null;
   planes: PlanOpcion[];
 }>) {
   const [pendiente, startTransition] = useTransition();
@@ -85,7 +99,7 @@ export function AccionesComercioMenu({
           </Button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuContent align="end" className={`w-56 ${CLASE_PORTAL_OSCURO}`}>
           <DropdownMenuItem onClick={() => setPagoAbierto(true)}>
             <Wallet className="mr-2 size-4 text-success" />
             Registrar pago
@@ -93,6 +107,26 @@ export function AccionesComercioMenu({
           <DropdownMenuItem onClick={() => setHistorialAbierto(true)}>
             <Receipt className="mr-2 size-4 text-muted-foreground" />
             Historial de pagos
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          {/* Modo dios: abre el POS de este comercio con TU sesión, sin
+              pedirle la contraseña a nadie. Vivía en la tabla vieja de
+              /admincomerz/negocios; cuando esa página se borró, esto se mudó
+              acá — es la acción más usada del panel cuando alguien escribe
+              que algo no le anda.
+
+              No pasa por `correr` porque la acción no devuelve un resultado:
+              termina en `redirect("/stock")`. Se llama directo dentro de la
+              transición y la navegación la resuelve Next. */}
+          <DropdownMenuItem
+            onClick={() =>
+              startTransition(() => iniciarImpersonationAction(negocioId))
+            }
+          >
+            <LogIn className="mr-2 size-4 text-primary" />
+            Entrar al POS
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
@@ -120,7 +154,10 @@ export function AccionesComercioMenu({
             Cambiar link de la tienda
           </DropdownMenuItem>
 
-          {estado === "activo" ? (
+          {/* Un negocio en prueba también se puede suspender o dar de baja:
+              está trabajando igual que uno activo. Lo que los separa es si
+              pagó, no si tiene acceso. */}
+          {negocioHabilitado(estado) ? (
             <>
               <DropdownMenuItem
                 onClick={() =>
@@ -161,6 +198,7 @@ export function AccionesComercioMenu({
         negocioId={negocioId}
         nombre={nombre}
         precioSugerido={planes.find((p) => p.id === planId)?.precio_mensual ?? 0}
+        vencimientoActual={planVencimiento}
       />
 
       <HistorialPagosModal

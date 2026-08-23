@@ -303,36 +303,11 @@ export default async function DashboardPage({
   });
 
   return (
-    <>
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-            /* Aplicar de forma global a los contenedores scroll */
-            ::-webkit-scrollbar {
-              width: 6px !important;
-              height: 6px !important;
-            }
-            ::-webkit-scrollbar-track {
-              background: transparent !important;
-            }
-            ::-webkit-scrollbar-thumb {
-              background: rgba(156, 163, 175, 0.25) !important; /* Gris sutil traslúcido */
-              border-radius: 9999px !important;
-              transition: background 0.2s ease !important;
-            }
-            ::-webkit-scrollbar-thumb:hover {
-              background: rgba(156, 163, 175, 0.45) !important; /* Un poco más oscuro al pasar el mouse */
-            }
-            /* Compatibilidad con Firefox */
-            * {
-              scrollbar-width: thin !important;
-              scrollbar-color: rgba(156, 163, 175, 0.25) transparent !important;
-            }
-          `,
-        }}
-      />
-
-      <div className="flex flex-col gap-3 px-2 py-2">
+    // Acá había un <style> inyectado que pintaba la barra de scroll de gris
+    // fijo con !important. Eso vivía en una página pero se aplicaba a toda la
+    // app, y al ser un color fijo ignoraba el tema: en modo oscuro quedaba la
+    // misma franja gris clara. Ahora sale de tokens en globals.css.
+    <div className="flex flex-col gap-3 px-2 py-2">
         {/* HEADER — título + selector de período, nada más. Las acciones se
             fueron a donde vive cada una: vender y crear producto ya están en
             el menú y en la toolbar de /stock, y el gasto pasó al modal de
@@ -454,6 +429,5 @@ export default async function DashboardPage({
           />
         </div>
       </div>
-    </>
   );
 }

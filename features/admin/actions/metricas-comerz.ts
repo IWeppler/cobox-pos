@@ -1,8 +1,8 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/shared/config/supabase/server";
+import { negocioHabilitado } from "@/shared/lib/estado-negocio";
 
 export interface NegocioAdmin {
   id: string;
@@ -94,108 +94,51 @@ export async function getPanelComerzAction(): Promise<{
   const ahora = Date.now();
   const dias = (d: number) => ahora - d * 24 * 60 * 60 * 1000;
 
+  // "Activo" acá es el que PAGA: los de prueba tienen su propio estado y no
+  // suman al MRR. Antes contaban como activos y lo inflaban con plata que
+  // todavía no había entrado.
   const activos = negocios.filter((n) => n.estado === "activo");
+  const enPrueba = negocios.filter((n) => n.estado === "prueba");
+  // Ni activo ni en prueba: dejó de trabajar. Sin este corte, un negocio en
+  // prueba pasaba a contarse como suspendido Y como baja del mes.
+  const inactivos = negocios.filter((n) => !negocioHabilitado(n.estado));
 
   const metricas: MetricasComerz = {
     // Solo factura lo que está activo: un negocio suspendido no cobra.
     mrr: activos.reduce((suma, n) => suma + n.plan_precio, 0),
     activos: activos.length,
-    suspendidos: negocios.filter((n) => n.estado !== "activo").length,
+    suspendidos: inactivos.length,
     sinPlan: activos.filter((n) => !n.plan_id).length,
     altasSemana: negocios.filter(
       (n) => new Date(n.created_at).getTime() >= dias(7),
     ).length,
     // Churn: los que dejaron de estar activos en los últimos 30 días. Se apoya
     // en estado_cambiado_en, que lo mantiene un trigger.
-    bajasMes: negocios.filter(
-      (n) =>
-        n.estado !== "activo" &&
-        new Date(n.estado_cambiado_en).getTime() >= dias(30),
+    bajasMes: inactivos.filter(
+      (n) => new Date(n.estado_cambiado_en).getTime() >= dias(30),
     ).length,
     porVencer: activos.filter(
       (n) =>
         n.plan_vencimiento &&
         new Date(n.plan_vencimiento).getTime() <= ahora + 15 * 86400000,
     ).length,
-    // Altas self-service que todavía están en los 14 días de prueba. Se derivan
-    // del vencimiento en vez de un estado propio: un negocio en prueba ES un
-    // negocio activo con vencimiento cerca (ver la migración
-    // 20260812180000). Un estado más sería otra cosa que mantener en sincronía.
-    enPrueba: activos.filter(
-      (n) =>
-        n.plan_vencimiento &&
-        new Date(n.plan_vencimiento).getTime() > ahora &&
-        new Date(n.plan_vencimiento).getTime() <=
-          new Date(n.created_at).getTime() + 14 * 86400000,
-    ).length,
+    // Ahora sale de un estado propio y no de una deducción. Antes se sacaba de
+    // que el vencimiento cayera dentro de los 14 días del alta, que dejaba de
+    // ser cierto en cuanto alguien tocaba esa fecha a mano — y estuvo mintiendo
+    // meses, con la semilla de `now() + 12 months` que puso 20260803010000.
+    enPrueba: enPrueba.length,
   };
 
   return { negocios, metricas };
 }
 
-export async function getPlanesAction() {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
-  const { data } = await supabase
-    .from("planes")
-    .select("id, nombre, precio_mensual")
-    .eq("activo", true)
-    .order("precio_mensual", { ascending: true });
-
-  return data ?? [];
-}
-
-/** Asigna plan y vencimiento. Solo super admin (lo exige la policy). */
-export async function asignarPlanAction(
-  negocioId: string,
-  planId: string | null,
-  meses: number,
-) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
-  const vencimiento = planId
-    ? new Date(Date.now() + meses * 30 * 86400000).toISOString()
-    : null;
-
-  const { error } = await supabase
-    .from("negocios")
-    .update({ plan_id: planId, plan_vencimiento: vencimiento })
-    .eq("id", negocioId);
-
-  if (error) {
-    console.error("[ASIGNAR PLAN ERROR]", error);
-    return { error: "No se pudo asignar el plan.", success: false };
-  }
-
-  revalidatePath("/admincomerz");
-  revalidatePath("/admincomerz/negocios");
-  return { error: null, success: true };
-}
-
-/**
- * Suspender corta el acceso del comercio sin borrar nada: su catálogo público
- * deja de resolver y sus usuarios no entran, pero los datos quedan intactos.
- */
-export async function cambiarEstadoNegocioAction(
-  negocioId: string,
-  estado: "activo" | "suspendido" | "cancelado",
-) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
-  const { error } = await supabase
-    .from("negocios")
-    .update({ estado })
-    .eq("id", negocioId);
-
-  if (error) {
-    console.error("[CAMBIAR ESTADO NEGOCIO ERROR]", error);
-    return { error: "No se pudo cambiar el estado.", success: false };
-  }
-
-  revalidatePath("/admincomerz");
-  revalidatePath("/admincomerz/negocios");
-  return { error: null, success: true };
-}
+// Acá vivían `getPlanesAction`, `asignarPlanAction` y una segunda
+// `cambiarEstadoNegocioAction`. Las tres quedaron sin uso al borrar la página
+// /admincomerz/negocios, que era lo único que las llamaba.
+//
+// Se borran y no se dejan "por las dudas" porque este archivo es "use server":
+// cada export es un endpoint que el navegador puede invocar. Y la
+// `cambiarEstadoNegocioAction` de acá era además la peor de las dos: no
+// chequeaba super admin en el código (confiaba solo en la policy) y no
+// escribía `estado_cambiado_en`, que es de donde sale el churn del panel.
+// La que se usa es la de `acciones-comercio.ts`.

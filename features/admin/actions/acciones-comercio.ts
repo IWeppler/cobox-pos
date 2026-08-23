@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { calcularPeriodoPago } from "@/features/admin/lib/periodo-pago";
 import { createClient } from "@/shared/config/supabase/server";
 import { slugify } from "@/shared/utils/slugify";
 
@@ -39,17 +40,28 @@ async function comoSuperAdmin() {
 
 function refrescarPanel() {
   revalidatePath("/admincomerz");
-  revalidatePath("/admincomerz/negocios");
 }
 
 /**
  * Registra un cobro y mueve el vencimiento del negocio.
  *
- * El vencimiento sale del período que se pagó, no de "hoy + 30": si el pago
- * entra tarde, el mes cubierto sigue siendo el que se pagó y no se le regalan
- * los días de atraso. Y NO se mueve hacia atrás — un pago viejo cargado
- * después no puede acortarle la suscripción a alguien que ya pagó el mes
- * siguiente.
+ * QUÉ SE PIDE Y QUÉ SE DEDUCE
+ *
+ * Se piden tres cosas: cuánto pagó, si es mensual o semestral, y por qué medio.
+ * Todo lo demás sale de ahí:
+ *
+ * - La FECHA es hoy. Se registra el pago cuando entra la plata, así que
+ *   elegirla a mano era ofrecer equivocarse en el único dato que el sistema ya
+ *   sabe con certeza.
+ * - El PERÍODO se deduce de la modalidad. Antes se pedían "cubre desde" y
+ *   "cubre hasta" a mano: dos fechas para expresar "un mes más", con la
+ *   posibilidad de escribir un rango de 45 días sin que nada lo frenara.
+ *
+ * DESDE DÓNDE SE CUENTA: desde el vencimiento vigente si todavía no pasó, y
+ * desde hoy si ya venció. Es lo que hace que pagar antes no cueste días — quien
+ * paga el 20 con vencimiento el 30 tiene que terminar cubierto hasta el 30 del
+ * mes siguiente, no hasta el 20. Y quien paga tarde arranca hoy, sin que se le
+ * regalen los días de atraso.
  */
 export async function registrarPagoAction(
   _prev: ResultadoAccion | null,
@@ -57,23 +69,16 @@ export async function registrarPagoAction(
 ): Promise<ResultadoAccion> {
   const negocioId = formData.get("negocio_id") as string;
   const monto = Number(formData.get("monto"));
-  const fechaPago = (formData.get("fecha_pago") as string) || null;
-  const periodoDesde = formData.get("periodo_desde") as string;
-  const periodoHasta = formData.get("periodo_hasta") as string;
+  const modalidad = (formData.get("modalidad") as string) || "mensual";
   const medio = (formData.get("medio") as string) || "transferencia";
   const nota = ((formData.get("nota") as string) ?? "").trim() || null;
 
-  if (!negocioId || !periodoDesde || !periodoHasta) {
-    return { error: "Faltan datos del pago.", success: false };
-  }
-  if (!Number.isFinite(monto) || monto < 0) {
+  if (!negocioId) return { error: "Falta el comercio.", success: false };
+  if (!Number.isFinite(monto) || monto <= 0) {
     return { error: "El monto no es válido.", success: false };
   }
-  if (periodoHasta <= periodoDesde) {
-    return {
-      error: "El período tiene que terminar después de empezar.",
-      success: false,
-    };
+  if (modalidad !== "mensual" && modalidad !== "semestral") {
+    return { error: "Modalidad inválida.", success: false };
   }
 
   const { supabase, user, autorizado } = await comoSuperAdmin();
@@ -85,45 +90,54 @@ export async function registrarPagoAction(
     .eq("id", negocioId)
     .maybeSingle();
 
-  const plan = Array.isArray(negocio?.planes) ? negocio?.planes[0] : negocio?.planes;
+  const plan = Array.isArray(negocio?.planes)
+    ? negocio?.planes[0]
+    : negocio?.planes;
 
-  const { error: errorPago } = await supabase.from("pagos_suscripcion").insert({
-    negocio_id: negocioId,
-    monto,
-    fecha_pago: fechaPago ?? new Date().toISOString().slice(0, 10),
-    periodo_desde: periodoDesde,
-    periodo_hasta: periodoHasta,
-    medio,
-    plan_nombre: (plan?.nombre as string | undefined) ?? null,
-    nota,
-    registrado_por: user?.id ?? null,
+  const hoy = new Date().toISOString().slice(0, 10);
+  const vencimientoActual = negocio?.plan_vencimiento
+    ? String(negocio.plan_vencimiento).slice(0, 10)
+    : null;
+
+  const { desde, hasta } = calcularPeriodoPago({
+    hoy,
+    vencimientoActual,
+    modalidad,
   });
+
+  const { error: errorPago } = await supabase
+    .from("pagos_suscripcion")
+    .insert({
+      negocio_id: negocioId,
+      monto,
+      fecha_pago: hoy,
+      periodo_desde: desde,
+      periodo_hasta: hasta,
+      medio,
+      plan_nombre: (plan?.nombre as string | undefined) ?? null,
+      nota,
+      registrado_por: user?.id ?? null,
+    });
 
   if (errorPago) {
     console.error("[PAGO SUSCRIPCION]", errorPago);
     return { error: "No se pudo registrar el pago.", success: false };
   }
 
-  const vencimientoActual = negocio?.plan_vencimiento
-    ? String(negocio.plan_vencimiento).slice(0, 10)
-    : null;
+  const { error: errorVenc } = await supabase
+    .from("negocios")
+    .update({ plan_vencimiento: hasta })
+    .eq("id", negocioId);
 
-  if (!vencimientoActual || periodoHasta > vencimientoActual) {
-    const { error: errorVenc } = await supabase
-      .from("negocios")
-      .update({ plan_vencimiento: periodoHasta })
-      .eq("id", negocioId);
-
-    if (errorVenc) {
-      // El pago YA quedó registrado: se avisa en vez de fingir que todo salió
-      // bien, porque la plata entró y el vencimiento quedó viejo.
-      console.error("[PAGO SUSCRIPCION] vencimiento no actualizado", errorVenc);
-      return {
-        error:
-          "El pago quedó registrado pero no se pudo mover el vencimiento. Revisalo.",
-        success: false,
-      };
-    }
+  if (errorVenc) {
+    // El pago YA quedó registrado: se avisa en vez de fingir que todo salió
+    // bien, porque la plata entró y el vencimiento quedó viejo.
+    console.error("[PAGO SUSCRIPCION] vencimiento no actualizado", errorVenc);
+    return {
+      error:
+        "El pago quedó registrado pero no se pudo mover el vencimiento. Revisalo.",
+      success: false,
+    };
   }
 
   refrescarPanel();
