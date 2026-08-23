@@ -1,4 +1,5 @@
 import { generateSlug } from "../utils/slugify-categories";
+import { normalizarTemporada } from "@/shared/lib/temporada-categoria";
 
 export type CategoriaBulkInput = {
   id?: string;
@@ -7,6 +8,8 @@ export type CategoriaBulkInput = {
   activa: boolean;
   /** Portada de la categoría en el catálogo público. */
   imagen_url?: string | null;
+  /** Ventana de venta. Solo silencia sugerencias, nunca las genera. */
+  temporada?: string | null;
   isNew?: boolean;
 };
 
@@ -45,6 +48,11 @@ export function construirPayloadCategorias(categorias: CategoriaBulkInput[]) {
     // omitiera `imagen_url`, se completaría con null y le borraría la portada
     // a esa categoría al guardar cualquier otro cambio.
     imagen_url: cat.imagen_url ?? null,
+    // Siempre presente por el mismo motivo que `imagen_url`, y acá el default
+    // importa más: la columna es NOT NULL, así que una fila que la omitiera
+    // haría fallar el lote entero. `normalizarTemporada` cae a TODO_EL_ANIO,
+    // que es el valor que no silencia nada.
+    temporada: normalizarTemporada(cat.temporada),
     orden: index, // Guardamos el orden visual
   }));
 }

@@ -35,6 +35,11 @@ import {
 import { bulkSaveCategoriasAction } from "../actions/manage-categories";
 import { CategoryAttributesModal } from "./category-attributes-modal";
 import { PortadaCategoria } from "./portada-categoria";
+import {
+  ETIQUETA_TEMPORADA,
+  TEMPORADAS,
+  normalizarTemporada,
+} from "@/shared/lib/temporada-categoria";
 
 export interface Categoria {
   id: string;
@@ -46,6 +51,8 @@ export interface Categoria {
   parent_id?: string | null;
   /** Portada en la home del catálogo público. Sólo aplica a categorías raíz. */
   imagen_url?: string | null;
+  /** Ventana de venta. Ver shared/lib/temporada-categoria.ts. */
+  temporada?: string | null;
 }
 
 type LocalCategory = Categoria & { isNew?: boolean };
@@ -187,6 +194,27 @@ export function CategoriesPanel({
 
   const renderRowActions = (cat: LocalCategory) => (
     <div className="flex items-center gap-1 shrink-0">
+      {/* Temporada. Solo sirve para NO sugerir esta categoría fuera de su
+          ventana de venta: nunca para sugerir que se compre. Por eso el
+          default "Todo el año" no oculta nada y el título lo dice. */}
+      <Select
+        value={normalizarTemporada(cat.temporada)}
+        onValueChange={(valor) => updateCat(cat.id, { temporada: valor })}
+      >
+        <SelectTrigger
+          className="h-9 w-[132px] shadow-none border-border/50 bg-background text-xs"
+          title="Fuera de esta temporada, Comerz no va a sugerir reponer esta categoría"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {TEMPORADAS.map((t) => (
+            <SelectItem key={t} value={t} className="text-xs">
+              {ETIQUETA_TEMPORADA[t]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <Button
         type="button"
         variant="ghost"

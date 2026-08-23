@@ -414,9 +414,16 @@ export async function registrarVentaAction(
       ? (subtotalConDescuento * pctRecargoCC) / 100
       : 0;
 
-  // Sin columna que lo registre, el log es el único rastro de que esta venta
-  // se fió sin el recargo que la config exige. Va como error para que quede
-  // en los logs de producción, no como info.
+  // El porcentaje que efectivamente rigió para ESTA venta, que es lo que se
+  // guarda en `ventas.recargo_cc_porcentaje`. Con el flag de la vendedora
+  // prendido es 0, y ese 0 es un dato: dice que se fió sin recargo, distinto
+  // de null, que dice que no se sabe.
+  const pctRecargoCCAplicado =
+    isCuentaCorriente && !ccSinRecargo ? pctRecargoCC : 0;
+
+  // El log sigue, pero ya no es el único rastro: desde 20260823180630 la
+  // venta guarda el porcentaje aplicado y el monto, así que fiar sin recargo
+  // se puede contar, no solo encontrar leyendo logs.
   if (isCuentaCorriente && ccSinRecargo && pctRecargoCC > 0) {
     console.error("[VENTA CC SIN RECARGO]", {
       vendedorId: user.id,
@@ -603,6 +610,11 @@ export async function registrarVentaAction(
       await supabase.rpc("ajustar_stock_variante", {
         p_variante_id: previo.varianteId,
         p_delta: previo.cantidad,
+        // REVERSO_VENTA y no ANULACION_VENTA: la venta nunca llegó a existir.
+        // Es el movimiento que la reconstrucción vieja de movimientos no podía
+        // ver, porque no deja fila en ninguna otra tabla.
+        p_origen: "REVERSO_VENTA",
+        p_referencia_id: ventaId,
       });
     }
   };
@@ -622,6 +634,11 @@ export async function registrarVentaAction(
         p_variante_id: item.varianteId,
         p_delta: -item.cantidad,
         p_permitir_negativo: permitirVentaSinStock,
+        // El origen viaja CON la llamada y no se setea antes: `set_config` es
+        // transaction-local y cada RPC es su propia transacción, así que un
+        // "marcar origen" previo desde acá no llegaría.
+        p_origen: "VENTA",
+        p_referencia_id: ventaId,
       },
     );
 
@@ -741,6 +758,13 @@ export async function registrarVentaAction(
     monto_cobrado: montoCobradoReal,
     monto_pendiente: montoPendiente > 0 ? montoPendiente : 0,
     estado_pago: estadoPago,
+    // Recargo por fiar, congelado en la fila. Antes se sumaba a `total` y
+    // desaparecía: no había forma de saber cuánto de un ticket fiado era
+    // mercadería y cuánto era el precio de esperar, y por lo tanto tampoco de
+    // comparar fiar contra cobrar con tarjeta. Va SIEMPRE, 0 incluido — un
+    // null en la columna significa "venta anterior a esto", no "sin recargo".
+    recargo_cc_porcentaje: pctRecargoCCAplicado,
+    recargo_cc_monto: recargoCCServer,
   };
 
   // --- 4. ESCRIBIR LA VENTA ENTERA, EN UNA TRANSACCIÓN ---

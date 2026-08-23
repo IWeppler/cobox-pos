@@ -127,6 +127,54 @@ tiene 11.
   ningún lado, sin error. Sin FK: el historial sobrevive a que la variante se
   borre. El match por nombre queda de respaldo para los que el backfill no pudo
   resolver.
+- `movimientos_stock` (`20260823182514`): la historia del NIVEL de stock por
+  variante. `producto_variantes.stock` es un escalar que se pisa, así que la
+  base sabía cuánto hay AHORA y nada más — "esta variante estuvo en cero del 3
+  al 11" no se podía reconstruir, y un quiebre no deja registro por definición
+  (la venta que no se hizo no existe en ninguna tabla). Por eso entra ANTES que
+  cualquier señal que la use: cada día sin la tabla es historia que no vuelve.
+  La escribe un TRIGGER sobre `producto_variantes`, no una llamada dentro de
+  cada RPC, y la diferencia es el punto: un camino que se olvida de registrar
+  es un agujero que se descubre meses después con los números ya mal. Con
+  trigger no hay camino que lo saltee — ni el UPDATE en batch de
+  `aprobar_orden_compra`, ni un ajuste a mano, ni el código que todavía no
+  existe. Además `stock_anterior` / `stock_nuevo` salen del propio UPDATE: son
+  exactos con dos cajas vendiendo la misma variante a la vez.
+  El PORQUÉ no lo puede adivinar el trigger: viaja en `comerz.origen_movimiento`
+  (transaction-local, `is_local => true` — con `false` una venta le pondría
+  origen VENTA al remito que se apruebe después en la misma conexión del pool).
+  Sin declarar queda DESCONOCIDO, que es la verdad, no 'AJUSTE', que sería una
+  suposición disfrazada de dato. Append-only por RLS: hay policy de SELECT e
+  INSERT y NO de UPDATE ni DELETE, mismo criterio que `comprobantes`. Sin FK a
+  la variante: el historial tiene que sobrevivir a que la variante desaparezca,
+  que es uno de los movimientos que registra.
+  `ajustar_stock_variante` toma `p_origen` / `p_referencia_id` porque la venta,
+  la anulación y Carga Rápida lo llaman suelto desde Node y `set_config` no
+  cruza transacciones. Ojo con esa función: pasó de `language sql` a plpgsql, y
+  sus OUT params `id`/`stock` SOMBREAN las columnas — sin
+  `#variable_conflict use_column`, `set stock = stock + p_delta` es "column
+  reference is ambiguous" y la venta se cae entera. Pasó al aplicar.
+  `aprobar_orden_compra` y `guardar_variantes_producto` quedaron detrás de
+  wrappers (`_impl` es la original renombrada): declaran el origen sin que haya
+  que reescribir 6.000 caracteres de lógica probada.
+  El caso especial es el guardado de variantes, que BORRA todas las variantes
+  del producto y las reinserta en cada guardado: con el trigger suelto,
+  corregir un precio de un producto con 9 talles escribiría 18 movimientos y 9
+  ceros intermedios que nunca pasaron en el local — y esos ceros falsos
+  arruinarían justo la cuenta de quiebres que motiva la tabla. Por eso el
+  wrapper apaga el trigger (`comerz.omitir_movimiento`) y registra el
+  movimiento NETO comparando antes contra después por `atributos_comparables`.
+  Verificado: guardar sin tocar stock no escribe ninguna fila.
+  `FOTO_INICIAL` (5.129 filas, 23/8/2026) es el punto de partida, con delta y
+  stock_anterior en NULL porque no hubo movimiento. La historia hacia atrás NO
+  es reconstruible —el nivel pasado no está guardado en ningún lado— pero sí se
+  puede fechar el arranque: sin la foto, una variante hoy en cero que no se
+  mueva más no tendría una sola fila.
+  Lo que NO cubre: `importar_productos_planilla` (hoy sin punto de entrada) no
+  declara origen, así que escribiría DESCONOCIDO. Y el origen BAJA no lo emite
+  nadie: `bajas` está VACÍA en los 4 negocios y `createBajaAction` inserta
+  siempre en estado PENDIENTE, sin ningún camino que apruebe ni descuente —
+  `get-movimientos-stock.ts` lee bajas con `estado = 'APROBADA'` que nada crea.
 - El espejo legacy `productos_stock` se mueve con `ajustar_stock_legacy`
   (delta en un statement), nunca leyendo y escribiendo después.
 - Dos columnas de `ventas` que se leyeron mal durante mucho tiempo:
@@ -186,6 +234,226 @@ tiene 11.
   queda congelado en la fila del pago. La comisión se calcula sobre el bruto
   (es lo que pasa por el posnet). anon lee `recargo_porcentaje` para el
   catálogo público vía policy + GRANT por columna: `comision` NO se expone.
+- Recargo de cuenta corriente: existía y se cobraba (`configuracion_pos.
+  cc_recargo_default`, 15% en Evens, recalculado server-side) pero se disolvía
+  dentro de `ventas.total` — no había columna que dijera cuánto de un ticket
+  fiado era mercadería y cuánto el precio de esperar, así que "¿me conviene
+  fiar al 15% o cobrar con tarjeta al 15%?" no se podía contestar.
+  `20260823180630` agrega `ventas.recargo_cc_porcentaje` / `recargo_cc_monto`
+  (congelados en la fila, mismo criterio que el recargo por método) y empieza a
+  escribir `cuenta_corriente_movimientos.monto_recargo`, que existía desde el
+  esquema maestro y estaba en 0 en los 220 movimientos vivos. null significa
+  "no se sabe" y 0 significa "se fió sin recargo": son distintos, por eso las
+  columnas NO tienen default. El backfill escribe solo donde la aritmética de
+  create-sale.ts cierra al peso (164 de 171 ventas fiadas); las 7 que no
+  cierran quedan null en vez de con un número inventado.
+  Cuenta corriente NO es una fila de `venta_pagos`, y es a propósito aunque
+  conceptualmente sea una forma de saldar el ticket: para el resto del sistema
+  esa tabla es PLATA QUE ENTRÓ. `posicion_dinero` arma "por acreditar" con
+  `metodo_tipo <> 'EFECTIVO'` sin mirar `tipo_movimiento` (una fila de fiado se
+  contaría como plata en camino) y nueve lugares en TypeScript suman
+  `venta_pagos` embebido en la venta como cobrado. La comparación entre medios
+  se arma en LECTURA, en `rentabilidad_por_metodo`, que no puede romper un
+  arqueo. `registrar_venta` tiene un guard que falla si alguien escribe fiado
+  ahí sin arreglar antes esos consumidores.
+- `rentabilidad_por_metodo` (`20260823180705`, gateada por
+  `caja.ver_gerencial`): primera señal de Comerz Insights. Recargo cobrado
+  menos comisión pagada, sobre la base, por medio. Deja ver que **recargo
+  igual a comisión pierde plata**: la comisión se cobra sobre el bruto y el
+  recargo se calcula sobre la base, así que 15% y 15% sobre 100 dan bruto 115,
+  comisión 17,25 y neto 97,75 — −2,25%, medido exacto en Tarjeta Banco Nación.
+  Para empatar 15% de comisión hay que cobrar 17,65% de recargo.
+  Cuenta corriente va en su propio bloque, FUERA del ranking de medios: no es
+  una forma de cobrar sino de no cobrar todavía, su neto es DEVENGADO, y
+  `pendiente_foto` / `vencido_foto` son fotos de ahora que no respetan el
+  período (el saldo de un cliente no tiene versión "de julio"). La comisión de
+  cobrar una deuda con tarjeta se le imputa a CUENTA CORRIENTE, no a la
+  tarjeta: sin el fiado ese cobro no existía. No se devuelven días REALES
+  hasta cobrar —los pagos de CC no están imputados a una venta— sino
+  `dias_plazo_pactado`, y el nombre lo dice; tampoco incobrabilidad, que con
+  5 semanas de historia sería un juicio y no un hecho. `sin_dato_recargo`
+  cuenta los débitos del período sin recargo registrado: con > 0 el total está
+  subestimado y la tarjeta tiene que decirlo.
+- **Unidades en `ventas_items`: las columnas del RENGLÓN son UNITARIAS**, al
+  revés que las de la cabecera. `precio_final`, `precio_costo` y
+  `descuento_monto` son por unidad, y para sumar hay que multiplicar por
+  `cantidad`. Verificado contra la cabecera sobre las ventas con líneas de más
+  de una unidad: `ventas.precio_costo = Σ (items.precio_costo × cantidad)`,
+  12 de 12. Es la misma trampa que el bullet de arriba pero en el otro
+  sentido, y ya mordió: el primer backfill de `20260823180630` reconstruyó el
+  subtotal como `sum(precio_final)` y dejó afuera exactamente las 7 ventas
+  fiadas con líneas multi-unidad (corregido en `20260823184214`). No quedó
+  nada mal escrito porque el backfill solo escribía donde la cuenta cerraba al
+  peso: el fail-closed convirtió un error en 7 nulls recuperables.
+  `precio_final` YA tiene restado el descuento del renglón, y
+  `ventas_descuentos.monto_descontado` = Σ (`items.descuento_monto` ×
+  `cantidad`) en las 423 ventas del período: restar la cabecera además del
+  renglón lo cuenta dos veces.
+- `margen_realizado` (`20260823184551`, gateada por `caja.ver_gerencial`):
+  margen de lo vendido, por producto y por categoría, desde el
+  `ventas_items.precio_costo` congelado en la venta (806 renglones en 30 días
+  de Evens, CERO sin costo). Los recargos quedan afuera: ni el de método ni el
+  de cuenta corriente son mercadería.
+  **Devuelve `dispersion_markup`, y ese bloque importa más que el ranking.**
+  La promesa clásica de esta señal es "vas a descubrir que tu producto más
+  vendido es el de peor margen"; en estos negocios ESO NO EXISTE. En Evens el
+  86,3% de los renglones tiene costo exactamente igual a la mitad del precio
+  (Estilo Bonito, 97,1%): el precio no es una decisión por producto sino una
+  regla, ×2 sobre el costo. Con markup uniforme el margen porcentual es el
+  mismo para todo el catálogo y lo único que lo mueve es el descuento — 50%
+  sin descuento, 44,4% con 10%, 37,5% con 20%, que es exactamente la
+  distribución observada. Ordenar por margen porcentual ahí no ordena por
+  rentabilidad: ordena por quién recibió más descuento, y presentarlo como
+  hallazgo es justo el error que hace que el módulo se apague a la semana.
+  Por eso la señal devuelve también el bloque `descuentos`, que es donde está
+  toda la variación real: 30 días de Evens dan $6.785.170 de margen (47,63%),
+  con $768.680 descontados en 168 de 401 tickets — 2,68 puntos de margen. El
+  día que se fijen precios por producto, el mismo ranking pasa a decir algo, y
+  `uniforme` es lo que avisa cuándo.
+  `p_min_unidades` (3) es el piso para entrar al ranking porcentual: 289 de
+  372 productos no llegan, y se cuentan en `base_insuficiente` en vez de
+  desaparecer sin explicación. Costo en cero queda fuera de todo ranking: no
+  es margen del 100%, es un costo que nadie cargó.
+- `composicion_ticket` (`20260823185658`, gateada por `caja.ver_gerencial`):
+  distribución de tickets por cantidad de renglones, con ticket y margen
+  promedio de cada tramo. Nace de una corrección: el ticket de 1,88 renglones
+  de Evens no es solo un obstáculo estadístico (con 173 tickets multi-item no
+  hay base para reglas de asociación) sino ADEMÁS el KPI más accionable que
+  tiene el negocio. Son dos lecturas del mismo número y las dos valen.
+  **`brecha_1_a_2` es DESCRIPTIVA, no causal**, y el nombre del campo es
+  deliberado: los tickets de dos renglones no son los mismos clientes que los
+  de uno, así que la diferencia de $14.810 NO es "lo que ganás por cada ticket
+  que convertís". Sirve como orden de magnitud y como línea de base contra la
+  cual comparar el mes que viene — eso último SÍ es causal y es el cierre que
+  hace que Insights rinda cuentas. Si la UI lo rotula "oportunidad" o
+  "ganancia potencial", miente.
+  QUÉ ofrecer no lo decide el sistema: con 173 tickets multi-item el par más
+  frecuente aparece 3 o 4 veces, que es ruido. La señal pone el objetivo y el
+  número; el complemento lo elige la vendedora. Los tramos se cortan en "6 o
+  más" (`es_tramo_abierto`) porque una fila por cada valor hasta 14 son filas
+  de un ticket cada una que se leen como si fueran un patrón.
+- `ventas_por_momento` (`20260823192530`): cuándo se vende. El día de semana va
+  NORMALIZADO por cuántos días de cada tipo hubo en el rango (`ventas_por_dia`):
+  sin eso, comparar sábados contra lunes en un rango de 60 días compara 9
+  sábados contra 8 lunes y la diferencia incluye el calendario. Evens, 60 días:
+  sábado 17,67 ventas por día y viernes 13,22, contra 3,75 el lunes. El domingo
+  tiene 1,89 por día pero el ticket promedio más alto de la semana ($46.791) —
+  dos hechos que van juntos en la misma fila, porque "cerrar los domingos" y
+  "el domingo entra la clienta que más gasta" salen de ahí. El corte por HORA
+  va aparte y con su conteo: 488 ventas en 14 horas × 7 días son celdas de 5, y
+  una grilla día × hora a ese volumen es un mapa de calor de ruido. Las franjas
+  (mañana/tarde/noche) sí tienen base.
+- `curva_de_precio` (`20260823192553`): a qué precio se vendió cada unidad. Es
+  la contracara accionable de lo que descubrió `margen_realizado` — con markup
+  uniforme el margen no varía por producto, varía por descuento, y ACÁ vive esa
+  variación. Evens, 30 días: 63,5% de las unidades a precio lleno (50,32% de
+  margen), 28,2% con hasta 10% (44,87%), 8,3% con hasta 20% (37,60%), y NINGUNA
+  por encima del 20%. No hay liquidación: hay descuento de mostrador, $768.680
+  resignados. Los tramos se calculan sobre el descuento del RENGLÓN, no del
+  ticket: una promo que toca un solo producto no descuenta el ticket entero.
+- `antiguedad_saldo_cc` (`20260823192614`): el sustituto honesto de la
+  incobrabilidad, que con 5 semanas de historia no se puede calcular — nada es
+  incobrable todavía, pero la antigüedad SÍ es un hecho.
+  **Imputa FIFO y lo declara en la respuesta** (`imputacion`): los pagos de CC
+  no están imputados a una venta, así que para saber qué deuda sigue viva hay
+  que suponer que los pagos cancelan lo más viejo primero. Es lo que hace
+  cualquier reporte de antigüedad y lo que asume el propio cliente, pero es un
+  supuesto y no un dato.
+  `clientes_descuadrados` es el control de calidad de la propia señal: cuenta
+  los clientes donde el libro (Σ débitos − Σ créditos) no coincide con
+  `clientes.saldo_pendiente`. Hoy son 2 de 156, $32.200. Si crece, la
+  antigüedad deja de cerrar contra el saldo que ve la dueña y la tarjeta tiene
+  que avisarlo. Validación: el `total_vivo` que devuelve la función
+  ($4.220.336,75) reconcilia al peso con la suma de `saldo_pendiente`.
+- Lo que NO se construyó del roadmap de Insights, y qué le falta a cada uno
+  para poder construirse. Está acá para no volver a proponerlo sin resolver
+  primero el bloqueo:
+  * **Días REALES hasta cobrar** y **imputación de pagos de CC** — la base no
+    sabe qué ticket saldó cada pago. Es un cambio de schema (imputación), no
+    una consulta.
+  * **Costo del dinero en el tiempo** — cálculo barato, pero necesita una TASA.
+    Un default inventado diría con precisión falsa si conviene fiar. Tiene que
+    salir de configuración del comercio o del contador.
+  * **Costo de reposición vs histórico** — `producto_variantes.costo` está en
+    cero en 3.020 de 3.153 variantes de Evens. No hay costo actual del catálogo
+    contra el cual comparar. (El costo REALIZADO sí está completo: es
+    `ventas_items.precio_costo`, congelado por renglón.)
+  * **Sell-through por lote** y **capital inmovilizado por antigüedad de
+    compra** — nada ata una unidad vendida al remito que la trajo. Es un
+    `lote_id` en `ventas_items`, no una consulta.
+  * **Ciclo de conversión de efectivo** — le falta una de las tres patas: los
+    días de pago a proveedor. `ordenes_compra` guarda remitos, no condiciones.
+    Media métrica cuyo sentido entero está en las tres patas es peor que
+    ninguna.
+- **Correlación no es palanca** (`20260823191708`). La primera versión de
+  `composicion_ticket` devolvía `brecha_1_a_2` —la diferencia entre el ticket
+  promedio de dos renglones y el de uno, $14.810— con un `es_descriptiva: true`
+  al lado. La advertencia no alcanza: si el único número grande de la señal es
+  ese, alguien lo usa para proyectar. Y es la diferencia entre DOS POBLACIONES
+  (las que venían a comprar una cosa y las que venían a comprar varias), no el
+  valor de una conversión. Lo que se agrega al convertir es UNA PRENDA, y en un
+  ticket de dos la que se suma es la más barata: $14.302 de precio y **$6.823
+  de margen**. Ese es `renglon_adicional`, y es el único que se puede prometer.
+  Los dos números quedaron cerca en Evens por un motivo empírico —la prenda
+  cara de un ticket de dos ($25.113) se parece al ticket de uno ($24.605)— que
+  puede dejar de valer el mes que viene o en otro comercio. **El número que se
+  promete tiene que ser el que se cumple por construcción, no el que
+  casualmente coincide.** Si el módulo promete $170.000 y entrega $60.000, se
+  perdió la confianza aunque los $60.000 sean excelentes.
+- **Venta cruzada: medida, y no hay señal en ningún grano.** Evens, 90 días:
+  por PRODUCTO hay 654 pares distintos y **el par más frecuente aparece DOS
+  veces** (cero pares con 3 o más); por CATEGORÍA el máximo es 7. Contra el
+  piso de ~30 co-ocurrencias que hace falta para que un par no sea azar, no
+  alcanza ni agregando. No se construye "lo que se lleva junto a X" hasta tener
+  ~6 meses. La señal pone el objetivo y el valor; QUÉ ofrecer lo elige la
+  vendedora. (Apareció midiendo: entre los pares de categorías más frecuentes
+  está "REMERAS, BLUSAS Y CAMISAS" con "REMERAS,BLUSAS Y CAMISAS", que son la
+  MISMA categoría cargada dos veces — hay tres variantes de JEANS y dos de
+  CAMPERAS. La fragmentación del catálogo degrada toda señal por categoría.)
+- **Al cliente solo se lo identifica cuando se le fía, y eso sesga TODA la
+  analítica de clientas.** Medido: en Evens el 23,0% de las ventas tiene
+  `cliente_id`, y de esas 112 solo **5** no son fiado. En Estilo Bonito, 49,2%
+  identificadas y 8 sin fiado. O sea que "clienta" en la base significa hoy
+  "clienta a la que se le fía". Consecuencias: la comparación "¿la clienta de
+  cuenta corriente compra más?" NO tiene grupo de control (81 de 83 clientas
+  identificadas de Evens usaron CC), y recencia, frecuencia y tasa de
+  repetición miden a las fiadas, no a la clientela. **Antes de cualquier señal
+  de clientas hay que identificar en la venta de contado**, y eso es un cambio
+  de producto en el POS, no de analítica.
+- **Toda señal de estancamiento se compara contra el comportamiento de su
+  CATEGORÍA, nunca contra un umbral absoluto.** Si toda la categoría abrigo
+  cayó 70%, ese producto no está estancado: está fuera de temporada. Sale de
+  los datos y no necesita carga manual, a diferencia de
+  `categorias.temporada`, que es el respaldo rústico. Todavía no hay señal
+  que lo implemente —con 5 semanas no hay dos ventanas comparables— pero la
+  regla vale desde ya para cualquier señal de rotación que se escriba.
+- `categorias.temporada` (`20260823185816`): la ventana de venta de cada
+  categoría, cargada a mano. Existe para que Insights no diga "necesitamos más
+  camperas" un 15 de septiembre. Esperar un año de historia para aprender la
+  estacionalidad de los datos no sirve con 5 semanas de POS; un campo cargado
+  una vez vale más y se puede tener hoy.
+  **Sirve SOLO para silenciar, nunca para sugerir.** "No me muestres abrigos
+  en la reposición de noviembre" es seguro — el peor caso es que falte una
+  fila. "Comprá mallas que viene el verano" es una predicción que el sistema
+  no puede respaldar. Por eso el helper de TS se llama
+  `categoriasFueraDeTemporada` y devuelve la forma NEGATIVA: obliga a usarla
+  para restar, no para agregar.
+  El default `TODO_EL_ANIO` NO silencia nada, y eso va contra la costumbre
+  fail-closed del resto de esta base: acá el lado seguro es mostrar. Un default
+  que adivinara la temporada por el nombre de la categoría escondería
+  mercadería real sin que nadie lo pidiera. Además el freno principal contra el
+  consejo fuera de temporada no es este campo sino la VENTANA CORTA de la
+  reposición (si no vendió en 14-21 días no aparece, sin saber qué mes es); la
+  temporada es la segunda línea.
+  Ventanas de VENTA, no meteorológicas, y se solapan a propósito: en marzo
+  conviven la liquidación de verano y la entrada de media estación. El criterio
+  vive en `shared/lib/temporada-categoria.ts` (con test) y en
+  `public.categoria_en_temporada`, y los dos tienen que decir lo mismo —
+  verificado mes por mes. Mismo patrón que `tipo-egreso.ts`.
+  OJO al tocar `build-categorias-payload.ts`: la columna es NOT NULL y el
+  upsert de PostgREST arma el UPDATE con la UNIÓN de las claves del lote, así
+  que `temporada` tiene que ir SIEMPRE en el payload — igual que `imagen_url`,
+  por el mismo motivo ya documentado ahí.
 - Egresos, dos ejes que no son el mismo: `egresos.tipo` (OPERATIVO |
   RETIRO_SOCIO | COMPRA_MERCADERIA, CHECK fail-closed, default OPERATIVO).
   Los TRES sacan plata del cajón — el arqueo de cierre sigue restando todo

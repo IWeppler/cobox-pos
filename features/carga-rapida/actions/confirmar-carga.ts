@@ -95,6 +95,7 @@ async function procesarLineaExistente(
     {
       p_variante_id: linea.varianteId,
       p_delta: linea.cantidad,
+      p_origen: "CARGA_RAPIDA",
     },
   );
 

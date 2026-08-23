@@ -166,7 +166,12 @@ export async function anularVentaAction(
           // update la pisa.
           const { error: stockError } = await supabase.rpc(
             "ajustar_stock_variante",
-            { p_variante_id: varianteId, p_delta: item.cantidad },
+            {
+              p_variante_id: varianteId,
+              p_delta: item.cantidad,
+              p_origen: "ANULACION_VENTA",
+              p_referencia_id: ventaId,
+            },
           );
 
           if (stockError) {
