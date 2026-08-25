@@ -1,7 +1,4 @@
-import {
-  resolverRangoActual,
-  type RangoFechas,
-} from "@/shared/lib/periodo-ranges";
+import { type RangoFechas } from "@/shared/lib/periodo-ranges";
 
 /**
  * Períodos de una exportación contable.
@@ -54,12 +51,45 @@ function mesAnteriorCompleto(ahora: Date): RangoFechas {
   };
 }
 
+function finDelDia(fecha: Date): Date {
+  return new Date(
+    fecha.getFullYear(),
+    fecha.getMonth(),
+    fecha.getDate(),
+    23,
+    59,
+    59,
+    999,
+  );
+}
+
+/**
+ * "Mes actual" y "Año en curso" son de CALENDARIO: desde el día 1 y desde el 1
+ * de enero, hasta hoy.
+ *
+ * Salían de `resolverRangoActual("mes"|"anio")` de shared, que hasta que el
+ * panel pasó a ventanas móviles significaba exactamente eso. Ahora esa función
+ * devuelve los últimos 28 y 364 días, así que un contador que pidiera "Mes
+ * actual" un 25 de agosto se habría llevado del 29 de julio al 25 de agosto
+ * rotulado como el mes. Se calcula acá, que es donde vive el criterio contable
+ * — igual que `mesAnteriorCompleto`, y por el mismo motivo.
+ */
+function desdeElInicioDe(unidad: "mes" | "anio", ahora: Date): RangoFechas {
+  return {
+    inicio:
+      unidad === "anio"
+        ? new Date(ahora.getFullYear(), 0, 1)
+        : new Date(ahora.getFullYear(), ahora.getMonth(), 1),
+    fin: finDelDia(ahora),
+  };
+}
+
 export function rangoDeExportacion(
   periodo: unknown,
   ahora: Date = new Date(),
 ): RangoFechas {
   const p = normalizarPeriodoExportacion(periodo);
   if (p === "mes_anterior") return mesAnteriorCompleto(ahora);
-  if (p === "anio") return resolverRangoActual("anio", ahora);
-  return resolverRangoActual("mes", ahora);
+  if (p === "anio") return desdeElInicioDe("anio", ahora);
+  return desdeElInicioDe("mes", ahora);
 }

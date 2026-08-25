@@ -10,6 +10,7 @@ import {
   PeriodoDashboard,
 } from "@/features/dashboard/lib/get-dashboard-metrics";
 import { ReportesFilterbar } from "@/features/reports/ui/reportes-filterbar";
+import { contarDiasConVentas } from "@/features/dashboard/lib/contar-dias-con-ventas";
 import { getAdvisorInsights } from "@/features/reports/actions/get-advisor-insights";
 import { AdvisorBanner } from "@/features/reports/ui/advisor-banner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
@@ -188,7 +189,17 @@ export default async function ReportesPage({
         });
 
   const costoMercaderiaVendida = metrics.ingresos - metrics.gananciaBrutaVentas;
-  const insights = getAdvisorInsights(metrics);
+  // `diasDelPeriodo` habilita las reglas que hablan de RITMO (cobertura de
+  // stock, día pico). Sin él no disparan, así que va también acá y no solo en
+  // el panel: son las mismas ventas ya filtradas por el período de esta
+  // pantalla, contadas por día local.
+  const insights = getAdvisorInsights({
+    ...metrics,
+    diasDelPeriodo: contarDiasConVentas(ventasDelPeriodo, {
+      inicio: startDate,
+      fin: endDate,
+    }),
+  });
 
   // yyyy-mm-dd en horario local, mismo criterio que ReportesFilterbar usa
   // para no desfasar por UTC.

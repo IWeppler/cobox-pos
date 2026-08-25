@@ -10,6 +10,8 @@ import {
   RecargoMoraConfig,
 } from "@/features/clients/lib/calcular-saldo-con-recargo";
 import { calcularFechaVencimiento } from "@/features/clients/lib/calcular-fecha-vencimiento";
+import { validarPerdonDeuda } from "@/features/clients/lib/validar-perdon-deuda";
+import { urlDeResumen } from "@/shared/lib/dominios";
 import { resolverVencimientoConPisoDeMora } from "@/features/clients/lib/vencimiento-con-piso-de-mora";
 import { esCuitValido, normalizarCuit } from "@/shared/lib/cuit";
 
@@ -1113,4 +1115,165 @@ export async function anularMovimientoManualAction(movimientoId: string) {
 
   revalidatePath("/clientes");
   return { error: null, success: true };
+}
+
+/**
+ * Perdona (total o parcialmente) la deuda de un cliente.
+ *
+ * Existe porque no había forma de bajar un saldo sin mentir. Las tres
+ * herramientas que había:
+ *   - "Cargar saldo inicial" solo escribe DÉBITOS: suma deuda, nunca la baja.
+ *   - Anular movimiento rechaza todo lo que tenga `venta_id` o `pago_id`, y el
+ *     recargo por mora tiene `pago_id` porque nace junto al cobro.
+ *   - Registrar un pago sí bajaría el saldo, pero mete en la caja plata que
+ *     nunca entró: rompe el arqueo del turno y ensucia las señales de dinero.
+ *
+ * El caso real que lo motivó: una clienta de Evens había pagado $1.450 MÁS que
+ * la mercadería, y lo único que le quedaba vivo era el 15% de recargo por mora
+ * que el sistema le había cobrado sola al registrar un pago atrasado. Perdonar
+ * esa multa es una decisión del comercio que se toma seguido.
+ *
+ * Escribe un CRÉDITO en el libro y RECIÉN DESPUÉS baja el saldo. El orden
+ * importa: poner la columna en cero sin el movimiento deja un libro que sigue
+ * sumando la deuda vieja, y el cliente aparece en la señal de "cuenta corriente
+ * sin cuadrar" de Comerz Insights, que cuenta exactamente esa diferencia.
+ *
+ * NO toca caja, a propósito: no entró plata. Es una deuda que se deja de
+ * reclamar, no un cobro.
+ */
+export async function perdonarDeudaAction(
+  clienteId: string,
+  datos: { monto: number; motivo: string },
+) {
+  if (!clienteId) {
+    return { error: "Cliente inválido.", success: false };
+  }
+
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  // Mismo criterio que anular y editar movimientos: mover plata que no entró
+  // es decisión de quien responde por la caja.
+  const { esAdmin, userId } = await esUsuarioAdmin(supabase);
+  if (!esAdmin) {
+    return {
+      error: "Solo un administrador puede perdonar una deuda.",
+      success: false,
+    };
+  }
+
+  // El saldo se lee del server, nunca del cliente: el monto que llega del
+  // navegador se valida contra la deuda REAL, mismo criterio que create-sale.
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("saldo_pendiente")
+    .eq("id", clienteId)
+    .single();
+
+  if (!cliente) {
+    return { error: "Cliente no encontrado.", success: false };
+  }
+
+  const validacion = validarPerdonDeuda(datos, Number(cliente.saldo_pendiente || 0));
+  if (!validacion.ok) {
+    return { error: validacion.error, success: false };
+  }
+
+  const { monto, motivo, saldoFinal } = validacion;
+
+  const { error: errorMovimiento } = await supabase
+    .from("cuenta_corriente_movimientos")
+    .insert({
+      cliente_id: clienteId,
+      tipo: "CREDITO" as const,
+      monto,
+      fecha_origen: fechaHoyIso(),
+      descripcion: `Deuda perdonada: ${motivo}`,
+      creado_por: userId,
+    });
+
+  if (errorMovimiento) {
+    console.error("[PERDONAR DEUDA] Error al escribir el movimiento", errorMovimiento);
+    return { error: "No se pudo registrar el perdón de deuda.", success: false };
+  }
+
+  const actualizacion: {
+    saldo_pendiente: number;
+    fecha_vencimiento_deuda?: string | null;
+  } = { saldo_pendiente: saldoFinal };
+
+  // Sin deuda no hay vencimiento que mostrar, mismo cierre que hace el cobro.
+  if (saldoFinal === 0) {
+    actualizacion.fecha_vencimiento_deuda = null;
+  }
+
+  const { error: errorSaldo } = await supabase
+    .from("clientes")
+    .update(actualizacion)
+    .eq("id", clienteId);
+
+  if (errorSaldo) {
+    // El movimiento ya está escrito: si el saldo no baja, el libro y la columna
+    // quedan distintos. Se avisa fuerte en vez de devolver un éxito falso.
+    console.error("[PERDONAR DEUDA] Movimiento escrito pero saldo NO actualizado", errorSaldo);
+    return {
+      error:
+        "Se registró el movimiento pero no se pudo actualizar el saldo. Revisá la cuenta del cliente.",
+      success: false,
+    };
+  }
+
+  revalidatePath("/clientes");
+  return { error: null, success: true };
+}
+
+/**
+ * El link público del resumen de cuenta de un cliente, generando el token la
+ * primera vez.
+ *
+ * El token es la credencial de una página sin login, así que es de 32
+ * caracteres hexadecimales (un UUID v4 sin guiones, 122 bits): no se adivina a
+ * fuerza bruta y no es secuencial, o sea que tener un link no permite pasar al
+ * cliente de al lado.
+ *
+ * Se genera perezosamente —recién cuando la dueña comparte— para no dejar 168
+ * links vivos por un comercio que nunca los usó. Y no caduca: la página lee el
+ * saldo ACTUAL, así que si la clienta paga y vuelve a abrir el link viejo ve
+ * que está al día, en vez de una foto congelada que la contradice. Para cortar
+ * el acceso se reemplaza el token.
+ */
+export async function obtenerLinkResumenAction(clienteId: string) {
+  if (!clienteId) {
+    return { url: null, error: "Cliente inválido." };
+  }
+
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const { data: cliente, error } = await supabase
+    .from("clientes")
+    .select("resumen_token")
+    .eq("id", clienteId)
+    .single();
+
+  if (error || !cliente) {
+    return { url: null, error: "No se encontró el cliente." };
+  }
+
+  let token = cliente.resumen_token as string | null;
+
+  if (!token) {
+    token = crypto.randomUUID().replace(/-/g, "");
+    const { error: errorToken } = await supabase
+      .from("clientes")
+      .update({ resumen_token: token })
+      .eq("id", clienteId);
+
+    if (errorToken) {
+      console.error("[LINK RESUMEN] No se pudo generar el token", errorToken);
+      return { url: null, error: "No se pudo generar el link." };
+    }
+  }
+
+  return { url: urlDeResumen(token), error: null };
 }

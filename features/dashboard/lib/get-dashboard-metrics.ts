@@ -152,6 +152,8 @@ export function getDashboardMetrics(
 
   // --- CORE KPIs FINANCIEROS ---
   let ingresosBrutos = 0;
+  let sumaCuadradosTicket = 0;
+  let ticketsDeUnaUnidad = 0;
   let costoMercaderiaVendida = 0;
   let gananciaBrutaVentas = 0;
   let unidadesVendidas = 0;
@@ -234,6 +236,14 @@ export function getDashboardMetrics(
 
     recargosCobrados += recargoTicket;
     ingresosBrutos += totalTicket;
+    // Tickets de UNA sola unidad. `ventas.cantidad` son unidades (no
+    // renglones), así que esto es exactamente "se llevó una cosa sola" — la
+    // población sobre la que se puede hacer algo en el mostrador.
+    if (Number(v.cantidad || 0) === 1) ticketsDeUnaUnidad += 1;
+    // Para el desvío del ticket promedio, en la misma pasada. Ver
+    // `ticketDesvio` en el return: sin él no se puede saber si una caída del
+    // ticket es un cambio o es un ticket grande de menos.
+    sumaCuadradosTicket += totalTicket * totalTicket;
     costoMercaderiaVendida += costoTicket;
     gananciaBrutaVentas += totalTicket - costoTicket;
 
@@ -413,6 +423,21 @@ export function getDashboardMetrics(
 
   const ordenes = ventasFiltradas.length;
   const ticketPromedio = ordenes > 0 ? ingresosBrutos / ordenes : 0;
+  // Desvío muestral de los tickets del período. El ticket promedio es una
+  // MEDIA, y una media sobre pocos tickets se mueve sola: medido en Evens
+  // sobre 408 tickets de 30 días, el desvío es más grande que la media
+  // (CV 1,07). Sin este número no hay forma de que la UI distinga "el ticket
+  // bajó" de "la semana pasada hubo un ticket de $204.700 entre seis".
+  // Var muestral = (Σx² − n·media²) / (n − 1), en la misma pasada de arriba.
+  const varianzaTicket =
+    ordenes > 1
+      ? Math.max(
+          0,
+          (sumaCuadradosTicket - ordenes * ticketPromedio * ticketPromedio) /
+            (ordenes - 1),
+        )
+      : 0;
+  const ticketDesvio = Math.sqrt(varianzaTicket);
 
   // --- EGRESOS Y BAJAS ---
   // Solo los OPERATIVOS restan del resultado. Un retiro de la dueña es la
@@ -621,6 +646,11 @@ export function getDashboardMetrics(
     ordenes,
     unidadesVendidas,
     ticketPromedio,
+    /** Desvío muestral del ticket, para poder decir si una variación del
+     * ticket promedio se distingue del ruido. Ver `crecimientoDeMedia`. */
+    ticketDesvio,
+    /** Tickets de una sola unidad. Ver la regla de venta cruzada del Advisor. */
+    ticketsDeUnaUnidad,
     gananciaBrutaVentas,
     gananciaNeta: resultadoOperativo,
     /** Solo gastos operativos: es lo que resta de la ganancia. */

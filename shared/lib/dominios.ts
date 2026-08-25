@@ -65,3 +65,15 @@ export function urlDeCatalogo(slugNegocio: string, slugProducto?: string) {
 
   return `${base}${rutaCatalogo(slugNegocio, slugProducto)}`;
 }
+
+/**
+ * URL pública del resumen de cuenta corriente de un cliente.
+ *
+ * Va SIEMPRE sobre el dominio del sitio, nunca sobre el subdominio del
+ * catálogo: el catálogo es la vidriera y esto es la cuenta de una persona.
+ * Mezclarlos haría que un link privado quede colgando del dominio público del
+ * comercio.
+ */
+export function urlDeResumen(token: string) {
+  return `${SITE_URL}/r/${token}`;
+}

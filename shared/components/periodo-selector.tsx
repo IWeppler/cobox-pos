@@ -8,30 +8,51 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import type { PeriodoPanel } from "@/shared/lib/periodo-ranges";
+import type {
+  PeriodoCalendario,
+  PeriodoPanel,
+} from "@/shared/lib/periodo-ranges";
 
-const OPCIONES: { value: PeriodoPanel; label: string }[] = [
+export type OpcionPeriodo<T extends string> = { value: T; label: string };
+
+/** /caja: períodos de CALENDARIO, que es lo que entiende su RPC. */
+export const OPCIONES_CALENDARIO: OpcionPeriodo<PeriodoCalendario>[] = [
   { value: "hoy", label: "Hoy" },
   { value: "semana", label: "Esta Semana" },
   { value: "mes", label: "Este Mes" },
   { value: "anio", label: "Este Año" },
 ];
 
-interface PeriodoSelectorProps {
-  periodo: PeriodoPanel;
+/** Panel: ventanas MÓVILES. Los nombres son los de siempre porque es como se
+ * habla del período; el largo exacto vive en DIAS_POR_PERIODO. */
+export const OPCIONES_PANEL: OpcionPeriodo<PeriodoPanel>[] = [
+  { value: "hoy", label: "Hoy" },
+  { value: "semana", label: "Semana" },
+  { value: "mes", label: "Mes" },
+  { value: "trimestre", label: "Trimestre" },
+  { value: "anio", label: "Año" },
+];
+
+interface PeriodoSelectorProps<T extends string> {
+  periodo: T;
+  /** Qué períodos ofrece esta superficie. No hay default a propósito: el
+   * panel y la caja hablan vocabularios distintos y confundirlos manda un
+   * período móvil a una RPC que espera calendario. */
+  opciones: OpcionPeriodo<T>[];
   /** Con onChange el selector es controlado y NO toca la URL. Sin él empuja
    * `?periodo=` a la ruta actual, que es lo que mantiene el panel
    * server-rendered. La caja lo usa controlado: ahí el período gobierna una
    * sola tarjeta y recargar la página entera sería tirar el estado de las
    * otras tabs. */
-  onChange?: (periodo: PeriodoPanel) => void;
+  onChange?: (periodo: T) => void;
   ariaLabel?: string;
 }
 
 /**
- * Selector de período de calendario (Hoy / Esta semana / Este mes / Este año),
- * compartido por el panel y la caja. La semántica de los rangos vive en
- * shared/lib/periodo-ranges.ts — acá solo está la presentación.
+ * Selector de período, compartido por el panel y la caja. Cada superficie le
+ * pasa SUS opciones: la caja usa períodos de calendario (los únicos que
+ * entiende su RPC) y el panel ventanas móviles. La semántica de los rangos
+ * vive en shared/lib/periodo-ranges.ts — acá solo está la presentación.
  *
  * En el panel gobierna ÚNICAMENTE la zona analítica (KPIs, chart, rankings)
  * — la zona de excepciones/insights es fija y no depende de este selector.
@@ -40,21 +61,22 @@ interface PeriodoSelectorProps {
  *
  * Dos presentaciones de la MISMA opción, elegidas por CSS y no por JS (sin
  * media query en el cliente no hay salto en la hidratación): dropdown en
- * mobile, donde va pegado al título y 4 botones no entran; segmentado en
- * desktop, donde el ancho sobra y ver las 4 opciones de una es mejor.
+ * mobile, donde va pegado al título y los botones no entran; segmentado en
+ * desktop, donde el ancho sobra y ver todas las opciones de una es mejor.
  */
-export function PeriodoSelector({
+export function PeriodoSelector<T extends string>({
   periodo,
+  opciones,
   onChange,
   ariaLabel = "Período",
-}: Readonly<PeriodoSelectorProps>) {
+}: Readonly<PeriodoSelectorProps<T>>) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const handleChange = (value: string) => {
     if (onChange) {
-      onChange(value as PeriodoPanel);
+      onChange(value as T);
       return;
     }
     const params = new URLSearchParams(searchParams.toString());
@@ -77,7 +99,7 @@ export function PeriodoSelector({
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
-            {OPCIONES.map((op) => (
+            {opciones.map((op) => (
               <SelectItem key={op.value} value={op.value} className="text-sm">
                 {op.label}
               </SelectItem>
@@ -87,7 +109,7 @@ export function PeriodoSelector({
       </div>
 
       <div className="hidden sm:inline-flex items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
-        {OPCIONES.map((op) => (
+        {opciones.map((op) => (
           <button
             key={op.value}
             type="button"

@@ -1,23 +1,34 @@
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 interface GrowthBadgeProps {
-  /** null = el período anterior no tuvo datos: no hay variación calculable. */
+  /** null = no hay variación mostrable (ver `etiquetaSinValor`). */
   value: number | null;
   /** "vs. mes anterior" — se muestra como title, para que el % se entienda
    * contra qué se mide sin agrandar la card. */
   titulo?: string;
+  /** Por qué no hay comparación, cuando `value` es null. */
+  motivoSinDato?: string;
+  /** Qué se muestra cuando no hay valor. "s/d" es "no hay período anterior";
+   * "≈" es "no hay cambio distinguible del ruido", que es información y no
+   * ausencia de dato — por eso se distinguen. */
+  etiquetaSinValor?: string;
 }
 
-export function GrowthBadge({ value, titulo }: Readonly<GrowthBadgeProps>) {
+export function GrowthBadge({
+  value,
+  titulo,
+  motivoSinDato = "Sin datos en el período anterior",
+  etiquetaSinValor = "s/d",
+}: Readonly<GrowthBadgeProps>) {
   // Sin período anterior no se inventa un +0% verde (se leería como "igual
   // que antes" cuando en realidad no hay con qué comparar).
   if (value === null) {
     return (
       <span
-        title="Sin datos en el período anterior"
+        title={motivoSinDato}
         className="inline-flex shrink-0 items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
       >
-        s/d
+        {etiquetaSinValor}
       </span>
     );
   }

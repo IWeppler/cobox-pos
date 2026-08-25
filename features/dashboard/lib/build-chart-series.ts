@@ -1,35 +1,82 @@
 import { Venta } from "@/entities/ventas/types";
-import type { PeriodoPanel, RangoFechas } from "@/shared/lib/periodo-ranges";
+import type { RangoFechas } from "@/shared/lib/periodo-ranges";
 
 export type Granularidad = "hora" | "dia" | "mes";
 
 export type MetricaSerie = "ingresos" | "unidades" | "ganancia";
 
-export type PuntoSerieComparada = {
-  /** Etiqueta corta del eje X (viene del período ACTUAL). */
+export type PuntoSerie = {
+  /** Etiqueta corta del eje X. */
   etiqueta: string;
-  /** Etiqueta larga para el tooltip, período actual. */
+  /** Etiqueta larga para el tooltip. */
   etiquetaCompleta: string;
-  /** Etiqueta larga para el tooltip, período anterior. null si ese tramo no
-   * existe en el período anterior (mes actual más largo que el anterior). */
-  etiquetaCompletaAnterior: string | null;
   ingresos: number;
   unidades: number;
   ganancia: number;
-  ingresosAnterior: number | null;
-  unidadesAnterior: number | null;
-  gananciaAnterior: number | null;
 };
 
+/** Punto del chart del panel: el día, más su media móvil y si es el día en
+ * curso. Las medias son null donde no se pueden calcular honestamente (ver
+ * `agregarMediaMovil`). */
+export type PuntoSerieChart = PuntoSerie & {
+  /** El último día de la ventana, que todavía no terminó. */
+  esHoy: boolean;
+  ingresosMedia: number | null;
+  unidadesMedia: number | null;
+  gananciaMedia: number | null;
+};
+
+/** Días de la media móvil. 7 y no otro número: alisa exactamente un ciclo
+ * semanal completo, que es el que domina estos negocios (sábado 17,67 ventas
+ * por día contra 3,75 el lunes, medido en Evens sobre 60 días). */
+export const VENTANA_MEDIA_MOVIL = 7;
+
 /**
- * Granularidad del chart según el período del panel. Un solo día graficado
- * por día sería un único punto (no es una línea), y un año por día son 365
- * puntos ilegibles en mobile.
+ * Agrega la media móvil de `ventana` días a una serie diaria.
+ *
+ * Dos huecos deliberados, los dos por el mismo motivo — una media sobre una
+ * ventana incompleta no es una media más baja, es un número que no
+ * corresponde, y dibujado se lee como una caída del negocio:
+ *
+ * 1. Los primeros `ventana - 1` puntos no tienen 7 días atrás. La línea
+ *    arranca en el día 7 y las barras ocupan la ventana entera; el hueco
+ *    inicial es honesto y no se lee mal.
+ * 2. El ÚLTIMO punto es el día en curso, que tiene horas de menos. Incluirlo
+ *    haría caer la línea todas las mañanas. La media termina ayer, que es el
+ *    último día completo, y hoy queda solo como barra (marcada aparte).
  */
-export function granularidadPara(periodo: PeriodoPanel): Granularidad {
-  if (periodo === "hoy") return "hora";
-  if (periodo === "anio") return "mes";
-  return "dia";
+export function agregarMediaMovil(
+  serie: PuntoSerie[],
+  ventana: number = VENTANA_MEDIA_MOVIL,
+): PuntoSerieChart[] {
+  const ultimo = serie.length - 1;
+
+  return serie.map((punto, i) => {
+    const esHoy = i === ultimo;
+    const hayVentanaCompleta = i >= ventana - 1 && !esHoy;
+
+    if (!hayVentanaCompleta) {
+      return {
+        ...punto,
+        esHoy,
+        ingresosMedia: null,
+        unidadesMedia: null,
+        gananciaMedia: null,
+      };
+    }
+
+    const tramo = serie.slice(i - ventana + 1, i + 1);
+    const promedio = (clave: "ingresos" | "unidades" | "ganancia") =>
+      tramo.reduce((acc, p) => acc + p[clave], 0) / ventana;
+
+    return {
+      ...punto,
+      esHoy,
+      ingresosMedia: promedio("ingresos"),
+      unidadesMedia: promedio("unidades"),
+      gananciaMedia: promedio("ganancia"),
+    };
+  });
 }
 
 type Acumulador = { ingresos: number; unidades: number; ganancia: number };
@@ -129,10 +176,10 @@ function generarBuckets(rango: RangoFechas, gran: Granularidad): Date[] {
 }
 
 /**
- * Acumula ventas por bucket dentro de un rango. Las ventas fuera del rango
- * se descartan aunque caigan en un bucket que el rango toca parcialmente:
- * eso es lo que hace justa la comparación con el mes/año anterior (el
- * último bucket del período anterior está cortado en el mismo día).
+ * Acumula ventas por bucket dentro de un rango. Las ventas fuera del rango se
+ * descartan aunque caigan en un bucket que el rango toca parcialmente (un
+ * rango que arranca a mitad de mes con granularidad "mes" no se lleva las
+ * ventas de la primera quincena).
  */
 function acumularPorBucket(
   ventasOperativas: Venta[],
@@ -172,49 +219,39 @@ function acumularPorBucket(
 }
 
 /**
- * Serie del chart del panel: representa EXACTAMENTE el período elegido en el
- * selector general (no una ventana fija de 7/30 días) más el período
- * anterior equivalente, alineado por posición dentro del período — el
- * bucket i del mes actual se compara contra el bucket i del mes anterior,
- * que es lo que hace comparable "mitad de mes contra mitad de mes".
+ * Serie del chart del panel: un punto por bucket del rango que le pasen (hoy,
+ * la ventana móvil de 4 semanas).
  *
- * El eje X lo manda el período actual, recortado en `ahora`: el rango llega
- * hasta el fin del día, pero graficar las horas que todavía no pasaron
- * dibujaría una caída a cero que se lee como si hubiera dejado de vender.
- * Si el período anterior tiene menos buckets (febrero contra marzo), la
- * serie de comparación queda en null en la cola y el chart corta la línea
- * ahí en vez de dibujar ceros falsos.
+ * El eje X va recortado en `ahora`: el rango llega hasta el fin del día, pero
+ * graficar las horas que todavía no pasaron dibujaría una caída a cero que se
+ * lee como si hubiera dejado de vender.
+ *
+ * Acá vivía también la serie del período anterior, que el chart dibujaba como
+ * línea punteada. Se sacó junto con el dibujo: comparar día contra día con ~8
+ * ventas diarias es ruido contra ruido, y el veredicto contra el período
+ * anterior ya lo dan los badges de las KPIs con el número exacto.
  */
-export function construirSerieComparada(
+export function construirSerie(
   ventasOperativas: Venta[],
-  rangoActual: RangoFechas,
-  rangoAnterior: RangoFechas,
+  rango: RangoFechas,
   gran: Granularidad,
   ahora: Date,
-): PuntoSerieComparada[] {
+): PuntoSerie[] {
   const rangoHastaAhora: RangoFechas = {
-    inicio: rangoActual.inicio,
-    fin: new Date(Math.min(rangoActual.fin.getTime(), ahora.getTime())),
+    inicio: rango.inicio,
+    fin: new Date(Math.min(rango.fin.getTime(), ahora.getTime())),
   };
-  const actual = acumularPorBucket(ventasOperativas, rangoHastaAhora, gran);
-  const anterior = acumularPorBucket(ventasOperativas, rangoAnterior, gran);
+  const { buckets, valores } = acumularPorBucket(
+    ventasOperativas,
+    rangoHastaAhora,
+    gran,
+  );
 
-  return actual.buckets.map((bucket, i) => {
-    const previo = anterior.valores[i];
-    const bucketPrevio = anterior.buckets[i];
-
-    return {
-      etiqueta: etiquetaCorta(bucket, gran),
-      etiquetaCompleta: etiquetaLarga(bucket, gran),
-      etiquetaCompletaAnterior: bucketPrevio
-        ? etiquetaLarga(bucketPrevio, gran)
-        : null,
-      ingresos: actual.valores[i].ingresos,
-      unidades: actual.valores[i].unidades,
-      ganancia: actual.valores[i].ganancia,
-      ingresosAnterior: previo ? previo.ingresos : null,
-      unidadesAnterior: previo ? previo.unidades : null,
-      gananciaAnterior: previo ? previo.ganancia : null,
-    };
-  });
+  return buckets.map((bucket, i) => ({
+    etiqueta: etiquetaCorta(bucket, gran),
+    etiquetaCompleta: etiquetaLarga(bucket, gran),
+    ingresos: valores[i].ingresos,
+    unidades: valores[i].unidades,
+    ganancia: valores[i].ganancia,
+  }));
 }

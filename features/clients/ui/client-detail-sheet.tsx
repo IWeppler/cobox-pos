@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Sheet,
@@ -23,7 +23,12 @@ import {
   Edit2,
   PlusCircle,
 } from "lucide-react";
-import { getClienteDetalleAction } from "../actions/manage-clients";
+import { FaWhatsapp } from "react-icons/fa";
+import { toast } from "sonner";
+import {
+  getClienteDetalleAction,
+  obtenerLinkResumenAction,
+} from "../actions/manage-clients";
 import { queryKeys } from "@/shared/lib/query-keys";
 import { calcularDiasVencido } from "../lib/calcular-dias-vencido";
 import { clasificarEstadoCliente } from "../lib/clasificar-estado-cliente";
@@ -39,6 +44,12 @@ import {
   calcularSaldoConRecargo,
   RecargoMoraConfig,
 } from "../lib/calcular-saldo-con-recargo";
+import { PerdonarDeudaModal } from "./perdonar-deuda-modal";
+import { construirMensajeDeuda } from "../lib/mensaje-deuda";
+import {
+  linkWhatsapp,
+  telefonoAWhatsapp,
+} from "@/shared/lib/telefono-whatsapp";
 
 interface VentaResumen {
   id: string;
@@ -73,6 +84,8 @@ export function ClientDetailSheet({
 }: Readonly<ClientDetailSheetProps>) {
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isPerdonOpen, setIsPerdonOpen] = useState(false);
+  const [enviandoRecordatorio, startRecordatorio] = useTransition();
 
   const { data: queryData, isLoading } = useQuery({
     queryKey: queryKeys.clientes.detalle(cliente?.id ?? ""),
@@ -152,6 +165,32 @@ export function ClientDetailSheet({
       ? `Venció el ${fechaVencimientoFormateada} · hace ${diasVencido} día${diasVencido === 1 ? "" : "s"}`
       : `Vence el ${fechaVencimientoFormateada}`
     : null;
+  // El mensaje se arma con el LIBRO de cuenta corriente y con el mismo total
+  // que va a cobrar el sistema (saldo + recargo de mora). Ver
+  // construirMensajeDeuda.
+  const tieneWhatsappDirecto = telefonoAWhatsapp(cliente.telefono) !== null;
+  const enviarRecordatorio = () => {
+    startRecordatorio(async () => {
+      // El link se pide ANTES de abrir WhatsApp: si el token no existe todavía
+      // se genera acá. Si falla, el mensaje sale igual pero sin detalle — un
+      // recordatorio sin link es peor que ninguno, pero mucho mejor que un
+      // botón que no hace nada.
+      const { url, error } = await obtenerLinkResumenAction(cliente.id);
+      if (error) toast.error("No se pudo generar el link del resumen.");
+
+      const mensaje = construirMensajeDeuda({
+        nombreCliente: cliente.nombre,
+        saldo,
+        montoRecargo,
+        saldoConRecargo,
+        fechaVencimiento,
+        diasVencido,
+        urlResumen: url,
+      });
+      window.open(linkWhatsapp(cliente.telefono, mensaje), "_blank");
+    });
+  };
+
   const favCategoryLabel =
     stats.favCategory === "-"
       ? "-"
@@ -191,7 +230,7 @@ export function ClientDetailSheet({
               className="h-8 text-xs font-medium shadow-none border-border"
             >
               <PlusCircle className="w-3.5 h-3.5 mr-1.5 text-warning" />
-              Cargar saldo inicial
+              Cargar saldo
             </Button>
             <Button
               variant="outline"
@@ -200,8 +239,27 @@ export function ClientDetailSheet({
               className="h-8 text-xs font-medium border-border"
             >
               <Edit2 className="w-3.5 h-3.5 mr-1.5 text-primary" />
-              Editar datos
+              Editar
             </Button>
+            {/* Solo con deuda: un recordatorio de cobranza a alguien que no
+                debe nada es una molestia, no una gestión. */}
+            {saldo > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={enviarRecordatorio}
+                disabled={enviandoRecordatorio}
+                title={
+                  tieneWhatsappDirecto
+                    ? `Abre el chat de ${cliente.telefono}`
+                    : "Sin un celular reconocible: abre WhatsApp con el mensaje listo para que elijas el contacto"
+                }
+                className="h-8 text-xs font-medium border-border"
+              >
+                <FaWhatsapp className="w-3.5 h-3.5 mr-1.5 text-success" />
+                Recordar
+              </Button>
+            )}
           </div>
         </SheetHeader>
 
@@ -251,7 +309,9 @@ export function ClientDetailSheet({
                     <div className="bg-card border border-border rounded-xl p-3 flex flex-col md:flex-row md:flex-wrap md:items-start md:justify-between gap-3">
                       <div className="order-1">
                         <p className="text-xs font-medium text-muted-foreground mb-1">
-                          {montoRecargo > 0 ? "Saldo con recargo" : "Saldo Actual"}
+                          {montoRecargo > 0
+                            ? "Saldo con recargo"
+                            : "Saldo Actual"}
                         </p>
                         <p className="text-2xl font-mono font-medium text-foreground">
                           {formatearMoneda(
@@ -442,6 +502,10 @@ export function ClientDetailSheet({
         cliente={isEditOpen ? cliente : null}
         onClose={() => setIsEditOpen(false)}
         entregaMinimaActiva={entregaMinimaActiva}
+      />
+      <PerdonarDeudaModal
+        cliente={isPerdonOpen ? cliente : null}
+        onClose={() => setIsPerdonOpen(false)}
       />
     </Sheet>
   );

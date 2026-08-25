@@ -12,13 +12,23 @@ import {
   resolverRangoRanking,
   formatearFechaISO,
   calcularCrecimiento,
+  crecimientoDeTotal,
+  crecimientoDeMedia,
+  resolverRangoRolling,
+  DIAS_CHART,
+  ETIQUETA_PERIODO,
   ETIQUETA_PERIODO_ANTERIOR,
   type PeriodoPanel,
 } from "@/shared/lib/periodo-ranges";
 import {
-  construirSerieComparada,
-  granularidadPara,
+  construirSerie,
+  agregarMediaMovil,
 } from "@/features/dashboard/lib/build-chart-series";
+import { contarDiasConVentas } from "@/features/dashboard/lib/contar-dias-con-ventas";
+import {
+  compararConDiaTipico,
+  muestraDeTickets,
+} from "@/features/dashboard/lib/dia-tipico";
 import {
   detectarQuiebresRotacion,
   VENTANA_ROTACION_DIAS,
@@ -29,7 +39,10 @@ import {
   detectarProximaTemporada,
 } from "@/features/dashboard/lib/detectar-estacionalidad";
 import { resolverCategoriaDisplayLabel } from "@/shared/utils/category-tree";
-import { PeriodoSelector } from "@/shared/components/periodo-selector";
+import {
+  PeriodoSelector,
+  OPCIONES_PANEL,
+} from "@/shared/components/periodo-selector";
 import { IngresosAreaChart } from "@/features/dashboard/ui/ingresos-area-chart";
 import { KpiMiniCard } from "@/features/dashboard/ui/kpi-mini-card";
 import { GrowthBadge } from "@/features/dashboard/ui/growth-badge";
@@ -39,6 +52,7 @@ import { RendimientoCard } from "@/features/dashboard/ui/rendimiento-card";
 import { getAdvisorInsights } from "@/features/reports/actions/get-advisor-insights";
 import { getDeudaVencidaAction } from "@/features/clients/actions/get-deuda-vencida";
 import { getRemitosPendientesAction } from "@/features/purchases/actions/get-remitos-pendientes";
+import { getSenalesInsightsAction } from "@/features/reports/actions/get-senales-insights";
 import { listarReservasActivasAction } from "@/features/reservations/actions/manage-reservations";
 import {
   getSupabaseRelation,
@@ -57,7 +71,13 @@ import { bloquearVendedor } from "@/shared/config/supabase/guard-rol";
 
 export const dynamic = "force-dynamic";
 
-const PERIODOS_VALIDOS: PeriodoPanel[] = ["hoy", "semana", "mes", "anio"];
+const PERIODOS_VALIDOS: PeriodoPanel[] = [
+  "hoy",
+  "semana",
+  "mes",
+  "trimestre",
+  "anio",
+];
 
 function parsearPeriodo(valor: string | undefined): PeriodoPanel {
   return PERIODOS_VALIDOS.includes(valor as PeriodoPanel)
@@ -65,22 +85,32 @@ function parsearPeriodo(valor: string | undefined): PeriodoPanel {
     : "semana";
 }
 
-const ETIQUETA_PERIODO: Record<PeriodoPanel, string> = {
-  hoy: "hoy",
-  semana: "esta semana",
-  mes: "este mes",
-  anio: "este año",
+// Los rankings nunca son de un solo día (mala muestra para "qué rota más"):
+// con Hoy usan la ventana de 7. Ver resolverRangoRanking.
+const ETIQUETA_RANKING: Record<PeriodoPanel, string> = {
+  hoy: "últimos 7 días",
+  semana: "últimos 7 días",
+  mes: "últimos 28 días",
+  trimestre: "últimos 3 meses",
+  anio: "último año",
 };
 
-// Los rankings nunca son diarios (una ventana de un solo día es mala
-// muestra para "qué rota más") — con Hoy o Semana usan ventana semanal, con
-// Mes usan ventana de mes. Ver resolverRangoRanking.
-const ETIQUETA_RANKING: Record<PeriodoPanel, string> = {
-  hoy: "esta semana",
-  semana: "esta semana",
-  mes: "este mes",
-  anio: "este año",
-};
+// Cuántos insights muestra la card del panel. Más que los 3 del banner de
+// /reportes porque acá viven en una columna alta del bento: con 3 las filas
+// quedan muy espaciadas y sobra aire.
+const INSIGHTS_EN_PANEL = 5;
+
+// Ventana de Comerz Insights. NO es la del selector, y eso es el punto: lo que
+// necesita tu atención no cambia porque alguien haya clickeado "Hoy".
+//
+// Alimentar el motor con el período elegido tenía dos efectos feos y reales:
+// la regla de confianza corta con menos de 3 ventas, así que con "Hoy" la
+// tarjeta entera decía "Recopilando datos…" cada mañana en un comercio con
+// más de mil ventas; y "Alerta de Rentabilidad" (danger, primera de la lista)
+// dispara con margen negativo, que en un día suelto es cuestión de a qué hora
+// se cargó un gasto — pasó 1 de cada 36 días completos en Evens, y a media
+// mañana es mucho más fácil.
+const DIAS_INSIGHTS = 28;
 
 type ReservaActivaRow = {
   id: string;
@@ -105,6 +135,11 @@ export default async function DashboardPage({
   const { periodo: periodoParam } = await searchParams;
   const periodo = parsearPeriodo(periodoParam);
 
+  // La ventana de Insights se resuelve acá arriba porque una de sus señales se
+  // pide a la base y entra en el mismo Promise.all que el resto.
+  const ahora = new Date();
+  const rangoInsights = resolverRangoRolling(DIAS_INSIGHTS, ahora);
+
   const [
     ventasResponse,
     productosResponse,
@@ -116,6 +151,7 @@ export default async function DashboardPage({
     categoriasResponse,
     pagosCuentaCorrienteResponse,
     estadoActivacion,
+    senales,
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
@@ -131,6 +167,12 @@ export default async function DashboardPage({
     // Devuelve null si no es ADMIN: el gate vive en la RPC, así que acá no hay
     // que preguntar el rol por separado.
     getEstadoActivacionAction(),
+    // Las seis señales gerenciales de Comerz Insights, en paralelo adentro.
+    // Cada una viene en null si el usuario no tiene permiso gerencial.
+    getSenalesInsightsAction(
+      formatearFechaISO(rangoInsights.inicio),
+      formatearFechaISO(rangoInsights.fin),
+    ),
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
@@ -150,7 +192,7 @@ export default async function DashboardPage({
     (b) => b.estado === "PENDIENTE",
   ).length;
 
-  const hoy = new Date();
+  const hoy = ahora;
 
   // Zona analítica (KPIs + chart + rankings): TODO lo de acá para abajo
   // depende de `periodo`. La zona de excepciones (Atención Requerida,
@@ -179,6 +221,19 @@ export default async function DashboardPage({
     formatearFechaISO(rangoAnterior.fin),
     pagosCuentaCorriente,
   );
+  // Comerz Insights corre sobre su propia ventana fija (resuelta arriba, junto
+  // al fetch de su señal). Ver DIAS_INSIGHTS.
+  const metricasInsights = getDashboardMetrics(
+    ventasOperativas,
+    productos,
+    egresos,
+    bajasAprobadas,
+    "personalizado",
+    formatearFechaISO(rangoInsights.inicio),
+    formatearFechaISO(rangoInsights.fin),
+    pagosCuentaCorriente,
+  );
+
   // Rankings: SIEMPRE ventana semanal como mínimo (nunca diaria) — ventana
   // de mes si el selector está en "Mes".
   const metricasRanking = getDashboardMetrics(
@@ -191,34 +246,100 @@ export default async function DashboardPage({
     formatearFechaISO(rangoRanking.fin),
   );
 
-  const crecimientoIngresos = calcularCrecimiento(
-    metricasActuales.ingresos,
-    metricasAnteriores.ingresos,
-  );
-  const crecimientoUnidades = calcularCrecimiento(
-    metricasActuales.unidadesVendidas,
-    metricasAnteriores.unidadesVendidas,
-  );
-  const crecimientoGanancia = calcularCrecimiento(
-    metricasActuales.gananciaBrutaVentas,
-    metricasAnteriores.gananciaBrutaVentas,
-  );
-  const crecimientoTicket = calcularCrecimiento(
-    metricasActuales.ticketPromedio,
-    metricasAnteriores.ticketPromedio,
-  );
+  // Días ABIERTOS de cada tramo: dos días contra uno no es una comparación.
+  // Ver `crecimientoDeTotal` y `contarDiasConVentas` (que explica por qué el
+  // conteo no sale de turnos_caja, que sería el dato correcto).
+  const diasActual = contarDiasConVentas(ventasOperativas, rangoActual);
+  const diasAnterior = contarDiasConVentas(ventasOperativas, rangoAnterior);
 
-  // El chart usa EXACTAMENTE los rangos del selector general (no una ventana
-  // fija de 30 días) — el selector 7D/30D propio del chart ya no existe.
-  const serieChart = construirSerieComparada(
-    ventasOperativas,
-    rangoActual,
-    rangoAnterior,
-    granularidadPara(periodo),
-    hoy,
+  // "Hoy" no se compara contra una ventana anterior sino contra un día TÍPICO
+  // de la misma semana, cortado a esta hora. Ver `compararConDiaTipico`: un
+  // día suelto contra otro día suelto se movía ±60% por la suerte del día de
+  // referencia, y comparar el día en curso contra uno completo mostraba ≈−67%
+  // toda la mañana.
+  const diaTipico =
+    periodo === "hoy" ? compararConDiaTipico(ventasOperativas, hoy) : null;
+
+  const crecimientoIngresos = diaTipico
+    ? calcularCrecimiento(diaTipico.hoy.ingresos, diaTipico.tipico.ingresos)
+    : crecimientoDeTotal(
+        metricasActuales.ingresos,
+        metricasAnteriores.ingresos,
+        diasActual,
+        diasAnterior,
+      );
+  const crecimientoUnidades = diaTipico
+    ? calcularCrecimiento(diaTipico.hoy.unidades, diaTipico.tipico.unidades)
+    : crecimientoDeTotal(
+        metricasActuales.unidadesVendidas,
+        metricasAnteriores.unidadesVendidas,
+        diasActual,
+        diasAnterior,
+      );
+  const crecimientoGanancia = diaTipico
+    ? calcularCrecimiento(diaTipico.hoy.ganancia, diaTipico.tipico.ganancia)
+    : crecimientoDeTotal(
+        metricasActuales.gananciaBrutaVentas,
+        metricasAnteriores.gananciaBrutaVentas,
+        diasActual,
+        diasAnterior,
+      );
+  // El ticket promedio es una MEDIA, no un total: se compara con el guard de
+  // significancia, no con `calcularCrecimiento` pelado. Ver `crecimientoDeMedia`
+  // — el −75% que mostraba este badge un martes era una media de 6 tickets con
+  // un outlier de $204.700 contra una de 23, con un feriado adentro del tramo
+  // de comparación. La cuenta estaba bien; la comparación no existía.
+  // Con "hoy" la referencia son los tickets de esos mismos días típicos hasta
+  // esta hora — juntos suman muestra suficiente, que es justo lo que un día
+  // suelto no tenía.
+  const crecimientoTicket = diaTipico
+    ? crecimientoDeMedia(
+        muestraDeTickets(diaTipico.hoy.tickets),
+        muestraDeTickets(diaTipico.ticketsReferencia),
+      )
+    : crecimientoDeMedia(
+        {
+          media: metricasActuales.ticketPromedio,
+          desvio: metricasActuales.ticketDesvio,
+          n: metricasActuales.ordenes,
+        },
+        {
+          media: metricasAnteriores.ticketPromedio,
+          desvio: metricasAnteriores.ticketDesvio,
+          n: metricasAnteriores.ordenes,
+        },
+      );
+
+  // El chart NO sigue al selector de período: grafica siempre los últimos 30
+  // días contra los 30 previos. Con "esta semana" un martes la tendencia son
+  // dos puntos, y con "este mes" un día 3 son tres — en los dos casos el
+  // gráfico no muestra ninguna tendencia justo cuando se lo mira. La ventana
+  // móvil tiene la misma cantidad de puntos todos los días y se compara
+  // siempre contra un tramo del mismo largo. El selector sigue gobernando los
+  // KPIs, que sí tienen sentido "a la fecha".
+  const rangoChart = resolverRangoRolling(DIAS_CHART, hoy);
+  const serieChart = agregarMediaMovil(
+    construirSerie(ventasOperativas, rangoChart, "dia", hoy),
   );
-  const etiquetaAnterior = ETIQUETA_PERIODO_ANTERIOR[periodo];
+  const etiquetaChart = `últimos ${DIAS_CHART} días`;
+  // Con "hoy" la referencia es el día de la semana que sea hoy: "vs. martes
+  // promedio". El nombre sale de la fecha, no de una tabla de strings.
+  const nombreDelDia = new Intl.DateTimeFormat("es-AR", {
+    weekday: "long",
+  }).format(hoy);
+  const etiquetaAnterior =
+    periodo === "hoy"
+      ? `${nombreDelDia} promedio`
+      : ETIQUETA_PERIODO_ANTERIOR[periodo];
   const tituloComparacion = `vs. ${etiquetaAnterior}`;
+
+  // Por qué un badge puede quedar sin número. Son dos casos distintos y el
+  // tooltip los distingue: con "hoy", que todavía no haya otros días de esa
+  // misma jornada; con el resto, que el tramo anterior tenga bastante menos
+  // historia registrada (ver crecimientoDeTotal).
+  const motivoSinComparacion = diaTipico
+    ? `Todavía no hay otros ${nombreDelDia}s con qué comparar`
+    : "El período anterior no tiene suficientes días con ventas para una comparación pareja";
 
   const quiebres = detectarQuiebresRotacion(
     ventasOperativas,
@@ -250,10 +371,11 @@ export default async function DashboardPage({
   const proximaTemporada = detectarProximaTemporada(productos, categoriasFlat, hoy);
 
   // Advisor: mismo motor de siempre (getAdvisorInsights, sin tocar su
-  // lógica de orden/corte), extendido con las reglas nuevas — se activan
-  // solo si el fetch correspondiente trajo datos.
+  // lógica de orden), extendido con las reglas nuevas — se activan solo si el
+  // fetch correspondiente trajo datos. El CORTE ahora sí es de la superficie:
+  // esta card pide 5 y el banner de /reportes se queda con 3.
   const insights = getAdvisorInsights({
-    ...metricasActuales,
+    ...metricasInsights,
     deudaVencida: deudaVencida ?? undefined,
     remitosPendientes:
       remitosPendientes && remitosPendientes.cantidad > 0
@@ -269,7 +391,17 @@ export default async function DashboardPage({
         : undefined,
     finDeTemporada: finDeTemporada ?? undefined,
     proximaTemporada: proximaTemporada ?? undefined,
-  });
+    // Días abiertos de la ventana de Insights (no la del selector): las
+    // reglas de RITMO (cobertura de stock, día pico) lo necesitan para pasar
+    // de un total a "por día".
+    diasDelPeriodo: contarDiasConVentas(ventasOperativas, rangoInsights),
+    metodoQuePierde: senales.metodoQuePierde ?? undefined,
+    descuentosResignados: senales.descuentosResignados ?? undefined,
+    renglonesSinCosto: senales.renglonesSinCosto ?? undefined,
+    renglonAdicional: senales.renglonAdicional ?? undefined,
+    momentoDelDia: senales.momentoDelDia ?? undefined,
+    cuentaCorrienteDescuadrada: senales.cuentaCorrienteDescuadrada ?? undefined,
+  }, INSIGHTS_EN_PANEL);
 
   const ventasDeHoy = ventasOperativas.filter((v) => {
     const f = new Date(v.fecha_venta);
@@ -326,7 +458,11 @@ export default async function DashboardPage({
               }).format(hoy)}
             </p>
           </div>
-          <PeriodoSelector periodo={periodo} ariaLabel="Período del panel" />
+          <PeriodoSelector
+            periodo={periodo}
+            opciones={OPCIONES_PANEL}
+            ariaLabel="Período del panel"
+          />
         </div>
 
         {/* GUÍA DE INICIO — arriba de todo mientras falte algo para vender, y
@@ -352,9 +488,19 @@ export default async function DashboardPage({
           />
         </div>
 
-        {/* FILA 1 — 40% KPIs / 60% chart, ambas dependen del selector de período */}
+        {/* BENTO — dos columnas que se estiran a la misma altura:
+            izquierda 40% (KPIs + Insights), derecha 60% (tendencia arriba,
+            operación abajo). En mobile cae todo a una sola columna en este
+            mismo orden. */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch">
-          <div className="lg:col-span-2 grid grid-cols-2 gap-2">
+          {/* COLUMNA IZQUIERDA — el "qué pasó" en números y el "qué hacer" */}
+          {/* 40% KPIs / 60% Insights, en filas fr y no en flex-1: el reparto
+              tiene que ser una PROPORCIÓN, no el resto de lo que ocupe el
+              contenido del otro. Atado al contenido, agregar un insight o
+              acortar una KPI mueve el equilibrio solo. En mobile las filas
+              vuelven a ser auto y cada card mide lo suyo. */}
+          <div className="lg:col-span-2 grid grid-rows-[auto_auto] lg:grid-rows-[2fr_3fr] gap-3">
+          <div className="grid grid-cols-2 gap-2 min-h-0">
             <KpiMiniCard
               label="Ingresos"
               value={formatearMoneda(metricasActuales.ingresos)}
@@ -363,6 +509,7 @@ export default async function DashboardPage({
                 <GrowthBadge
                   value={crecimientoIngresos}
                   titulo={tituloComparacion}
+                  motivoSinDato={motivoSinComparacion}
                 />
               }
             />
@@ -374,6 +521,7 @@ export default async function DashboardPage({
                 <GrowthBadge
                   value={crecimientoUnidades}
                   titulo={tituloComparacion}
+                  motivoSinDato={motivoSinComparacion}
                 />
               }
             />
@@ -385,6 +533,8 @@ export default async function DashboardPage({
                 <GrowthBadge
                   value={crecimientoTicket}
                   titulo={tituloComparacion}
+                  etiquetaSinValor="≈"
+                  motivoSinDato="Sin cambio medible: con esta cantidad de tickets la diferencia no se distingue del ruido"
                 />
               }
             />
@@ -396,37 +546,58 @@ export default async function DashboardPage({
                 <GrowthBadge
                   value={crecimientoGanancia}
                   titulo={tituloComparacion}
+                  motivoSinDato={motivoSinComparacion}
                 />
               }
             />
           </div>
 
-          <div className="lg:col-span-3">
-            <IngresosAreaChart
-              serie={serieChart}
-              etiquetaPeriodo={ETIQUETA_PERIODO[periodo]}
-              etiquetaPeriodoAnterior={etiquetaAnterior}
-            />
+            {/* min-h-0 para que la fila `3fr` pueda achicarse por debajo de su
+                contenido: sin eso el mínimo automático del grid la infla y la
+                proporción no se respeta. La lista scrollea adentro. */}
+            <div className="min-h-0">
+              <AdvisorMiniList insights={insights} />
+            </div>
           </div>
-        </div>
 
-        {/* FILA 2 — 3 columnas iguales, cada una con tabs internas */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:h-[300px]">
-          <AdvisorMiniList insights={insights} />
+          {/* COLUMNA DERECHA — tendencia arriba, operación del día abajo */}
+          <div className="lg:col-span-3 flex flex-col gap-3">
+            {/* El chart absorbe el sobrante de la columna y el gráfico crece
+                con él (el área de dibujo es flex-1 adentro de la card). Sin
+                este wrapper la card llevaba `h-full` = 100% de la columna
+                ENTERA, así que pedía el alto del chart + el de la fila de
+                abajo: el navegador encogía a las dos y el chart quedaba con
+                un bloque en blanco debajo de las fechas. */}
+            <div className="flex-1 min-h-0">
+              <IngresosAreaChart
+                serie={serieChart}
+                etiquetaPeriodo={etiquetaChart}
+              />
+            </div>
 
-          <AtencionRequeridaCard
-            quiebres={quiebres}
-            stockCritico={metricasActuales.stockCriticoDetallado}
-            cantidadBajasPendientes={cantidadBajasPendientes}
-            reservasActivas={reservasActivas}
-          />
+            {/* 40 / 60: lo que hay que mirar (stock, reservas) es una lista
+                corta de nombres; lo que rinde son dos rankings en paralelo y
+                necesita el doble de ancho. */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 shrink-0 lg:h-[300px]">
+              <div className="lg:col-span-2 min-w-0 min-h-[280px] lg:min-h-0">
+                <AtencionRequeridaCard
+                  quiebres={quiebres}
+                  stockCritico={metricasActuales.stockCriticoDetallado}
+                  cantidadBajasPendientes={cantidadBajasPendientes}
+                  reservasActivas={reservasActivas}
+                />
+              </div>
 
-          <RendimientoCard
-            topProductos={metricasRanking.topProductos}
-            topProductosRentables={metricasRanking.topProductosRentables}
-            etiquetaRanking={ETIQUETA_RANKING[periodo]}
-            ultimasVentas={ultimasVentas}
-          />
+              <div className="lg:col-span-3 min-w-0 min-h-[280px] lg:min-h-0">
+                <RendimientoCard
+                  topProductos={metricasRanking.topProductos}
+                  topProductosRentables={metricasRanking.topProductosRentables}
+                  etiquetaRanking={ETIQUETA_RANKING[periodo]}
+                  ultimasVentas={ultimasVentas}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
   );

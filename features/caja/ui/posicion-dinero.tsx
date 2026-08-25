@@ -19,10 +19,13 @@ import {
 } from "@/shared/ui/tooltip";
 import { toast } from "sonner";
 import { formatearMoneda } from "@/shared/utils/formatters";
-import { PeriodoSelector } from "@/shared/components/periodo-selector";
 import {
-  ETIQUETA_PERIODO,
-  type PeriodoPanel,
+  PeriodoSelector,
+  OPCIONES_CALENDARIO,
+} from "@/shared/components/periodo-selector";
+import {
+  ETIQUETA_PERIODO_CALENDARIO,
+  type PeriodoCalendario,
 } from "@/shared/lib/periodo-ranges";
 import { getPosicionDineroAction } from "../actions/get-posicion-dinero";
 import type {
@@ -64,14 +67,14 @@ export function PosicionDinero({
   periodoInicial,
 }: Readonly<{
   posicionInicial: PosicionDineroData;
-  periodoInicial: PeriodoPanel;
+  periodoInicial: PeriodoCalendario;
 }>) {
   const [verCajas, setVerCajas] = useState(false);
-  const [periodo, setPeriodo] = useState<PeriodoPanel>(periodoInicial);
+  const [periodo, setPeriodo] = useState<PeriodoCalendario>(periodoInicial);
   const [posicion, setPosicion] = useState(posicionInicial);
   const [cargando, setCargando] = useState(false);
 
-  const cambiarPeriodo = async (nuevo: PeriodoPanel) => {
+  const cambiarPeriodo = async (nuevo: PeriodoCalendario) => {
     if (nuevo === periodo) return;
     // Optimista en el selector, no en los números: el período se marca al
     // toque y las cifras recién cambian cuando llegan. Al revés se vería un
@@ -105,6 +108,7 @@ export function PosicionDinero({
           </p>
         </div>
         <PeriodoSelector
+          opciones={OPCIONES_CALENDARIO}
           periodo={periodo}
           onChange={cambiarPeriodo}
           ariaLabel="Período del dinero acreditado"
@@ -137,7 +141,7 @@ export function PosicionDinero({
             ayuda="Plata que ya cobraste pero todavía no está en la cuenta. Sale de los días de acreditación pactados con cada método (las tarjetas suelen ser a 20 días). Es tuya, pero no la podés usar todavía: no la sumes al efectivo para decidir una compra."
           />
           <Tarjeta
-            titulo={`Acreditado ${ETIQUETA_PERIODO[periodo]}`}
+            titulo={`Acreditado ${ETIQUETA_PERIODO_CALENDARIO[periodo]}`}
             monto={totalAcreditado}
             detalle="Neto de comisiones"
             Icono={Landmark}
@@ -216,7 +220,7 @@ export function PosicionDinero({
       />
 
       <ListaCuentas
-        titulo={`Ya acreditado en cada cuenta (${ETIQUETA_PERIODO[periodo]})`}
+        titulo={`Ya acreditado en cada cuenta (${ETIQUETA_PERIODO_CALENDARIO[periodo]})`}
         cuentas={acreditado}
         vacio="No se acreditó nada en este período."
       />

@@ -3,10 +3,10 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/shared/config/supabase/server";
 import type { PosicionDinero } from "@/entities/caja/types";
-import type { PeriodoPanel } from "@/shared/lib/periodo-ranges";
+import type { PeriodoCalendario } from "@/shared/lib/periodo-ranges";
 
 export async function getPosicionDineroAction(
-  periodo: PeriodoPanel = "mes",
+  periodo: PeriodoCalendario = "mes",
 ): Promise<{ data: PosicionDinero | null; error: string | null }> {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
