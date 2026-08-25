@@ -208,6 +208,13 @@ export async function middleware(request: NextRequest) {
   // aceptar.
   const isPublicRoute =
     pathname.startsWith("/store") ||
+    // Resumen de cuenta corriente por token: lo abre la clienta desde un link
+    // de WhatsApp y NO tiene sesión. Sin esto rebota al login, que es la forma
+    // más rápida de que el link no sirva para nada.
+    //
+    // La barra final NO es decorativa: `startsWith("/r")` se comería
+    // `/reportes` y `/recuperar` y las volvería públicas.
+    pathname.startsWith("/r/") ||
     pathname.startsWith("/recuperar") ||
     pathname.startsWith("/terminos") ||
     pathname.startsWith("/privacidad") ||
