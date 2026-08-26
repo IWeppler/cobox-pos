@@ -28,6 +28,11 @@ interface CartStepItemsProps {
   /** Abre el selector de aparato desde la línea. Sin esto el badge es
    * informativo: en el catálogo público no hay nada que elegir. */
   onElegirUnidad?: () => void;
+  /** En los rubros de venta rápida (kiosco, almacén) el ticket va sin
+   * miniaturas: son 96px de alto por renglón que se usan mejor mostrando un
+   * ítem más. Default true — el catálogo público y el resto de los rubros no
+   * cambian. */
+  mostrarImagenes?: boolean;
 }
 
 export function CartStepItems({
@@ -40,6 +45,7 @@ export function CartStepItems({
   variantesSerializadas,
   imeiPorVariante,
   onElegirUnidad,
+  mostrarImagenes = true,
 }: Readonly<CartStepItemsProps>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
@@ -59,6 +65,7 @@ export function CartStepItems({
                   key={`${item.productoId}-${item.variante}`}
                   className="flex gap-3"
                 >
+                  {mostrarImagenes && (
                   <div className="h-24 w-18 shrink-0 overflow-hidden border border-border bg-muted/40">
                     {item.imagenUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -73,6 +80,7 @@ export function CartStepItems({
                       </div>
                     )}
                   </div>
+                  )}
 
                   <div className="flex min-w-0 flex-1 flex-col justify-between">
                     <div className="flex items-start gap-2">

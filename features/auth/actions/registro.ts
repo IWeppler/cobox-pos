@@ -4,6 +4,7 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { COOKIE_NEGOCIO_ACTIVO } from "@/shared/lib/negocio-activo";
 import { urlBaseDeLaRequest } from "@/shared/lib/url-base-request";
+import { enviarVerificacionEmailAction } from "./verificacion-email";
 
 export interface RegistroState {
   error: string;
@@ -12,6 +13,8 @@ export interface RegistroState {
   destino?: string;
   /** Mensaje cuando NO hay sesión inmediata (confirmación por email prendida). */
   aviso?: string;
+  /** A qué dirección se mandó, para ofrecer el reenvío sin volver a pedirla. */
+  email?: string;
 }
 
 /**
@@ -90,6 +93,7 @@ export async function registrarseAction(
     return {
       error: "",
       success: true,
+      email,
       aviso:
         "Te mandamos un mail para confirmar la cuenta. Abrilo y volvé para terminar de crear tu comercio.",
     };
@@ -99,6 +103,22 @@ export async function registrarseAction(
   // dudas una cookie de negocio de una sesión anterior en el mismo navegador —
   // apuntaría a un negocio que este usuario no integra.
   cookieStore.delete(COOKIE_NEGOCIO_ACTIVO);
+
+  // Hay sesión, o sea que el proyecto NO exige confirmar para entrar. El mail
+  // de verificación se manda igual, pero como aviso y no como puerta: la
+  // persona sigue derecho al paso 2 y la deuda queda a la vista en el panel
+  // (ver `estadoVerificacionEmail`). Es el paso que hacía perder altas —
+  // obligaba a irse a la casilla justo cuando todavía no vio nada del
+  // producto.
+  //
+  // Un fallo del envío NO puede voltear un alta que ya está hecha: se loguea y
+  // el usuario tiene el botón de reenviar en el banner.
+  if (!data.user?.email_confirmed_at) {
+    const envio = await enviarVerificacionEmailAction(email);
+    if (!envio.ok) {
+      console.error("[REGISTRO] verificación no enviada", envio.mensaje);
+    }
+  }
 
   return { error: "", success: true, destino: "/onboarding" };
 }

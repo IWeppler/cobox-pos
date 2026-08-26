@@ -142,8 +142,12 @@ export async function crearNegocioAction(
     return { error: "Elegí el rubro de tu comercio.", success: false };
   }
 
-  if (!TAMANOS_EQUIPO.some((t) => t.valor === tamanoEquipo)) {
-    return { error: "Contanos cuánta gente trabaja en el comercio.", success: false };
+  // OPCIONAL: se valida solo si vino. Era obligatorio y no debía serlo —
+  // cuánta gente trabaja en el local no cambia nada de lo que el sistema
+  // configura (eso lo decide el rubro), así que era un peaje en el alta a
+  // cambio de un dato de segmentación. Se pregunta igual, pero no frena.
+  if (tamanoEquipo && !TAMANOS_EQUIPO.some((t) => t.valor === tamanoEquipo)) {
+    return { error: "Elegí una opción válida de tamaño de equipo.", success: false };
   }
 
   // El CUIT se valida por dígito verificador, igual que en clientes: atrapa el
@@ -178,9 +182,12 @@ export async function crearNegocioAction(
     {
       p_nombre: nombre,
       p_slug: slug,
-      p_whatsapp: whatsapp,
+      // Vacío se guarda como NULL y no como cadena vacía: "no lo cargó" y
+      // "lo dejó en blanco" son lo mismo acá, y un "" en la columna se
+      // filtraría distinto en cualquier consulta que pregunte por null.
+      p_whatsapp: whatsapp || null,
       p_rubro_comercial: rubro,
-      p_tamano_equipo: tamanoEquipo,
+      p_tamano_equipo: tamanoEquipo || null,
       // El operativo se deriva del comercial acá, en Node — mismo criterio que
       // la canonicalización de atributos: la traducción se queda del lado de la
       // app y la base recibe el valor ya resuelto. Es un default: el comercio

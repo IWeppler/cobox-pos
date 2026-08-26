@@ -11,6 +11,8 @@ import { queryKeys } from "@/shared/lib/query-keys";
 import { toast } from "sonner";
 import { useCatalogFilters } from "@/features/store/hooks/use-catalog-filters";
 import { QuickAddModal } from "@/features/pos/ui/quick-add-modal";
+import { PosProductList } from "@/features/pos/ui/pos-product-list";
+import { posSinImagenes } from "@/features/pos/lib/vista-por-rubro";
 import Image from "next/image";
 import { StockFiltersToolbar } from "@/features/stock/ui/stock-filters-toolbar";
 import { formatearMoneda } from "@/shared/utils/formatters";
@@ -153,6 +155,11 @@ export function PosTerminal({
       }),
     [productosFiltrados],
   );
+
+  // En kiosco y almacén la venta es por nombre, no de vista: la grilla pasa a
+  // lista y el ticket del carrito deja de mostrar miniaturas. Se decide una
+  // vez acá y viaja a los dos lugares, para que no puedan quedar en desacuerdo.
+  const vistaSinImagenes = posSinImagenes(rubro);
 
   const hayFiltrosActivos =
     searchQuery !== "" ||
@@ -351,6 +358,36 @@ export function PosTerminal({
                 Intenta con otra búsqueda o categoría.
               </p>
             </div>
+          ) : vistaSinImagenes ? (
+            // Lista densa. Ver `posSinImagenes` para qué rubros la usan y por
+            // qué es del rubro y no un toggle.
+            <>
+              <PosProductList
+                productos={productosOrdenados}
+                stockTotalDe={getStockTotal}
+                permitirVentaSinStock={permitirVentaSinStock}
+                mostrarSinStock={mostrarSinStock}
+                slugNegocio={slugNegocio}
+                nombreComercio={nombreComercio}
+                onProductoClick={handleProductClick}
+              />
+
+              {ofrecerCarga && (
+                <button
+                  type="button"
+                  onClick={cargarLoBuscado}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-3 transition-colors hover:border-primary hover:bg-primary/5 cursor-pointer"
+                >
+                  <PackagePlus className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold text-foreground">
+                    Cargar &quot;{searchQuery.trim()}&quot;
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    y seguí cobrando
+                  </span>
+                </button>
+              )}
+            </>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-20 lg:pb-0">
               {productosOrdenados.map((producto, index) => {

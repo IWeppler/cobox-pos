@@ -13,6 +13,7 @@ import {
 } from "@/shared/lib/negocio-activo";
 import { BannerImpersonation } from "@/features/admin/ui/banner-impersonation";
 import { NegocioActivoProvider } from "@/shared/components/negocio-activo-provider";
+import { BannerVerificacionEmail } from "@/features/auth/ui/banner-verificacion";
 import { PlanProvider } from "@/features/planes/ui/plan-provider";
 import { getContextoPlanAction } from "@/features/planes/actions/contexto-plan";
 import { leerConfigPos } from "@/entities/config/lib/leer-config-pos";
@@ -111,6 +112,17 @@ export default async function DashboardLayout({
           {impersonando && (
             <BannerImpersonation nombreNegocio={systemBranding.posName} />
           )}
+
+          {/* La verificación del correo dejó de frenar el alta: se entra
+              derecho y la deuda queda a la vista acá, con el plazo corriendo y
+              el botón para resolverla. Ver
+              features/auth/lib/verificacion-email.ts. */}
+          <BannerVerificacionEmail
+            email={user.email ?? ""}
+            emailConfirmado={Boolean(user.email_confirmed_at)}
+            creadoEn={user.created_at ?? null}
+          />
+
           <DashboardNavbar
             modoCaja={systemBranding.modo_caja || "UNICA"}
             userId={user.id}

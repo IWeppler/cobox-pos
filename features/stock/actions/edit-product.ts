@@ -9,6 +9,7 @@ import {
   construirCacheAtributos,
 } from "@/features/stock/lib/normalize-atributo";
 import { parseProductImages } from "@/features/stock/lib/stock-product-utils";
+import { canonicalizarMarcaContraCatalogo } from "../lib/canonicalizar-marca-server";
 import { obtenerAtributosRequeridosFaltantes } from "@/features/stock/lib/validate-required-atributos";
 import {
   leerUrlsDeImagenes,
@@ -141,8 +142,13 @@ export async function editarProductoAction(
   // los datos fiscales de un cliente al guardar sin tocar el toggle.
   const camposOpcionales: Record<string, string | null> = {};
   if (formData.has("marca")) {
-    camposOpcionales.marca =
-      (formData.get("marca") as string)?.trim() || null;
+    // Contra el catálogo, no tal cual viene: tipear "Popys" donde ya hay
+    // "popys" tiene que guardar "popys". Sin esto el combobox sugiere bien y
+    // el duplicado entra igual.
+    camposOpcionales.marca = await canonicalizarMarcaContraCatalogo(
+      supabase,
+      formData.get("marca") as string | null,
+    );
   }
   if (formData.has("genero")) {
     camposOpcionales.genero =

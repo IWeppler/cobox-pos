@@ -28,6 +28,11 @@ export type BaseVariant = {
 export type CategoriaOption = {
   id: string;
   nombre: string;
+  /** `null` en las raíces. Sin esta columna el selector de producto no puede
+   * ofrecer el segundo nivel, que es lo que hacía que un producto solo se
+   * pudiera colgar de una categoría padre aunque el catálogo tuviera
+   * subcategorías y el listado ya las mostrara como "Padre › Hijo". */
+  parent_id: string | null;
 };
 
 /** Lo mínimo del producto recién creado para poder usarlo sin re-fetch — hoy

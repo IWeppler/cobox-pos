@@ -13,7 +13,7 @@ import { Label } from "@/shared/ui/label";
 import { Button } from "@/shared/ui/button";
 import { ProductCategorySection } from "@/features/stock/ui/create-product/product-category-section";
 import { ProductVariantsSection } from "@/features/stock/ui/create-product/product-variants-section";
-import { useActiveCategories } from "@/features/stock/hooks/use-active-categories";
+import { useCategoriasProducto } from "@/features/stock/hooks/use-categorias-producto";
 import { useVariantSelection } from "@/features/stock/hooks/use-variant-selection";
 import type { Opcion, VarianteInput } from "@/features/stock/types";
 import type { LineaCargaNueva } from "../types";
@@ -86,7 +86,7 @@ function CargaRapidaQuickCreateModalContent({
 }>) {
   const editando = altaRapida.editando;
   const maestro = altaRapida.maestro;
-  const categorias = useActiveCategories();
+  const categorias = useCategoriasProducto();
 
   // Del maestro sale UNA combinación concreta (128GB / 4GB / Black), así que
   // el alta arranca ya en modo variantes con esa fila cargada y el EAN como

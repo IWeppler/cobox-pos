@@ -43,7 +43,7 @@ export function PosPageClient() {
         mostrarSinStock={data?.data?.mostrarSinStock}
         rubro={data?.data?.rubro ?? RUBRO_DEFAULT}
       />
-      <CartPanelAdmin />
+      <CartPanelAdmin rubro={data?.data?.rubro ?? RUBRO_DEFAULT} />
     </div>
   );
 }

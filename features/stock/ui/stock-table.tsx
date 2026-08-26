@@ -96,12 +96,14 @@ function AbrirDetalle({
   producto,
   nombreComercio,
   mostrarSinStock,
+  rubro,
   children,
 }: Readonly<{
   activo: boolean;
   producto: ProductoIndice;
   nombreComercio: string;
   mostrarSinStock: boolean;
+  rubro: Rubro;
   children: React.ReactNode;
 }>) {
   if (!activo) return <>{children}</>;
@@ -110,6 +112,7 @@ function AbrirDetalle({
       producto={producto}
       nombreComercio={nombreComercio}
       mostrarSinStock={mostrarSinStock}
+      rubro={rubro}
     >
       {children}
     </ProductEditDetailSheet>
@@ -413,6 +416,7 @@ export function StockTable({
                         <AbrirDetalle
                           activo={!seleccion.modoSeleccion}
                           producto={producto}
+                          rubro={rubro}
                           nombreComercio={nombreComercio}
                           mostrarSinStock={mostrarSinStock}
                         >
@@ -444,6 +448,7 @@ export function StockTable({
                           <AbrirDetalle
                             activo={!seleccion.modoSeleccion}
                             producto={producto}
+                            rubro={rubro}
                             nombreComercio={nombreComercio}
                             mostrarSinStock={mostrarSinStock}
                           >

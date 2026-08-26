@@ -72,12 +72,14 @@ export function useCreateProductForm(control?: ControlDeApertura) {
   useEffect(() => {
     const fetchCats = async () => {
       const supabase = createClient();
+      // El árbol COMPLETO, no solo las raíces: los productos cuelgan de las
+      // hojas y hasta acá no había forma de elegir una.
       const { data } = await supabase
         .from("categorias")
-        .select("id, nombre")
+        .select("id, nombre, parent_id")
         .eq("activa", true)
-        .is("parent_id", null)
-        .order("orden");
+        .order("orden")
+        .order("nombre");
 
       if (data && data.length > 0) setCategorias(data);
     };

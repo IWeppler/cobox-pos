@@ -18,6 +18,9 @@ import { normalizarRubro, type Rubro } from "@/entities/config/types";
 export interface EstadoActivacion {
   rubro: string;
   marca: boolean;
+  /** La RPC lo sigue devolviendo, pero la guía ya NO arma un paso con esto:
+   * ver el comentario en `construirPasosActivacion`. Se mantiene en el tipo
+   * para que la forma de acá siga siendo la de la respuesta real. */
   metodos_pago: boolean;
   productos: boolean;
   stock_y_precios: boolean;
@@ -80,16 +83,17 @@ export function construirPasosActivacion(
       hecho: estado.marca,
       opcional: false,
     },
-    {
-      clave: "metodos_pago",
-      titulo: "Revisá cómo cobrás",
-      detalle:
-        "Efectivo ya está listo. Sumá tarjeta o transferencia con su recargo y su comisión.",
-      href: "/configuracion",
-      cta: "Ver métodos",
-      hecho: estado.metodos_pago,
-      opcional: false,
-    },
+    // ACÁ IBA "Revisá cómo cobrás", y se sacó porque no pedía nada: el alta ya
+    // siembra un método de pago, y `estado_activacion` marca el paso como
+    // hecho con que exista UNO activo. O sea que nacía tildado siempre, y lo
+    // único que lograba era regalar 1 de 6 en la barra de progreso — el
+    // comercio veía 17% completado sin haber tocado nada, que es el tipo de
+    // número que hace que la guía deje de creerse.
+    //
+    // Sumar tarjeta o transferencia sigue siendo importante, pero es una
+    // decisión de configuración, no un requisito para vender: con efectivo ya
+    // se puede cobrar. Vive en Configuración > Métodos de pago, que es donde
+    // alguien va cuando se hace la pregunta.
     {
       clave: "productos",
       titulo: "Cargá tus productos",

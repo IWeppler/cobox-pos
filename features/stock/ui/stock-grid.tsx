@@ -34,12 +34,14 @@ function AbrirDetalleCard({
   producto,
   nombreComercio,
   mostrarSinStock,
+  rubro,
   children,
 }: Readonly<{
   activo: boolean;
   producto: ProductoIndice;
   nombreComercio: string;
   mostrarSinStock: boolean;
+  rubro: Rubro;
   children: React.ReactNode;
 }>) {
   if (!activo) return <>{children}</>;
@@ -48,6 +50,7 @@ function AbrirDetalleCard({
       producto={producto}
       nombreComercio={nombreComercio}
       mostrarSinStock={mostrarSinStock}
+      rubro={rubro}
     >
       {children}
     </ProductEditDetailSheet>
@@ -171,6 +174,7 @@ export function StockGrid({
               <AbrirDetalleCard
                 activo={!seleccion.modoSeleccion}
                 producto={producto}
+                rubro={rubro}
                 nombreComercio={nombreComercio}
                 mostrarSinStock={mostrarSinStock}
               >

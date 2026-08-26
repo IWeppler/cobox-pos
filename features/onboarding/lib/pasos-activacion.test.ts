@@ -7,7 +7,8 @@ import {
 
 const RECIEN_CREADO: EstadoActivacion = {
   rubro: "indumentaria",
-  // El alta siembra Efectivo, así que este nace en true.
+  // El alta siembra Efectivo, así que este nace en true — por eso mismo dejó
+  // de ser un paso de la guía: nadie tenía que hacer nada para tildarlo.
   metodos_pago: true,
   marca: false,
   productos: false,
@@ -102,8 +103,16 @@ describe("construirPasosActivacion", () => {
 describe("calcularProgresoActivacion", () => {
   it("no cuenta los opcionales en el progreso", () => {
     const { total, completados } = calcularProgresoActivacion(RECIEN_CREADO);
-    expect(total).toBe(6);
-    expect(completados).toBe(1); // solo métodos de pago
+    expect(total).toBe(5);
+    // Cero, y eso es lo correcto: un comercio recién creado no hizo nada
+    // todavía. Antes daba 1 de 6 por el paso de métodos de pago, que venía
+    // tildado de fábrica.
+    expect(completados).toBe(0);
+  });
+
+  it("métodos de pago ya NO es un paso de la guía", () => {
+    const claves = construirPasosActivacion(RECIEN_CREADO).map((p) => p.clave);
+    expect(claves).not.toContain("metodos_pago");
   });
 
   it("activa el negocio aunque los opcionales queden sin hacer", () => {

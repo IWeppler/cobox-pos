@@ -19,6 +19,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Producto, ProductoIndice } from "@/entities/productos/types";
+import type { Rubro } from "@/entities/config/types";
 import { Button } from "@/shared/ui/button";
 import { createClient } from "@/shared/config/supabase/client";
 import {
@@ -81,6 +82,9 @@ type ProductEditDetailSheetProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   hideTrigger?: boolean;
+  /** Rubro del comercio. Solo lo usa el bloque de identidad (marca): en kiosco,
+   * alimentos, farmacia y ferretería el campo se ofrece siempre. */
+  rubro?: Rubro;
 };
 
 // La fila de /stock rinde 100% desde ProductoIndice (búsqueda/orden/página
@@ -96,6 +100,7 @@ export function ProductEditDetailSheet({
   open,
   onOpenChange,
   hideTrigger = false,
+  rubro,
 }: Readonly<ProductEditDetailSheetProps>) {
   // El link del catálogo necesita el negocio, no solo el origen: cada
   // comercio tiene su propia tienda.
@@ -201,6 +206,7 @@ export function ProductEditDetailSheet({
           <EditProductForm
             key={detalle.id}
             producto={detalle}
+            rubro={rubro}
             onSaved={() => setOpen(false)}
           />
         )}
@@ -215,9 +221,11 @@ type EditableProducto = Producto & {
 
 function EditProductForm({
   producto,
+  rubro,
   onSaved,
 }: Readonly<{
   producto: EditableProducto;
+  rubro?: Rubro;
   onSaved: () => void;
 }>) {
   const router = useRouter();
@@ -288,12 +296,15 @@ function EditProductForm({
   useEffect(() => {
     const fetchCats = async () => {
       const supabase = createClient();
+      // Padres E hijas. Con solo las raíces, un producto que estaba en una
+      // subcategoría no encontraba su id en la lista: el panel mostraba
+      // "Asigna una categoría" sobre un producto que sí tenía una.
       const { data } = await supabase
         .from("categorias")
-        .select("id, nombre")
+        .select("id, nombre, parent_id")
         .eq("activa", true)
-        .is("parent_id", null)
-        .order("orden");
+        .order("orden")
+        .order("nombre");
 
       if (data && data.length > 0) setCategorias(data);
     };
@@ -771,6 +782,7 @@ function EditProductForm({
             unidadActual={producto.unidad_medida}
             generoActual={producto.genero}
             marcaActual={producto.marca}
+            rubro={rubro}
           />
         </form>
       </div>

@@ -18,14 +18,14 @@ import {
   type RegistroState,
 } from "@/features/auth/actions/registro";
 import { crearNegocioAction } from "@/features/auth/actions/negocios";
-import { CONDICIONES_IVA, RUBROS, TAMANOS_EQUIPO } from "@/shared/lib/rubros";
-import { CuitInput } from "@/shared/components/cuit-input";
+import { ReenviarVerificacion } from "@/features/auth/ui/reenviar-verificacion";
+import { RUBROS, TAMANOS_EQUIPO } from "@/shared/lib/rubros";
 
 const estadoRegistro: RegistroState = { error: "" };
 const estadoNegocio = { error: null as string | null, success: false };
 
 /**
- * Alta completa en 3 pasos: cuenta → negocio → perfil fiscal.
+ * Alta completa en DOS pasos: cuenta → negocio.
  *
  * Por qué el paso 1 se manda SOLO y no todo junto al final: crear el negocio
  * necesita una sesión (la RPC corta sin `auth.uid()`), así que la cuenta tiene
@@ -36,6 +36,18 @@ const estadoNegocio = { error: null as string | null, success: false };
  * Por qué NO hay paso de plan: el trial desbloquea todo igual, así que elegir
  * plan acá es una decisión sin consecuencia, tomada en el momento de menor
  * información. Los planes se muestran cuando la prueba está por vencer.
+ *
+ * Y por qué NO hay paso de facturación: pedir razón social, CUIT y condición
+ * frente al IVA antes de que la persona haya visto el producto espanta al que
+ * vende informal y aburre al que ya factura. Ninguno de los tres hace falta
+ * para vender: se cargan en Configuración el día que quiera emitir una
+ * factura, que es cuando la pregunta tiene sentido. La action los sigue
+ * aceptando —el formulario de Configuración usa la misma— pero el alta no los
+ * pide.
+ *
+ * De los datos del negocio, solo NOMBRE y RUBRO son obligatorios: con eso
+ * alcanza para armar el catálogo y el POS. El tamaño del equipo y el WhatsApp
+ * se completan después.
  */
 export function OnboardingStepper({
   yaAutenticado,
@@ -52,18 +64,14 @@ export function OnboardingStepper({
     estadoNegocio,
   );
 
-  // Datos del paso 2, sostenidos en el cliente hasta el submit final: el
-  // negocio se crea de una sola vez, con o sin los fiscales del paso 3.
+  // Datos del negocio. Viven en estado porque el Select y los botones de
+  // tamaño no son controles nativos: al submit viajan por inputs ocultos.
   const [datosNegocio, setDatosNegocio] = useState({
     nombre: "",
     rubro: "",
     tamano_equipo: "",
     whatsapp: "",
   });
-
-  // Estado propio porque el Select de Radix no participa del FormData: el
-  // valor viaja por un input oculto en el paso 3.
-  const [condicionIva, setCondicionIva] = useState("");
 
   // Avanzar de paso cuando el registro salió bien se hace DURANTE el render y
   // no en un efecto: un setState dentro de useEffect dispara un render en
@@ -83,8 +91,12 @@ export function OnboardingStepper({
     }
   }, [negocio.success, router]);
 
-  // Confirmación por email prendida: no hay sesión, así que no se puede seguir
-  // al paso 2. Se dice qué pasó en vez de dejar la pantalla muda.
+  // Confirmación por email prendida en el proyecto: no hay sesión, así que no
+  // se puede seguir al paso 2. Es el camino que el alta directa viene a
+  // evitar, pero mientras la opción siga prendida hay que dar una salida:
+  // sin el botón de reenviar, un mail que no llega (spam, dirección mal
+  // tipeada, SMTP demorado) deja a la persona sin nada que hacer más que
+  // registrarse de nuevo con otro mail.
   if (registro.aviso) {
     return (
       <div className="rounded-xl border border-border bg-card p-6 text-center">
@@ -93,6 +105,15 @@ export function OnboardingStepper({
         </div>
         <h2 className="text-lg font-semibold">Revisá tu correo</h2>
         <p className="mt-2 text-sm text-muted-foreground">{registro.aviso}</p>
+
+        {registro.email && (
+          <div className="mt-4 flex flex-col items-center gap-1">
+            <p className="text-xs text-muted-foreground">
+              ¿No te llegó? Fijate en spam, o pedilo de nuevo.
+            </p>
+            <ReenviarVerificacion email={registro.email} />
+          </div>
+        )}
       </div>
     );
   }
@@ -129,13 +150,7 @@ export function OnboardingStepper({
       )}
 
       {paso === 2 && (
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setPaso(3);
-          }}
-        >
+        <form action={accionNegocio} className="space-y-4" aria-busy={cargando}>
           <Encabezado
             titulo="Tu negocio"
             detalle="Con esto armamos tu catálogo y tu punto de venta."
@@ -160,8 +175,8 @@ export function OnboardingStepper({
 
           <div className="space-y-2">
             <Label htmlFor="rubro">¿A qué se dedica?</Label>
-            {/* Controlado y no con `name`: el valor viaja en el hidden del paso
-                3, porque el negocio se crea de una sola vez al final. */}
+            {/* Controlado y no con `name`: el Select de Radix no aporta al
+                FormData, así que el valor viaja por un hidden más abajo. */}
             <Select
               value={datosNegocio.rubro}
               onValueChange={(v) =>
@@ -186,7 +201,7 @@ export function OnboardingStepper({
 
           <fieldset className="space-y-2">
             <legend className="mb-2 text-sm font-medium">
-              ¿Cuánta gente trabaja ahí?
+              ¿Cuánta gente trabaja ahí? <span className="font-normal text-muted-foreground">(opcional)</span>
             </legend>
             <div className="grid grid-cols-2 gap-2">
               {TAMANOS_EQUIPO.map((t) => {
@@ -213,7 +228,10 @@ export function OnboardingStepper({
           </fieldset>
 
           <div className="space-y-2">
-            <Label htmlFor="whatsapp">WhatsApp de contacto</Label>
+            <Label htmlFor="whatsapp">
+              WhatsApp de contacto{" "}
+              <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
             <Input
               id="whatsapp"
               value={datosNegocio.whatsapp}
@@ -228,63 +246,27 @@ export function OnboardingStepper({
             </p>
           </div>
 
-          <Button
-            type="submit"
-            className="h-11 w-full"
-            disabled={!datosNegocio.nombre || !datosNegocio.rubro || !datosNegocio.tamano_equipo}
-          >
-            Continuar
-          </Button>
-        </form>
-      )}
-
-      {paso === 3 && (
-        <form action={accionNegocio} className="space-y-4" aria-busy={cargando}>
-          <Encabezado
-            titulo="Datos de facturación"
-            detalle="Opcional. Si todavía no los tenés a mano, seguí y cargalos después desde Configuración."
-          />
-
-          {/* Lo del paso 2 viaja oculto: el negocio se crea de una sola vez. */}
+          {/* Los controlados (Select de Radix y los botones de tamaño) no
+              aportan al FormData por sí solos: viajan por estos hidden. */}
           <input type="hidden" name="nombre" value={datosNegocio.nombre} />
           <input type="hidden" name="rubro" value={datosNegocio.rubro} />
-          <input type="hidden" name="tamano_equipo" value={datosNegocio.tamano_equipo} />
+          <input
+            type="hidden"
+            name="tamano_equipo"
+            value={datosNegocio.tamano_equipo}
+          />
           <input type="hidden" name="whatsapp" value={datosNegocio.whatsapp} />
-
-          <Campo id="razon_social" label="Razón social" disabled={cargando} />
-          <CuitInput disabled={cargando} />
-
-          <div className="space-y-2">
-            <Label htmlFor="condicion_iva">Condición frente al IVA</Label>
-            {/* El Select de Radix no es un control nativo, así que no aporta
-                nada al FormData por sí solo: el valor va por este hidden. Sin
-                él, el campo se manda siempre vacío y el dato se pierde en
-                silencio, que es peor que no tener el campo. */}
-            <input type="hidden" name="condicion_iva" value={condicionIva} />
-            <Select
-              value={condicionIva}
-              onValueChange={setCondicionIva}
-              disabled={cargando}
-            >
-              <SelectTrigger
-                id="condicion_iva"
-                className="h-11 w-full rounded-lg bg-background shadow-none"
-              >
-                <SelectValue placeholder="Prefiero cargarlo después" />
-              </SelectTrigger>
-              <SelectContent>
-                {CONDICIONES_IVA.map((c) => (
-                  <SelectItem key={c.valor} value={c.valor}>
-                    {c.etiqueta}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
           <Error mensaje={negocio.error} />
 
-          <Button type="submit" disabled={cargando} className="h-11 w-full">
+          {/* Solo nombre y rubro frenan el botón: lo demás es opcional y
+              pedirlo para entrar era cobrar peaje por datos que no hacen
+              falta para vender. */}
+          <Button
+            type="submit"
+            className="h-11 w-full"
+            disabled={cargando || !datosNegocio.nombre || !datosNegocio.rubro}
+          >
             {cargando ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -296,6 +278,7 @@ export function OnboardingStepper({
           </p>
         </form>
       )}
+
 
       {paso > (yaAutenticado ? 2 : 1) && !cargando && (
         <button
@@ -312,7 +295,7 @@ export function OnboardingStepper({
 }
 
 function Progreso({ paso }: Readonly<{ paso: number }>) {
-  const pasos = ["Cuenta", "Negocio", "Facturación"];
+  const pasos = ["Cuenta", "Negocio"];
   return (
     <ol className="flex items-center gap-2">
       {pasos.map((nombre, i) => {

@@ -29,6 +29,8 @@ import { CartSidebarFooter } from "../../../shared/components/cart-sidebar/cart-
 import { CartSidebarHeader } from "../../../shared/components/cart-sidebar/cart-sidebar-header";
 import { CartStepCheckout } from "../../../shared/components/cart-sidebar/cart-step-checkout";
 import { CartStepItems } from "../../../shared/components/cart-sidebar/cart-step-items";
+import { posSinImagenes } from "@/features/pos/lib/vista-por-rubro";
+import type { Rubro } from "@/entities/config/types";
 import { Sheet, SheetContent } from "@/shared/ui/sheet";
 import { Drawer, DrawerContent } from "@/shared/ui/drawer";
 import { MobileCartBar } from "../../../shared/components/cart-sidebar/mobile-cart-bar";
@@ -53,7 +55,13 @@ type CheckoutStep = "CART" | "PAYMENT";
 
 export function CartPanelAdmin({
   numeroWhatsApp,
-}: Readonly<{ numeroWhatsApp?: string }>) {
+  rubro,
+}: Readonly<{
+  numeroWhatsApp?: string;
+  /** Decide si el ticket muestra miniaturas. Ausente = las muestra: es el
+   * default seguro para cualquier consumidor que todavía no lo pase. */
+  rubro?: Rubro;
+}>) {
   const {
     items,
     isOpen,
@@ -812,6 +820,9 @@ export function CartPanelAdmin({
           variantesSerializadas={variantesSerializadas}
           imeiPorVariante={imeiPorVariante}
           onElegirUnidad={() => setModalUnidades("SOLO_ELEGIR")}
+          // Mismo criterio que la grilla: en kiosco y almacén el ticket va sin
+          // miniaturas para que entren más renglones en pantalla.
+          mostrarImagenes={!rubro || !posSinImagenes(rubro)}
         />
       ) : (
         <CartStepCheckout

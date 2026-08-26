@@ -9,6 +9,7 @@ import {
   canonicalizarValores,
   construirCacheAtributos,
 } from "@/features/stock/lib/normalize-atributo";
+import { canonicalizarMarcaContraCatalogo } from "../lib/canonicalizar-marca-server";
 import { obtenerAtributosRequeridosFaltantes } from "@/features/stock/lib/validate-required-atributos";
 import {
   leerUrlsDeImagenes,
@@ -55,7 +56,12 @@ export async function crearProductoAction(
   const nombre = formData.get("nombre") as string;
   const categoria_id = formData.get("categoria_id") as string;
   const descripcion = formData.get("descripcion") as string;
-  const marca = (formData.get("marca") as string | null)?.trim() || null;
+  // Misma canonicalización que la edición: el alta es el otro camino por el
+  // que puede entrar "Popys" a un catálogo que ya tiene "popys".
+  const marca = await canonicalizarMarcaContraCatalogo(
+    supabase,
+    formData.get("marca") as string | null,
+  );
   const modelo = (formData.get("modelo") as string | null)?.trim() || null;
   const sku = (formData.get("sku") as string | null)?.trim() || null;
   // Referencia opcional al Catálogo Maestro (T5). Se valida como UUID antes
