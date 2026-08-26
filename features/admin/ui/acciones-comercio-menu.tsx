@@ -7,6 +7,7 @@ import {
   Link2,
   LogIn,
   Play,
+  Presentation,
   Receipt,
   Wallet,
 } from "lucide-react";
@@ -28,7 +29,11 @@ import { RegistrarPagoModal } from "./registrar-pago-modal";
 import { HistorialPagosModal } from "./historial-pagos-modal";
 import { iniciarImpersonationAction } from "@/features/admin/actions/impersonate";
 import { CLASE_PORTAL_OSCURO } from "@/features/admin/lib/tema-portal";
-import { negocioHabilitado } from "@/shared/lib/estado-negocio";
+import {
+  ESTADO_BAJA,
+  esNegocioDemo,
+  negocioHabilitado,
+} from "@/shared/lib/estado-negocio";
 
 export interface PlanOpcion {
   id: string;
@@ -154,6 +159,29 @@ export function AccionesComercioMenu({
             Cambiar link de la tienda
           </DropdownMenuItem>
 
+          {/* El comercio de muestra sigue funcionando igual: lo que cambia es
+              que deja de contarse como cliente y de generar avisos de
+              cobranza. Volver atrás es marcarlo activo. */}
+          {esNegocioDemo(estado) ? (
+            <DropdownMenuItem
+              onClick={() =>
+                correr(() => cambiarEstadoNegocioAction(negocioId, "activo"))
+              }
+            >
+              <Play className="mr-2 size-4 text-success" />
+              Dejar de ser demo (pasa a activo)
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              onClick={() =>
+                correr(() => cambiarEstadoNegocioAction(negocioId, "demo"))
+              }
+            >
+              <Presentation className="mr-2 size-4 text-violet-400" />
+              Marcar como demo
+            </DropdownMenuItem>
+          )}
+
           {/* Un negocio en prueba también se puede suspender o dar de baja:
               está trabajando igual que uno activo. Lo que los separa es si
               pagó, no si tiene acceso. */}
@@ -172,7 +200,9 @@ export function AccionesComercioMenu({
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onClick={() =>
-                  correr(() => cambiarEstadoNegocioAction(negocioId, "baja"))
+                  correr(() =>
+                    cambiarEstadoNegocioAction(negocioId, ESTADO_BAJA),
+                  )
                 }
               >
                 <Ban className="mr-2 size-4" />

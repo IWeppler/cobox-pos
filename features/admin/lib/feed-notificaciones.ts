@@ -16,6 +16,11 @@
  * testea sin base y sin reloj.
  */
 
+import {
+  esNegocioDemo,
+  esNegocioDeBaja,
+} from "@/shared/lib/estado-negocio";
+
 export type SeveridadNotificacion = "urgente" | "atencion" | "info";
 
 export interface NotificacionComerz {
@@ -117,7 +122,12 @@ export function derivarPendientes(
   for (const n of negocios) {
     // Un comercio dado de baja no genera pendientes: ya se fue, y seguir
     // avisando que "venció" es ruido sobre algo que nadie va a cobrar.
-    if (n.estado === "baja") continue;
+    if (esNegocioDeBaja(n.estado)) continue;
+
+    // Un comercio de muestra tampoco: no se le cobra, así que "venció" o
+    // "no tiene plan" son avisos sobre una cobranza que no existe. Es el
+    // ruido que hace que el feed se deje de leer.
+    if (esNegocioDemo(n.estado)) continue;
 
     const enPrueba = n.plan_nombre === "Prueba";
     const vence = n.plan_vencimiento ? new Date(n.plan_vencimiento) : null;

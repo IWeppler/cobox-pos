@@ -2,7 +2,10 @@
 
 import { cookies } from "next/headers";
 import { createClient } from "@/shared/config/supabase/server";
-import { negocioHabilitado } from "@/shared/lib/estado-negocio";
+import {
+  esNegocioDemo,
+  negocioHabilitado,
+} from "@/shared/lib/estado-negocio";
 
 export interface NegocioAdmin {
   id: string;
@@ -32,6 +35,9 @@ export interface MetricasComerz {
   porVencer: number;
   /** Altas self-service dentro de sus 14 días de prueba. */
   enPrueba: number;
+  /** Comercios de muestra. Se informan aparte para que se vea que existen y
+   * que por eso no aparecen en ninguna de las otras cuentas. */
+  demos: number;
 }
 
 /**
@@ -99,8 +105,13 @@ export async function getPanelComerzAction(): Promise<{
   // todavía no había entrado.
   const activos = negocios.filter((n) => n.estado === "activo");
   const enPrueba = negocios.filter((n) => n.estado === "prueba");
+  // El comercio de muestra no es cliente ni candidato: no suma al MRR, no es
+  // alta y no es baja. Queda en su propia cuenta para que se vea por qué la
+  // lista de comercios tiene más filas que la suma de las métricas.
+  const demos = negocios.filter((n) => esNegocioDemo(n.estado));
   // Ni activo ni en prueba: dejó de trabajar. Sin este corte, un negocio en
-  // prueba pasaba a contarse como suspendido Y como baja del mes.
+  // prueba pasaba a contarse como suspendido Y como baja del mes. Los demo
+  // están habilitados, así que este filtro ya los deja afuera.
   const inactivos = negocios.filter((n) => !negocioHabilitado(n.estado));
 
   const metricas: MetricasComerz = {
@@ -109,8 +120,12 @@ export async function getPanelComerzAction(): Promise<{
     activos: activos.length,
     suspendidos: inactivos.length,
     sinPlan: activos.filter((n) => !n.plan_id).length,
+    // Los demo no son altas: los crea Comerz para mostrar el producto, no
+    // llegan solos. Contarlos haría que armar una demo se leyera como tracción.
     altasSemana: negocios.filter(
-      (n) => new Date(n.created_at).getTime() >= dias(7),
+      (n) =>
+        !esNegocioDemo(n.estado) &&
+        new Date(n.created_at).getTime() >= dias(7),
     ).length,
     // Churn: los que dejaron de estar activos en los últimos 30 días. Se apoya
     // en estado_cambiado_en, que lo mantiene un trigger.
@@ -127,6 +142,7 @@ export async function getPanelComerzAction(): Promise<{
     // ser cierto en cuanto alguien tocaba esa fecha a mano — y estuvo mintiendo
     // meses, con la semilla de `now() + 12 months` que puso 20260803010000.
     enPrueba: enPrueba.length,
+    demos: demos.length,
   };
 
   return { negocios, metricas };

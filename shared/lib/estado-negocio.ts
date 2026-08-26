@@ -1,4 +1,9 @@
-export type EstadoNegocio = "activo" | "prueba" | "suspendido" | "cancelado";
+export type EstadoNegocio =
+  | "activo"
+  | "prueba"
+  | "demo"
+  | "suspendido"
+  | "cancelado";
 
 /**
  * Los estados que dejan al comercio TRABAJAR.
@@ -10,6 +15,14 @@ export type EstadoNegocio = "activo" | "prueba" | "suspendido" | "cancelado";
  *
  * Lo que separa a los dos NO es el acceso sino el cobro: `prueba` es "todavía
  * no pagó nunca". Cuando entra el primer pago pasa a `activo`.
+ *
+ * `demo` es el comercio de MUESTRA: el que un vendedor abre para enseñar el
+ * producto. Tiene que funcionar entero —POS, panel y catálogo público— porque
+ * la demo es justamente usarlo, así que habilita igual que los otros dos. Lo
+ * que lo separa es que NO es un cliente ni un candidato: no suma al MRR, no
+ * cuenta como alta, no vence y no genera avisos de cobranza. Sin un estado
+ * propio, un comercio de demostración quedaba en `activo` inflando las
+ * métricas o en `prueba` apareciendo como candidato a cerrar.
  *
  * El corte por FECHA es otro eje y vive en `plan_vencimiento`: una prueba
  * vencida sigue siendo `prueba`, con su vencimiento en el pasado. Mezclar los
@@ -24,6 +37,7 @@ export type EstadoNegocio = "activo" | "prueba" | "suspendido" | "cancelado";
 export const ESTADOS_HABILITADOS: readonly EstadoNegocio[] = [
   "activo",
   "prueba",
+  "demo",
 ] as const;
 
 export function negocioHabilitado(
@@ -32,11 +46,38 @@ export function negocioHabilitado(
   return ESTADOS_HABILITADOS.includes(estado as EstadoNegocio);
 }
 
+/**
+ * El comercio de muestra que usan los vendedores.
+ *
+ * Se pregunta por función y no comparando el string en cada archivo: la
+ * decisión de qué queda afuera de las métricas es una sola y tiene que poder
+ * cambiarse en un lugar.
+ */
+export function esNegocioDemo(estado: string | null | undefined): boolean {
+  return estado === "demo";
+}
+
+/**
+ * El comercio se fue.
+ *
+ * La constante existe porque durante meses el código escribió y buscó el
+ * estado `'baja'`, que NUNCA estuvo en el CHECK de la base: el nombre real es
+ * `'cancelado'`. El botón "Dar de baja" fallaba siempre y el churn buscaba un
+ * estado inexistente, así que daba 0 por construcción. Los dos bugs eran el
+ * mismo string escrito a mano en cinco archivos.
+ */
+export const ESTADO_BAJA = "cancelado" as const;
+
+/** Se fue. La palabra en pantalla sigue siendo "baja"; el dato es `cancelado`. */
+export function esNegocioDeBaja(estado: string | null | undefined): boolean {
+  return estado === ESTADO_BAJA;
+}
+
 /** Cómo se llama cada estado en pantalla. */
 export const ETIQUETA_ESTADO: Record<string, string> = {
   activo: "activo",
   prueba: "prueba",
+  demo: "demo",
   suspendido: "suspendido",
   cancelado: "cancelado",
-  baja: "baja",
 };

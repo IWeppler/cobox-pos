@@ -14,6 +14,8 @@
  * Puro y sin IO: recibe todo resuelto y se testea sin base ni reloj.
  */
 
+import { esNegocioDeBaja } from "@/shared/lib/estado-negocio";
+
 /** Debajo de esto no se publica churn ni LTV. Con menos comercios, una sola
  * baja mueve la tasa decenas de puntos. */
 export const MINIMO_PARA_CHURN = 10;
@@ -69,7 +71,7 @@ export function calcularChurnMensual(
     if (alta >= inicio) return false;
     // Ya estaba de baja antes de que arrancara el mes: no formaba parte del
     // universo que podía irse.
-    if (n.estado === "baja" && n.estado_cambiado_en) {
+    if (esNegocioDeBaja(n.estado) && n.estado_cambiado_en) {
       return new Date(n.estado_cambiado_en) >= inicio;
     }
     return true;
@@ -83,7 +85,7 @@ export function calcularChurnMensual(
   }
 
   const bajasDelMes = negocios.filter((n) => {
-    if (n.estado !== "baja" || !n.estado_cambiado_en) return false;
+    if (!esNegocioDeBaja(n.estado) || !n.estado_cambiado_en) return false;
     const cuando = new Date(n.estado_cambiado_en);
     return cuando >= inicio && cuando < fin;
   }).length;

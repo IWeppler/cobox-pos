@@ -42,7 +42,7 @@ describe("calcularChurnMensual", () => {
     const churn = calcularChurnMensual(
       [
         ...cartera(3),
-        negocio({ estado: "baja", estado_cambiado_en: "2026-08-05T00:00:00Z" }),
+        negocio({ estado: "cancelado", estado_cambiado_en: "2026-08-05T00:00:00Z" }),
       ],
       AGOSTO,
     );
@@ -57,7 +57,7 @@ describe("calcularChurnMensual", () => {
     const churn = calcularChurnMensual(
       [
         ...cartera(11),
-        negocio({ estado: "baja", estado_cambiado_en: "2026-08-05T00:00:00Z" }),
+        negocio({ estado: "cancelado", estado_cambiado_en: "2026-08-05T00:00:00Z" }),
       ],
       AGOSTO,
     );
@@ -77,7 +77,7 @@ describe("calcularChurnMensual", () => {
     const churn = calcularChurnMensual(
       [
         ...cartera(12),
-        negocio({ estado: "baja", estado_cambiado_en: "2026-06-05T00:00:00Z" }),
+        negocio({ estado: "cancelado", estado_cambiado_en: "2026-06-05T00:00:00Z" }),
       ],
       AGOSTO,
     );

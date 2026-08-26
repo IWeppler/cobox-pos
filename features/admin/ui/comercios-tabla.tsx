@@ -19,9 +19,19 @@ const ESTADO_COLOR: Record<string, string> = {
   // Azul y no verde: en prueba todavía no pagó, y un verde lo haría pasar
   // por cliente cuando es un candidato.
   prueba: "bg-sky-500/15 text-sky-400 border-sky-500/25",
+  // Violeta: ni verde (no paga) ni azul (no es candidato). Un color propio es
+  // lo que evita confundir el comercio de muestra con uno real de un vistazo.
+  demo: "bg-violet-500/15 text-violet-300 border-violet-500/25",
   suspendido: "bg-amber-500/15 text-amber-400 border-amber-500/25",
-  baja: "bg-white/5 text-white/40 border-white/10",
+  // 'cancelado' es el nombre real del estado de baja en la base. La clave acá
+  // decía 'baja', que no existe, así que el único estado apagado caía al
+  // fallback — funcionaba de casualidad, con el color correcto por accidente.
+  cancelado: "bg-white/5 text-white/40 border-white/10",
 };
+
+/** Para un estado que todavía no tenga color propio. Apagado a propósito: un
+ * estado desconocido no se pinta como si fuera bueno. */
+const ESTADO_COLOR_DEFECTO = "bg-white/5 text-white/40 border-white/10";
 
 /** Barra de consumo de un límite. El track es un paso más claro del mismo
  * color que el fill, no un gris: así el estado se lee a lo largo de toda la
@@ -256,7 +266,7 @@ export function ComerciosTabla({
                   <span className="font-medium text-white/90">{c.nombre}</span>
                   <span
                     className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
-                      ESTADO_COLOR[c.estado] ?? ESTADO_COLOR.baja
+                      ESTADO_COLOR[c.estado] ?? ESTADO_COLOR_DEFECTO
                     }`}
                   >
                     {c.estado}
@@ -372,7 +382,7 @@ export function ComerciosTabla({
                       </span>
                       <span
                         className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
-                          ESTADO_COLOR[c.estado] ?? ESTADO_COLOR.baja
+                          ESTADO_COLOR[c.estado] ?? ESTADO_COLOR_DEFECTO
                         }`}
                       >
                         {c.estado}

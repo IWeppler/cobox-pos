@@ -70,7 +70,23 @@ describe("derivarPendientes", () => {
   it("un comercio dado de baja no genera pendientes", () => {
     // Ya se fue: seguir avisando que venció es ruido sobre algo incobrable.
     const pendientes = derivarPendientes(
-      [negocio({ estado: "baja", plan_vencimiento: "2026-01-01" })],
+      [negocio({ estado: "cancelado", plan_vencimiento: "2026-01-01" })],
+      AHORA,
+    );
+    expect(pendientes).toHaveLength(0);
+  });
+
+  it("un comercio demo tampoco: no se le cobra", () => {
+    // Vencido y sin plan a la vez, o sea los dos avisos posibles. Ninguno
+    // corresponde: el comercio de muestra no tiene cobranza que reclamar.
+    const pendientes = derivarPendientes(
+      [
+        negocio({
+          estado: "demo",
+          plan_id: null,
+          plan_vencimiento: "2026-01-01",
+        }),
+      ],
       AHORA,
     );
     expect(pendientes).toHaveLength(0);

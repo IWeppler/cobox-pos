@@ -171,6 +171,15 @@ export default async function AdminComerzPage() {
               valor={String(metricas.enPrueba)}
               detalle="dentro de sus 14 días"
             />
+            {/* Se muestra solo cuando hay alguno: una tarjeta en cero al lado
+                de las que miden el negocio ocupa lugar sin decir nada. */}
+            {metricas.demos > 0 && (
+              <Dato
+                titulo="Demo"
+                valor={String(metricas.demos)}
+                detalle="fuera de las métricas"
+              />
+            )}
           </div>
         </div>
 

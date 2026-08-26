@@ -1,9 +1,12 @@
-import { negocioHabilitado } from "@/shared/lib/estado-negocio";
 import "server-only";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { slugDesdeHost, HEADER_NEGOCIO_SLUG } from "@/shared/lib/negocio-slug";
+import {
+  ESTADOS_HABILITADOS,
+  negocioHabilitado,
+} from "@/shared/lib/estado-negocio";
 
 export interface Tenant {
   negocio_id: string;
@@ -32,7 +35,13 @@ const buscarPorSlug = cache(async (slug: string) => {
     .from("negocios")
     .select("id, nombre, slug, logo_url")
     .eq("slug", slug)
-    .eq("estado", "activo")
+    // Los estados HABILITADOS, no solo 'activo': la RLS de anon
+    // (`negocios_select_anon_activo`) siempre dejó entrar también a los de
+    // prueba y ahora a los demo, así que este filtro más estrecho hacía que
+    // el catálogo de un comercio en prueba diera 404 aunque la base lo
+    // devolviera — que es justo lo contrario de lo que dice el comentario de
+    // `ESTADOS_HABILITADOS`. Sin esto, la tienda de la demo no abre.
+    .in("estado", [...ESTADOS_HABILITADOS])
     .maybeSingle();
 
   if (error) {

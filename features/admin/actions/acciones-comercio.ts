@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { calcularPeriodoPago } from "@/features/admin/lib/periodo-pago";
 import { createClient } from "@/shared/config/supabase/server";
 import { slugify } from "@/shared/utils/slugify";
+import { ESTADO_BAJA } from "@/shared/lib/estado-negocio";
 
 /**
  * Las acciones que Comerz ejecuta sobre un comercio: cobrar, cambiar el plan,
@@ -172,13 +173,23 @@ export async function cambiarPlanAction(
  * Estado del comercio.
  *
  * 'suspendido' es la falta de pago: el comercio deja de entrar pero NO se
- * borra nada, así que al pagar vuelve exactamente a donde estaba. 'baja' es
- * que se fue. Los datos se conservan en los dos casos — perderlos por una
+ * borra nada, así que al pagar vuelve exactamente a donde estaba. 'cancelado'
+ * es que se fue. Los datos se conservan en los dos casos — perderlos por una
  * cuota impaga sería un daño irreversible por un problema temporal.
+ *
+ * El estado de baja se llama 'cancelado' y NO 'baja'. Esta action recibía
+ * 'baja' desde el menú, que no está en el CHECK de `negocios.estado`: el
+ * update fallaba SIEMPRE, y como el error se mostraba como un toast genérico
+ * ("No se pudo") parecía un problema de permisos. Por eso el valor sale de
+ * `ESTADO_BAJA` y no de un string escrito a mano.
+ *
+ * 'demo' es el comercio de muestra que abre un vendedor para enseñar el
+ * producto: sigue funcionando entero, pero queda afuera de las métricas y de
+ * los avisos de cobranza (ver `shared/lib/estado-negocio.ts`).
  */
 export async function cambiarEstadoNegocioAction(
   negocioId: string,
-  estado: "activo" | "suspendido" | "baja",
+  estado: "activo" | "suspendido" | "demo" | typeof ESTADO_BAJA,
 ): Promise<ResultadoAccion> {
   const { supabase, autorizado } = await comoSuperAdmin();
   if (!autorizado) return { error: "No autorizado.", success: false };

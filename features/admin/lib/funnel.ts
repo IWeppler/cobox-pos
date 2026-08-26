@@ -7,6 +7,8 @@
  * crudas; el significado se decide en este archivo.
  */
 
+import { esNegocioDemo } from "@/shared/lib/estado-negocio";
+
 export interface FilaFunnel {
   id: string;
   nombre: string;
@@ -140,6 +142,10 @@ export function enRiesgo(
         // Cancelado no: la baja ya pasó, no hay nada que salvar. El que
         // está en prueba SÍ es riesgo, y del más urgente.
         c.estado !== "cancelado" &&
+        // Demo tampoco: un comercio de muestra que no vende hace 30 días no
+        // es un cliente que se está yendo, es una demo entre visita y visita.
+        // Y por construcción encabezaría la lista, tapando a los reales.
+        !esNegocioDemo(c.estado) &&
         (!c.activado || (c.diasSinVender ?? 0) >= umbralDias),
     )
     .sort((a, b) => {
