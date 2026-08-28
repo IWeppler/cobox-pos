@@ -98,9 +98,10 @@ export function TicketSheet({
     const success = await downloadSaleReceiptPdf(ticket, config);
     setIsDownloading(false);
 
-    if (success) {
-      toast.success("Comprobante descargado con éxito");
-    } else {
+    // El éxito no se avisa: el navegador ya muestra la descarga y el archivo
+    // aparece solo. El error SÍ, que es el único caso en que no pasa nada
+    // visible y hay que decir por qué.
+    if (!success) {
       toast.error("Ocurrió un error al generar el PDF");
     }
   };

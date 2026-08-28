@@ -733,8 +733,10 @@ export function CartPanelAdmin({
           return;
         }
 
-        toast.success("Venta registrada con éxito!");
-
+        // Sin toast de éxito: lo que sigue es abrir el ticket con el número de
+        // comprobante, que es la confirmación de verdad y no se puede perder de
+        // vista. Un cartel encima diciendo lo mismo tapa parte de esa pantalla
+        // y hay que esperar a que se vaya para seguir cobrando.
         const nombreMetodoMostrar =
           pagosToSubmit.length > 1
             ? `Pago mixto (${pagosToSubmit

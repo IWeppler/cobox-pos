@@ -2,6 +2,7 @@
 
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
+import { calcularFechaVencimiento } from "@/features/clients/lib/calcular-fecha-vencimiento";
 import { revalidatePath } from "next/cache";
 import { calcularRecargoMonto } from "@/shared/lib/recargo-metodo";
 import { parseClientesCSV } from "@/features/clients/lib/parse-clientes-csv";
@@ -9,10 +10,8 @@ import {
   calcularSaldoConRecargo,
   RecargoMoraConfig,
 } from "@/features/clients/lib/calcular-saldo-con-recargo";
-import { calcularFechaVencimiento } from "@/features/clients/lib/calcular-fecha-vencimiento";
 import { validarPerdonDeuda } from "@/features/clients/lib/validar-perdon-deuda";
 import { urlDeResumen } from "@/shared/lib/dominios";
-import { resolverVencimientoConPisoDeMora } from "@/features/clients/lib/vencimiento-con-piso-de-mora";
 import { esCuitValido, normalizarCuit } from "@/shared/lib/cuit";
 
 interface ClientActionState {
@@ -399,30 +398,22 @@ export async function registrarPagoDeudaAction(
   const saldoActual = Number(clienteActual?.saldo_pendiente || 0);
   const saldoFinal = Math.max(0, saldoActual + montoRecargo - monto);
 
-  // Vencimiento después de cobrar la mora:
+  // Vencimiento: lo resuelve la regla única, que ya vio el CREDITO del pago y
+  // el DEBITO de la mora recién escritos.
   //
-  // - Si quedó saldo y se cobró mora, el reloj arranca de nuevo (hoy + plazo).
-  //   Es lo que evita el interés sobre interés: como la mora ya entró al
-  //   capital, dejar la fecha vencida haría que el próximo cobro calcule el
-  //   porcentaje sobre un saldo que ya trae mora adentro. La penalidad se
-  //   cobra una vez por ciclo de atraso, no una vez por cobro.
-  // - Si no quedó saldo, no hay deuda que pueda vencer: la fecha se limpia.
-  // - Si no hubo mora, no se toca nada (un pago parcial de alguien al día no
-  //   tiene por qué mover su vencimiento).
-  const plazoMora = configPos?.cc_plazo_mora ?? 30;
+  // - Un pago que cancela la deuda más vieja corre el vencimiento a la que
+  //   sigue, que es lo correcto y lo que antes no pasaba (acá se movía la fecha
+  //   solo si se había cobrado mora).
+  // - Con mora cobrada, el piso interno de la función deja "hoy + plazo": es lo
+  //   que evita el interés sobre interés, porque el recargo ya entró al capital.
+  // - Sin deuda viva devuelve null y la fecha se limpia sola.
   const actualizacionCliente: {
     saldo_pendiente: number;
-    fecha_vencimiento_deuda?: string | null;
-  } = { saldo_pendiente: saldoFinal };
-
-  if (saldoFinal === 0) {
-    actualizacionCliente.fecha_vencimiento_deuda = null;
-  } else if (montoRecargo > 0) {
-    actualizacionCliente.fecha_vencimiento_deuda = calcularFechaVencimiento(
-      new Date().toISOString().slice(0, 10),
-      plazoMora,
-    );
-  }
+    fecha_vencimiento_deuda: string | null;
+  } = {
+    saldo_pendiente: saldoFinal,
+    fecha_vencimiento_deuda: await recalcularVencimientoCC(supabase, clienteId),
+  };
 
   // El error del update SÍ se mira: el trigger de límite de cuenta corriente
   // puede rechazarlo (23514) y hasta acá se ignoraba, así que el pago quedaba
@@ -683,31 +674,21 @@ export async function ajustarSaldoAction(
     return { error: "Error al registrar los movimientos.", success: false };
 
   // 2. Saldo y vencimiento del cliente
-  const [{ data: cliente }, { data: configPos }] = await Promise.all([
-    supabase
-      .from("clientes")
-      .select("saldo_pendiente, fecha_vencimiento_deuda")
-      .eq("id", clienteId)
-      .single(),
-    supabase.from("configuracion_pos").select("cc_plazo_mora").single(),
-  ]);
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("saldo_pendiente")
+    .eq("id", clienteId)
+    .single();
 
   const saldoActual = Number(cliente?.saldo_pendiente || 0);
-  const plazoMora = configPos?.cc_plazo_mora ?? 30;
 
-  // Vencimiento: desde la entrada más antigua + plazo de mora, pero sin
-  // pisar un vencimiento existente que ya sea más próximo (más urgente) —
-  // el cliente puede ya tener una deuda vigente por otra vía.
-  const fechaMasAntigua = entradasValidas.reduce(
-    (min, e) => (e.fecha < min ? e.fecha : min),
-    entradasValidas[0].fecha,
+  // Vencimiento por la regla única: los movimientos ya están escritos, así que
+  // la función los ve. Antes se comparaba a mano contra el valor existente y
+  // eso ignoraba tanto los pagos como las ventas fiadas del cliente.
+  const fechaVencimientoFinal = await recalcularVencimientoCC(
+    supabase,
+    clienteId,
   );
-  const nuevoVencimiento = calcularFechaVencimiento(fechaMasAntigua, plazoMora);
-  const vencimientoActual = cliente?.fecha_vencimiento_deuda ?? null;
-  const fechaVencimientoFinal =
-    vencimientoActual && vencimientoActual < nuevoVencimiento
-      ? vencimientoActual
-      : nuevoVencimiento;
 
   const { error: errorSaldo } = await supabase
     .from("clientes")
@@ -761,6 +742,17 @@ export async function importarClientesCSVAction(formData: FormData) {
     let importados = 0;
     // Los que entraron pero sin su deuda inicial, por el tope del plan.
     let importadosSinDeuda = 0;
+
+    // La planilla trae la fecha de VENCIMIENTO y el libro guarda la fecha en
+    // que la deuda NACIÓ, así que hay que restarle el plazo. Sin esto el
+    // movimiento quedaba con fecha_origen null y para el libro la deuda nacía
+    // el día del import: una clienta atrasada desde marzo aparecía venciendo
+    // recién 35 días después de la importación (ver 20260828140000).
+    const { data: configPlazo } = await supabase
+      .from("configuracion_pos")
+      .select("cc_plazo_mora")
+      .single();
+    const plazoMoraImport = configPlazo?.cc_plazo_mora ?? 30;
 
     for (const candidato of parsed.clientes) {
       const { nombre, telefono, dni, deudaInicial, fechaVencimientoDeuda } =
@@ -818,6 +810,9 @@ export async function importarClientesCSVAction(formData: FormData) {
             cliente_id: nuevoCliente.id,
             tipo: "DEBITO",
             monto: deudaInicial,
+            fecha_origen: fechaVencimientoDeuda
+              ? calcularFechaVencimiento(fechaVencimientoDeuda, -plazoMoraImport)
+              : null,
             descripcion: "Saldo inicial importado (CSV)",
             creado_por: user?.id,
           });
@@ -876,68 +871,32 @@ async function esUsuarioAdmin(
 }
 
 /**
- * Recalcula clientes.fecha_vencimiento_deuda DESDE CERO, tomando la fecha
- * más antigua entre todos los movimientos manuales no anulados de ese
- * cliente + cc_plazo_mora (null si no queda ninguno). A diferencia de
- * ajustarSaldoAction (que solo compara contra el valor existente y nunca
- * lo hace menos urgente), acá el recálculo reemplaza el valor sin
- * comparar — una corrección tiene que poder mover el vencimiento en
- * cualquier dirección, es la parte que arregla una fecha mal cargada.
+ * El vencimiento de la deuda del cliente, calculado por la ÚNICA regla que hay:
+ * la función `recalcular_vencimiento_cc` de la base.
  *
- * Con UNA excepción: no puede quedar más urgente que la última mora cobrada
- * (ver resolverVencimientoConPisoDeMora). Sin ese piso, editar un ajuste
- * manual viejo después de haberle cobrado la mora al cliente lo devolvía a
- * vencido sobre un saldo que ya tiene el recargo adentro — o sea recargo
- * sobre recargo, que es justo lo que el corrimiento de fecha evita.
+ * Antes se calculaba acá, mirando SOLO los movimientos manuales: ignoraba los
+ * pagos y las ventas fiadas, así que anular un ajuste manual devolvía el
+ * vencimiento a un débito que ya estaba pagado — y la venta lo resolvía con
+ * otro criterio. Tres implementaciones de la misma pregunta divergen siempre;
+ * el porqué está en la migración 20260828130000.
+ *
+ * La imputación FIFO de los pagos y el piso por mora ya cobrada viven adentro
+ * de la función, no acá.
  */
-async function recalcularVencimientoDesdeMovimientosManuales(
+async function recalcularVencimientoCC(
   supabase: ReturnType<typeof createClient>,
   clienteId: string,
 ): Promise<string | null> {
-  const [{ data: movimientos }, { data: configPos }, { data: ultimaMora }] =
-    await Promise.all([
-      supabase
-        .from("cuenta_corriente_movimientos")
-        .select("fecha_origen, creado_en")
-        .eq("cliente_id", clienteId)
-        .is("venta_id", null)
-        .is("pago_id", null)
-        .eq("anulado", false),
-      supabase.from("configuracion_pos").select("cc_plazo_mora").single(),
-      // Un DEBITO con pago_id es, hoy, exactamente una mora cobrada: el cobro
-      // genera un CREDITO por el pago y este DEBITO por el recargo, y ningún
-      // otro camino escribe un DEBITO atado a un pago.
-      supabase
-        .from("cuenta_corriente_movimientos")
-        .select("creado_en")
-        .eq("cliente_id", clienteId)
-        .eq("tipo", "DEBITO")
-        .not("pago_id", "is", null)
-        .eq("anulado", false)
-        .order("creado_en", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  const { data, error } = await supabase.rpc("recalcular_vencimiento_cc", {
+    p_cliente_id: clienteId,
+  });
 
-  const plazoMora = configPos?.cc_plazo_mora ?? 30;
-
-  const pisoPorMora = ultimaMora
-    ? calcularFechaVencimiento(
-        String(ultimaMora.creado_en).slice(0, 10),
-        plazoMora,
-      )
-    : null;
-
-  let candidato: string | null = null;
-  if (movimientos && movimientos.length > 0) {
-    const fechaMasAntigua = movimientos.reduce((min: string, mov) => {
-      const fecha = mov.fecha_origen || String(mov.creado_en).slice(0, 10);
-      return !min || fecha < min ? fecha : min;
-    }, "");
-    candidato = calcularFechaVencimiento(fechaMasAntigua, plazoMora);
+  if (error) {
+    console.error("[VENCIMIENTO CC] No se pudo recalcular:", error);
+    throw new Error("RECALCULO_VENCIMIENTO_FALLIDO");
   }
 
-  return resolverVencimientoConPisoDeMora(candidato, pisoPorMora);
+  return (data as string | null) ?? null;
 }
 
 export async function editarMovimientoManualAction(
@@ -1021,7 +980,7 @@ export async function editarMovimientoManualAction(
   const saldoActual = Number(cliente?.saldo_pendiente || 0);
 
   const nuevaFechaVencimiento =
-    await recalcularVencimientoDesdeMovimientosManuales(
+    await recalcularVencimientoCC(
       supabase,
       movimiento.cliente_id,
     );
@@ -1100,7 +1059,7 @@ export async function anularMovimientoManualAction(movimientoId: string) {
   const saldoActual = Number(cliente?.saldo_pendiente || 0);
 
   const nuevaFechaVencimiento =
-    await recalcularVencimientoDesdeMovimientosManuales(
+    await recalcularVencimientoCC(
       supabase,
       movimiento.cliente_id,
     );
@@ -1202,10 +1161,13 @@ export async function perdonarDeudaAction(
     fecha_vencimiento_deuda?: string | null;
   } = { saldo_pendiente: saldoFinal };
 
-  // Sin deuda no hay vencimiento que mostrar, mismo cierre que hace el cobro.
-  if (saldoFinal === 0) {
-    actualizacion.fecha_vencimiento_deuda = null;
-  }
+  // Perdonar baja el saldo, así que puede dejar sin deuda viva a la más
+  // antigua: la regla única devuelve el vencimiento que corresponde, o null si
+  // no quedó nada que pueda vencer.
+  actualizacion.fecha_vencimiento_deuda = await recalcularVencimientoCC(
+    supabase,
+    clienteId,
+  );
 
   const { error: errorSaldo } = await supabase
     .from("clientes")
