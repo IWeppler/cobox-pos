@@ -54,6 +54,8 @@ import { getDeudaVencidaAction } from "@/features/clients/actions/get-deuda-venc
 import { getRemitosPendientesAction } from "@/features/purchases/actions/get-remitos-pendientes";
 import { getSenalesInsightsAction } from "@/features/reports/actions/get-senales-insights";
 import { listarReservasActivasAction } from "@/features/reservations/actions/manage-reservations";
+import { normalizarRubro } from "@/entities/config/types";
+import { rubroUsaReservas } from "@/features/pos/lib/reservas-por-rubro";
 import {
   getSupabaseRelation,
   SupabaseRelation,
@@ -152,10 +154,13 @@ export default async function DashboardPage({
     pagosCuentaCorrienteResponse,
     estadoActivacion,
     senales,
+    configResponse,
   ] = await Promise.all([
     getVentasAction(),
     getStockAction(),
-    supabase.from("egresos").select("id, concepto, monto, fecha, tipo, orden_compra_id"),
+    supabase
+      .from("egresos")
+      .select("id, concepto, monto, fecha, tipo, orden_compra_id"),
     supabase
       .from("bajas")
       .select("id, producto_id, cantidad, creado_en, estado"),
@@ -173,6 +178,10 @@ export default async function DashboardPage({
       formatearFechaISO(rangoInsights.inicio),
       formatearFechaISO(rangoInsights.fin),
     ),
+    // El rubro, para saber si este comercio reserva. Entra en esta misma tanda
+    // y no en una consulta aparte: es una fila chica y en serie costaría un
+    // viaje entero a Ohio.
+    supabase.from("configuracion_pos").select("rubro").single(),
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
@@ -357,7 +366,10 @@ export default async function DashboardPage({
   );
   const categoriaEnRiesgo = categoriasEnRiesgo[0];
   const categoriaEnRiesgoLabel = categoriaEnRiesgo
-    ? resolverCategoriaDisplayLabel(categoriasFlat, categoriaEnRiesgo.categoriaId)
+    ? resolverCategoriaDisplayLabel(
+        categoriasFlat,
+        categoriaEnRiesgo.categoriaId,
+      )
     : "";
 
   const finDeTemporada = detectarFinDeTemporada(
@@ -368,40 +380,48 @@ export default async function DashboardPage({
     VENTANA_ROTACION_DIAS,
     hoy,
   );
-  const proximaTemporada = detectarProximaTemporada(productos, categoriasFlat, hoy);
+  const proximaTemporada = detectarProximaTemporada(
+    productos,
+    categoriasFlat,
+    hoy,
+  );
 
   // Advisor: mismo motor de siempre (getAdvisorInsights, sin tocar su
   // lógica de orden), extendido con las reglas nuevas — se activan solo si el
   // fetch correspondiente trajo datos. El CORTE ahora sí es de la superficie:
   // esta card pide 5 y el banner de /reportes se queda con 3.
-  const insights = getAdvisorInsights({
-    ...metricasInsights,
-    deudaVencida: deudaVencida ?? undefined,
-    remitosPendientes:
-      remitosPendientes && remitosPendientes.cantidad > 0
-        ? remitosPendientes
-        : undefined,
-    categoriaEnRiesgo:
-      categoriaEnRiesgo && categoriaEnRiesgoLabel
-        ? {
-            categoria: categoriaEnRiesgoLabel,
-            unidadesVendidas: categoriaEnRiesgo.unidadesVendidas,
-            diasCobertura: categoriaEnRiesgo.diasCobertura,
-          }
-        : undefined,
-    finDeTemporada: finDeTemporada ?? undefined,
-    proximaTemporada: proximaTemporada ?? undefined,
-    // Días abiertos de la ventana de Insights (no la del selector): las
-    // reglas de RITMO (cobertura de stock, día pico) lo necesitan para pasar
-    // de un total a "por día".
-    diasDelPeriodo: contarDiasConVentas(ventasOperativas, rangoInsights),
-    metodoQuePierde: senales.metodoQuePierde ?? undefined,
-    descuentosResignados: senales.descuentosResignados ?? undefined,
-    renglonesSinCosto: senales.renglonesSinCosto ?? undefined,
-    renglonAdicional: senales.renglonAdicional ?? undefined,
-    momentoDelDia: senales.momentoDelDia ?? undefined,
-    cuentaCorrienteDescuadrada: senales.cuentaCorrienteDescuadrada ?? undefined,
-  }, INSIGHTS_EN_PANEL);
+  const insights = getAdvisorInsights(
+    {
+      ...metricasInsights,
+      deudaVencida: deudaVencida ?? undefined,
+      remitosPendientes:
+        remitosPendientes && remitosPendientes.cantidad > 0
+          ? remitosPendientes
+          : undefined,
+      categoriaEnRiesgo:
+        categoriaEnRiesgo && categoriaEnRiesgoLabel
+          ? {
+              categoria: categoriaEnRiesgoLabel,
+              unidadesVendidas: categoriaEnRiesgo.unidadesVendidas,
+              diasCobertura: categoriaEnRiesgo.diasCobertura,
+            }
+          : undefined,
+      finDeTemporada: finDeTemporada ?? undefined,
+      proximaTemporada: proximaTemporada ?? undefined,
+      // Días abiertos de la ventana de Insights (no la del selector): las
+      // reglas de RITMO (cobertura de stock, día pico) lo necesitan para pasar
+      // de un total a "por día".
+      diasDelPeriodo: contarDiasConVentas(ventasOperativas, rangoInsights),
+      metodoQuePierde: senales.metodoQuePierde ?? undefined,
+      descuentosResignados: senales.descuentosResignados ?? undefined,
+      renglonesSinCosto: senales.renglonesSinCosto ?? undefined,
+      renglonAdicional: senales.renglonAdicional ?? undefined,
+      momentoDelDia: senales.momentoDelDia ?? undefined,
+      cuentaCorrienteDescuadrada:
+        senales.cuentaCorrienteDescuadrada ?? undefined,
+    },
+    INSIGHTS_EN_PANEL,
+  );
 
   const ventasDeHoy = ventasOperativas.filter((v) => {
     const f = new Date(v.fecha_venta);
@@ -440,66 +460,63 @@ export default async function DashboardPage({
     // app, y al ser un color fijo ignoraba el tema: en modo oscuro quedaba la
     // misma franja gris clara. Ahora sale de tokens en globals.css.
     <div className="flex flex-col gap-3 px-2 py-2">
-        {/* HEADER — título + selector de período, nada más. Las acciones se
+      {/* HEADER — título + selector de período, nada más. Las acciones se
             fueron a donde vive cada una: vender y crear producto ya están en
             el menú y en la toolbar de /stock, y el gasto pasó al modal de
             caja del navbar (es plata que sale del cajón). */}
-        <div className="flex items-center justify-between gap-3 pb-3 border-b border-border">
-          <div className="min-w-0">
-            <h1 className="text-sm font-medium text-foreground">
-              Operación de hoy
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5 truncate">
-              {new Intl.DateTimeFormat("es-AR", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              }).format(hoy)}
-            </p>
-          </div>
-          <PeriodoSelector
-            periodo={periodo}
-            opciones={OPCIONES_PANEL}
-            ariaLabel="Período del panel"
-          />
+      <div className="flex items-center justify-between gap-3 pb-3 border-b border-border">
+        <div className="min-w-0">
+          <h1 className="text-sm font-medium text-foreground">
+            Operación de hoy
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">
+            {new Intl.DateTimeFormat("es-AR", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            }).format(hoy)}
+          </p>
         </div>
+        <PeriodoSelector
+          periodo={periodo}
+          opciones={OPCIONES_PANEL}
+          ariaLabel="Período del panel"
+        />
+      </div>
 
-        {/* GUÍA DE INICIO — arriba de todo mientras falte algo para vender, y
+      {/* GUÍA DE INICIO — arriba de todo mientras falte algo para vender, y
             se va sola cuando está completa (el estado es derivado, no un flag).
             Solo ADMIN: la RPC devuelve null para el resto. */}
-        {estadoActivacion && <ChecklistActivacion estado={estadoActivacion} />}
+      {estadoActivacion && <ChecklistActivacion estado={estadoActivacion} />}
 
-        {/* ACCIONES — solo mobile: en desktop el POS está siempre a la vista en
+      {/* ACCIONES — solo mobile: en desktop el POS está siempre a la vista en
             el sidebar, acá el menú está detrás de la hamburguesa y vender
             quedaba a dos toques. El gasto va al lado porque a este panel solo
             entra quien tiene permiso, y ese permiso implica poder anotarlo
             (sigue estando también en el modal de caja del navbar). */}
-        <div className="grid grid-cols-2 gap-2 sm:hidden">
-          <Button asChild className="h-11 w-full">
-            <Link href="/pos">
-              <Plus className="mr-2 h-4 w-4" />
-              Vender
-            </Link>
-          </Button>
-          <EgresoModal
-            triggerVariant="outline"
-            triggerClassName="h-11 w-full"
-          />
-        </div>
+      <div className="grid grid-cols-2 gap-2 sm:hidden">
+        <Button asChild className="h-11 w-full">
+          <Link href="/pos">
+            <Plus className="mr-2 h-4 w-4" />
+            Vender
+          </Link>
+        </Button>
+        <EgresoModal triggerVariant="outline" triggerClassName="h-11 w-full" />
+      </div>
 
-        {/* BENTO — dos columnas que se estiran a la misma altura:
+      {/* BENTO — dos columnas que se estiran a la misma altura:
             izquierda 40% (KPIs + Insights), derecha 60% (tendencia arriba,
             operación abajo). En mobile cae todo a una sola columna en este
             mismo orden. */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch">
-          {/* COLUMNA IZQUIERDA — el "qué pasó" en números y el "qué hacer" */}
-          {/* 40% KPIs / 60% Insights, en filas fr y no en flex-1: el reparto
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch">
+        {/* COLUMNA IZQUIERDA — el "qué pasó" en números y el "qué hacer" */}
+        {/* 40% KPIs / 60% Insights, en filas fr y no en flex-1: el reparto
               tiene que ser una PROPORCIÓN, no el resto de lo que ocupe el
               contenido del otro. Atado al contenido, agregar un insight o
               acortar una KPI mueve el equilibrio solo. En mobile las filas
               vuelven a ser auto y cada card mide lo suyo. */}
-          <div className="lg:col-span-2 grid grid-rows-[auto_auto] lg:grid-rows-[2fr_3fr] gap-3">
+        <div className="lg:col-span-2 grid grid-rows-[auto_auto] lg:grid-rows-[2fr_3fr] gap-3">
           <div className="grid grid-cols-2 gap-2 min-h-0">
             <KpiMiniCard
               label="Ingresos"
@@ -552,53 +569,56 @@ export default async function DashboardPage({
             />
           </div>
 
-            {/* min-h-0 para que la fila `3fr` pueda achicarse por debajo de su
+          {/* min-h-0 para que la fila `3fr` pueda achicarse por debajo de su
                 contenido: sin eso el mínimo automático del grid la infla y la
                 proporción no se respeta. La lista scrollea adentro. */}
-            <div className="min-h-0">
-              <AdvisorMiniList insights={insights} />
-            </div>
+          <div className="min-h-0">
+            <AdvisorMiniList insights={insights} />
           </div>
+        </div>
 
-          {/* COLUMNA DERECHA — tendencia arriba, operación del día abajo */}
-          <div className="lg:col-span-3 flex flex-col gap-3">
-            {/* El chart absorbe el sobrante de la columna y el gráfico crece
+        {/* COLUMNA DERECHA — tendencia arriba, operación del día abajo */}
+        <div className="lg:col-span-3 flex flex-col gap-3">
+          {/* El chart absorbe el sobrante de la columna y el gráfico crece
                 con él (el área de dibujo es flex-1 adentro de la card). Sin
                 este wrapper la card llevaba `h-full` = 100% de la columna
                 ENTERA, así que pedía el alto del chart + el de la fila de
                 abajo: el navegador encogía a las dos y el chart quedaba con
                 un bloque en blanco debajo de las fechas. */}
-            <div className="flex-1 min-h-0">
-              <IngresosAreaChart
-                serie={serieChart}
-                etiquetaPeriodo={etiquetaChart}
+          <div className="flex-1 min-h-0">
+            <IngresosAreaChart
+              serie={serieChart}
+              etiquetaPeriodo={etiquetaChart}
+            />
+          </div>
+
+          {/* 40 / 60: lo que hay que mirar (stock, reservas) es una lista
+                corta de nombres; lo que rinde son dos rankings en paralelo y
+                necesita el doble de ancho. */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 shrink-0 lg:h-[300px]">
+            <div className="lg:col-span-2 min-w-0 min-h-[280px] lg:min-h-0">
+              <AtencionRequeridaCard
+                quiebres={quiebres}
+                stockCritico={metricasActuales.stockCriticoDetallado}
+                cantidadBajasPendientes={cantidadBajasPendientes}
+                reservasActivas={reservasActivas}
+                mostrarReservas={rubroUsaReservas(
+                  normalizarRubro(configResponse.data?.rubro),
+                )}
               />
             </div>
 
-            {/* 40 / 60: lo que hay que mirar (stock, reservas) es una lista
-                corta de nombres; lo que rinde son dos rankings en paralelo y
-                necesita el doble de ancho. */}
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 shrink-0 lg:h-[300px]">
-              <div className="lg:col-span-2 min-w-0 min-h-[280px] lg:min-h-0">
-                <AtencionRequeridaCard
-                  quiebres={quiebres}
-                  stockCritico={metricasActuales.stockCriticoDetallado}
-                  cantidadBajasPendientes={cantidadBajasPendientes}
-                  reservasActivas={reservasActivas}
-                />
-              </div>
-
-              <div className="lg:col-span-3 min-w-0 min-h-[280px] lg:min-h-0">
-                <RendimientoCard
-                  topProductos={metricasRanking.topProductos}
-                  topProductosRentables={metricasRanking.topProductosRentables}
-                  etiquetaRanking={ETIQUETA_RANKING[periodo]}
-                  ultimasVentas={ultimasVentas}
-                />
-              </div>
+            <div className="lg:col-span-3 min-w-0 min-h-[280px] lg:min-h-0">
+              <RendimientoCard
+                topProductos={metricasRanking.topProductos}
+                topProductosRentables={metricasRanking.topProductosRentables}
+                etiquetaRanking={ETIQUETA_RANKING[periodo]}
+                ultimasVentas={ultimasVentas}
+              />
             </div>
           </div>
         </div>
       </div>
+    </div>
   );
 }

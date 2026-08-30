@@ -70,6 +70,8 @@ interface ClientDetailSheetProps {
   metodosPago: MetodoPagoPOS[];
   entregaMinimaActiva?: boolean;
   recargoMoraConfig: RecargoMoraConfig;
+  /** Porción vencida por FIFO, base del recargo. Ver `deuda_cc_vencida`. */
+  montoVencido: number;
   isAdmin?: boolean;
   onClose: () => void;
 }
@@ -79,6 +81,7 @@ export function ClientDetailSheet({
   metodosPago,
   entregaMinimaActiva = false,
   recargoMoraConfig,
+  montoVencido,
   isAdmin = false,
   onClose,
 }: Readonly<ClientDetailSheetProps>) {
@@ -139,6 +142,7 @@ export function ClientDetailSheet({
     {
       monto_pendiente: cliente.saldo_pendiente,
       fecha_vencimiento: cliente.fecha_vencimiento_deuda,
+      monto_vencido: montoVencido,
     },
     recargoMoraConfig,
   );

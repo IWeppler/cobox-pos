@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { Producto } from "@/entities/productos/types";
@@ -35,6 +35,8 @@ import {
   CargaRapidaRecargo,
 } from "@/features/carga-rapida/ui/carga-rapida-panel";
 import type { ProductoCargado } from "@/features/carga-rapida/types";
+import { useCobroCcStore } from "@/shared/store/cobro-cc-store";
+import { useAtajosTeclado } from "@/shared/hooks/use-atajos-teclado";
 
 /** Con menos resultados que esto, la grilla ofrece cargar lo que se buscó:
  * no hay que esperar a que la búsqueda quede en cero para poder crearlo. */
@@ -54,6 +56,12 @@ interface PosTerminalProps {
   /** Lo necesita la Carga rápida: en electro consulta el Catálogo Maestro,
    * en indumentaria ni lo intenta. */
   rubro: Rubro;
+  /** Permiso `clientes.cobrar_cc`: decide si la barra ofrece "Cobrar deuda".
+   * El modal vive montado en el layout; acá solo se lo abre. */
+  puedeCobrarCuentaCorriente?: boolean;
+  /** Búsqueda con la que arranca la pantalla. Hoy la manda la paleta (Ctrl+K)
+   * por `?q=` cuando se elige un producto desde otra pantalla. */
+  busquedaInicial?: string;
 }
 
 const getStockTotal = (producto: Producto) => {
@@ -82,12 +90,17 @@ export function PosTerminal({
   nombreComercio = "Tienda",
   mostrarSinStock = true,
   rubro,
+  puedeCobrarCuentaCorriente = false,
+  busquedaInicial = "",
 }: Readonly<PosTerminalProps>) {
+  const abrirCobroCc = useCobroCcStore((state) => state.abrir);
+  // El buscador de la barra: lo comparten la tecla "/" y la Carga rápida.
+  const buscadorRef = useRef<HTMLInputElement>(null);
   // El link del catálogo necesita el negocio, no solo el origen: cada
   // comercio tiene su propia tienda.
   const slugNegocio = useSlugNegocioActivo() ?? "";
   const queryClient = useQueryClient();
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(busquedaInicial);
   const [tipo, setTipo] = useState("todos");
   const [filtrosVariantes, setFiltrosVariantes] = useState<
     Record<string, string[]>
@@ -288,6 +301,40 @@ export function PosTerminal({
     setVista("cargar");
   };
 
+  /**
+   * Atajos de la mitad izquierda: catálogo y búsqueda. Los del ticket viven en
+   * CartPanelAdmin, con sus propios handlers — repartidos por dueño y no en un
+   * archivo de atajos aparte, que sería el archivo que se olvida de actualizar
+   * cuando la acción cambia.
+   *
+   * Alt+1…9 entra por `handleProductClick`, el mismo camino que tocar la card:
+   * variante única va derecho al ticket y con talles se abre el selector. Un
+   * atajo que agregue "la primera variante" elegiría el talle por su cuenta.
+   */
+  useAtajosTeclado([
+    {
+      teclas: "F8",
+      correr: () => setVista((v) => (v === "cargar" ? "vender" : "cargar")),
+    },
+    {
+      teclas: "/",
+      correr: () => buscadorRef.current?.focus(),
+    },
+    {
+      teclas: "Escape",
+      activo: hayFiltrosActivos,
+      correr: limpiarFiltros,
+    },
+    ...Array.from({ length: 9 }, (_, indice) => ({
+      teclas: `alt+${indice + 1}`,
+      activo: vista === "vender",
+      correr: () => {
+        const producto = productosOrdenados[indice];
+        if (producto) handleProductClick(producto);
+      },
+    })),
+  ]);
+
   const ofrecerCarga =
     vista === "vender" &&
     searchQuery.trim().length > 0 &&
@@ -320,15 +367,22 @@ export function PosTerminal({
             setVista((v) => (v === "cargar" ? "vender" : "cargar"))
           }
           cargaRapidaActiva={vista === "cargar"}
+          onCobrarCuentaCorriente={
+            puedeCobrarCuentaCorriente ? () => abrirCobroCc() : undefined
+          }
           searchPlaceholder={
             vista === "cargar"
               ? "Escaneá o escribí y Enter…"
               : "Buscar producto..."
           }
           onSearchEnter={vista === "cargar" ? carga.procesarEnter : undefined}
-          searchInputRef={vista === "cargar" ? carga.inputRef : undefined}
+          // En Cargar el ref es de la Carga rápida (necesita devolverle el
+          // foco al input después de cada línea); en Vender es el nuestro, que
+          // usa la tecla "/".
+          searchInputRef={vista === "cargar" ? carga.inputRef : buscadorRef}
           searchDisabled={
-            vista === "cargar" && (carga.modalAbierto || carga.buscandoEnMaestro)
+            vista === "cargar" &&
+            (carga.modalAbierto || carga.buscandoEnMaestro)
           }
           filaSecundaria={
             vista === "cargar" ? (

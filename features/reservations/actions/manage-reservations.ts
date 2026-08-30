@@ -7,6 +7,8 @@ import {
   calcularStockDisponible,
   contarReservasActivasPorVariante,
 } from "@/entities/productos/lib/stock-disponible";
+import { normalizarRubro } from "@/entities/config/types";
+import { rubroUsaReservas } from "@/features/pos/lib/reservas-por-rubro";
 
 interface ReservaActionResult {
   error: string | null;
@@ -45,6 +47,22 @@ export async function crearReservaAction(
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Reservar es de indumentaria (ver `rubroUsaReservas`). El rubro se lee de
+  // la BASE y no llega por parámetro: esto es un endpoint, y que el POS no
+  // dibuje el botón "Reservado" en un kiosco no impide que alguien llame la
+  // action igual. Es la misma regla que ya vale para los permisos.
+  const { data: config } = await supabase
+    .from("configuracion_pos")
+    .select("rubro")
+    .single();
+
+  if (!rubroUsaReservas(normalizarRubro(config?.rubro))) {
+    return {
+      error: "Las reservas están disponibles solo para indumentaria.",
+      success: false,
+    };
+  }
 
   // Sumamos por variante por si el carrito trae más de una línea para la
   // misma variante (no debería pasar — el carrito las mergea — pero no

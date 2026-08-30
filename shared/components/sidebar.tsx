@@ -93,8 +93,10 @@ interface SidebarProps {
   /** Negocios a los que pertenece el usuario. Con uno solo no hay switcher. */
   negocios?: MembresiaNegocio[];
   negocioActivoId?: string;
+  /** Permiso `clientes.cobrar_cc`. Solo viaja hasta el modal de caja, que es
+   * donde vive uno de los dos accesos al cobro. */
+  puedeCobrarCuentaCorriente?: boolean;
 }
-
 
 export function Sidebar({
   branding,
@@ -104,6 +106,7 @@ export function Sidebar({
   planName = "Sin plan",
   negocios = [],
   negocioActivoId,
+  puedeCobrarCuentaCorriente = false,
 }: Readonly<SidebarProps>) {
   const pathname = usePathname();
   const contextoPlan = useContextoPlan();
@@ -199,6 +202,7 @@ export function Sidebar({
             modoCaja={branding.modo_caja || "UNICA"}
             userId={userId}
             className="mr-1"
+            puedeCobrarCuentaCorriente={puedeCobrarCuentaCorriente}
           />
           <span className="hidden sm:block">
             <CartButton />
@@ -301,9 +305,9 @@ export function Sidebar({
                   // medio sistema porque el contexto todavía no llegó.
                   const bloqueadoPorPlan = Boolean(
                     item.feature &&
-                      contextoPlan &&
-                      !contextoPlan.sinPlan &&
-                      !contextoPlan.features.includes(item.feature),
+                    contextoPlan &&
+                    !contextoPlan.sinPlan &&
+                    !contextoPlan.features.includes(item.feature),
                   );
 
                   return (
@@ -366,8 +370,7 @@ export function Sidebar({
 
           {/* WIDGET INSTALAR APP (Nuevo diseño premium) */}
           <div className="pb-4 mt-auto">
-            <InstallAppWidget
-             isCollapsed={isCollapsed} />
+            <InstallAppWidget isCollapsed={isCollapsed} />
           </div>
         </nav>
 
@@ -443,4 +446,3 @@ export function Sidebar({
     </TooltipProvider>
   );
 }
-

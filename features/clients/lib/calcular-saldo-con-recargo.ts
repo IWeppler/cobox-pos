@@ -9,10 +9,29 @@ export interface RecargoMoraConfig {
 export interface TicketConVencimiento {
   monto_pendiente?: number | string | null;
   fecha_vencimiento?: string | null;
+  /**
+   * La porción del saldo que YA venció, imputando los pagos FIFO. Sale de
+   * `deuda_cc_vencida` en la base.
+   *
+   * Es OBLIGATORIO y sin default a propósito. Hasta el 30/8/2026 el recargo se
+   * calculaba sobre `monto_pendiente` entero, así que un solo ticket atrasado
+   * arrastraba a todo lo comprado después: en Evens, una clienta con $175
+   * vencidos y $104.825 de saldo iba a pagar $15.723,75 de mora, casi toda por
+   * una compra del día anterior que vencía recién en octubre. Sobre lo ya
+   * cobrado eran $37.590 de más en 19 cobros, con 5 donde no había NADA
+   * vencido.
+   *
+   * Un default acá volvería a ese comportamiento en el primer llamador que se
+   * olvide de pasarlo. Que sea obligatorio hace que el olvido sea un error de
+   * compilación y no plata de más cobrada a una clienta.
+   */
+  monto_vencido: number | string | null | undefined;
 }
 
 export interface SaldoConRecargo {
   saldoBase: number;
+  /** Lo que se usó como base del recargo, ya acotado al saldo. */
+  montoVencido: number;
   montoRecargo: number;
   saldoConRecargo: number;
   estaVencido: boolean;
@@ -36,12 +55,18 @@ export function calcularSaldoConRecargo(
   config: RecargoMoraConfig,
 ): SaldoConRecargo {
   const saldoBase = Math.max(0, Number(ticket.monto_pendiente) || 0);
+  const montoVencido = Math.min(
+    saldoBase,
+    Math.max(0, Number(ticket.monto_vencido) || 0),
+  );
   const diasVencido = calcularDiasVencido(ticket.fecha_vencimiento);
-  const estaVencido = saldoBase > 0 && diasVencido !== null && diasVencido > 0;
+  const estaVencido =
+    montoVencido > 0 && diasVencido !== null && diasVencido > 0;
 
   if (!estaVencido) {
     return {
       saldoBase,
+      montoVencido,
       montoRecargo: 0,
       saldoConRecargo: saldoBase,
       estaVencido: false,
@@ -53,14 +78,15 @@ export function calcularSaldoConRecargo(
     montoRecargo = Math.max(0, Number(config.recargo_mora_valor) || 0);
   } else if (config.recargo_mora_tipo === "PORCENTAJE") {
     const pct = Math.max(0, Number(config.recargo_mora_valor) || 0);
-    montoRecargo = (saldoBase * pct) / 100;
+    // Sobre lo VENCIDO, no sobre el saldo: ver el comentario de la interfaz.
+    montoRecargo = (montoVencido * pct) / 100;
   }
 
   return {
     saldoBase,
+    montoVencido,
     montoRecargo,
     saldoConRecargo: saldoBase + montoRecargo,
     estaVencido: true,
   };
 }
-

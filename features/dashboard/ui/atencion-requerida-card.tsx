@@ -21,6 +21,11 @@ interface AtencionRequeridaCardProps {
   stockCritico: StockCriticoItem[];
   cantidadBajasPendientes: number;
   reservasActivas: ReservaActiva[];
+  /** Reservar es de indumentaria (ver `rubroUsaReservas`). En los demás rubros
+   * la pestaña no existe: una que nunca puede tener nada enseña a ignorar las
+   * pestañas de esta card. Ausente = se muestra, para no esconderla en un
+   * consumidor que todavía no pasa el dato. */
+  mostrarReservas?: boolean;
 }
 
 /**
@@ -29,17 +34,89 @@ interface AtencionRequeridaCardProps {
  * fija sin crecer verticalmente (fila 2 del layout v2). Reservas sigue
  * siendo por ANTIGÜEDAD (hace cuánto está activa), nunca "por vencer": el
  * sistema no tiene un campo de vencimiento para reservas.
+ *
+ * Sin reservas —todo rubro que no sea indumentaria— la card deja de ser de
+ * pestañas: queda el stock crítico con su título. Una sola pestaña es un
+ * control que no controla nada.
  */
 export function AtencionRequeridaCard({
   quiebres,
   stockCritico,
   cantidadBajasPendientes,
   reservasActivas,
+  mostrarReservas = true,
 }: Readonly<AtencionRequeridaCardProps>) {
   const sinNovedadesStock =
     quiebres.length === 0 &&
     stockCritico.length === 0 &&
     cantidadBajasPendientes === 0;
+
+  const contenidoStock = (
+    <>
+      {sinNovedadesStock ? (
+        <div className="h-full flex items-center justify-center">
+          <p className="text-xs text-muted-foreground italic">
+            Inventario saludable.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {quiebres.slice(0, 3).map((q) => (
+            <div
+              key={q.productoId}
+              className="flex items-center justify-between gap-2 text-xs bg-danger/10 border border-danger/20rounded-lg px-2.5 py-1.5"
+            >
+              <span
+                className="truncate text-foreground font-medium"
+                title={q.nombre}
+              >
+                {q.nombre}
+              </span>
+              <span className="shrink-0 text-[10px] font-semibold uppercase text-danger bg-danger/10 px-1.5 py-0.5 rounded">
+                Quiebre · {q.unidadesVendidas} u. vendidas
+              </span>
+            </div>
+          ))}
+          {stockCritico.slice(0, 3).map((s, idx) => (
+            <div
+              key={`${s.nombre}-${s.variante}-${idx}`}
+              className="flex items-center justify-between gap-2 text-xs bg-muted/40 border border-border rounded-lg px-2.5 py-1.5"
+            >
+              <span
+                className="truncate text-foreground"
+                title={`${s.nombre} · ${s.variante}`}
+              >
+                {s.nombre} · {s.variante}
+              </span>
+              <span className="shrink-0 text-warning font-medium">
+                {s.cantidad} u.
+              </span>
+            </div>
+          ))}
+          {cantidadBajasPendientes > 0 && (
+            <div className="flex items-center gap-2 text-xs bg-muted/40 border border-border rounded-lg px-2.5 py-1.5 text-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground shrink-0" />
+              {cantidadBajasPendientes} merma
+              {cantidadBajasPendientes === 1 ? "" : "s"} pendiente
+              {cantidadBajasPendientes === 1 ? "" : "s"} de revisión
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+
+  // Sin la pestaña de reservas no hay pestañas: una sola no es un control.
+  if (!mostrarReservas) {
+    return (
+      <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden h-full">
+        <div className="flex items-center gap-1.5 px-4 pt-3.5 pb-1 shrink-0 text-sm font-semibold text-foreground">
+          <Package className="w-3.5 h-3.5" /> Stock crítico
+        </div>
+        <div className="flex-1 overflow-y-auto p-3 pt-2">{contenidoStock}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden h-full">
@@ -55,54 +132,17 @@ export function AtencionRequeridaCard({
           </TabsList>
         </div>
 
-        <TabsContent value="stock" className="flex-1 overflow-y-auto p-3 pt-2 mt-0">
-          {sinNovedadesStock ? (
-            <div className="h-full flex items-center justify-center">
-              <p className="text-xs text-muted-foreground italic">
-                Inventario saludable.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              {quiebres.slice(0, 3).map((q) => (
-                <div
-                  key={q.productoId}
-                  className="flex items-center justify-between gap-2 text-xs bg-danger/10 border border-danger/20rounded-lg px-2.5 py-1.5"
-                >
-                  <span className="truncate text-foreground font-medium" title={q.nombre}>
-                    {q.nombre}
-                  </span>
-                  <span className="shrink-0 text-[10px] font-semibold uppercase text-danger bg-danger/10 px-1.5 py-0.5 rounded">
-                    Quiebre · {q.unidadesVendidas} u. vendidas
-                  </span>
-                </div>
-              ))}
-              {stockCritico.slice(0, 3).map((s, idx) => (
-                <div
-                  key={`${s.nombre}-${s.variante}-${idx}`}
-                  className="flex items-center justify-between gap-2 text-xs bg-muted/40 border border-border rounded-lg px-2.5 py-1.5"
-                >
-                  <span className="truncate text-foreground" title={`${s.nombre} · ${s.variante}`}>
-                    {s.nombre} · {s.variante}
-                  </span>
-                  <span className="shrink-0 text-warning font-medium">
-                    {s.cantidad} u.
-                  </span>
-                </div>
-              ))}
-              {cantidadBajasPendientes > 0 && (
-                <div className="flex items-center gap-2 text-xs bg-muted/40 border border-border rounded-lg px-2.5 py-1.5 text-foreground">
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground shrink-0" />
-                  {cantidadBajasPendientes} merma
-                  {cantidadBajasPendientes === 1 ? "" : "s"} pendiente
-                  {cantidadBajasPendientes === 1 ? "" : "s"} de revisión
-                </div>
-              )}
-            </div>
-          )}
+        <TabsContent
+          value="stock"
+          className="flex-1 overflow-y-auto p-3 pt-2 mt-0"
+        >
+          {contenidoStock}
         </TabsContent>
 
-        <TabsContent value="reservas" className="flex-1 overflow-y-auto p-3 pt-2 mt-0">
+        <TabsContent
+          value="reservas"
+          className="flex-1 overflow-y-auto p-3 pt-2 mt-0"
+        >
           {reservasActivas.length > 0 ? (
             <div className="space-y-1.5">
               {reservasActivas.map((r) => (

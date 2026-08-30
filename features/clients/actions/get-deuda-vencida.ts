@@ -2,7 +2,6 @@
 
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
-import { calcularDiasVencido } from "@/features/clients/lib/calcular-dias-vencido";
 
 export type DeudaVencidaResumen = {
   monto: number;
@@ -11,20 +10,23 @@ export type DeudaVencidaResumen = {
 
 /**
  * Resumen de deuda vencida cobrable, para el Advisor del dashboard.
- * `clientes.saldo_pendiente` + `fecha_vencimiento_deuda` ya son el caché
- * mantenido por manage-clients.ts (recalculado en cada movimiento de CC) —
- * se lee directo de ahí en vez de recorrer `ventas`, mismo criterio que
- * calcularSaldoConRecargo. "Vencido" = fecha_vencimiento_deuda ya pasada,
- * misma función que usa el resto de la feature de clientes.
+ *
+ * Sale de `deuda_cc_vencida`, que imputa los pagos FIFO y devuelve la porción
+ * REALMENTE vencida de cada cliente. Antes sumaba `clientes.saldo_pendiente`
+ * entero de todo cliente con la fecha pasada, y eso contaba como vencido lo
+ * comprado días antes: medido en Evens el 30/8/2026 daba $1.326.050 contra
+ * $1.098.825 reales, y una clienta entraba con sus $104.825 teniendo $175
+ * atrasados. La tarjeta decía "esto se puede cobrar hoy" sobre plata que
+ * todavía no se podía reclamar.
+ *
+ * El corte por cliente ("cuántos") también cambia: cuenta a quien tiene algo
+ * vencido, no a quien tiene la fecha pasada con todo al día.
  */
 export async function getDeudaVencidaAction(): Promise<DeudaVencidaResumen | null> {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const { data, error } = await supabase
-    .from("clientes")
-    .select("id, saldo_pendiente, fecha_vencimiento_deuda")
-    .gt("saldo_pendiente", 0);
+  const { data, error } = await supabase.rpc("deuda_cc_vencida");
 
   if (error) {
     console.error("[getDeudaVencidaAction] Error:", error);
@@ -34,10 +36,10 @@ export async function getDeudaVencidaAction(): Promise<DeudaVencidaResumen | nul
   let monto = 0;
   let clientes = 0;
 
-  for (const c of data || []) {
-    const diasVencido = calcularDiasVencido(c.fecha_vencimiento_deuda);
-    if (diasVencido === null || diasVencido <= 0) continue;
-    monto += Number(c.saldo_pendiente || 0);
+  for (const fila of (data ?? []) as { vencido: number | string | null }[]) {
+    const vencido = Number(fila.vencido ?? 0);
+    if (vencido <= 0) continue;
+    monto += vencido;
     clientes += 1;
   }
 

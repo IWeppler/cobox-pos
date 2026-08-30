@@ -43,6 +43,9 @@ interface CartStepCheckoutProps {
   anticipoMinimo: number;
   clienteSeleccionado: ClienteBasico | null;
   onClienteChange: (cliente: ClienteBasico | null) => void;
+  /** Apertura controlada del selector de cliente. La usa el atajo F7. */
+  selectorClienteAbierto?: boolean;
+  onSelectorClienteAbiertoChange?: (abierto: boolean) => void;
   promocionesElegibles: PromocionDB[];
   promocionActivaId: string;
   onPromocionChange: (promocionId: string) => void;
@@ -72,6 +75,8 @@ export function CartStepCheckout({
   anticipoMinimo,
   clienteSeleccionado,
   onClienteChange,
+  selectorClienteAbierto,
+  onSelectorClienteAbiertoChange,
   promocionesElegibles,
   promocionActivaId,
   onPromocionChange,
@@ -266,6 +271,8 @@ export function CartStepCheckout({
             <ClientSelector
               clienteSeleccionado={clienteSeleccionado}
               onClienteChange={onClienteChange}
+              abierto={selectorClienteAbierto}
+              onAbiertoChange={onSelectorClienteAbiertoChange}
             />
           </section>
 

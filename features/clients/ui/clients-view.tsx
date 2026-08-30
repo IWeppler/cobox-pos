@@ -77,6 +77,9 @@ interface ClientsViewProps {
   metodosPago: MetodoPago[];
   entregaMinimaActiva?: boolean;
   recargoMoraConfig: RecargoMoraConfig;
+  /** Porción VENCIDA por cliente (FIFO), base del recargo por mora. Sale de
+   * `deuda_cc_vencida`; un cliente ausente no tiene deuda viva. */
+  vencidoPorCliente: Record<string, number>;
   isAdmin?: boolean;
 }
 
@@ -85,6 +88,7 @@ export function ClientsView({
   metodosPago,
   entregaMinimaActiva = false,
   recargoMoraConfig,
+  vencidoPorCliente,
   isAdmin = false,
 }: Readonly<ClientsViewProps>) {
   // El "ahora" se congela en el primer render: si saliera de `new Date()`
@@ -143,6 +147,7 @@ export function ClientsView({
         {
           monto_pendiente: cliente.saldo_pendiente,
           fecha_vencimiento: cliente.fecha_vencimiento_deuda,
+          monto_vencido: vencidoPorCliente[cliente.id] ?? 0,
         },
         recargoMoraConfig,
       );
@@ -159,7 +164,13 @@ export function ClientsView({
         scoring,
       };
     });
-  }, [clientes, recargoMoraConfig, referenciaScoring, ahora]);
+  }, [
+    clientes,
+    recargoMoraConfig,
+    vencidoPorCliente,
+    referenciaScoring,
+    ahora,
+  ]);
 
   // El KPI sigue siendo CAPITAL: la mora no es plata prestada, es una
   // penalidad que recién existe si el cliente paga tarde. Sumarla al "dinero
@@ -606,6 +617,9 @@ export function ClientsView({
         metodosPago={metodosPago}
         entregaMinimaActiva={entregaMinimaActiva}
         recargoMoraConfig={recargoMoraConfig}
+        montoVencido={
+          selectedClient ? (vencidoPorCliente[selectedClient.id] ?? 0) : 0
+        }
         isAdmin={isAdmin}
         onClose={() => setSelectedClientId(null)}
       />

@@ -12,6 +12,7 @@ import {
   Filter,
   FilterX,
   FolderOpen,
+  HandCoins,
   LayoutGrid,
   List,
   MoreHorizontal,
@@ -130,6 +131,10 @@ interface StockFiltersToolbarProps {
   onCargaRapida?: () => void;
   /** Marca visualmente el botón cuando esa vista está activa. */
   cargaRapidaActiva?: boolean;
+  /** Si viene, la barra ofrece "Cobrar deuda" al lado de Carga rápida. Solo lo
+   * manda el POS: es donde está parada la vendedora cuando la clienta viene a
+   * pagar la cuenta. En Inventario no tiene sentido. */
+  onCobrarCuentaCorriente?: () => void;
   searchPlaceholder?: string;
   /** Enter en el buscador. En Vender no hace nada (el filtrado es en vivo);
    * en Cargar es lo que agrega la línea a la lista. */
@@ -168,6 +173,7 @@ export function StockFiltersToolbar({
   resultadosFueraDeCategoria = 0,
   onCargaRapida,
   cargaRapidaActiva = false,
+  onCobrarCuentaCorriente,
   searchPlaceholder = "Buscar producto...",
   onSearchEnter,
   searchInputRef,
@@ -398,6 +404,24 @@ export function StockFiltersToolbar({
             </Link>
           )}
 
+          {/* Cobrar deuda. Al lado de Carga rápida porque son las dos cosas
+              que la vendedora hace SIN vender, sin salir de la venta. No es
+              vista sino modal: un cobro son tres datos y termina. */}
+          {onCobrarCuentaCorriente && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCobrarCuentaCorriente}
+              className="hidden sm:flex h-10 w-10 sm:w-auto p-0 sm:px-3 shrink-0 border-border/60 bg-background"
+              title="Cobrar un saldo de cuenta corriente"
+            >
+              <HandCoins className="h-4 w-4 sm:mr-2 text-muted-foreground" />
+              <span className="hidden sm:inline font-semibold">
+                Cobrar deuda
+              </span>
+            </Button>
+          )}
+
           {/* Toggle View (Oculto en celular para ahorrar valioso espacio) */}
           {showViewToggle && (
             <div className="hidden sm:flex items-center bg-muted border border-border/80 p-0.5 rounded-lg shrink-0">
@@ -468,6 +492,20 @@ export function StockFiltersToolbar({
                         Carga rápida
                       </button>
                     </Link>
+                  )}
+
+                  {/* En mobile el dropdown es el único acceso, igual que
+                      Carga rápida: en la barra no entra sin comerse el
+                      buscador. */}
+                  {onCobrarCuentaCorriente && (
+                    <button
+                      type="button"
+                      onClick={onCobrarCuentaCorriente}
+                      className="w-full flex sm:hidden items-center justify-start h-9 px-2 text-sm font-medium cursor-pointer text-foreground hover:bg-muted rounded-md transition-colors"
+                    >
+                      <HandCoins className="w-4 h-4 mr-2 text-muted-foreground shrink-0" />
+                      Cobrar deuda
+                    </button>
                   )}
 
                   {isAdmin && (

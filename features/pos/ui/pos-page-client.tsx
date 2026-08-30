@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getPosCatalogDataAction } from "@/shared/actions/store-actions";
 import { conNegocio, queryKeys } from "@/shared/lib/query-keys";
@@ -11,8 +12,20 @@ import { RUBRO_DEFAULT } from "@/entities/config/types";
 
 const CATALOG_STALE_TIME_MS = 3 * 60 * 1000;
 
-export function PosPageClient() {
+interface PosPageClientProps {
+  /** Permiso `clientes.cobrar_cc`, resuelto en la página (server). Decide si
+   * la barra del POS ofrece "Cobrar deuda". */
+  puedeCobrarCuentaCorriente?: boolean;
+}
+
+export function PosPageClient({
+  puedeCobrarCuentaCorriente = false,
+}: Readonly<PosPageClientProps> = {}) {
   const negocioActivo = useNegocioActivo();
+  // `?q=` es cómo entra un producto elegido en la paleta (Ctrl+K): en vez de
+  // agregarlo al ticket a ciegas —con talles y colores, elegir la variante es
+  // una decisión— deja el POS con esa búsqueda hecha.
+  const busquedaInicial = useSearchParams().get("q") ?? "";
   const { data, isLoading, error } = useQuery({
     queryKey: conNegocio(queryKeys.pos.productos, negocioActivo?.id),
     queryFn: getPosCatalogDataAction,
@@ -35,13 +48,20 @@ export function PosPageClient() {
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 overflow-hidden">
+      {/* La `key` remonta el terminal cuando llega otra búsqueda desde la
+          paleta. Es lo que hace que elegir un segundo producto sin salir de
+          /pos vuelva a filtrar: sin ella, `busquedaInicial` solo se leería en
+          el primer render. Remontar no toca el carrito, que vive en el store. */}
       <PosTerminal
+        key={busquedaInicial}
+        busquedaInicial={busquedaInicial}
         productos={data?.data?.productos ?? []}
         categorias={data?.data?.categorias ?? []}
         permitirVentaSinStock={data?.data?.permitirVentaSinStock}
         nombreComercio={data?.data?.nombreComercio}
         mostrarSinStock={data?.data?.mostrarSinStock}
         rubro={data?.data?.rubro ?? RUBRO_DEFAULT}
+        puedeCobrarCuentaCorriente={puedeCobrarCuentaCorriente}
       />
       <CartPanelAdmin rubro={data?.data?.rubro ?? RUBRO_DEFAULT} />
     </div>

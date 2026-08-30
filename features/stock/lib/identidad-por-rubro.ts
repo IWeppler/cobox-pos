@@ -65,3 +65,15 @@ export function badgesIdentidad(
 
   return badges;
 }
+
+/**
+ * Cómo se llama en pantalla el código de la variante, según el rubro.
+ *
+ * Es la MISMA columna (`producto_variantes.sku`) con dos semánticas, tal como
+ * ya lo asume `badgesIdentidad`: en electro guarda el EAN de la unidad y en el
+ * resto el código interno del modelo. El label acompaña esa diferencia en vez
+ * de pedirle "SKU" a quien está por escanear un código de barras.
+ */
+export function etiquetaSku(rubro?: Rubro): string {
+  return rubro === "electro" ? "Código de barras (EAN)" : "SKU";
+}

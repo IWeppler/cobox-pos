@@ -42,6 +42,9 @@ import {
   getPromocionesElegibles,
 } from "../../../shared/components/cart-sidebar/cart-sidebar-utils";
 import { ClienteBasico } from "../../../shared/components/cart-sidebar/client-selector";
+import { AtajosCarrito } from "./atajos-carrito";
+import { esFraccionable } from "@/shared/lib/unidad-venta";
+import { rubroUsaReservas } from "@/features/pos/lib/reservas-por-rubro";
 import {
   calcularPagosConRecargo,
   etiquetaRecargo,
@@ -158,7 +161,9 @@ export function CartPanelAdmin({
     );
     return new Set(
       Object.entries(disponibilidadUnidades)
-        .filter(([varianteId, cantidad]) => cantidad > 0 && enCarrito.has(varianteId))
+        .filter(
+          ([varianteId, cantidad]) => cantidad > 0 && enCarrito.has(varianteId),
+        )
         .map(([varianteId]) => varianteId),
     );
   }, [disponibilidadUnidades, varianteIdsCarrito]);
@@ -168,7 +173,9 @@ export function CartPanelAdmin({
   // render extra cada vez que cambia el carrito.
   const unidadesElegidas = useMemo(
     () =>
-      unidadesElegidasRaw.filter((u) => variantesSerializadas.has(u.varianteId)),
+      unidadesElegidasRaw.filter((u) =>
+        variantesSerializadas.has(u.varianteId),
+      ),
     [unidadesElegidasRaw, variantesSerializadas],
   );
 
@@ -189,8 +196,6 @@ export function CartPanelAdmin({
       Object.fromEntries(unidadesElegidas.map((u) => [u.varianteId, u.imei])),
     [unidadesElegidas],
   );
-
-
 
   const mounted = useSyncExternalStore(
     subscribeToClientMount,
@@ -258,6 +263,9 @@ export function CartPanelAdmin({
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("CART");
   const [clienteSeleccionado, setClienteSeleccionado] =
     useState<ClienteBasico | null>(null);
+  // Controlado desde acá solo para que F7 pueda abrirlo sin un click. Cuando
+  // se maneja con el mouse, el selector sigue haciendo lo suyo.
+  const [selectorClienteAbierto, setSelectorClienteAbierto] = useState(false);
 
   const isPOSMode = true;
   const totalCarrito = getTotalPrice();
@@ -808,8 +816,50 @@ export function CartPanelAdmin({
     });
   };
 
+  // El último renglón cargado: es sobre el que actúa Alt+↑/↓, porque es el
+  // que se acaba de tocar y el que se está por corregir.
+  const ultimoItem = items.length > 0 ? items[items.length - 1] : null;
+
+  // Reservar es de indumentaria. Ver `rubroUsaReservas` para el porqué; el
+  // freno de verdad está en `crearReservaAction`, que vuelve a preguntarle el
+  // rubro a la base.
+  const usaReservas = rubroUsaReservas(rubro);
+
   const CartContent = (
     <>
+      <AtajosCarrito
+        paso={effectiveCheckoutStep}
+        hayItems={items.length > 0}
+        ocupado={isPending}
+        irAPagar={handleContinueToPayment}
+        volverAlCarrito={() => setCheckoutStep("CART")}
+        confirmar={() =>
+          usaReservas && isReserva
+            ? handleConfirmarReserva()
+            : handleConfirmarVentaPOS()
+        }
+        // El selector de cliente vive en el paso de pago: F7 desde el ticket
+        // avanza primero y lo abre después, en vez de no hacer nada.
+        abrirSelectorCliente={() => {
+          if (effectiveCheckoutStep === "CART") handleContinueToPayment();
+          setSelectorClienteAbierto(true);
+        }}
+        vaciarTicket={clearCartAndResetStep}
+        // Solo para lo que se vende por unidad. En un producto por peso el
+        // paso mínimo es un gramo: "+1" ahí sería un kilo de más, y "+1 g" un
+        // atajo que no cambia nada visible. Esa cantidad se tipea.
+        ajustarUltimo={
+          ultimoItem && !esFraccionable(ultimoItem.unidadMedida)
+            ? (delta: number) =>
+                updateQuantity(
+                  ultimoItem.productoId,
+                  ultimoItem.variante,
+                  ultimoItem.cantidad + delta,
+                )
+            : null
+        }
+      />
+
       <CartSidebarHeader isPOSMode={isPOSMode} onClose={closeSidebar} />
 
       {effectiveCheckoutStep === "CART" ? (
@@ -835,13 +885,18 @@ export function CartPanelAdmin({
           totalFinal={totalFinal}
           isCuentaCorriente={isCuentaCorriente}
           onCuentaCorrienteChange={handleCuentaCorrienteChange}
-          isReserva={isReserva}
-          onReservaChange={handleReservaChange}
+          isReserva={usaReservas && isReserva}
+          // Sin `onReservaChange` el paso de pago no dibuja el botón
+          // "Reservado" y la fila queda en dos columnas. Es el mismo mecanismo
+          // que ya usaba el carrito público, donde reservar tampoco existe.
+          onReservaChange={usaReservas ? handleReservaChange : undefined}
           modoMixto={modoMixto}
           onModoMixtoChange={setModoMixto}
           anticipoMinimo={anticipoMinimo}
           clienteSeleccionado={clienteSeleccionado}
           onClienteChange={setClienteSeleccionado}
+          selectorClienteAbierto={selectorClienteAbierto}
+          onSelectorClienteAbiertoChange={setSelectorClienteAbierto}
           promocionesElegibles={promocionesElegibles}
           promocionActivaId={promocionActivaId}
           onPromocionChange={setPromocionId}
@@ -862,8 +917,10 @@ export function CartPanelAdmin({
               totalACobrar={totalACobrar}
               sumaPagos={sumaPagos}
               isCuentaCorriente={isCuentaCorriente}
-              isReserva={isReserva}
-              onConfirmarReserva={handleConfirmarReserva}
+              isReserva={usaReservas && isReserva}
+              onConfirmarReserva={
+                usaReservas ? handleConfirmarReserva : undefined
+              }
               anticipoMinimo={anticipoMinimo}
               clienteSeleccionado={clienteSeleccionado}
               descuentoDetalle={descuentoDetalle}

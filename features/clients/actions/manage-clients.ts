@@ -13,6 +13,7 @@ import {
 import { validarPerdonDeuda } from "@/features/clients/lib/validar-perdon-deuda";
 import { urlDeResumen } from "@/shared/lib/dominios";
 import { esCuitValido, normalizarCuit } from "@/shared/lib/cuit";
+import { PERMISOS, tienePermiso } from "@/shared/lib/permisos";
 
 interface ClientActionState {
   error: string | null;
@@ -33,7 +34,9 @@ interface ClientActionState {
  *    normalizado (solo dígitos) para que "30-712..." y "30712..." no entren
  *    como dos clientes distintos y el índice único sirva de algo.
  */
-function resolverDatosFiscales(formData: FormData):
+function resolverDatosFiscales(
+  formData: FormData,
+):
   | { error: string; datos?: undefined }
   | { error?: undefined; datos: Record<string, string | null> } {
   const esFiscal = formData.get("es_fiscal") === "true";
@@ -131,13 +134,16 @@ export async function getClientesPageDataAction() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const [clientesRes, metodosRes, configRes] = await Promise.all([
+  const [clientesRes, metodosRes, configRes, vencidoRes] = await Promise.all([
     getClientesAction(),
     supabase.from("metodos_pago").select("*").eq("activo", true),
     supabase
       .from("configuracion_pos")
       .select("cc_anticipo_default, recargo_mora_tipo, recargo_mora_valor")
       .single(),
+    // Sin `p_cliente_id` devuelve todos los del negocio en UN viaje: la tabla
+    // muestra el recargo de 156 clientes y pedirlo de a uno serían 156.
+    supabase.rpc("deuda_cc_vencida"),
   ]);
 
   if (clientesRes.error) {
@@ -149,12 +155,24 @@ export async function getClientesPageDataAction() {
     recargo_mora_valor: configRes.data?.recargo_mora_valor ?? 0,
   };
 
+  // Mapa cliente → porción vencida, para que la tabla y el detalle calculen el
+  // MISMO recargo que va a cobrar el server. Un cliente que no aparece no
+  // tiene deuda viva, y ahí el vencido es 0.
+  const vencidoPorCliente: Record<string, number> = {};
+  for (const fila of (vencidoRes.data ?? []) as {
+    cliente_id: string;
+    vencido: number | string | null;
+  }[]) {
+    vencidoPorCliente[fila.cliente_id] = Number(fila.vencido ?? 0);
+  }
+
   return {
     data: {
       clientes: clientesRes.data ?? [],
       metodosPago: metodosRes.data ?? [],
       entregaMinimaActiva: (configRes.data?.cc_anticipo_default ?? 0) > 0,
       recargoMoraConfig,
+      vencidoPorCliente,
     },
     error: null,
   };
@@ -216,6 +234,17 @@ export async function registrarPagoDeudaAction(
 
   if (!user) return { error: "No autorizado.", success: false };
 
+  // Permiso explícito, no ubicación del botón. Este cobro se dispara ahora
+  // también desde el POS y desde el modal de caja: la protección que daba
+  // "esto solo se ve entrando a /clientes" ya no existe, y un server action es
+  // un endpoint. Fail-closed: ver `tienePermiso`.
+  if (!(await tienePermiso(supabase, PERMISOS.CLIENTES_COBRAR_CC))) {
+    return {
+      error: "No tenés permiso para cobrar cuenta corriente.",
+      success: false,
+    };
+  }
+
   // 🚀 A. Buscar si el usuario tiene una caja abierta donde meter la plata
   const { data: config } = await supabase
     .from("configuracion_pos")
@@ -276,17 +305,22 @@ export async function registrarPagoDeudaAction(
   // misma action en cada movimiento, y es la fuente que usa el resto de la
   // feature (getDeudaVencidaAction, la tabla y el detalle del cliente), así
   // que además desaparece la doble fuente de verdad.
-  const [{ data: configPos }, { data: clienteDeuda }] = await Promise.all([
-    supabase
-      .from("configuracion_pos")
-      .select("recargo_mora_tipo, recargo_mora_valor, cc_plazo_mora")
-      .single(),
-    supabase
-      .from("clientes")
-      .select("saldo_pendiente, fecha_vencimiento_deuda")
-      .eq("id", clienteId)
-      .single(),
-  ]);
+  // La BASE del recargo es la porción VENCIDA, no el saldo entero: eso lo
+  // resuelve `deuda_cc_vencida` en la base, imputando los pagos FIFO igual que
+  // `recalcular_vencimiento_cc`. Ver el comentario de `monto_vencido`.
+  const [{ data: configPos }, { data: clienteDeuda }, { data: deudaVencida }] =
+    await Promise.all([
+      supabase
+        .from("configuracion_pos")
+        .select("recargo_mora_tipo, recargo_mora_valor, cc_plazo_mora")
+        .single(),
+      supabase
+        .from("clientes")
+        .select("saldo_pendiente, fecha_vencimiento_deuda")
+        .eq("id", clienteId)
+        .single(),
+      supabase.rpc("deuda_cc_vencida", { p_cliente_id: clienteId }).single(),
+    ]);
   const recargoConfig: RecargoMoraConfig = {
     recargo_mora_tipo: configPos?.recargo_mora_tipo ?? "NINGUNO",
     recargo_mora_valor: configPos?.recargo_mora_valor ?? 0,
@@ -295,6 +329,10 @@ export async function registrarPagoDeudaAction(
     {
       monto_pendiente: clienteDeuda?.saldo_pendiente,
       fecha_vencimiento: clienteDeuda?.fecha_vencimiento_deuda,
+      // El cast es porque la función es nueva y todavía no está en los tipos
+      // generados de Supabase, igual que `contexto_sesion` en su momento.
+      monto_vencido: (deudaVencida as { vencido: number | null } | null)
+        ?.vencido,
     },
     recargoConfig,
   );
@@ -357,7 +395,10 @@ export async function registrarPagoDeudaAction(
 
     if (moraError) {
       console.error("[PAGO DEUDA] No se pudo registrar la mora:", moraError);
-      return { error: "Error al registrar el recargo por mora.", success: false };
+      return {
+        error: "Error al registrar el recargo por mora.",
+        success: false,
+      };
     }
   }
 
@@ -424,7 +465,10 @@ export async function registrarPagoDeudaAction(
     .eq("id", clienteId);
 
   if (errorSaldoCliente) {
-    console.error("[PAGO DEUDA] No se pudo actualizar el saldo:", errorSaldoCliente);
+    console.error(
+      "[PAGO DEUDA] No se pudo actualizar el saldo:",
+      errorSaldoCliente,
+    );
     return {
       error:
         "El pago quedó registrado en caja, pero no se pudo actualizar el saldo del cliente. Revisalo antes de seguir.",
@@ -811,7 +855,10 @@ export async function importarClientesCSVAction(formData: FormData) {
             tipo: "DEBITO",
             monto: deudaInicial,
             fecha_origen: fechaVencimientoDeuda
-              ? calcularFechaVencimiento(fechaVencimientoDeuda, -plazoMoraImport)
+              ? calcularFechaVencimiento(
+                  fechaVencimientoDeuda,
+                  -plazoMoraImport,
+                )
               : null,
             descripcion: "Saldo inicial importado (CSV)",
             creado_por: user?.id,
@@ -979,11 +1026,10 @@ export async function editarMovimientoManualAction(
     .single();
   const saldoActual = Number(cliente?.saldo_pendiente || 0);
 
-  const nuevaFechaVencimiento =
-    await recalcularVencimientoCC(
-      supabase,
-      movimiento.cliente_id,
-    );
+  const nuevaFechaVencimiento = await recalcularVencimientoCC(
+    supabase,
+    movimiento.cliente_id,
+  );
 
   await supabase
     .from("clientes")
@@ -1058,11 +1104,10 @@ export async function anularMovimientoManualAction(movimientoId: string) {
     .single();
   const saldoActual = Number(cliente?.saldo_pendiente || 0);
 
-  const nuevaFechaVencimiento =
-    await recalcularVencimientoCC(
-      supabase,
-      movimiento.cliente_id,
-    );
+  const nuevaFechaVencimiento = await recalcularVencimientoCC(
+    supabase,
+    movimiento.cliente_id,
+  );
 
   await supabase
     .from("clientes")
@@ -1133,7 +1178,10 @@ export async function perdonarDeudaAction(
     return { error: "Cliente no encontrado.", success: false };
   }
 
-  const validacion = validarPerdonDeuda(datos, Number(cliente.saldo_pendiente || 0));
+  const validacion = validarPerdonDeuda(
+    datos,
+    Number(cliente.saldo_pendiente || 0),
+  );
   if (!validacion.ok) {
     return { error: validacion.error, success: false };
   }
@@ -1152,8 +1200,14 @@ export async function perdonarDeudaAction(
     });
 
   if (errorMovimiento) {
-    console.error("[PERDONAR DEUDA] Error al escribir el movimiento", errorMovimiento);
-    return { error: "No se pudo registrar el perdón de deuda.", success: false };
+    console.error(
+      "[PERDONAR DEUDA] Error al escribir el movimiento",
+      errorMovimiento,
+    );
+    return {
+      error: "No se pudo registrar el perdón de deuda.",
+      success: false,
+    };
   }
 
   const actualizacion: {
@@ -1177,7 +1231,10 @@ export async function perdonarDeudaAction(
   if (errorSaldo) {
     // El movimiento ya está escrito: si el saldo no baja, el libro y la columna
     // quedan distintos. Se avisa fuerte en vez de devolver un éxito falso.
-    console.error("[PERDONAR DEUDA] Movimiento escrito pero saldo NO actualizado", errorSaldo);
+    console.error(
+      "[PERDONAR DEUDA] Movimiento escrito pero saldo NO actualizado",
+      errorSaldo,
+    );
     return {
       error:
         "Se registró el movimiento pero no se pudo actualizar el saldo. Revisá la cuenta del cliente.",

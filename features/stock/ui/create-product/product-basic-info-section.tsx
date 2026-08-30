@@ -1,12 +1,23 @@
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
+import { MarcaCombobox } from "./marca-combobox";
+import { etiquetaMarca } from "@/features/stock/lib/marca-por-rubro";
+import type { Rubro } from "@/entities/config/types";
 
 type ProductBasicInfoSectionProps = {
   status: "active" | "inactive";
   onStatusChange: (status: "active" | "inactive") => void;
   defaultNombre?: string;
   defaultDescripcion?: string | null;
+  /** Muestra la marca acá, opcional. Apagado por defecto porque en la EDICIÓN
+   * la marca ya vive en el bloque de datos fiscales: dos inputs con
+   * `name="marca"` en el mismo form hacen que `formData.get("marca")` devuelva
+   * el primero y el otro se pierda sin avisar. */
+  mostrarMarca?: boolean;
+  /** Solo para el label: en farmacia la marca es el Laboratorio. */
+  rubro?: Rubro;
+  defaultMarca?: string | null;
 };
 
 export function ProductBasicInfoSection({
@@ -14,6 +25,9 @@ export function ProductBasicInfoSection({
   onStatusChange,
   defaultNombre,
   defaultDescripcion,
+  mostrarMarca = false,
+  rubro,
+  defaultMarca,
 }: ProductBasicInfoSectionProps) {
   return (
     <>
@@ -33,6 +47,13 @@ export function ProductBasicInfoSection({
           className="h-11 px-3 bg-sidebar"
         />
       </div>
+
+      {mostrarMarca && (
+        <MarcaCombobox
+          etiqueta={`${rubro ? etiquetaMarca(rubro) : "Marca"} (opcional)`}
+          valorInicial={defaultMarca}
+        />
+      )}
 
       <div className="space-y-2">
         <Label className="text-sm font-semibold text-foreground">Estado</Label>

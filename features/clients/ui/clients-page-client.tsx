@@ -47,6 +47,7 @@ export function ClientsPageClient({ isAdmin }: { isAdmin: boolean }) {
             recargo_mora_valor: 0,
           }
         }
+        vencidoPorCliente={data?.data?.vencidoPorCliente ?? {}}
         isAdmin={isAdmin}
       />
     </div>

@@ -20,6 +20,9 @@ import { leerConfigPos } from "@/entities/config/lib/leer-config-pos";
 import { etiquetaPlan } from "@/shared/lib/planes";
 import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
 import { getRolActual } from "@/shared/config/supabase/contexto-actual";
+import { puedeCobrarCuentaCorriente } from "@/features/clients/lib/puede-cobrar-cc";
+import { CobrarCuentaCorrienteModal } from "@/features/clients/ui/cobrar-cuenta-corriente-modal";
+import { PaletaComandos } from "@/shared/components/paleta-comandos";
 
 export default async function DashboardLayout({
   children,
@@ -42,8 +45,14 @@ export default async function DashboardLayout({
   // cuatro, en cada navegación del panel. Y `leerConfigPos` además la comparte
   // con el `generateMetadata` del layout raíz: si aquel ya la resolvió en este
   // mismo render, acá no cuesta nada.
-  const [{ data: perfil }, rolActual, negocios, contextoPlan, config] =
-    await Promise.all([
+  const [
+    { data: perfil },
+    rolActual,
+    negocios,
+    contextoPlan,
+    config,
+    puedeCobrarCc,
+  ] = await Promise.all([
       supabase.from("perfiles").select("nombre").eq("id", user.id).single(),
       // Cacheado por request: la página de abajo lo vuelve a pedir en el mismo
       // render y ahí ya no cuesta un viaje. Ver `getRolActual`.
@@ -51,6 +60,10 @@ export default async function DashboardLayout({
       listarMisNegociosAction(),
       getContextoPlanAction(),
       leerConfigPos(),
+      // Cacheado por request, igual que el rol: la página del POS lo vuelve a
+      // pedir en el mismo render para su propio botón y ahí ya no cuesta un
+      // viaje. Ver `puede-cobrar-cc.ts`.
+      puedeCobrarCuentaCorriente(),
     ]);
 
   const userRole = rolActual || "VENDEDOR";
@@ -103,6 +116,7 @@ export default async function DashboardLayout({
         planName={etiquetaPlan(contextoPlan.planActual)}
         negocios={negocios}
         negocioActivoId={negocioActivoId}
+        puedeCobrarCuentaCorriente={puedeCobrarCc}
       />
 
       {/* Contenedor principal de la derecha */}
@@ -126,6 +140,19 @@ export default async function DashboardLayout({
           <DashboardNavbar
             modoCaja={systemBranding.modo_caja || "UNICA"}
             userId={user.id}
+            puedeCobrarCuentaCorriente={puedeCobrarCc}
+          />
+
+          {/* Montado UNA vez para toda la app: lo abren el botón del POS y el
+              modal de caja, y dos instancias serían dos formularios de cobro
+              en paralelo. Mismo criterio que el modal de caja. */}
+          {puedeCobrarCc && <CobrarCuentaCorrienteModal />}
+
+          {/* Ctrl+K. Va acá por lo mismo: una sola instancia para toda la app,
+              y el atajo escuchado en `window` una sola vez. */}
+          <PaletaComandos
+            puedeCobrarCuentaCorriente={puedeCobrarCc}
+            esAdmin={userRole === "ADMIN"}
           />
 
           <main className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">

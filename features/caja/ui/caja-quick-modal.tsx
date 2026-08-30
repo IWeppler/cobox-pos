@@ -3,7 +3,14 @@
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Lock, Unlock, Clock, TrendingDown } from "lucide-react";
+import {
+  Loader2,
+  Lock,
+  Unlock,
+  Clock,
+  TrendingDown,
+  HandCoins,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +23,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { abrirTurnoAction, cerrarTurnoAction } from "../actions/caja-action";
 import { useCajaStatusStore } from "@/shared/store/caja-status-store";
+import { useCobroCcStore } from "@/shared/store/cobro-cc-store";
 import { CajaActionState } from "@/entities/caja/types";
 import { formatearMoneda } from "@/shared/utils/formatters";
 
@@ -27,6 +35,10 @@ interface CajaQuickModalProps {
   /** Abre el modal de egreso (cerrando este). El egreso es plata que sale
    * del cajón: su lugar es acá, no en el header del panel. */
   onAnotarGasto: () => void;
+  /** Muestra el acceso a cobrar cuenta corriente. Lo resuelve el server
+   * (permiso `clientes.cobrar_cc`); esconderlo NO es el control de acceso, que
+   * vive dentro de `registrarPagoDeudaAction`. */
+  puedeCobrarCuentaCorriente?: boolean;
 }
 
 /**
@@ -43,8 +55,10 @@ export function CajaQuickModal({
   modoCaja,
   userId,
   onAnotarGasto,
+  puedeCobrarCuentaCorriente = false,
 }: Readonly<CajaQuickModalProps>) {
   const router = useRouter();
+  const abrirCobroCc = useCobroCcStore((state) => state.abrir);
   const isCajaAbierta = useCajaStatusStore((state) => state.isCajaAbierta);
   const turno = useCajaStatusStore((state) => state.turno);
   const notifyCajaChanged = useCajaStatusStore(
@@ -85,11 +99,15 @@ export function CajaQuickModal({
 
   const mostrarCierre = isCajaAbierta && turno;
 
-  // Acción secundaria: nunca compite con abrir/cerrar turno, que es a lo que
-  // se entra a este modal. Cierra este diálogo ANTES de abrir el de egreso —
+  // Acciones secundarias: nunca compiten con abrir/cerrar turno, que es a lo
+  // que se entra a este modal. Cierran este diálogo ANTES de abrir el otro —
   // dos Dialog anidados de Radix se pelean el foco y el scroll-lock.
-  const botonGasto = (
-    <div className="border-t border-border px-6 py-3">
+  //
+  // Gasto y cobro de cuenta corriente son las dos caras del mismo movimiento:
+  // plata que sale del cajón y plata que entra sin ser una venta. Por eso
+  // viven juntas acá, además de tener cada una su acceso propio donde se usa.
+  const accionesSecundarias = (
+    <div className="flex flex-col gap-1 border-t border-border px-6 py-3">
       <Button
         type="button"
         variant="ghost"
@@ -102,6 +120,24 @@ export function CajaQuickModal({
         <TrendingDown className="mr-2 h-4 w-4" />
         Anotar gasto
       </Button>
+
+      {/* Solo con turno abierto: el cobro entra al arqueo de un turno, y la
+          action lo rechaza sin él. Ofrecerlo en la pantalla de "Abrir turno"
+          sería ofrecer algo que no puede funcionar. */}
+      {puedeCobrarCuentaCorriente && mostrarCierre && (
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => {
+            onOpenChange(false);
+            abrirCobroCc();
+          }}
+          className="h-9 w-full justify-center text-muted-foreground"
+        >
+          <HandCoins className="mr-2 h-4 w-4" />
+          Cobrar cuenta corriente
+        </Button>
+      )}
     </div>
   );
 
@@ -193,7 +229,7 @@ export function CajaQuickModal({
               </Button>
             </form>
 
-            {botonGasto}
+            {accionesSecundarias}
           </>
         ) : (
           <>
@@ -239,7 +275,7 @@ export function CajaQuickModal({
               </Button>
             </form>
 
-            {botonGasto}
+            {accionesSecundarias}
           </>
         )}
       </DialogContent>

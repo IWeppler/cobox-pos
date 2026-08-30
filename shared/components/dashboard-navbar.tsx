@@ -8,11 +8,15 @@ import { CajaStatusButton } from "@/features/caja/ui/caja-status-button";
 interface DashboardNavbarProps {
   modoCaja: string;
   userId: string;
+  /** Permiso `clientes.cobrar_cc`, para el acceso al cobro desde el modal de
+   * caja. Ver CajaQuickModal. */
+  puedeCobrarCuentaCorriente?: boolean;
 }
 
 export function DashboardNavbar({
   modoCaja,
   userId,
+  puedeCobrarCuentaCorriente = false,
 }: Readonly<DashboardNavbarProps>) {
   const { toggleSidebar } = useSidebarStore();
   const pathname = usePathname();
@@ -97,7 +101,11 @@ export function DashboardNavbar({
         </div>
       </div>
 
-      <CajaStatusButton modoCaja={modoCaja} userId={userId} />
+      <CajaStatusButton
+        modoCaja={modoCaja}
+        userId={userId}
+        puedeCobrarCuentaCorriente={puedeCobrarCuentaCorriente}
+      />
     </header>
   );
 }

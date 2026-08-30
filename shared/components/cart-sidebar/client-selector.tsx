@@ -23,6 +23,11 @@ export interface ClienteBasico {
 interface ClientSelectorProps {
   clienteSeleccionado: ClienteBasico | null;
   onClienteChange: (cliente: ClienteBasico | null) => void;
+  /** Apertura controlada desde afuera. La usa el atajo F7 del POS, que tiene
+   * que poder abrir este popover sin que haya un click de por medio. Sin estas
+   * props el selector se sigue manejando solo, como siempre. */
+  abierto?: boolean;
+  onAbiertoChange?: (abierto: boolean) => void;
 }
 
 interface EstadoCrearCliente {
@@ -34,8 +39,17 @@ interface EstadoCrearCliente {
 export function ClientSelector({
   clienteSeleccionado,
   onClienteChange,
+  abierto,
+  onAbiertoChange,
 }: Readonly<ClientSelectorProps>) {
-  const [open, setOpen] = useState(false);
+  const [openInterno, setOpenInterno] = useState(false);
+  const esControlado = abierto !== undefined;
+  const open = esControlado ? abierto : openInterno;
+
+  const setOpen = (siguiente: boolean) => {
+    if (!esControlado) setOpenInterno(siguiente);
+    onAbiertoChange?.(siguiente);
+  };
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [clientes, setClientes] = useState<ClienteBasico[]>([]);
   const [search, setSearch] = useState("");
