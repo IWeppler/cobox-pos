@@ -62,9 +62,18 @@ function DrawerContent({
         )}
         {...props}
       >
-        {/* Agarradera visual — el drag-to-close de vaul funciona en toda
-            la superficie del drawer, esto solo marca dónde "agarrar". */}
-        <div
+        {/* La agarradera REAL de vaul, no un adorno.
+
+            Antes era un `div` decorativo y el arrastre funcionaba en toda la
+            superficie del drawer. Eso convertía cada control del contenido
+            en un competidor del gesto: al tocar el selector de cliente,
+            vaul empezaba a arrastrar y el click nunca se completaba. Desde
+            el celular se veía como un desplegable que no abre —el drawer
+            se movía apenas y nada más.
+
+            Con `Drawer.Handle` (y `handleOnly` en el Root del ticket) el
+            gesto vive SOLO acá, que además es donde la gente lo busca. */}
+        <DrawerPrimitive.Handle
           data-slot="drawer-handle"
           className="mx-auto mt-3 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30 group-data-[vaul-drawer-direction=bottom]/drawer-content:block"
         />

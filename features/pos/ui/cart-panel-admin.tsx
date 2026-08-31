@@ -1046,8 +1046,24 @@ export function CartPanelAdmin({
 
   return (
     <>
+      {/* El panel fijo de escritorio. `hidden lg:flex` lo ESCONDE pero no lo
+          desmonta, así que abajo de 1024px el ticket quedaba montado DOS
+          veces: acá y adentro del sheet/drawer. Dos árboles iguales atados al
+          mismo estado, y por lo tanto dos Popover controlados por el mismo
+          `open`: al tocar el selector de cliente, la capa de descarte del que
+          está oculto leía el toque como "afuera" y lo cerraba en el mismo
+          tick. Desde el celular el desplegable no se abría NUNCA; en
+          escritorio ancho —donde esta es la única instancia— funcionaba.
+
+          Medido en producción antes de arreglarlo: dos
+          `[data-slot="popover-trigger"]` en la página, el click llegaba al
+          botón sin `defaultPrevented` y `aria-expanded` seguía en `false`.
+
+          Renderizar UNA sola instancia además saca del DOM un ticket entero
+          duplicado: los mismos `name` de formulario y los mismos ids, dos
+          veces. */}
       <div className="hidden lg:flex flex-col w-100 shrink-0 border-l border-border bg-background h-full z-20">
-        {CartContent}
+        {!isMobileLayout && CartContent}
       </div>
 
       {/* Tablet (640-1023px): sin cambios — sheet lateral derecho, se sigue
@@ -1078,6 +1094,18 @@ export function CartPanelAdmin({
 
       <Drawer
         direction="bottom"
+        // Solo la agarradera arrastra. Sin esto, vaul toma el toque sobre
+        // CUALQUIER parte del ticket como el comienzo de un arrastre y se
+        // come el click: el selector de cliente no abría nunca desde el
+        // celular (medido: el click llegaba al botón, sin
+        // `defaultPrevented`, y `aria-expanded` seguía en false).
+        //
+        // Un ticket es una pantalla llena de controles —métodos de pago,
+        // montos, cliente, promociones—, así que el gesto de arrastrar
+        // sobre el contenido no solo estorba: no hay forma de distinguirlo
+        // de tocar un control. Cerrar sigue estando a mano: la agarradera,
+        // tocar afuera y Esc.
+        handleOnly
         open={isPhoneLayout && phoneCartOpen}
         onOpenChange={(open) => {
           if (open) setPhoneCartOpen(true);
