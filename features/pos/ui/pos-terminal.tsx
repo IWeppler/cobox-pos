@@ -94,8 +94,15 @@ export function PosTerminal({
   busquedaInicial = "",
 }: Readonly<PosTerminalProps>) {
   const abrirCobroCc = useCobroCcStore((state) => state.abrir);
-  // El buscador de la barra: lo comparten la tecla "/" y la Carga rápida.
+  // El buscador de la barra: lo comparten la tecla "F" y la Carga rápida.
   const buscadorRef = useRef<HTMLInputElement>(null);
+  // El área scrolleable de productos y, adentro, la grilla. La grilla se
+  // referencia aparte porque de ELLA se leen las columnas: son clases de
+  // Tailwind (2 / md:3 / lg:4) y repetir esos breakpoints en JS sería una
+  // segunda definición que se desincroniza la primera vez que alguien toca
+  // el layout.
+  const contenedorProductosRef = useRef<HTMLDivElement>(null);
+  const grillaRef = useRef<HTMLDivElement>(null);
   // El link del catálogo necesita el negocio, no solo el origen: cada
   // comercio tiene su propia tienda.
   const slugNegocio = useSlugNegocioActivo() ?? "";
@@ -301,6 +308,59 @@ export function PosTerminal({
     setVista("cargar");
   };
 
+  /** Cuántas columnas está pintando la grilla AHORA. Sale de la CSS real, así
+   * que sigue a los breakpoints de Tailwind sin repetirlos: si mañana la
+   * grilla pasa a 5 columnas en pantallas grandes, las flechas se enteran
+   * solas. En la vista de lista es siempre 1. */
+  const columnasDeLaGrilla = () => {
+    const grilla = grillaRef.current;
+    if (!grilla) return 1;
+    const columnas = getComputedStyle(grilla)
+      .gridTemplateColumns.split(" ")
+      .filter(Boolean).length;
+    return columnas > 0 ? columnas : 1;
+  };
+
+  /** Mueve el foco `paso` productos: ±1 son los costados y ±columnas son
+   * arriba y abajo. Los agotados no entran (van `disabled`, o sea que ni
+   * siquiera son enfocables) y en los bordes se FRENA en vez de dar la
+   * vuelta: con 851 productos, saltar del último al primero desorienta más
+   * de lo que ayuda. La única salida por arriba es el buscador, que es de
+   * donde se venía. */
+  const moverFoco = (paso: number) => {
+    const botones = Array.from(
+      contenedorProductosRef.current?.querySelectorAll<HTMLButtonElement>(
+        "[data-producto-foco]:not([disabled])",
+      ) ?? [],
+    );
+    if (botones.length === 0) return;
+
+    const actual = botones.indexOf(document.activeElement as HTMLButtonElement);
+
+    // Desde el buscador (o desde cualquier otro lado), la primera flecha
+    // entra al catálogo por el primer producto.
+    if (actual === -1) {
+      enfocar(botones[0]);
+      return;
+    }
+
+    if (actual === 0 && paso < 0) {
+      buscadorRef.current?.focus();
+      return;
+    }
+
+    const destino = Math.min(Math.max(actual + paso, 0), botones.length - 1);
+    enfocar(botones[destino]);
+  };
+
+  /** `preventScroll` + `scrollIntoView` en vez del scroll que hace `focus()`
+   * solo: el del navegador centra el producto y salta media pantalla en cada
+   * flecha. Con "nearest" la grilla se mueve lo mínimo para que se vea. */
+  const enfocar = (boton: HTMLButtonElement) => {
+    boton.focus({ preventScroll: true });
+    boton.scrollIntoView({ block: "nearest" });
+  };
+
   /**
    * Atajos de la mitad izquierda: catálogo y búsqueda. Los del ticket viven en
    * CartPanelAdmin, con sus propios handlers — repartidos por dueño y no en un
@@ -317,8 +377,38 @@ export function PosTerminal({
       correr: () => setVista((v) => (v === "cargar" ? "vender" : "cargar")),
     },
     {
-      teclas: "/",
+      teclas: "f",
       correr: () => buscadorRef.current?.focus(),
+    },
+    // Las flechas mueven el FOCO real del DOM, no una selección propia. Con
+    // foco de verdad, Enter agrega el producto sin una sola línea de código
+    // extra (es un <button>), el navegador lo scrollea a la vista y el anillo
+    // de foco ya dice cuál está marcado. Una selección paralela habría
+    // necesitado las tres cosas escritas a mano, y desincronizada del foco
+    // cada vez que alguien toca con el dedo.
+    //
+    // Izquierda y derecha NO se registran en la vista de lista: ahí hay una
+    // sola columna, así que moverían igual que arriba y abajo y le sacarían
+    // las teclas al cursor de cualquier campo.
+    {
+      teclas: "ArrowDown",
+      activo: vista === "vender",
+      correr: () => moverFoco(columnasDeLaGrilla()),
+    },
+    {
+      teclas: "ArrowUp",
+      activo: vista === "vender",
+      correr: () => moverFoco(-columnasDeLaGrilla()),
+    },
+    {
+      teclas: "ArrowRight",
+      activo: vista === "vender" && !vistaSinImagenes,
+      correr: () => moverFoco(1),
+    },
+    {
+      teclas: "ArrowLeft",
+      activo: vista === "vender" && !vistaSinImagenes,
+      correr: () => moverFoco(-1),
     },
     {
       teclas: "Escape",
@@ -376,10 +466,21 @@ export function PosTerminal({
               : "Buscar producto..."
           }
           onSearchEnter={vista === "cargar" ? carga.procesarEnter : undefined}
+          // Bajar desde el buscador entra al catálogo por el primer
+          // producto; desde ahí, subir en el primero devuelve el foco acá.
+          // Solo ArrowDown: arriba, en el campo, no hay a dónde ir, e
+          // izquierda y derecha se quedan donde tienen que estar (en el
+          // cursor de lo que se está escribiendo).
+          onSearchKeyDown={(evento) => {
+            if (vista === "cargar" || evento.key !== "ArrowDown") return;
+            evento.preventDefault();
+            moverFoco(1);
+          }}
           // En Cargar el ref es de la Carga rápida (necesita devolverle el
           // foco al input después de cada línea); en Vender es el nuestro, que
-          // usa la tecla "/".
+          // usa la tecla "F".
           searchInputRef={vista === "cargar" ? carga.inputRef : buscadorRef}
+          atajoBusqueda={vista === "cargar" ? undefined : "F"}
           searchDisabled={
             vista === "cargar" &&
             (carga.modalAbierto || carga.buscandoEnMaestro)
@@ -399,7 +500,10 @@ export function PosTerminal({
         />
 
         {/* Área de productos: es lo único que cambia entre Vender y Cargar. */}
-        <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] p-2 min-h-0">
+        <div
+          ref={contenedorProductosRef}
+          className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] p-2 min-h-0"
+        >
           {vista === "cargar" ? (
             <div className="pb-20 lg:pb-0">
               <CargaRapidaPanel carga={carga} />
@@ -443,7 +547,10 @@ export function PosTerminal({
               )}
             </>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-20 lg:pb-0">
+            <div
+              ref={grillaRef}
+              className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-20 lg:pb-0"
+            >
               {productosOrdenados.map((producto, index) => {
                 const primeraImagen = resolverImagenPrincipal(producto);
 
@@ -473,7 +580,8 @@ export function PosTerminal({
                     <button
                       onClick={() => handleProductClick(producto)}
                       disabled={bloqueado}
-                      className={`flex flex-col text-left rounded-lg bg-card transition-all overflow-hidden x w-full h-full cursor-pointer ${
+                      data-producto-foco=""
+                      className={`flex flex-col text-left rounded-lg bg-card transition-all overflow-hidden x w-full h-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background ${
                         !bloqueado
                           ? "shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-150"
                           : "shadow-xs opacity-50"

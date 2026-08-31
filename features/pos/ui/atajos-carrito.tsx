@@ -1,10 +1,12 @@
 "use client";
 
+import { useRef } from "react";
 import { toast } from "sonner";
 import { useAtajosTeclado } from "@/shared/hooks/use-atajos-teclado";
 
 type AtajosCarritoProps = {
-  /** En qué paso está el ticket: decide qué hace F4 y qué hace Esc. */
+  /** En qué paso está el ticket: decide qué hace Ctrl+Enter (llevar al pago
+   * o confirmar), qué hace F4 y qué hace Esc. */
   paso: "CART" | "PAYMENT";
   hayItems: boolean;
   /** Con una venta en vuelo no se dispara nada: dos Ctrl+Enter seguidos son
@@ -44,6 +46,9 @@ export function AtajosCarrito({
   vaciarTicket,
   ajustarUltimo,
 }: Readonly<AtajosCarritoProps>) {
+  /** Cuándo fue que Ctrl+Enter llevó al paso de pago. Ver el atajo. */
+  const llegadaAPagoPorAtajo = useRef(0);
+
   useAtajosTeclado([
     {
       teclas: "alt+ArrowUp",
@@ -66,9 +71,25 @@ export function AtajosCarrito({
       correr: abrirSelectorCliente,
     },
     {
+      // La MISMA tecla avanza el ticket: en el carrito lleva al pago y en
+      // el pago confirma. F4 sigue existiendo para ir al pago directo.
+      //
+      // El freno de 500 ms es lo que hace que esto sea seguro: sin él, dos
+      // Ctrl+Enter rápidos —o una tecla que rebota— cobran la venta sin que
+      // nadie haya mirado el paso de pago. Solo corre cuando al pago se
+      // llegó CON el atajo; entrando por el botón, confirmar es inmediato.
       teclas: "ctrl+Enter",
-      activo: paso === "PAYMENT" && hayItems && !ocupado,
-      correr: confirmar,
+      activo: hayItems && !ocupado,
+      correr: () => {
+        if (paso === "CART") {
+          llegadaAPagoPorAtajo.current = Date.now();
+          irAPagar();
+          return;
+        }
+
+        if (Date.now() - llegadaAPagoPorAtajo.current < 500) return;
+        confirmar();
+      },
     },
     {
       teclas: "Escape",

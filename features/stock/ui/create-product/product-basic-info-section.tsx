@@ -3,6 +3,7 @@ import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
 import { MarcaCombobox } from "./marca-combobox";
 import { etiquetaMarca } from "@/features/stock/lib/marca-por-rubro";
+import { etiquetaSku } from "@/features/stock/lib/identidad-por-rubro";
 import type { Rubro } from "@/entities/config/types";
 
 type ProductBasicInfoSectionProps = {
@@ -10,14 +11,11 @@ type ProductBasicInfoSectionProps = {
   onStatusChange: (status: "active" | "inactive") => void;
   defaultNombre?: string;
   defaultDescripcion?: string | null;
-  /** Muestra la marca acá, opcional. Apagado por defecto porque en la EDICIÓN
-   * la marca ya vive en el bloque de datos fiscales: dos inputs con
-   * `name="marca"` en el mismo form hacen que `formData.get("marca")` devuelva
-   * el primero y el otro se pierda sin avisar. */
   mostrarMarca?: boolean;
-  /** Solo para el label: en farmacia la marca es el Laboratorio. */
   rubro?: Rubro;
   defaultMarca?: string | null;
+  mostrarSku?: boolean;
+  defaultSku?: string | null;
 };
 
 export function ProductBasicInfoSection({
@@ -28,6 +26,8 @@ export function ProductBasicInfoSection({
   mostrarMarca = false,
   rubro,
   defaultMarca,
+  mostrarSku = false,
+  defaultSku,
 }: ProductBasicInfoSectionProps) {
   return (
     <>
@@ -48,11 +48,34 @@ export function ProductBasicInfoSection({
         />
       </div>
 
-      {mostrarMarca && (
-        <MarcaCombobox
-          etiqueta={`${rubro ? etiquetaMarca(rubro) : "Marca"} (opcional)`}
-          valorInicial={defaultMarca}
-        />
+      {(mostrarMarca || mostrarSku) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {mostrarSku && (
+            <div className="space-y-2 order-first sm:order-last">
+              <Label
+                htmlFor="sku"
+                className="text-sm font-semibold text-foreground"
+              >
+                {etiquetaSku(rubro)}
+              </Label>
+              <Input
+                id="sku"
+                name="sku"
+                defaultValue={defaultSku ?? ""}
+                placeholder="Ej: 123456"
+                autoComplete="off"
+                className="h-11 px-3 bg-sidebar"
+              />
+            </div>
+          )}
+
+          {mostrarMarca && (
+            <MarcaCombobox
+              etiqueta={`${rubro ? etiquetaMarca(rubro) : "Marca"}`}
+              valorInicial={defaultMarca}
+            />
+          )}
+        </div>
       )}
 
       <div className="space-y-2">

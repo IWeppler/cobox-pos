@@ -90,14 +90,16 @@ export function CrearProductoSheet({
                 onArchivosChange={form.setArchivos}
               />
 
-              {/* La marca va acá y no en el bloque fiscal —donde vive en la
-                  edición— porque no es un dato fiscal y en el alta es el
-                  momento en que se sabe: quien carga el producto lo tiene en
-                  la mano. Es opcional y el producto nace igual sin ella. */}
+              {/* Marca y código van acá, y la EDICIÓN muestra exactamente lo
+                  mismo: identifican al producto, así que se cargan donde se
+                  lo nombra. Los dos son opcionales y el producto nace igual
+                  sin ellos. El código solo cuando no hay variantes: con
+                  variantes, cada fila de la grilla trae el suyo. */}
               <ProductBasicInfoSection
                 status={form.status}
                 onStatusChange={form.setStatus}
                 mostrarMarca
+                mostrarSku={!form.showVariants}
                 rubro={rubro}
               />
 
@@ -118,15 +120,10 @@ export function CrearProductoSheet({
                 recargoPorcentaje={form.recargoPorcentaje}
               />
 
-              {/* El SKU acompaña al stock porque es el de la variante única:
-                  con variantes esta sección no se muestra y cada fila de la
-                  grilla trae el suyo. */}
               <ProductInventorySection
                 showVariants={form.showVariants}
                 showInventory={form.showInventory}
                 onShowInventoryChange={form.setShowInventory}
-                mostrarSku
-                rubro={rubro}
               />
 
               <ProductVariantsSection

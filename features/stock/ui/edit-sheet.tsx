@@ -239,6 +239,13 @@ function EditProductForm({
     [producto, isSimpleProduct],
   );
 
+  // El código de la variante única. Solo tiene sentido sin variantes: con
+  // variantes cada fila de la grilla trae el suyo, y la primera no
+  // representa a las demás.
+  const skuVarianteUnica = isSimpleProduct
+    ? (producto.producto_variantes?.[0]?.sku ?? null)
+    : null;
+
   // Espejo local de imagen_url — arranca desde el producto cargado, pero
   // se actualiza apenas el servidor confirma un guardado de imágenes
   // exitoso (ver el success handler de formAction más abajo). Es la
@@ -706,11 +713,20 @@ function EditProductForm({
             inputId={`imagenes-edit-${producto.id}`}
           />
 
+          {/* Los MISMOS campos que el alta. Antes la marca solo aparecía
+              enterrada en el bloque fiscal —y el código, en ningún lado—, así
+              que un producto se daba de alta con marca y después no había
+              dónde corregirla. */}
           <ProductBasicInfoSection
             status={status}
             onStatusChange={setStatus}
             defaultNombre={producto.nombre}
             defaultDescripcion={producto.descripcion}
+            mostrarMarca
+            defaultMarca={producto.marca}
+            mostrarSku={!showVariants}
+            defaultSku={skuVarianteUnica}
+            rubro={rubro}
           />
 
           <ProductCategorySection
@@ -781,8 +797,6 @@ function EditProductForm({
             tratamientoActual={producto.tratamiento_iva}
             unidadActual={producto.unidad_medida}
             generoActual={producto.genero}
-            marcaActual={producto.marca}
-            rubro={rubro}
           />
         </form>
       </div>

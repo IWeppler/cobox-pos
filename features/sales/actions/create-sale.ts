@@ -67,58 +67,76 @@ export async function registrarVentaAction(
     )
     .single();
 
-  // BLOQUEO Y ASIGNACIÓN DE CAJA (MODO DINÁMICO)
-  const { turnoId: turnoAbiertoId, requiereCajaAbierta: requiereCaja } =
-    await resolverTurnoActivo(supabase, user.id, configVenta);
+  // --- PREÁMBULO DE LA VENTA, EN PARALELO ---
+  //
+  // Cuatro cosas que la venta necesita y que NO dependen entre sí: el turno de
+  // caja, los métodos de pago, la promoción aplicada y los precios/costos
+  // reales del carrito. Antes se pedían una atrás de otra, así que eran cuatro
+  // viajes SERIALES a Ohio antes de tocar una sola fila. Ahora es uno solo:
+  // ninguna de las cuatro necesita el resultado de las otras.
+  //
+  // Lo único que queda antes es `configVenta`, porque el turno sí depende de
+  // ella (`modo_caja` y `requiere_caja_abierta`).
+  //
+  // Los precios se resuelven SERVER-SIDE: item.precio / item.precioUnitario
+  // vienen del cliente y son solo para pintar el carrito antes de confirmar.
+  // El precio (y el costo, que define el margen reportado) que efectivamente
+  // se cobra y persiste sale siempre de la variante o, si esta no tiene su
+  // propio valor, del producto — nunca del payload del cliente. Y son DOS
+  // consultas para todo el carrito, no dos por renglón: antes era un `for` con
+  // dos `await` adentro, o sea 20 viajes en un ticket de 10 renglones. Mismo
+  // criterio que `aprobar_orden_compra` e `importar_productos_planilla`.
+  const productoIds = [
+    ...new Set(items.map((item) => item.productoId ?? item.id)),
+  ];
 
-  if (requiereCaja && !turnoAbiertoId) {
-    return { error: "CAJA_CERRADA", success: false };
-  }
+  /** La promoción y, si es por categoría, las categorías que alcanza. Va como
+   * función para poder entrar al mismo `Promise.all` que el resto. */
+  const cargarPromocion = async () => {
+    if (!promocionId || promocionId === "ninguna" || descuentoMonto <= 0) {
+      return { promoData: null, categoriasPromo: [] as string[] };
+    }
 
-  const { data: metodosDb } = await supabase.from("metodos_pago").select("*");
-  if (!metodosDb)
-    return { error: "Error consultando métodos de pago.", success: false };
-  const metodosMap = Object.fromEntries(metodosDb.map((m) => [m.id, m]));
-
-  // --- PRE-CARGA PROMOCIÓN ---
-  let promoData = null;
-  let categoriasPromo: string[] = [];
-  if (promocionId && promocionId !== "ninguna" && descuentoMonto > 0) {
     const { data: promo } = await supabase
       .from("promociones")
       .select("*")
       .eq("id", promocionId)
       .single();
-    if (promo) {
-      promoData = promo;
-      if (promo.tipo_regla === "CATEGORIA") {
-        const { data: cats } = await supabase
-          .from("promociones_categorias")
-          .select("categoria_nombre")
-          .eq("promocion_id", promocionId);
-        if (cats)
-          categoriasPromo = cats.map((c) => c.categoria_nombre.toLowerCase());
-      }
+
+    if (!promo) return { promoData: null, categoriasPromo: [] as string[] };
+    if (promo.tipo_regla !== "CATEGORIA") {
+      return { promoData: promo, categoriasPromo: [] as string[] };
     }
-  }
 
-  // --- 0. RESOLVER PRECIO Y COSTO REALES SERVER-SIDE ---
-  // item.precio / item.precioUnitario vienen del cliente y son solo para
-  // pintar el carrito antes de confirmar: cualquiera con el request
-  // interceptado podría mandar el valor que quiera. El precio (y el costo,
-  // que define el margen reportado) que efectivamente se cobra y persiste
-  // sale siempre de la variante o, si esta no tiene su propio valor, del
-  // producto — nunca del payload del cliente.
-  // DOS consultas para todo el carrito, no dos por renglón. Antes esto era un
-  // `for` con dos `await` adentro: un ticket de 10 renglones eran 20 viajes a
-  // la base, en fila, con la clienta esperando en el mostrador. Es el mismo
-  // criterio que ya se aplicó en `aprobar_orden_compra` e
-  // `importar_productos_planilla`.
-  const productoIds = [
-    ...new Set(items.map((item) => item.productoId ?? item.id)),
-  ];
+    const { data: cats } = await supabase
+      .from("promociones_categorias")
+      .select("categoria_nombre")
+      .eq("promocion_id", promocionId);
 
-  const [{ data: stockFilas }, { data: variantesFilas }] = await Promise.all([
+    return {
+      promoData: promo,
+      categoriasPromo: (cats ?? []).map((c) =>
+        c.categoria_nombre.toLowerCase(),
+      ),
+    };
+  };
+
+  const [
+    { turnoId: turnoAbiertoId, requiereCajaAbierta: requiereCaja },
+    { data: metodosDb },
+    { promoData, categoriasPromo },
+    { data: stockFilas },
+    { data: variantesFilas },
+  ] = await Promise.all([
+    resolverTurnoActivo(supabase, user.id, configVenta),
+    // Columnas explícitas y no `*`: es la fila que arma cada pago del ticket,
+    // y traer el resto solo engorda la respuesta.
+    supabase
+      .from("metodos_pago")
+      .select(
+        "id, nombre, tipo, comision, recargo_porcentaje, acreditacion_dias",
+      ),
+    cargarPromocion(),
     supabase
       .from("productos_stock")
       // `unidad_medida` viaja acá y no en una consulta propia: es la misma
@@ -133,6 +151,15 @@ export async function registrarVentaAction(
       .select("id, precio, costo, producto_id, nombre_display")
       .in("producto_id", productoIds),
   ]);
+
+  // BLOQUEO Y ASIGNACIÓN DE CAJA (MODO DINÁMICO)
+  if (requiereCaja && !turnoAbiertoId) {
+    return { error: "CAJA_CERRADA", success: false };
+  }
+
+  if (!metodosDb)
+    return { error: "Error consultando métodos de pago.", success: false };
+  const metodosMap = Object.fromEntries(metodosDb.map((m) => [m.id, m]));
 
   // La clave compuesta reproduce el `.eq().eq()` que hacía cada iteración.
   const stockPorClave = new Map(
@@ -601,38 +628,85 @@ export async function registrarVentaAction(
     }
   };
 
-  const itemsConStockDescontado: typeof itemsProcesados = [];
+  /** Los renglones que mueven stock por variante. Un producto legacy sin
+   * `producto_variantes` no tiene fila atómica que descontar: su stock vive
+   * solo en el espejo `productos_stock`, que se toca más abajo. */
+  const itemsConVariante = itemsProcesados.filter((item) => item.varianteId);
+
+  /** Los movimientos tal como los espera la RPC. La misma variante en dos
+   * renglones viaja dos veces y la función los SUMA (agrupa por variante):
+   * mandarlos ya sumados desde acá sería una segunda implementación de la
+   * misma regla, en el lugar donde no la protege ninguna transacción. */
+  const movimientosStock = itemsConVariante.map((item) => ({
+    variante_id: item.varianteId,
+    delta: -item.cantidad,
+  }));
+
+  let stockDescontado = false;
 
   /** Devuelve el stock que este mismo request ya había descontado. */
   const revertirStockDescontado = async () => {
-    for (const previo of itemsConStockDescontado) {
-      if (!previo.varianteId) continue;
-      await supabase.rpc("ajustar_stock_variante", {
-        p_variante_id: previo.varianteId,
-        p_delta: previo.cantidad,
-        // REVERSO_VENTA y no ANULACION_VENTA: la venta nunca llegó a existir.
-        // Es el movimiento que la reconstrucción vieja de movimientos no podía
-        // ver, porque no deja fila en ninguna otra tabla.
-        p_origen: "REVERSO_VENTA",
-        p_referencia_id: ventaId,
-      });
+    if (!stockDescontado) return;
+
+    const { error } = await supabase.rpc("ajustar_stock_variantes", {
+      p_movimientos: movimientosStock.map((movimiento) => ({
+        ...movimiento,
+        delta: -movimiento.delta,
+      })),
+      // Una devolución NUNCA se frena por el signo: la mercadería vuelve
+      // igual, y dejarla sin devolver es peor que un stock negativo, que al
+      // menos se ve y se corrige.
+      p_permitir_negativo: true,
+      // REVERSO_VENTA y no ANULACION_VENTA: la venta nunca llegó a existir.
+      // Es el movimiento que la reconstrucción vieja de movimientos no podía
+      // ver, porque no deja fila en ninguna otra tabla.
+      p_origen: "REVERSO_VENTA",
+      p_referencia_id: ventaId,
+    });
+
+    if (error) {
+      console.error(
+        "[VENTA] CRÍTICO: no se pudo devolver el stock de la venta abortada",
+        { ventaId, movimientos: movimientosStock, error },
+      );
+      return;
+    }
+
+    stockDescontado = false;
+  };
+
+  /** Los nombres que la RPC no puede saber: la excepción viaja con los ids de
+   * las variantes que no llegaron, y acá se traducen a lo que la vendedora ve
+   * escrito en el ticket. */
+  const nombresSinStock = (detalle: string | null | undefined): string[] => {
+    if (!detalle) return [];
+    try {
+      const ids = JSON.parse(detalle);
+      if (!Array.isArray(ids)) return [];
+      return ids
+        .map(
+          (id) =>
+            itemsConVariante.find((item) => item.varianteId === id)?.variante,
+        )
+        .filter((nombre): nombre is string => Boolean(nombre));
+    } catch {
+      return [];
     }
   };
 
-  for (const item of itemsProcesados) {
-    if (!item.varianteId) {
-      // Producto legacy sin producto_variantes: no hay fila atómica que
-      // descontar acá, productos_stock es su única fuente de stock y se
-      // sigue tocando más abajo, igual que siempre.
-      itemsConStockDescontado.push(item);
-      continue;
-    }
-
-    const { data: descontado, error: descuentoError } = await supabase.rpc(
-      "ajustar_stock_variante",
+  // --- 2. DESCUENTO DE STOCK: TODO EL TICKET EN UN VIAJE ---
+  //
+  // Antes era un `for` con un `await` adentro, o sea un round-trip por
+  // renglón, en fila y con la clienta esperando. Además, si el renglón 4 no
+  // tenía mercadería, los 3 primeros YA estaban descontados y había que
+  // devolverlos con otros 3 viajes. La RPC plural es todo-o-nada: o descuenta
+  // el ticket entero o no toca una sola fila, así que acá ya no hay nada que
+  // revertir cuando falla el descuento.
+  if (movimientosStock.length > 0) {
+    const { error: descuentoError } = await supabase.rpc(
+      "ajustar_stock_variantes",
       {
-        p_variante_id: item.varianteId,
-        p_delta: -item.cantidad,
+        p_movimientos: movimientosStock,
         p_permitir_negativo: permitirVentaSinStock,
         // El origen viaja CON la llamada y no se setea antes: `set_config` es
         // transaction-local y cada RPC es su propia transacción, así que un
@@ -643,25 +717,23 @@ export async function registrarVentaAction(
     );
 
     if (descuentoError) {
+      await liberarUnidades();
+
+      if (descuentoError.message?.includes("STOCK_INSUFICIENTE")) {
+        const faltantes = nombresSinStock(descuentoError.details);
+        return {
+          error: faltantes.length
+            ? `Sin stock suficiente para la variante "${faltantes.join('", "')}".`
+            : "Sin stock suficiente para completar la venta.",
+          success: false,
+        };
+      }
+
       console.error("[VENTA] Error descontando stock:", descuentoError);
-      await revertirStockDescontado();
-      await liberarUnidades();
-      return {
-        error: `Error al descontar stock de "${item.variante}".`,
-        success: false,
-      };
+      return { error: "Error al descontar stock.", success: false };
     }
 
-    if (!descontado || descontado.length === 0) {
-      await revertirStockDescontado();
-      await liberarUnidades();
-      return {
-        error: `Sin stock suficiente para la variante "${item.variante}".`,
-        success: false,
-      };
-    }
-
-    itemsConStockDescontado.push(item);
+    stockDescontado = true;
   }
 
   // --- 3. CÁLCULO FINANCIERO MASIVO ---

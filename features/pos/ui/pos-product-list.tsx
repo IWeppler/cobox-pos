@@ -68,7 +68,10 @@ export function PosProductList({
             <button
               onClick={() => onProductoClick(producto)}
               disabled={bloqueado}
-              className={`flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors ${
+              // La marca que buscan las flechas del POS. Ver `moverFoco`
+              // en pos-terminal.
+              data-producto-foco=""
+              className={`flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background ${
                 bloqueado
                   ? "opacity-50"
                   : "cursor-pointer hover:bg-muted/60 active:bg-muted"

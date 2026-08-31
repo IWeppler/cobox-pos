@@ -401,9 +401,18 @@ async function procesarVariantes(
     if (!tieneVariantes) {
       const { data: unicoAnterior } = await supabase
         .from("producto_variantes")
-        .select("id, stock, precio, costo")
+        .select("id, stock, precio, costo, sku")
         .eq("producto_id", id)
         .maybeSingle();
+
+      // El código de la variante única. `has()` y no `get()`: este bloque
+      // borra y reinserta la variante, así que un formulario que no manda el
+      // campo —la edición rápida, o un producto con variantes— tiene que
+      // CONSERVAR el código que ya estaba, no vaciarlo. Vaciarlo a propósito
+      // sigue siendo posible: el campo viaja presente y en blanco.
+      const sku = formData.has("sku")
+        ? ((formData.get("sku") as string | null)?.trim() || null)
+        : (unicoAnterior?.sku ?? null);
 
       const { error: delVarError } = await supabase
         .from("producto_variantes")
@@ -418,6 +427,7 @@ async function procesarVariantes(
           producto_id: id,
           nombre_display: "Único",
           stock: stockBase,
+          sku,
         })
         .select("id")
         .single();

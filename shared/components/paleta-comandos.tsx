@@ -96,7 +96,13 @@ const ATAJOS: {
   { teclas: "F2", que: "Cobrar cuenta corriente", soloConPermiso: true },
   { teclas: "F9", que: "Abrir o cerrar el turno de caja" },
   { teclas: "Esc", que: "Cerrar lo que esté abierto" },
-  { teclas: "/", que: "Foco al buscador", soloEnPos: true },
+  { teclas: "F", que: "Foco al buscador", soloEnPos: true },
+  {
+    teclas: "↑ ↓ ← →",
+    que: "Moverse por los productos (en lista, solo ↑ ↓)",
+    soloEnPos: true,
+  },
+  { teclas: "Enter", que: "Agregar el producto marcado", soloEnPos: true },
   {
     teclas: "Alt + 1…9",
     que: "Agregar el producto N de la grilla",
@@ -110,7 +116,11 @@ const ATAJOS: {
   { teclas: "F8", que: "Carga rápida ↔ Vender", soloEnPos: true },
   { teclas: "F4", que: "Ir al paso de pago", soloEnPos: true },
   { teclas: "F7", que: "Elegir cliente", soloEnPos: true },
-  { teclas: "Ctrl + Enter", que: "Confirmar la venta", soloEnPos: true },
+  {
+    teclas: "Ctrl + Enter",
+    que: "Ir al pago y, ahí, confirmar la venta",
+    soloEnPos: true,
+  },
   {
     teclas: "Ctrl + Shift + Borrar",
     que: "Vaciar el ticket",

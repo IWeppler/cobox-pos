@@ -1,6 +1,4 @@
 import { Package } from "lucide-react";
-import { etiquetaSku } from "@/features/stock/lib/identidad-por-rubro";
-import type { Rubro } from "@/entities/config/types";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -10,14 +8,6 @@ type ProductInventorySectionProps = {
   showInventory: boolean;
   onShowInventoryChange: (show: boolean) => void;
   defaultStock?: number | string;
-  /** Ofrece el SKU/EAN de la variante única. Apagado por defecto: solo el ALTA
-   * lo manda hoy (`crearProductoAction` lo escribe en la variante "Único"). La
-   * edición todavía no tiene camino para guardarlo, y un campo que se escribe
-   * y no se guarda es peor que no tenerlo. */
-  mostrarSku?: boolean;
-  /** Solo para el label: en electro esta columna guarda el EAN. */
-  rubro?: Rubro;
-  defaultSku?: string | null;
 };
 
 export function ProductInventorySection({
@@ -25,9 +15,6 @@ export function ProductInventorySection({
   showInventory,
   onShowInventoryChange,
   defaultStock = "0",
-  mostrarSku = false,
-  rubro,
-  defaultSku,
 }: ProductInventorySectionProps) {
   if (showVariants) return null;
 
@@ -61,7 +48,10 @@ export function ProductInventorySection({
       </div>
       {showInventory && (
         <div className="px-2 md:px-5 pb-5 pt-2 animate-in fade-in slide-in-from-top-2 border-t border-border/50 mt-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
+          <div className="pt-3">
+            {/* Solo el stock: el código de la variante única vive arriba, al
+                lado de la marca, porque identifica al producto y no a su
+                inventario. */}
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground">
                 Stock Disponible
@@ -75,24 +65,6 @@ export function ProductInventorySection({
               />
             </div>
 
-            {mostrarSku && (
-              <div className="space-y-2">
-                <Label
-                  htmlFor="sku"
-                  className="text-xs font-semibold text-muted-foreground"
-                >
-                  {etiquetaSku(rubro)}
-                </Label>
-                <Input
-                  id="sku"
-                  name="sku"
-                  defaultValue={defaultSku ?? ""}
-                  placeholder="Opcional"
-                  autoComplete="off"
-                  className="h-10 shadow-none rounded-lg uppercase"
-                />
-              </div>
-            )}
           </div>
         </div>
       )}

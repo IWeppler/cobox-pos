@@ -1,11 +1,6 @@
 import { useState } from "react";
 import { Receipt } from "lucide-react";
-import { MarcaCombobox } from "./marca-combobox";
-import {
-  etiquetaMarca,
-  rubroUsaMarca,
-} from "@/features/stock/lib/marca-por-rubro";
-import type { Rubro } from "@/entities/config/types";
+
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -35,10 +30,6 @@ type ProductFiscalSectionProps = {
   tratamientoActual?: string | null;
   unidadActual?: string | null;
   generoActual?: string | null;
-  marcaActual?: string | null;
-  /** Rubro del comercio: decide si la marca se ofrece siempre y cómo se llama
-   * (en farmacia, "Laboratorio"). */
-  rubro?: Rubro;
 };
 
 /**
@@ -55,28 +46,22 @@ type ProductFiscalSectionProps = {
  * pisa. Un producto al 10,5% sigue al 10,5% después de que alguien le corrija
  * el precio desde la edición rápida.
  *
- * Marca y género no son datos fiscales (no salen en ninguna factura) y por eso
- * el alta no los muestra: pedirle a quien viene a tocar una alícuota que
- * además clasifique el producto es la forma de que no haga ninguna de las dos.
- * En la EDICIÓN aparecen en dos casos:
+ * El GÉNERO tampoco es un dato fiscal (no sale en ninguna factura) y sigue
+ * acá por una razón acotada: es un campo legacy que traen los productos
+ * importados por planilla o desde el catálogo maestro, y esta es la única
+ * pantalla donde se corrige. Por eso aparece SOLO si el producto ya lo trae
+ * cargado; de ahora en más el género se carga como propiedad en Variantes.
  *
- * 1. El producto ya trae alguno cargado —entró por planilla o por el catálogo
- *    maestro—: sacarles la única pantalla donde se corrigen los volvería
- *    incorregibles.
- * 2. El rubro usa la marca como identidad (`rubroUsaMarca`): en un kiosco
- *    "Yerba Del Monte" y "Yerba La Merced" son dos productos que el nombre
- *    solo no distingue, así que el campo tiene que estar aunque venga vacío.
- *
- * En indumentaria y electro se mantiene solo el caso 1: ahí la prenda se
- * identifica por talle/color y el aparato por modelo + EAN.
+ * La MARCA se fue de acá: vive arriba, junto al nombre y al código, en el
+ * bloque de datos básicos. Estaba enterrada en una sección colapsada que el
+ * alta ni siquiera muestra, así que un producto se creaba con marca y después
+ * no había dónde corregirla.
  */
 export function ProductFiscalSection({
   defaults,
   tratamientoActual,
   unidadActual,
   generoActual,
-  marcaActual,
-  rubro,
 }: ProductFiscalSectionProps) {
   const [abierta, setAbierta] = useState(false);
 
@@ -91,22 +76,9 @@ export function ProductFiscalSection({
 
   const resumen = `${ETIQUETA_UNIDAD[unidad]} · IVA ${DEFINICION_TRATAMIENTO_IVA[tratamiento].label}`;
 
-  // Solo si el producto YA los trae: en el alta estas props ni se pasan, así
-  // que el bloque no existe. Se muestra el par completo aunque solo uno tenga
-  // valor — si aparece "Marca" sola, el que edita no tiene forma de saber que
-  // género también se puede corregir ahí.
-  const tieneIdentidadCargada = Boolean(
-    (marcaActual ?? "").trim() || (generoActual ?? "").trim(),
-  );
-
-  // En los rubros donde la marca ES la identidad del producto —kiosco,
-  // alimentos, farmacia, ferretería— el campo aparece aunque esté vacío: "Yerba
-  // Del Monte" y "Yerba La Merced" no se distinguen por el nombre. En los
-  // demás se mantiene la regla de antes (solo si el producto ya la trae), que
-  // es lo que evita empujar un dato que ese rubro no usa: Evens tiene 1.171
-  // productos y cero marcas.
-  const usaMarca = rubro ? rubroUsaMarca(rubro) : false;
-  const mostrarBloqueIdentidad = tieneIdentidadCargada || usaMarca;
+  // Solo si el producto YA lo trae: en el alta esta prop ni se pasa, así que
+  // el bloque no existe y nadie carga un género nuevo desde acá.
+  const mostrarBloqueIdentidad = Boolean((generoActual ?? "").trim());
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden transition-all">
@@ -189,16 +161,11 @@ export function ProductFiscalSection({
           {mostrarBloqueIdentidad && (
             <div className="mt-5 border-t border-border/50 pt-4">
               <p className="text-[11px] text-muted-foreground">
-                {usaMarca
-                  ? `${etiquetaMarca(rubro!)} y género no son datos fiscales, pero identifican al producto en el buscador del POS.`
-                  : "Este producto trae marca y género de una importación. No son datos fiscales — se pueden corregir o vaciar acá, y de ahora en más se cargan como propiedad en Variantes."}
+                Este producto trae género de una importación. No es un dato
+                fiscal — se puede corregir o vaciar acá, y de ahora en más se
+                carga como propiedad en Variantes.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
-                <MarcaCombobox
-                  etiqueta={rubro ? etiquetaMarca(rubro) : "Marca"}
-                  valorInicial={marcaActual}
-                />
-
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-muted-foreground">
                     Género

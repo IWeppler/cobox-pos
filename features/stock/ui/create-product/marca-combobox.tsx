@@ -76,7 +76,7 @@ export function MarcaCombobox({
 
   return (
     <div className="space-y-2">
-      <Label className="text-xs font-semibold text-muted-foreground">
+      <Label className="text-sm font-semibold text-foreground">
         {etiqueta}
       </Label>
 
@@ -89,8 +89,8 @@ export function MarcaCombobox({
           }}
           onFocus={() => setAbierto(true)}
           onBlur={() => setAbierto(false)}
-          placeholder="Opcional"
-          className="h-10 shadow-none rounded-lg pr-8"
+          placeholder="Ej: Nike"
+          className="h-11 px-3 bg-sidebar rounded-lg pr-8"
           autoComplete="off"
         />
 

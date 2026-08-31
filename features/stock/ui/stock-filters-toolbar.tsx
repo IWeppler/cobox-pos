@@ -139,7 +139,19 @@ interface StockFiltersToolbarProps {
   /** Enter en el buscador. En Vender no hace nada (el filtrado es en vivo);
    * en Cargar es lo que agrega la línea a la lista. */
   onSearchEnter?: (value: string) => void;
+  /** Teclas del buscador que la pantalla quiera manejar además de Enter. El
+   * POS lo usa para que la flecha abajo salte del campo al catálogo: ese
+   * caso no puede ir por `useAtajosTeclado`, que ignora las teclas sueltas
+   * mientras se escribe —y hace bien, porque el lector de códigos de barras
+   * escribe acá— así que la excepción va acotada a ESTE input en vez de
+   * levantar la regla para toda la pantalla. */
+  onSearchKeyDown?: (evento: React.KeyboardEvent<HTMLInputElement>) => void;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
+  /** Tecla que le da el foco al buscador, para mostrarla como badge adentro
+   * del campo. Solo la manda la pantalla que REGISTRA el atajo (hoy el POS):
+   * un badge en Inventario, donde la tecla no hace nada, sería una promesa
+   * que el teclado no cumple. */
+  atajoBusqueda?: string;
   searchDisabled?: boolean;
   /** Reemplaza la fila de pills de categoría. Lo usa el POS en la vista de
    * Carga rápida, donde filtrar por categoría no significa nada. */
@@ -176,7 +188,9 @@ export function StockFiltersToolbar({
   onCobrarCuentaCorriente,
   searchPlaceholder = "Buscar producto...",
   onSearchEnter,
+  onSearchKeyDown,
   searchInputRef,
+  atajoBusqueda,
   searchDisabled = false,
   filaSecundaria,
   productosDelNegocio,
@@ -269,15 +283,24 @@ export function StockFiltersToolbar({
               ref={searchInputRef}
               placeholder={searchPlaceholder}
               disabled={searchDisabled}
-              className="pl-9 h-10 text-sm rounded-lg border-border bg-muted w-full"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               onKeyDown={(e) => {
+                onSearchKeyDown?.(e);
+                if (e.defaultPrevented) return;
                 if (e.key !== "Enter" || !onSearchEnter) return;
                 e.preventDefault();
                 onSearchEnter(searchQuery);
               }}
+              className={`pl-9 h-10 text-sm rounded-lg border-border bg-muted w-full ${atajoBusqueda ? "pr-12" : ""}`}
             />
+            {/* Se esconde con texto escrito: el badge no puede taparle a la
+                vendedora lo que está buscando. */}
+            {atajoBusqueda && !searchQuery && (
+              <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-border/70 bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {atajoBusqueda}
+              </kbd>
+            )}
           </div>
 
           <Sheet>
