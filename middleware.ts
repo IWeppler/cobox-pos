@@ -11,6 +11,7 @@ import {
 } from "@/shared/lib/host-comerz";
 import { decidirRuteo, RUTA_TIENDA_NO_ENCONTRADA } from "@/shared/lib/ruteo-host";
 import { resolverTienda } from "@/shared/lib/cache-tenants";
+import { MENSAJE_SESION_VENCIDA } from "@/shared/lib/sesion-vencida";
 import {
   COOKIE_IMPERSONATE,
   COOKIE_NEGOCIO_ACTIVO,
@@ -264,6 +265,32 @@ export async function middleware(request: NextRequest) {
 
   // 2. Control de usuarios NO autenticados
   if (!user) {
+    // Un SERVER ACTION no se puede redirigir. El `fetch` de React sigue el
+    // 307 solo, recibe el HTML del login y tira "An unexpected response was
+    // received from the server": el boundary muestra "esta pantalla falló"
+    // —que no dice lo único que importa— con un Reintentar que no puede
+    // funcionar, porque la sesión sigue vencida. Visto en producción en
+    // /stock, iPhone con la PWA instalada.
+    //
+    // 401 + texto plano es lo que Next sabe leer: usa el CUERPO como mensaje
+    // cuando el status es >= 400 y el content-type es text/plain. Es el único
+    // canal que sobrevive, porque del resto de la respuesta no queda nada.
+    //
+    // Las navegaciones y los RSC siguen redirigiendo: ahí el redirect SÍ
+    // funciona —Next cae a una navegación del navegador y se aterriza en el
+    // login—, y es lo que hace que volver a entrar sea un solo toque.
+    if (request.headers.get("next-action")) {
+      // El content-type va EXACTO, sin charset: Next compara por igualdad
+      // estricta (`contentType === 'text/plain'` en server-action-reducer),
+      // así que "text/plain; charset=utf-8" cae en el else y el mensaje se
+      // pierde. Probado contra producción: el 307 termina en un 404 de /auth
+      // que ya viene con charset, y por eso hoy sale el texto genérico.
+      return new NextResponse(MENSAJE_SESION_VENCIDA, {
+        status: 401,
+        headers: { "content-type": "text/plain" },
+      });
+    }
+
     if (pathname === "/") {
       // La raíz sin sesión y sin subdominio de tienda es la landing de comerz,
       // no el catálogo de un comercio: no hay tenant por defecto.
