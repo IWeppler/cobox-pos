@@ -265,44 +265,49 @@ export async function middleware(request: NextRequest) {
 
   // 2. Control de usuarios NO autenticados
   if (!user) {
-    // Un SERVER ACTION no se puede redirigir. El `fetch` de React sigue el
-    // 307 solo, recibe el HTML del login y tira "An unexpected response was
-    // received from the server": el boundary muestra "esta pantalla falló"
-    // —que no dice lo único que importa— con un Reintentar que no puede
-    // funcionar, porque la sesión sigue vencida. Visto en producción en
-    // /stock, iPhone con la PWA instalada.
-    //
-    // 401 + texto plano es lo que Next sabe leer: usa el CUERPO como mensaje
-    // cuando el status es >= 400 y el content-type es text/plain. Es el único
-    // canal que sobrevive, porque del resto de la respuesta no queda nada.
-    //
-    // Las navegaciones y los RSC siguen redirigiendo: ahí el redirect SÍ
-    // funciona —Next cae a una navegación del navegador y se aterriza en el
-    // login—, y es lo que hace que volver a entrar sea un solo toque.
-    if (request.headers.get("next-action")) {
-      // El content-type va EXACTO, sin charset: Next compara por igualdad
-      // estricta (`contentType === 'text/plain'` en server-action-reducer),
-      // así que "text/plain; charset=utf-8" cae en el else y el mensaje se
-      // pierde. Probado contra producción: el 307 termina en un 404 de /auth
-      // que ya viene con charset, y por eso hoy sale el texto genérico.
-      return new NextResponse(MENSAJE_SESION_VENCIDA, {
-        status: 401,
-        headers: { "content-type": "text/plain" },
-      });
-    }
+    /**
+     * Al login, con una excepción que importa: un SERVER ACTION no se puede
+     * redirigir. El `fetch` de React sigue el 307 solo, recibe el HTML del
+     * login y tira "An unexpected response was received from the server", que
+     * el boundary muestra como "esta pantalla falló" —sin decir lo único que
+     * importa— con un Reintentar que no puede funcionar porque la sesión sigue
+     * vencida. Visto en producción en /stock, iPhone con la PWA instalada.
+     *
+     * 401 + texto plano es lo que Next sabe leer: usa el CUERPO como mensaje
+     * cuando el status es >= 400 y el content-type es text/plain. Es el único
+     * canal que sobrevive, porque del resto de la respuesta no queda nada.
+     *
+     * Las navegaciones y los RSC siguen redirigiendo: ahí el redirect SÍ
+     * funciona —Next cae a una navegación del navegador y se aterriza en el
+     * login—, y es lo que hace que volver a entrar sea un solo toque.
+     *
+     * VA ACÁ ADENTRO Y NO ARRIBA DEL BLOQUE: solo reemplaza redirecciones que
+     * de verdad iban a ocurrir. Puesto antes, le contestaba 401 a los actions
+     * de las rutas PÚBLICAS —el catálogo y el resumen de cuenta corriente por
+     * token, que corren sin sesión a propósito— y los rompía.
+     */
+    const alLogin = () => {
+      if (request.headers.get("next-action")) {
+        // El content-type va EXACTO, sin charset: Next compara por igualdad
+        // estricta (`contentType === 'text/plain'` en server-action-reducer),
+        // así que "text/plain; charset=utf-8" cae en el else y el mensaje se
+        // pierde. Probado contra producción: el 307 termina en un 404 de
+        // /auth que ya viene con charset, y por eso salía el texto genérico.
+        return new NextResponse(MENSAJE_SESION_VENCIDA, {
+          status: 401,
+          headers: { "content-type": "text/plain" },
+        });
+      }
 
-    if (pathname === "/") {
-      // La raíz sin sesión y sin subdominio de tienda es la landing de comerz,
-      // no el catálogo de un comercio: no hay tenant por defecto.
       const url = request.nextUrl.clone();
       url.pathname = "/auth";
       return NextResponse.redirect(url);
-    }
-    if (!isAuthRoute && !isPublicRoute) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/auth";
-      return NextResponse.redirect(url);
-    }
+    };
+
+    // La raíz sin sesión y sin subdominio de tienda es la landing de comerz,
+    // no el catálogo de un comercio: no hay tenant por defecto.
+    if (pathname === "/") return alLogin();
+    if (!isAuthRoute && !isPublicRoute) return alLogin();
     return supabaseResponse;
   }
 
