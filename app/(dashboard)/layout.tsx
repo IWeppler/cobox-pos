@@ -23,6 +23,7 @@ import { getRolActual } from "@/shared/config/supabase/contexto-actual";
 import { puedeCobrarCuentaCorriente } from "@/features/clients/lib/puede-cobrar-cc";
 import { CobrarCuentaCorrienteModal } from "@/features/clients/ui/cobrar-cuenta-corriente-modal";
 import { PaletaComandos } from "@/shared/components/paleta-comandos";
+import { SincronizadorVentas } from "@/features/sales/ui/sincronizador-ventas";
 
 export default async function DashboardLayout({
   children,
@@ -154,6 +155,11 @@ export default async function DashboardLayout({
             puedeCobrarCuentaCorriente={puedeCobrarCc}
             esAdmin={userRole === "ADMIN"}
           />
+
+          {/* Sube las ventas cobradas sin señal. Montado UNA vez, como la
+              paleta: dos instancias serían dos sincronizaciones compitiendo
+              por la misma cola. */}
+          <SincronizadorVentas />
 
           <main className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <TooltipProvider>

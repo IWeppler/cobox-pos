@@ -13,10 +13,15 @@ import { useCatalogFilters } from "@/features/store/hooks/use-catalog-filters";
 import { QuickAddModal } from "@/features/pos/ui/quick-add-modal";
 import { PosProductList } from "@/features/pos/ui/pos-product-list";
 import { posSinImagenes } from "@/features/pos/lib/vista-por-rubro";
+import { resumirStock } from "@/features/pos/lib/resumen-stock";
 import Image from "next/image";
 import { StockFiltersToolbar } from "@/features/stock/ui/stock-filters-toolbar";
 import { formatearMoneda } from "@/shared/utils/formatters";
-import { sufijoPrecioPorUnidad } from "@/shared/lib/unidad-venta";
+import {
+  formatearCantidad,
+  formatearNumeroCantidad,
+  sufijoPrecioPorUnidad,
+} from "@/shared/lib/unidad-venta";
 import { ShareButton } from "@/shared/components/share-button";
 import {
   armarMensajeProducto,
@@ -122,6 +127,26 @@ export function PosTerminal({
   const [vista, setVista] = useState<"vender" | "cargar">("vender");
 
   const addItem = useCartStore((state) => state.addItem);
+  const itemsCarrito = useCartStore((state) => state.items);
+
+  /**
+   * Cuántas unidades de cada producto ya están en el ticket.
+   *
+   * Se suma POR PRODUCTO y no por variante: la grilla muestra productos, y
+   * lo que la vendedora necesita saber de un vistazo es si esa card ya
+   * entró al ticket. Si cargó dos talles, la card dice "3" y el detalle
+   * está en el ticket, que es donde se corrige.
+   */
+  const cantidadEnCarrito = useMemo(() => {
+    const porProducto = new Map<string, number>();
+    for (const item of itemsCarrito) {
+      porProducto.set(
+        item.productoId,
+        (porProducto.get(item.productoId) ?? 0) + item.cantidad,
+      );
+    }
+    return porProducto;
+  }, [itemsCarrito]);
   const setIsOpenCart = useCartStore((state) => state.setIsOpen);
 
   const {
@@ -523,6 +548,9 @@ export function PosTerminal({
               <PosProductList
                 productos={productosOrdenados}
                 stockTotalDe={getStockTotal}
+                cantidadEnCarritoDe={(producto) =>
+                  cantidadEnCarrito.get(producto.id) ?? 0
+                }
                 permitirVentaSinStock={permitirVentaSinStock}
                 mostrarSinStock={mostrarSinStock}
                 slugNegocio={slugNegocio}
@@ -557,6 +585,8 @@ export function PosTerminal({
                 const stockTotal = getStockTotal(producto);
                 const sinStock = stockTotal <= 0;
                 const bloqueado = sinStock && !permitirVentaSinStock;
+                const resumen = resumirStock(producto);
+                const enCarrito = cantidadEnCarrito.get(producto.id) ?? 0;
 
                 const urlProducto = producto.slug
                   ? construirUrlProducto(slugNegocio, producto.slug)
@@ -581,7 +611,15 @@ export function PosTerminal({
                       onClick={() => handleProductClick(producto)}
                       disabled={bloqueado}
                       data-producto-foco=""
+                      // El anillo marca lo que YA está en el ticket. Va
+                      // como `ring` y no como borde para no correr un
+                      // pixel el contenido de la card al prenderse: con la
+                      // grilla llena, ese salto se nota más que la marca.
                       className={`flex flex-col text-left rounded-lg bg-card transition-all overflow-hidden x w-full h-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background ${
+                        enCarrito > 0
+                          ? "ring-2 ring-primary/60"
+                          : ""
+                      } ${
                         !bloqueado
                           ? "shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-150"
                           : "shadow-xs opacity-50"
@@ -602,6 +640,24 @@ export function PosTerminal({
                             <ShoppingBag className="w-8 h-8 text-muted-foreground/30" />
                           </div>
                         )}
+                        {/* Cuántas unidades de este producto ya se
+                            cargaron. Arriba a la IZQUIERDA: a la derecha
+                            vive el botón de compartir, que aparece al
+                            pasar el mouse y taparía el número justo
+                            cuando la vendedora va a tocar la card.
+
+                            El número, y no solo el color: en una grilla
+                            con varias cards marcadas, "¿cuántas de esta
+                            llevo?" es la pregunta que sigue. */}
+                        {enCarrito > 0 && (
+                          <span className="absolute top-2 left-2 z-10 flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold tabular-nums text-primary-foreground shadow-sm">
+                            {formatearNumeroCantidad(
+                              enCarrito,
+                              producto.unidad_medida,
+                            )}
+                          </span>
+                        )}
+
                         {sinStock && (
                           <div className="absolute inset-0 bg-background/55 backdrop-blur-[1px]">
                             <span className="px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-danger/10 text-danger border border-danger/20">
@@ -620,6 +676,37 @@ export function PosTerminal({
                             {sufijoPrecioPorUnidad(producto.unidad_medida)}
                           </span>
                         </p>
+
+                        {/* Cuánto queda. Información SECUNDARIA: va abajo
+                            del precio, más chica y apagada, porque la card
+                            se lee por nombre y precio. Con variantes se
+                            nombran las que tienen stock — el total solo
+                            diría "quedan 6" sin decir de qué talle, que es
+                            justo lo que hay que saber para ofrecerlo. */}
+                        {!sinStock && (
+                          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-muted-foreground/70">
+                            <span className="font-mono tabular-nums">
+                              {formatearCantidad(
+                                stockTotal,
+                                producto.unidad_medida,
+                              )}
+                            </span>
+
+                            {resumen.tieneVariantes &&
+                              resumen.variantes.map((v) => (
+                                <span
+                                  key={v.etiqueta}
+                                  className="rounded bg-muted px-1 py-px font-mono tabular-nums"
+                                >
+                                  {v.etiqueta} {v.stock}
+                                </span>
+                              ))}
+
+                            {resumen.restantes > 0 && (
+                              <span>+{resumen.restantes}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </button>
 

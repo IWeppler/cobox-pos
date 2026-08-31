@@ -12,6 +12,7 @@ import {
   redondearCantidad,
 } from "@/shared/lib/unidad-venta";
 import { emitirComprobante } from "../lib/emitir-comprobante";
+import { ARCA_EMISION_DISPONIBLE } from "@/shared/lib/facturacion";
 
 export async function registrarVentaAction(
   prevState: { error: string | null; success: boolean },
@@ -39,6 +40,47 @@ export async function registrarVentaAction(
   const unidadesRaw = formData.get("unidades_serie") as string | null;
   const unidadesElegidas: { varianteId: string; unidadId: string }[] =
     unidadesRaw ? JSON.parse(unidadesRaw) : [];
+
+  // --- VENTA OFFLINE ---
+  //
+  // El POS puede cobrar sin señal y mandar la venta después (ver
+  // `features/sales/lib/outbox-ventas.ts`). Eso trae tres datos que en una
+  // venta normal no existen:
+  //
+  // `venta_id`: lo pone el CLIENTE. Es la clave de idempotencia — si la
+  // respuesta se pierde y la venta se reenvía, `registrar_venta` la reconoce
+  // por su PK y devuelve `ya_registrada` en vez de cobrarla dos veces.
+  // Se valida el formato: lo que va a una columna uuid no puede venir crudo.
+  //
+  // `vendida_en`: la hora REAL del cobro. Sin ella la venta quedaría fechada
+  // cuando se sincronizó, o sea en el turno equivocado y con la curva
+  // horaria corrida.
+  //
+  // `offline`: la venta NO revalida precios (ver el paso 0). Es la única
+  // excepción a la regla de no confiar en el precio del cliente, y existe
+  // porque el ticket que se le dio a la clienta dice ese número: cambiarlo
+  // al sincronizar sería cobrar una cosa y registrar otra.
+  const esVentaOffline = formData.get("offline") === "true";
+  const ventaIdCliente = (formData.get("venta_id") as string | null)?.trim();
+  const vendidaEn = (formData.get("vendida_en") as string | null)?.trim();
+
+  const UUID_V4 =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (ventaIdCliente && !UUID_V4.test(ventaIdCliente)) {
+    return { error: "Identificador de venta inválido.", success: false };
+  }
+
+  // Una factura no se puede emitir sin conexión: el CAE lo da ARCA en el
+  // momento. Mientras la emisión fiscal esté apagada esto no se activa —
+  // todo sale como TICKET interno, que sí se puede numerar al sincronizar—,
+  // pero el día que se prenda, una venta offline no puede colarse y quedar
+  // sin comprobante válido. El freno va acá, antes de tocar nada.
+  if (esVentaOffline && ARCA_EMISION_DISPONIBLE) {
+    return {
+      error: "Sin conexión no se puede facturar: el CAE lo autoriza ARCA en el momento.",
+      success: false,
+    };
+  }
 
   if (!cartData) return { error: "El carrito está vacío.", success: false };
   const items = JSON.parse(cartData) as any[];
@@ -226,8 +268,21 @@ export async function registrarVentaAction(
         variante: item.variante,
         precioCliente,
         precioServer,
+        offline: esVentaOffline,
       });
     }
+
+    // ACÁ está la única excepción a la regla de que el precio lo pone el
+    // server. En una venta offline el precio que vale es el que la clienta
+    // ya pagó: el ticket impreso dice ese número, y registrar otro sería
+    // cobrar una cosa y guardar otra. El costo, en cambio, sigue saliendo de
+    // la base: no lo paga nadie en el mostrador, y tomarlo del cliente
+    // dejaría el margen a merced de un request modificado.
+    //
+    // Lo que se aparta del precio vigente NO se pierde: se acumula y queda
+    // en `ventas.desfasaje_precio`. Aceptar el precio del cliente sin
+    // registrar la diferencia sería un agujero silencioso.
+    const precioUsado = esVentaOffline ? precioCliente : precioServer;
 
     // La cantidad se valida server-side por el mismo motivo que el precio: la
     // manda el cliente. Hasta acá era `Number(item.cantidad ?? 1)` sin
@@ -267,7 +322,10 @@ export async function registrarVentaAction(
       tipo: item.tipo,
       cantidad: cantidadValidada,
       stockActual,
-      precioServer,
+      precioServer: precioUsado,
+      // Cuánto se apartó del precio vigente, por unidad. Cero en toda venta
+      // online, donde `precioUsado` ES el del server.
+      desfasajeUnitario: precioUsado - precioServer,
       costoServer,
     });
   }
@@ -368,6 +426,8 @@ export async function registrarVentaAction(
   const itemsProcesados = [];
   let totalVentaBrutaItems = 0;
   let costoTotalVenta = 0;
+  // Cuánto se apartó del precio vigente TODA la venta. Siempre 0 online.
+  let desfasajePrecioVenta = 0;
 
   for (const item of itemsResueltos) {
     const { productoIdReal, varianteId, stockActual } = item;
@@ -391,6 +451,7 @@ export async function registrarVentaAction(
 
     totalVentaBrutaItems += precioUnitario * cantidadFinal;
     costoTotalVenta += precioCostoReal * cantidadFinal;
+    desfasajePrecioVenta += item.desfasajeUnitario * cantidadFinal;
 
     itemsProcesados.push({
       productoId: productoIdReal,
@@ -589,7 +650,10 @@ export async function registrarVentaAction(
   // La RPC hace UPDATE ... WHERE id = ? AND estado = 'disponible' y aborta
   // si no afecta exactamente la cantidad pedida: dos cajas vendiendo el
   // mismo IMEI a la vez se serializan en el row lock y la segunda rebota.
-  const ventaId = crypto.randomUUID();
+  // El id lo pone el cliente cuando la venta se cobró offline; si no, lo
+  // ponemos acá como siempre. En los dos casos es la PK, y por lo tanto el
+  // freno contra registrar la misma venta dos veces.
+  const ventaId = ventaIdCliente ?? crypto.randomUUID();
 
   if (unidadesAVender.length > 0) {
     const { error: unidadesError } = await supabase.rpc(
@@ -837,6 +901,14 @@ export async function registrarVentaAction(
     // null en la columna significa "venta anterior a esto", no "sin recargo".
     recargo_cc_porcentaje: pctRecargoCCAplicado,
     recargo_cc_monto: recargoCCServer,
+    // La hora del COBRO, no la de la sincronización: una venta offline que
+    // sube 40 minutos después caería en el turno equivocado y correría la
+    // curva horaria de los reportes. Sin dato, la RPC usa now().
+    fecha_venta: vendidaEn || null,
+    registrada_offline: esVentaOffline,
+    // Redondeado al peso: es un número para mirar, no para cuadrar contra
+    // otro. Null en las ventas online, donde la pregunta no aplica.
+    desfasaje_precio: esVentaOffline ? Math.round(desfasajePrecioVenta) : null,
   };
 
   // --- 4. ESCRIBIR LA VENTA ENTERA, EN UNA TRANSACCIÓN ---
@@ -940,7 +1012,48 @@ export async function registrarVentaAction(
     venta_id: string;
     fecha_venta: string;
     fecha_vencimiento: string | null;
+    ya_registrada?: boolean;
   };
+
+  // LA VENTA YA ESTABA. Pasa cuando el intento anterior llegó al server y
+  // lo que se perdió fue la respuesta: el celular reintenta con el MISMO id
+  // y `registrar_venta` lo reconoce por la PK.
+  //
+  // No es un error y no hay que rehacer nada. Pero sí hay que DESHACER lo
+  // que este intento alcanzó a hacer antes de la RPC: el stock ya se
+  // descontó una vez (en el intento que sí quedó) y este segundo descuento
+  // sobra. Sin esto, cada reintento se comería el stock de nuevo, en
+  // silencio y sin que la venta lo explique.
+  if (nuevaVenta.ya_registrada) {
+    await revertirStockDescontado();
+    await liberarUnidades();
+
+    console.info("[VENTA] Reintento de una venta que ya estaba registrada", {
+      ventaId,
+      offline: esVentaOffline,
+    });
+
+    // El número de comprobante sale de la fila que ya existe: el ticket
+    // impreso en el mostrador tiene que poder repetirse igual.
+    const { data: comprobanteExistente } = await supabase
+      .from("comprobantes")
+      .select("punto_venta, numero")
+      .eq("venta_id", ventaId)
+      .maybeSingle();
+
+    return {
+      error: null,
+      success: true,
+      ventaId,
+      yaRegistrada: true,
+      comprobante: comprobanteExistente
+        ? {
+            puntoVenta: comprobanteExistente.punto_venta,
+            numero: comprobanteExistente.numero,
+          }
+        : null,
+    };
+  }
 
   // --- 11. EMITIR EL COMPROBANTE ---
   // Va último y NO puede voltear la venta: a esta altura la plata ya se cobró

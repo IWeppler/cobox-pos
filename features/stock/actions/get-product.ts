@@ -177,6 +177,14 @@ export async function getStockDetalleProductoAction(id: string): Promise<{
       .select(
         `
         id, nombre, tipo, precio, precio_costo, imagen_url, thumbnail_url, grid_url, slug, publicado, descripcion, categoria_id, creado_en,
+        -- Identidad y datos fiscales: los pide el FORMULARIO de edición, que
+        -- es el único consumidor de esta consulta. Sin ellos el form los leía
+        -- como undefined y los mostraba con el default ("Unidad", 21%, marca
+        -- vacía): el producto se veía mal cargado aunque en la base estuviera
+        -- bien, y guardar desde ahí PISABA el valor real con el default.
+        -- Así se perdía un producto que se vendía por kilo cada vez que
+        -- alguien le tocaba el precio.
+        marca, modelo, unidad_medida, tratamiento_iva, genero,
         categoria:categorias(id, nombre, slug),
         producto_variantes(
           id, sku, nombre_display, precio, costo, stock, atributos,

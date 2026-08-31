@@ -63,7 +63,14 @@ export async function crearProductoAction(
     formData.get("marca") as string | null,
   );
   const modelo = (formData.get("modelo") as string | null)?.trim() || null;
-  const sku = (formData.get("sku") as string | null)?.trim() || null;
+  // En MAYÚSCULAS, que es como el formulario lo muestra: el input tiene
+  // `uppercase` por CSS pero eso no toca el valor, así que lo escrito en
+  // minúscula se guardaba distinto de lo que la vendedora veía en pantalla.
+  // La búsqueda no se veía afectada (compara normalizado), pero el dato sí:
+  // el mismo código escrito de dos formas es un código que no cruza con el
+  // remito ni con la planilla del proveedor.
+  const sku =
+    (formData.get("sku") as string | null)?.trim().toUpperCase() || null;
   // Referencia opcional al Catálogo Maestro (T5). Se valida como UUID antes
   // de tocar la base: un valor basura acá rompería el INSERT entero del
   // producto por un campo que es meramente informativo.

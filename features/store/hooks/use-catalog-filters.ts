@@ -5,6 +5,7 @@ import {
   buildPropiedadesFiltro,
   resolverAtributosVariante,
 } from "@/entities/productos/lib/build-propiedades-filtro";
+import { coincideConBusqueda } from "@/features/store/lib/coincide-busqueda";
 import {
   esPropiedadColor,
   valorPerteneceAFamilia,
@@ -88,21 +89,12 @@ export function useCatalogFilters({
   // nunca debe filtrarse por su propia categoría).
   const matchSearchYVariante = useCallback(
     (c: Producto) => {
-      const query = searchQuery.toLowerCase().trim();
-
-      // 1. Buscar en propiedades del producto padre
-      const matchNombre = (c.nombre || "").toLowerCase().includes(query);
-      const matchMarca = (c.marca || "").toLowerCase().includes(query);
-      const matchModelo = (c.modelo || "").toLowerCase().includes(query);
-
-      // 2. Buscar en el SKU de las variantes (producto_variantes)
-      const matchSku =
-        c.producto_variantes?.some((pv) =>
-          pv.sku?.toLowerCase().includes(query),
-        ) ?? false;
-
-      // 3. Matchea si alguna de las condiciones se cumple
-      const matchSearch = matchNombre || matchMarca || matchModelo || matchSku;
+      // Nombre, marca, modelo y el SKU de las variantes, con acentos
+      // normalizados de los dos lados. La regla vive en
+      // `coincide-busqueda.ts`, aparte y probada: acá adentro no se podía
+      // testear sin montar un componente, y buscar por código —lo que hace
+      // el lector de códigos de barras— no tenía ni una prueba.
+      const matchSearch = coincideConBusqueda(c, searchQuery);
 
       const matchVariante = Object.entries(filtrosVariantes).every(
         ([propKey, propVal]) => {

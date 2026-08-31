@@ -51,6 +51,24 @@ export function ClientSelector({
     onAbiertoChange?.(siguiente);
   };
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  /**
+   * El drawer que contiene este selector, cuando lo hay.
+   *
+   * En celular el ticket del POS vive adentro de un drawer (vaul), que le
+   * pone `pointer-events: none` al body mientras está abierto. El popover se
+   * portalea al body por defecto, así que quedaba FUERA de lo que recibe
+   * eventos: se abría y no se podía tocar ningún cliente. En escritorio el
+   * mismo panel no es un drawer, y por eso ahí siempre funcionó.
+   *
+   * Se resuelve con un callback ref y no con un efecto: el nodo se conoce en
+   * el momento en que React lo monta, y `setState` con el mismo elemento no
+   * vuelve a renderizar. Sin drawer queda `null` y el popover va al body,
+   * exactamente como antes.
+   */
+  const [contenedorDrawer, setContenedorDrawer] = useState<HTMLElement | null>(
+    null,
+  );
   const [clientes, setClientes] = useState<ClienteBasico[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -116,7 +134,14 @@ export function ClientSelector({
 
   return (
     <>
-      <div className="flex flex-col gap-1.5 bg-background rounded-lg">
+      <div
+        ref={(nodo) =>
+          setContenedorDrawer(
+            nodo?.closest<HTMLElement>("[data-slot='drawer-content']") ?? null,
+          )
+        }
+        className="flex flex-col gap-1.5 bg-background rounded-lg"
+      >
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <Button
@@ -134,6 +159,7 @@ export function ClientSelector({
             </Button>
           </PopoverTrigger>
           <PopoverContent
+            container={contenedorDrawer}
             className="w-[calc(100vw-2rem)] sm:w-85 p-0 rounded-xl overflow-hidden border-border"
             align="center"
           >

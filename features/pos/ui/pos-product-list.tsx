@@ -2,7 +2,11 @@
 
 import type { Producto } from "@/entities/productos/types";
 import { formatearMoneda } from "@/shared/utils/formatters";
-import { sufijoPrecioPorUnidad } from "@/shared/lib/unidad-venta";
+import {
+  formatearCantidad,
+  formatearNumeroCantidad,
+  sufijoPrecioPorUnidad,
+} from "@/shared/lib/unidad-venta";
 import { ShareButton } from "@/shared/components/share-button";
 import {
   armarMensajeProducto,
@@ -13,6 +17,9 @@ import {
 type PosProductListProps = {
   productos: Producto[];
   stockTotalDe: (producto: Producto) => number;
+  /** Cuántas unidades de ese producto ya están en el ticket. Marca la fila
+   * como cargada, igual que el anillo de la card en la vista con fotos. */
+  cantidadEnCarritoDe?: (producto: Producto) => number;
   permitirVentaSinStock: boolean;
   mostrarSinStock: boolean;
   slugNegocio: string;
@@ -37,6 +44,7 @@ type PosProductListProps = {
 export function PosProductList({
   productos,
   stockTotalDe,
+  cantidadEnCarritoDe,
   permitirVentaSinStock,
   mostrarSinStock,
   slugNegocio,
@@ -48,6 +56,7 @@ export function PosProductList({
       {productos.map((producto) => {
         const stockTotal = stockTotalDe(producto);
         const sinStock = stockTotal <= 0;
+        const enCarrito = cantidadEnCarritoDe?.(producto) ?? 0;
         const bloqueado = sinStock && !permitirVentaSinStock;
 
         const urlProducto = producto.slug
@@ -63,7 +72,13 @@ export function PosProductList({
         return (
           <div
             key={producto.id}
-            className="group relative flex items-center gap-2 pr-2"
+            className={`group relative flex items-center gap-2 pr-2 ${
+              // Fondo y no anillo: en una lista densa de 44px, un borde
+              // por fila hace que se lean como cajas separadas y se pierde
+              // el barrido vertical, que es lo que hace rápida a esta
+              // vista.
+              enCarrito > 0 ? "bg-primary/5" : ""
+            }`}
           >
             <button
               onClick={() => onProductoClick(producto)}
@@ -81,6 +96,15 @@ export function PosProductList({
                 <p className="truncate text-sm font-medium text-foreground">
                   {producto.nombre}
                 </p>
+                {enCarrito > 0 && (
+                  <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold tabular-nums text-primary-foreground">
+                    {formatearNumeroCantidad(
+                      enCarrito,
+                      producto.unidad_medida,
+                    )}
+                  </span>
+                )}
+
                 {sinStock && (
                   <span className="shrink-0 rounded-md border border-danger/20 bg-danger/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-danger">
                     Agotado
@@ -88,15 +112,27 @@ export function PosProductList({
                 )}
               </div>
 
-              {/* Tabular para que los precios queden alineados columna abajo:
-                  con la lista larga, un precio corrido se lee mal de un
-                  vistazo. */}
-              <p className="shrink-0 font-mono text-sm font-semibold tabular-nums tracking-tight text-muted-foreground">
-                {formatearMoneda(producto.precio)}
-                <span className="text-[10px] font-normal">
-                  {sufijoPrecioPorUnidad(producto.unidad_medida)}
-                </span>
-              </p>
+              <div className="flex shrink-0 items-baseline gap-2">
+                {/* Cuánto queda, en la misma línea. En esta vista el
+                    producto no tiene variantes que desglosar, así que el
+                    total ES la respuesta a la única pregunta del
+                    mostrador: "¿queda?". */}
+                {!sinStock && (
+                  <span className="font-mono text-[11px] tabular-nums text-muted-foreground/70">
+                    {formatearCantidad(stockTotal, producto.unidad_medida)}
+                  </span>
+                )}
+
+                {/* Tabular para que los precios queden alineados columna
+                    abajo: con la lista larga, un precio corrido se lee mal
+                    de un vistazo. */}
+                <p className="font-mono text-sm font-semibold tabular-nums tracking-tight text-muted-foreground">
+                  {formatearMoneda(producto.precio)}
+                  <span className="text-[10px] font-normal">
+                    {sufijoPrecioPorUnidad(producto.unidad_medida)}
+                  </span>
+                </p>
+              </div>
             </button>
 
             <ShareButton

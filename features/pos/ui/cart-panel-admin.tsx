@@ -13,6 +13,9 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { registrarVentaAction } from "@/features/sales/actions/create-sale";
+import { encolarVenta } from "@/features/sales/lib/outbox-ventas";
+import { useVentasPendientesStore } from "@/shared/store/ventas-pendientes-store";
+import { esErrorDeRed } from "@/shared/lib/error-de-red";
 import { getDisponibilidadUnidadesAction } from "@/features/sales/actions/get-unidades-serie";
 import { SeleccionarUnidadesModal } from "./seleccionar-unidades-modal";
 import type {
@@ -43,6 +46,7 @@ import {
 } from "../../../shared/components/cart-sidebar/cart-sidebar-utils";
 import { ClienteBasico } from "../../../shared/components/cart-sidebar/client-selector";
 import { AtajosCarrito } from "./atajos-carrito";
+import type { TipoVenta } from "./atajos-carrito";
 import { esFraccionable } from "@/shared/lib/unidad-venta";
 import { rubroUsaReservas } from "@/features/pos/lib/reservas-por-rubro";
 import {
@@ -97,6 +101,7 @@ export function CartPanelAdmin({
   // una navegación blanda: sin esta dependencia los datos del comercio
   // anterior sobreviven al cambio. Ver el comentario del efecto de abajo.
   const negocioId = useNegocioActivo()?.id ?? null;
+  const refrescarPendientes = useVentasPendientesStore((s) => s.refrescar);
 
   useEffect(() => {
     sincronizarNegocio(negocioId);
@@ -679,7 +684,17 @@ export function CartPanelAdmin({
           metodosPagoDB,
         );
 
+        // El id de la venta se genera ACÁ, antes de saber si hay señal, y
+        // es lo que hace que una venta encolada se pueda reintentar sin
+        // riesgo: es la PK, así que el server reconoce el reenvío y no la
+        // cobra dos veces. La hora también es de acá — es cuando la clienta
+        // pagó, no cuando el registro logró subir.
+        const ventaId = crypto.randomUUID();
+        const vendidaEn = new Date().toISOString();
+
         const formData = new FormData();
+        formData.append("venta_id", ventaId);
+        formData.append("vendida_en", vendidaEn);
         formData.append("cart_items", JSON.stringify(items));
         formData.append("pagos", JSON.stringify(pagosToSubmit));
         formData.append("metodo_pago_id", pagosToSubmit[0]?.metodoPagoId || "");
@@ -715,10 +730,79 @@ export function CartPanelAdmin({
           formData.append("descuento_monto", descuentoDetalle.monto.toString());
         }
 
-        const result = await registrarVentaAction(
-          { error: null, success: false },
-          formData,
-        );
+        /**
+         * Guarda la venta en el celular para subirla después. Se usa cuando
+         * no hay señal y cuando el intento se muere en la red.
+         *
+         * Devuelve si se pudo guardar. Cuando NO se puede —el celular sin
+         * lugar, o el navegador sin IndexedDB— la venta NO se da por hecha:
+         * es preferible que la vendedora lo sepa antes de entregar la
+         * mercadería y no que la venta desaparezca en silencio.
+         */
+        const guardarParaDespues = async () => {
+          if (!negocioId) return false;
+
+          const campos: Record<string, string> = {};
+          formData.forEach((valor, clave) => {
+            if (typeof valor === "string") campos[clave] = valor;
+          });
+          campos["offline"] = "true";
+
+          const guardada = await encolarVenta({
+            ventaId,
+            negocioId,
+            campos,
+            vendidaEn,
+            total: totalFinal,
+            intentos: 0,
+          });
+
+          if (guardada) {
+            void refrescarPendientes(negocioId);
+          }
+          return guardada;
+        };
+
+        // Sin señal ni se intenta: el POST tarda en morirse y son segundos
+        // de la clienta esperando frente al mostrador para llegar al mismo
+        // lugar. `navigator.onLine` en false es confiable (no hay interfaz
+        // de red); en true no garantiza nada, y para eso está el catch.
+        const sinSenal =
+        typeof navigator !== "undefined" && navigator.onLine === false;
+
+        let result: Awaited<ReturnType<typeof registrarVentaAction>>;
+
+        if (sinSenal) {
+          if (!(await guardarParaDespues())) {
+            toast.error("No se pudo guardar la venta en este dispositivo", {
+              description:
+                "No la cobres todavía: no hay conexión y el celular no pudo anotarla.",
+            });
+            return;
+          }
+          result = { error: null, success: true, ventaId } as typeof result;
+        } else {
+          try {
+            result = await registrarVentaAction(
+              { error: null, success: false },
+              formData,
+            );
+          } catch (error) {
+            // La venta se murió en la red. NO se sabe si el server la llegó
+            // a registrar, y por eso encolarla es seguro: si ya estaba, el
+            // reintento la reconoce por su id y no la duplica.
+            if (!esErrorDeRed(error)) throw error;
+
+            if (!(await guardarParaDespues())) {
+              toast.error("Se cortó la conexión y no se pudo guardar la venta", {
+              description:
+                  "Revisá la señal y volvé a cobrar: no quedó registrada.",
+              });
+              return;
+            }
+            result = { error: null, success: true, ventaId } as typeof result;
+          }
+        }
 
         if (!result.success) {
           if (result.error === "CAJA_CERRADA") {
@@ -845,6 +929,23 @@ export function CartPanelAdmin({
           setSelectorClienteAbierto(true);
         }}
         vaciarTicket={clearCartAndResetStep}
+        // Pasa por los MISMOS handlers que los botones: apagar cuenta
+        // corriente descarta la exención de recargo, y prender una apaga la
+        // otra. Un atajo que seteara los estados por su cuenta se saltearía
+        // esas reglas y quedaría desincronizado del ticket.
+        elegirTipoVenta={(tipo: TipoVenta) => {
+          if (tipo === "CUENTA_CORRIENTE") {
+            handleCuentaCorrienteChange(true);
+            return;
+          }
+          if (tipo === "RESERVA") {
+            handleReservaChange(true);
+            return;
+          }
+          handleCuentaCorrienteChange(false);
+          handleReservaChange(false);
+        }}
+        puedeReservar={usaReservas}
         // Solo para lo que se vende por unidad. En un producto por peso el
         // paso mínimo es un gramo: "+1" ahí sería un kilo de más, y "+1 g" un
         // atajo que no cambia nada visible. Esa cantidad se tipea.

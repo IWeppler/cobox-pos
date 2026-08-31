@@ -21,6 +21,10 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { abrirTurnoAction, cerrarTurnoAction } from "../actions/caja-action";
+import {
+  AvisoVentasPendientes,
+  useFrenoVentasPendientes,
+} from "@/features/caja/ui/freno-ventas-pendientes";
 import { etiquetaTipoEgreso } from "../lib/tipo-egreso";
 import { calcularTotalesTurno } from "../lib/totales-turno";
 import { useCajaStatusStore } from "@/shared/store/caja-status-store";
@@ -120,6 +124,11 @@ export function CajaDashboard({
     },
     { error: null, success: false },
   );
+
+  // El turno no se cierra con ventas cobradas sin señal todavía en el
+  // celular: entrarían contra un arqueo ya firmado. Ver
+  // freno-ventas-pendientes.tsx.
+  const { bloqueado: ventasSinSubir } = useFrenoVentasPendientes();
 
   const [, cerrarAction, isCerrarPending] = useActionState(
     async (prevState: CajaActionState, formData: FormData) => {
@@ -434,9 +443,11 @@ export function CajaDashboard({
                         diferencias
                       </p>
                     </div>
+                    <AvisoVentasPendientes />
+
                     <Button
                       type="submit"
-                      disabled={isCerrarPending}
+                      disabled={isCerrarPending || ventasSinSubir}
                       className="w-full h-12"
                     >
                       {isCerrarPending

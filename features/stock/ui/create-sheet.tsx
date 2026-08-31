@@ -120,10 +120,14 @@ export function CrearProductoSheet({
                 recargoPorcentaje={form.recargoPorcentaje}
               />
 
+              {/* La unidad va acá: en una verdulería o una fiambrería, que
+                  el producto se venda por kilo es lo primero que hay que
+                  poder decir, y estaba escondido en el bloque fiscal. */}
               <ProductInventorySection
                 showVariants={form.showVariants}
                 showInventory={form.showInventory}
                 onShowInventoryChange={form.setShowInventory}
+                unidadMedida={defaultsFiscales.unidad_medida}
               />
 
               <ProductVariantsSection

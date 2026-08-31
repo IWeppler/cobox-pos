@@ -411,7 +411,8 @@ async function procesarVariantes(
       // CONSERVAR el código que ya estaba, no vaciarlo. Vaciarlo a propósito
       // sigue siendo posible: el campo viaja presente y en blanco.
       const sku = formData.has("sku")
-        ? ((formData.get("sku") as string | null)?.trim() || null)
+        ? ((formData.get("sku") as string | null)?.trim().toUpperCase() ||
+          null)
         : (unicoAnterior?.sku ?? null);
 
       const { error: delVarError } = await supabase

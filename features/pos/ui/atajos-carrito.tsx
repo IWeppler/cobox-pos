@@ -20,7 +20,15 @@ type AtajosCarritoProps = {
   /** Suma o resta una unidad al ÚLTIMO renglón cargado. `null` cuando no hay
    * ninguno o cuando ese renglón se vende fraccionado (ver abajo). */
   ajustarUltimo: ((delta: number) => void) | null;
+  /** Qué tipo de venta es. Son los mismos tres botones del paso de pago:
+   * el atajo no decide nada por su cuenta, toca el mismo control. */
+  elegirTipoVenta: (tipo: TipoVenta) => void;
+  /** Reservar existe solo en los rubros que lo usan (indumentaria). Sin
+   * esto, `3` sería una tecla que no hace nada en un kiosco. */
+  puedeReservar: boolean;
 };
+
+export type TipoVenta = "COMUN" | "CUENTA_CORRIENTE" | "RESERVA";
 
 /**
  * Los atajos del ticket, en un componente propio y no en un `useAtajosTeclado`
@@ -45,6 +53,8 @@ export function AtajosCarrito({
   abrirSelectorCliente,
   vaciarTicket,
   ajustarUltimo,
+  elegirTipoVenta,
+  puedeReservar,
 }: Readonly<AtajosCarritoProps>) {
   /** Cuándo fue que Ctrl+Enter llevó al paso de pago. Ver el atajo. */
   const llegadaAPagoPorAtajo = useRef(0);
@@ -69,6 +79,28 @@ export function AtajosCarrito({
       teclas: "F7",
       activo: hayItems && !ocupado,
       correr: abrirSelectorCliente,
+    },
+    // 1 / 2 / 3: qué tipo de venta es. Van SOLO en el paso de pago, que es
+    // donde están los botones que representan: un atajo que cambia algo que
+    // no está en pantalla deja a la vendedora sin forma de ver qué pasó.
+    //
+    // Teclas sueltas, así que el hook las ignora mientras se escribe: tipear
+    // "2" en el monto del pago no convierte la venta en fiado. Y no chocan
+    // con los Alt+1…9 de la grilla, que exigen el modificador.
+    {
+      teclas: "1",
+      activo: paso === "PAYMENT" && !ocupado,
+      correr: () => elegirTipoVenta("COMUN"),
+    },
+    {
+      teclas: "2",
+      activo: paso === "PAYMENT" && !ocupado,
+      correr: () => elegirTipoVenta("CUENTA_CORRIENTE"),
+    },
+    {
+      teclas: "3",
+      activo: paso === "PAYMENT" && !ocupado && puedeReservar,
+      correr: () => elegirTipoVenta("RESERVA"),
     },
     {
       // La MISMA tecla avanza el ticket: en el carrito lleva al pago y en

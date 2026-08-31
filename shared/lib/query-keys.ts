@@ -44,3 +44,29 @@ export const CATALOG_QUERY_KEYS = [
   queryKeys.stock.index,
   queryKeys.clientes.listado,
 ] as const;
+
+/**
+ * Qué queries se guardan en el celular para poder abrir la app sin señal
+ * (ver `shared/lib/cache-offline.ts`).
+ *
+ * La lista es CORTA a propósito y es una decisión de plata, no de
+ * performance: entra el catálogo —lo que hace falta para consultar un precio
+ * o ver si hay stock— y NO entra nada que el comercio use para cobrar. Caja,
+ * turnos y el listado de clientes (que trae los saldos de cuenta corriente)
+ * quedan afuera: una foto vieja de un saldo no es un dato incompleto, es un
+ * dato equivocado, y alguien lo usa para cobrar.
+ *
+ * `stock.detalle` tampoco entra: es por producto y solo hace falta con el
+ * sheet de edición abierto, que es justo cuando SÍ se necesita estar online
+ * para guardar.
+ */
+const QUERIES_PERSISTIBLES: readonly (readonly string[])[] = [
+  queryKeys.pos.productos,
+  queryKeys.stock.index,
+];
+
+export function esQueryPersistible(clave: readonly unknown[]): boolean {
+  return QUERIES_PERSISTIBLES.some((persistible) =>
+    persistible.every((parte, indice) => clave[indice] === parte),
+  );
+}

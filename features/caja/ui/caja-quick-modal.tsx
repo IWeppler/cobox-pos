@@ -22,6 +22,10 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { abrirTurnoAction, cerrarTurnoAction } from "../actions/caja-action";
+import {
+  AvisoVentasPendientes,
+  useFrenoVentasPendientes,
+} from "@/features/caja/ui/freno-ventas-pendientes";
 import { useCajaStatusStore } from "@/shared/store/caja-status-store";
 import { useCobroCcStore } from "@/shared/store/cobro-cc-store";
 import { CajaActionState } from "@/entities/caja/types";
@@ -80,6 +84,11 @@ export function CajaQuickModal({
     },
     { error: null, success: false },
   );
+
+  // El turno no se cierra con ventas cobradas sin señal todavía en el
+  // celular: entrarían contra un arqueo ya firmado. Ver
+  // freno-ventas-pendientes.tsx.
+  const { bloqueado: ventasSinSubir } = useFrenoVentasPendientes();
 
   const [, cerrarAction, isCerrarPending] = useActionState(
     async (prevState: CajaActionState, formData: FormData) => {
@@ -215,9 +224,11 @@ export function CajaQuickModal({
                   />
                 </div>
               </div>
+              <AvisoVentasPendientes />
+
               <Button
                 type="submit"
-                disabled={isCerrarPending}
+                disabled={isCerrarPending || ventasSinSubir}
                 className="h-11 w-full"
               >
                 {isCerrarPending ? (

@@ -28,6 +28,7 @@ import {
 } from "@/shared/ui/command";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { usePaletaStore } from "@/shared/store/paleta-store";
+import { normalizarBusqueda as normalizar } from "@/shared/lib/normalizar-busqueda";
 import { useCobroCcStore } from "@/shared/store/cobro-cc-store";
 import { useCajaModalStore } from "@/shared/store/caja-modal-store";
 import {
@@ -117,6 +118,11 @@ const ATAJOS: {
   { teclas: "F4", que: "Ir al paso de pago", soloEnPos: true },
   { teclas: "F7", que: "Elegir cliente", soloEnPos: true },
   {
+    teclas: "1 / 2 / 3",
+    que: "En el pago: venta común, cuenta corriente o reservado",
+    soloEnPos: true,
+  },
+  {
     teclas: "Ctrl + Enter",
     que: "Ir al pago y, ahí, confirmar la venta",
     soloEnPos: true,
@@ -128,10 +134,7 @@ const ATAJOS: {
   },
 ];
 
-/** Sin acentos y en minúscula: "camion" tiene que encontrar "Camión". */
-function normalizar(texto: string): string {
-  return texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
+
 
 /**
  * Paleta de comandos (Ctrl+K).

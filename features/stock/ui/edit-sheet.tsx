@@ -751,6 +751,7 @@ function EditProductForm({
             showInventory={showInventory}
             onShowInventoryChange={setShowInventory}
             defaultStock={producto.stock?.[0]?.cantidad || 0}
+            unidadMedida={producto.unidad_medida}
           />
 
           <ProductVariantsSection

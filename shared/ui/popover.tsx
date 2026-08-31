@@ -21,10 +21,24 @@ function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
+  container,
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content> & {
+  /**
+   * Dónde se monta el popover. Por defecto va al <body>, y eso lo deja
+   * MUERTO adentro de un drawer: vaul le pone `pointer-events: none` al body
+   * mientras está abierto, así que el contenido portaleado afuera no recibe
+   * un solo toque. Se ve exactamente como un popover que se abre y no
+   * responde — y solo en celular, porque en escritorio el mismo panel no es
+   * un drawer.
+   *
+   * Pasando el nodo del drawer, el popover queda adentro del árbol que sí
+   * recibe eventos.
+   */
+  container?: HTMLElement | null;
+}) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={container ?? undefined}>
       <PopoverPrimitive.Content
         data-slot="popover-content"
         align={align}

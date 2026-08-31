@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { logoutAction } from "@/features/auth/actions/logout";
+import { borrarCacheOffline } from "@/shared/lib/cache-offline";
 import {
   LayoutDashboard,
   Package,
@@ -386,7 +387,17 @@ export function Sidebar({
             )}
           </Link> */}
 
-          <form action={logoutAction} className="w-full">
+          {/* El catálogo guardado para trabajar sin señal se borra ACÁ, antes
+              de que la sesión se vaya: en un celular compartido no puede
+              quedar accesible después de que la vendedora se fue. Ver
+              shared/lib/cache-offline.ts. */}
+          <form
+            action={logoutAction}
+            className="w-full"
+            onSubmit={() => {
+              void borrarCacheOffline();
+            }}
+          >
             <button
               type="submit"
               className={`flex items-center gap-3 rounded-md px-2 py-2 w-full text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger cursor-pointer ${isCollapsed ? "justify-center mx-auto w-9 h-9" : ""}`}

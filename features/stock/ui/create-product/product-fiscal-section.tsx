@@ -18,7 +18,6 @@ import {
   normalizarTratamientoIva,
   normalizarUnidadMedida,
   TRATAMIENTOS_IVA,
-  UNIDADES_MEDIDA,
   type DefaultsFiscales,
 } from "@/shared/lib/fiscal-producto";
 
@@ -28,6 +27,8 @@ type ProductFiscalSectionProps = {
   defaults?: DefaultsFiscales;
   /** Valores ya guardados (edición). Ausentes en el alta. */
   tratamientoActual?: string | null;
+  /** Solo para el resumen de la sección cerrada. La unidad NO se edita
+   * acá: vive en Inventario, al lado del stock. Ver abajo. */
   unidadActual?: string | null;
   generoActual?: string | null;
 };
@@ -45,6 +46,17 @@ type ProductFiscalSectionProps = {
  * miran `formData.has(...)`, así que un campo que no se muestra tampoco se
  * pisa. Un producto al 10,5% sigue al 10,5% después de que alguien le corrija
  * el precio desde la edición rápida.
+ *
+ * LA UNIDAD DE MEDIDA NO SE EDITA ACÁ, y no es una omisión: vive en
+ * Inventario, al lado del stock. Decide cuánto se puede cargar y cuánto se
+ * puede vender —un producto por kilo necesita que el campo de stock acepte
+ * 0,750— así que separarla del stock era pedirle a quien carga una
+ * fiambrería que buscara en una sección llamada "fiscal" algo que no lo es.
+ * Acá solo se NOMBRA, en el resumen de la sección cerrada.
+ *
+ * Que aparezca en un solo lugar además es obligatorio: dos inputs con
+ * `name="unidad_medida"` en el mismo form hacen que `formData.get` devuelva
+ * el primero y el otro se pierda sin avisar.
  *
  * El GÉNERO tampoco es un dato fiscal (no sale en ninguna factura) y sigue
  * acá por una razón acotada: es un campo legacy que traen los productos
@@ -138,23 +150,7 @@ export function ProductFiscalSection({
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-muted-foreground">
-                Unidad de medida
-              </Label>
-              <Select name="unidad_medida" defaultValue={unidad}>
-                <SelectTrigger className="h-10 shadow-none rounded-lg bg-background">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {UNIDADES_MEDIDA.map((u) => (
-                    <SelectItem key={u} value={u}>
-                      {ETIQUETA_UNIDAD[u]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
 
           </div>
 
