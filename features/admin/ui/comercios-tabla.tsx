@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { ExternalLink, Search, X } from "lucide-react";
-import { AccionesComercioMenu, type PlanOpcion } from "./acciones-comercio-menu";
+import {
+  AccionesComercioMenu,
+  type PlanOpcion,
+} from "./acciones-comercio-menu";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import type { ComercioConUso } from "@/features/admin/actions/comercios-con-uso";
 import {
@@ -13,6 +16,11 @@ import {
   SelectValue,
 } from "@/shared/ui/select";
 import { CLASE_PORTAL_OSCURO } from "@/features/admin/lib/tema-portal";
+import {
+  BotonWhatsapp,
+  CeldaAcceso,
+  CeldaOnboarding,
+} from "./celda-onboarding";
 
 const ESTADO_COLOR: Record<string, string> = {
   activo: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
@@ -150,7 +158,9 @@ export function ComerciosTabla({
   // ningún comercio.
   const rubros = useMemo(
     () =>
-      [...new Set(comercios.map((c) => c.rubro).filter(Boolean))].sort() as string[],
+      [
+        ...new Set(comercios.map((c) => c.rubro).filter(Boolean)),
+      ].sort() as string[],
     [comercios],
   );
   const estados = useMemo(
@@ -291,7 +301,8 @@ export function ComerciosTabla({
                 )}
               </div>
 
-              <div className="shrink-0">
+              <div className="flex shrink-0 items-center gap-1.5">
+                <BotonWhatsapp whatsapp={c.whatsapp} nombre={c.nombre} />
                 <AccionesComercioMenu
                   negocioId={c.id}
                   nombre={c.nombre}
@@ -302,6 +313,13 @@ export function ComerciosTabla({
                   planes={planes}
                 />
               </div>
+            </div>
+
+            <div className="mt-2">
+              <CeldaAcceso
+                acceso={c.acceso}
+                ultimaActividad={c.ultimaActividad}
+              />
             </div>
 
             <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/[0.06] pt-3 text-xs">
@@ -325,7 +343,8 @@ export function ComerciosTabla({
                   })}
                 </span>
               )}
-              <span className="ml-auto">
+              <span className="ml-auto flex items-center gap-3">
+                <CeldaOnboarding onboarding={c.onboarding} />
                 <Actividad ventas={c.ventas7d} monto={c.monto7d} />
               </span>
             </div>
@@ -365,6 +384,8 @@ export function ComerciosTabla({
                 <th className="px-4 py-3 font-semibold">Rubro</th>
                 <th className="px-4 py-3 font-semibold">Plan</th>
                 <th className="px-4 py-3 font-semibold">Vence</th>
+                <th className="px-4 py-3 font-semibold">Acceso</th>
+                <th className="px-4 py-3 font-semibold">Onboarding</th>
                 <th className="px-4 py-3 font-semibold">7 días</th>
                 <th className="px-4 py-3 font-semibold">Usuarios</th>
                 <th className="px-4 py-3 font-semibold">Cta. corriente</th>
@@ -437,6 +458,17 @@ export function ComerciosTabla({
                   </td>
 
                   <td className="px-4 py-3">
+                    <CeldaAcceso
+                      acceso={c.acceso}
+                      ultimaActividad={c.ultimaActividad}
+                    />
+                  </td>
+
+                  <td className="px-4 py-3">
+                    <CeldaOnboarding onboarding={c.onboarding} />
+                  </td>
+
+                  <td className="px-4 py-3">
                     <Actividad ventas={c.ventas7d} monto={c.monto7d} />
                   </td>
 
@@ -454,22 +486,25 @@ export function ComerciosTabla({
                   </td>
 
                   <td className="px-4 py-3 text-right">
-                    <AccionesComercioMenu
-                      negocioId={c.id}
-                      nombre={c.nombre}
-                      slug={c.slug}
-                      estado={c.estado}
-                      planId={c.plan_id}
-                      planVencimiento={c.plan_vencimiento}
-                      planes={planes}
-                    />
+                    <div className="flex items-center justify-end gap-1.5">
+                      <BotonWhatsapp whatsapp={c.whatsapp} nombre={c.nombre} />
+                      <AccionesComercioMenu
+                        negocioId={c.id}
+                        nombre={c.nombre}
+                        slug={c.slug}
+                        estado={c.estado}
+                        planId={c.plan_id}
+                        planVencimiento={c.plan_vencimiento}
+                        planes={planes}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
 
               {filtrados.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center">
+                  <td colSpan={11} className="px-4 py-10 text-center">
                     <Vacio hayFiltros={hayFiltros} />
                   </td>
                 </tr>
@@ -535,10 +570,8 @@ function Filtro({
   );
 }
 
-const textoDe = (
-  opciones: { valor: string; texto: string }[],
-  valor: string,
-) => opciones.find((o) => o.valor === valor)?.texto ?? valor;
+const textoDe = (opciones: { valor: string; texto: string }[], valor: string) =>
+  opciones.find((o) => o.valor === valor)?.texto ?? valor;
 
 /** Distingue "no hay comercios" de "no hay resultados": son dos situaciones
  * distintas y la segunda tiene solución. */

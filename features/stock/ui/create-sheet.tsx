@@ -20,6 +20,7 @@ import { ProductVariantsSection } from "./create-product/product-variants-sectio
 import { ProductFiscalSection } from "./create-product/product-fiscal-section";
 import { defaultsFiscalesPorRubro } from "@/shared/lib/fiscal-producto";
 import type { Rubro } from "@/entities/config/types";
+import { textoAtributosFaltantes } from "@/features/stock/utils/texto-atributos-faltantes";
 
 interface CrearProductoSheetProps {
   /** Apertura controlada por el padre. Omitir = el sheet se maneja solo con
@@ -166,23 +167,30 @@ export function CrearProductoSheet({
             </form>
           </div>
 
+          {/* Los tres frenos son de la grilla de variantes, así que ninguno
+              aplica con la sección cerrada — es la misma condición que ya usaba
+              `handleSubmit`, y la que faltaba acá dejaba el botón muerto sin
+              ningún campo donde resolver el problema. El de atributos además
+              dice CUÁL falta: "exige uno o más atributos requeridos" no le dice
+              a nadie qué completar. */}
           <CreateProductFooter
             isPending={form.isPending}
             isCompressing={form.isCompressing}
             onCancel={() => form.handleOpenChange(false)}
             blockedReason={
-              form.duplicatePropertyNames.size > 0
-                ? "Resolvé los nombres de propiedad duplicados antes de guardar."
-                : form.genericPropertyNames.size > 0
-                  ? "Renombrá las propiedades con nombre genérico (Propiedad/Opción) antes de guardar."
-                  : form.missingRequiredAttributes.size > 0
-                    ? "Esta categoría exige valores para uno o más atributos requeridos."
-                    : null
+              !form.showVariants
+                ? null
+                : form.duplicatePropertyNames.size > 0
+                  ? "Resolvé los nombres de propiedad duplicados antes de guardar."
+                  : form.genericPropertyNames.size > 0
+                    ? "Renombrá las propiedades con nombre genérico (Propiedad/Opción) antes de guardar."
+                    : form.missingRequiredAttributes.size > 0
+                      ? `Completá ${textoAtributosFaltantes(form.atributosRequeridos, form.missingRequiredAttributes)} en Variantes: esta categoría lo exige.`
+                      : null
             }
           />
         </SheetContent>
       </Sheet>
-
     </>
   );
 }

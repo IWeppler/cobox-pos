@@ -74,20 +74,46 @@ const num = (v: unknown) => Number(v ?? 0);
  * sistemática, no un redondeo. */
 const PERDIDA_MINIMA_PCT = 0.5;
 
-/** Una RPC gerencial. Devuelve null si el usuario no tiene permiso (la función
- * lanza) o si algo falla: la tarjeta simplemente no aparece. */
+/** Sin permiso gerencial la función lanza 42501, y eso es lo ESPERADO para
+ * cualquier vendedora: no es un error que haya que mirar. */
+const SIN_PERMISO = "42501";
+
+/**
+ * Llama una señal y se traga el fallo: la tarjeta simplemente no aparece.
+ *
+ * Lo que NO se traga es el aviso. Hasta el 31/8/2026 este helper devolvía null
+ * en silencio ante cualquier error, y así estuvo 8 días llamando
+ * `antiguedad_saldo_cc` con `p_desde/p_hasta` cuando esa función recibe
+ * `p_limite`: PostgREST devolvía 404 en CADA carga del panel, la señal no se
+ * mostró nunca y nadie se enteró hasta leer los logs de Supabase por otro
+ * motivo. Una tarjeta que no aparece se ve igual que una tarjeta sin nada que
+ * decir — por eso el error va al log, menos el de permiso.
+ */
+async function correrSenal(
+  supabase: SupabaseClient,
+  fn: string,
+  args: Record<string, string | number>,
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabase.rpc(fn, args);
+
+  if (error) {
+    if (error.code !== SIN_PERMISO) {
+      console.error(`[INSIGHTS] ${fn} falló:`, error.message);
+    }
+    return null;
+  }
+
+  return data ? (data as Record<string, unknown>) : null;
+}
+
+/** Una señal del PERÍODO: recibe el rango que el usuario eligió. */
 async function rpcGerencial(
   supabase: SupabaseClient,
   fn: string,
   desde: string,
   hasta: string,
 ): Promise<Record<string, unknown> | null> {
-  const { data, error } = await supabase.rpc(fn, {
-    p_desde: desde,
-    p_hasta: hasta,
-  });
-  if (error || !data) return null;
-  return data as Record<string, unknown>;
+  return correrSenal(supabase, fn, { p_desde: desde, p_hasta: hasta });
 }
 
 /**
@@ -97,7 +123,9 @@ async function rpcGerencial(
  * porque la comisión se cobra sobre el BRUTO y el recargo se calcula sobre la
  * BASE. 15% y 15% sobre 100 dan bruto 115, comisión 17,25 y neto 97,75.
  */
-function reducirMetodos(data: Record<string, unknown> | null): MetodoQuePierde | null {
+function reducirMetodos(
+  data: Record<string, unknown> | null,
+): MetodoQuePierde | null {
   if (!data) return null;
   const medios = (data.medios ?? []) as Record<string, unknown>[];
 
@@ -255,9 +283,13 @@ export async function getSenalesInsightsAction(
     rpcGerencial(supabase, "composicion_ticket", desde, hasta),
     rpcGerencial(supabase, "ventas_por_momento", desde, hasta),
     // La antigüedad de cuenta corriente es una FOTO de ahora: el saldo de un
-    // cliente no tiene versión "de julio". Igual recibe el rango porque la
-    // firma es la misma.
-    rpcGerencial(supabase, "antiguedad_saldo_cc", desde, hasta),
+    // cliente no tiene versión "de julio". Por eso NO recibe el rango, y por
+    // eso va por `correrSenal` y no por `rpcGerencial` — su firma es
+    // `p_limite`, no `p_desde/p_hasta`. Pasarle el rango era lo que la hacía
+    // devolver 404 en cada carga del panel: PostgREST resuelve la función por
+    // el NOMBRE DE LOS ARGUMENTOS, así que una firma que no coincide no es un
+    // parámetro ignorado, es una función que no existe.
+    correrSenal(supabase, "antiguedad_saldo_cc", {}),
   ]);
 
   return {

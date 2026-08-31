@@ -59,7 +59,13 @@ export function useCreateProductForm(control?: ControlDeApertura) {
 
   const [showPrice, setShowPrice] = useState(false);
   const [showInventory, setShowInventory] = useState(false);
-  const [showVariants, setShowVariants] = useState(false);
+  /**
+   * `null` = todavía nadie tocó el toggle de Variantes, así que lo decide la
+   * categoría. Ver `showVariants` abajo.
+   */
+  const [variantesElegidoAMano, setVariantesElegidoAMano] = useState<
+    boolean | null
+  >(null);
 
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [categorias, setCategorias] = useState<CategoriaOption[]>([]);
@@ -67,7 +73,31 @@ export function useCreateProductForm(control?: ControlDeApertura) {
   const [precioCosto, setPrecioCosto] = useState("");
   const [precioVenta, setPrecioVenta] = useState("");
 
-  const variantSelection = useVariantSelection({ categoriaId: categoriaSeleccionada });
+  const variantSelection = useVariantSelection({
+    categoriaId: categoriaSeleccionada,
+  });
+
+  /**
+   * Si la sección Variantes está abierta.
+   *
+   * Cuando la categoría exige atributos (`categoria_atributos`) se abre SOLA, y
+   * eso arregla un callejón sin salida real: en Estilo Bonito, "Ropa Bebe"
+   * exige Género y sus 12 subcategorías lo heredan. `useVariantSelection` ya
+   * agregaba la propiedad "Género" esperando valores — pero adentro de esta
+   * sección, que estaba cerrada. El formulario quedaba con Guardar
+   * deshabilitado ("Esta categoría exige valores...") y sin ningún campo donde
+   * cargarlo. El 30/8/2026 le pasó cargando una campera de bebé.
+   *
+   * Se deriva en vez de prenderse con un efecto para que no haya un render
+   * extra ni un setState en cascada, y sobre todo para que la elección MANUAL
+   * siga mandando: quien apaga Variantes a propósito puede guardar igual — el
+   * server tampoco exige el atributo en el camino sin variantes, así que
+   * bloquearlo acá era la UI pidiendo algo que la base no pide.
+   */
+  const showVariants =
+    variantesElegidoAMano ??
+    variantSelection.atributosRequeridosNombres.size > 0;
+  const setShowVariants = setVariantesElegidoAMano;
 
   useEffect(() => {
     const fetchCats = async () => {
@@ -106,7 +136,9 @@ export function useCreateProductForm(control?: ControlDeApertura) {
       setUrlsSubidas(null);
       setShowPrice(false);
       setShowInventory(false);
-      setShowVariants(false);
+      // Vuelve a "lo decide la categoría", no a "cerrado": el sheet siguiente
+      // arranca sin categoría elegida, así que da cerrado igual.
+      setVariantesElegidoAMano(null);
       setStatus("active");
       setCategoriaSeleccionada("");
       setPrecioCosto("");
@@ -347,6 +379,7 @@ export function useCreateProductForm(control?: ControlDeApertura) {
     isLoadingSuggestions: variantSelection.isLoadingSuggestions,
     getFilteredSuggestions: variantSelection.getFilteredSuggestions,
     atributosExistentes: variantSelection.atributosExistentes,
+    atributosRequeridos: variantSelection.atributosRequeridos,
     atributosRequeridosNombres: variantSelection.atributosRequeridosNombres,
     missingRequiredAttributes: variantSelection.missingRequiredAttributes,
   };
