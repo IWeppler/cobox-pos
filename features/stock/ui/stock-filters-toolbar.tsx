@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
+import { useDragScroll } from "@/shared/hooks/use-drag-scroll";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -224,6 +225,12 @@ export function StockFiltersToolbar({
   // cambia por rubro es la plantilla que se descarga, no el camino: los dos
   // orígenes —proveedor y planilla propia— terminan en la conciliación.
   const [isIngresoOpen, setIsIngresoOpen] = useState(false);
+  // La fila de categorías se puede arrastrar con el mouse, como ya se
+  // arrastra con el dedo. Se declara acá arriba y no adentro de la rama que
+  // la dibuja porque esa rama es condicional (filaSecundaria) y un hook no
+  // puede montarse a veces sí y a veces no.
+  const { ref: filaCategoriasRef, dragProps: dragCategorias } =
+    useDragScroll<HTMLDivElement>();
   const propiedadesVariantes = Object.entries(propiedadesGlobales);
   const hayFiltrosVariantesActivos = Object.values(filtrosVariantes).some(
     (valor) => (Array.isArray(valor) ? valor.length > 0 : valor !== "todos"),
@@ -628,7 +635,14 @@ export function StockFiltersToolbar({
 
         return (
           <div className="flex w-full min-w-0 items-start gap-2 overflow-hidden mt-4 md:mt-2 px-2">
-            <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-2 scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] px-1 sm:px-0">
+            <div
+              ref={filaCategoriasRef}
+              {...dragCategorias}
+              // `touch-pan-x` deja el pan táctil en manos del navegador (con
+              // su inercia) y solo evita que el gesto horizontal se lo robe
+              // el scroll vertical de la página.
+              className="flex min-w-0 flex-1 gap-2 overflow-x-auto touch-pan-x pb-2 scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] px-1 sm:px-0"
+            >
               {padreEnVista ? (
                 <>
                   <Button
