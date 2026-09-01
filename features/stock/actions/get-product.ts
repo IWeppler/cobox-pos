@@ -172,18 +172,24 @@ export async function getStockDetalleProductoAction(id: string): Promise<{
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
+    // OJO: adentro del string del `select` NO van comentarios, ni `--` ni
+    // `/* */`. PostgREST no los parsea y supabase-js además le saca los saltos
+    // de línea, así que un comentario se fusiona con la lista de campos y la
+    // consulta entera vuelve PGRST100 ("failed to parse select parameter").
+    // Cualquier explicación sobre estas columnas va ACÁ afuera.
+    //
+    // `marca, modelo, unidad_medida, tratamiento_iva, genero` son identidad y
+    // datos fiscales: los pide el FORMULARIO de edición, que es el único
+    // consumidor de esta consulta. Sin ellos el form los leía como undefined y
+    // los mostraba con el default ("Unidad", 21%, marca vacía): el producto se
+    // veía mal cargado aunque en la base estuviera bien, y guardar desde ahí
+    // PISABA el valor real con el default. Así se perdía un producto que se
+    // vendía por kilo cada vez que alguien le tocaba el precio.
     const { data, error } = await supabase
       .from("productos")
       .select(
         `
         id, nombre, tipo, precio, precio_costo, imagen_url, thumbnail_url, grid_url, slug, publicado, descripcion, categoria_id, creado_en,
-        -- Identidad y datos fiscales: los pide el FORMULARIO de edición, que
-        -- es el único consumidor de esta consulta. Sin ellos el form los leía
-        -- como undefined y los mostraba con el default ("Unidad", 21%, marca
-        -- vacía): el producto se veía mal cargado aunque en la base estuviera
-        -- bien, y guardar desde ahí PISABA el valor real con el default.
-        -- Así se perdía un producto que se vendía por kilo cada vez que
-        -- alguien le tocaba el precio.
         marca, modelo, unidad_medida, tratamiento_iva, genero,
         categoria:categorias(id, nombre, slug),
         producto_variantes(
