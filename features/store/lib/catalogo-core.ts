@@ -2,8 +2,9 @@ import type { Producto } from "@/entities/productos/types";
 import { construirArbolCategorias } from "@/shared/utils/category-tree";
 import {
   construirPortadaCategorias,
-  recienLlegados,
+  seleccionPortada,
   type EntradaPortada,
+  type OrigenPortada,
 } from "./portada-catalogo";
 
 /**
@@ -82,7 +83,10 @@ export function crearResolverCategoriaId(categorias: CategoriaCatalogo[]) {
 /** Lo que la portada necesita para dibujarse, y nada más. */
 export interface PortadaCatalogo {
   categorias: EntradaPortada[];
-  recientes: Producto[];
+  /** La fila de 8 productos: los destacados si hay, si no los recién llegados. */
+  productos: Producto[];
+  /** De cuál de las dos se trata. Lo usa la UI para titular la sección. */
+  origen: OrigenPortada;
   totalProductos: number;
 }
 
@@ -95,7 +99,8 @@ export interface PortadaCatalogo {
  * son el mismo número, así que alcanza con contar una vez — no es una
  * simplificación optimista, es la definición del modo portada.
  *
- * Devuelve 8 productos (`recienLlegados`) y una tarjeta por categoría. Eso es
+ * Devuelve 8 productos (`seleccionPortada`: los destacados si el comercio marcó
+ * alguno, si no los recién llegados) y una tarjeta por categoría. Eso es
  * lo que se manda al navegador para el primer render, en lugar de los 1.183
  * productos con sus 3.164 variantes que se mandaban antes para dibujar
  * exactamente lo mismo.
@@ -150,13 +155,16 @@ export function calcularPortada(params: {
     })),
   ];
 
+  const fila = seleccionPortada(visibles);
+
   return {
     categorias: construirPortadaCategorias({
       entradas,
       productos: visibles,
       resolverCategoriaId,
     }),
-    recientes: recienLlegados(visibles),
+    productos: fila.productos,
+    origen: fila.origen,
     totalProductos: visibles.length,
   };
 }

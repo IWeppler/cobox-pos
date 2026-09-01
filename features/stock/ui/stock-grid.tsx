@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import type { ProductoIndice } from "@/entities/productos/types";
-import { Check, Image as ImageIcon } from "lucide-react";
+import { Check, Image as ImageIcon, Star } from "lucide-react";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import {
   getTotalStock,
@@ -168,6 +168,19 @@ export function StockGrid({
               {isSelected && seleccion.modoSeleccion && (
                 <span className="absolute top-2 left-2 z-10 sm:hidden flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
                   <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                </span>
+              )}
+
+              {/* Los 8 de la portada del catálogo público. Sin esta marca,
+                  "¿cuáles están destacados?" solo se puede responder abriendo
+                  la tienda en otra pestaña y contando. Va abajo a la izquierda
+                  para no chocar con el checkbox ni con el botón de compartir. */}
+              {producto.destacado_en && (
+                <span
+                  className="absolute bottom-2 left-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 backdrop-blur-sm shadow-sm"
+                  title="Destacado en la portada del catálogo"
+                >
+                  <Star className="h-3.5 w-3.5 fill-warning text-warning" />
                 </span>
               )}
 

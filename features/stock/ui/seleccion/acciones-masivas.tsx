@@ -11,6 +11,8 @@ import {
   Loader2,
   MessageCircle,
   Share2,
+  Star,
+  StarOff,
   Trash2,
   TrendingUp,
   type LucideIcon,
@@ -51,7 +53,10 @@ import {
   bulkDeleteProductsAction,
   bulkUpdateCategoryAction,
 } from "../../actions/delete-product";
-import { bulkTogglePublicadoAction } from "../../actions/bulk-catalogo";
+import {
+  bulkTogglePublicadoAction,
+  bulkToggleDestacadoAction,
+} from "../../actions/bulk-catalogo";
 import { UpdatePricesModal } from "../update-prices-modal";
 
 // ---------------------------------------------------------------------------
@@ -481,6 +486,32 @@ async function cambiarVisibilidad(ctx: CtxSeleccion, publicado: boolean) {
   }
 }
 
+
+/**
+ * Destacar / quitar de destacados.
+ *
+ * Directas y sin modal, igual que publicar/ocultar: son reversibles con un
+ * click y no piden ningún dato. El tope de 8 lo chequea la action ANTES de
+ * escribir y vuelve como error con el número exacto que sobra — no se
+ * pre-calcula acá para deshabilitar el botón, porque el conteo del cliente
+ * puede estar viejo (otra vendedora destacando desde otra terminal) y un botón
+ * habilitado que después explica por qué no se pudo es más honesto que uno
+ * gris sin motivo.
+ */
+async function cambiarDestacado(ctx: CtxSeleccion, destacado: boolean) {
+  const result = await bulkToggleDestacadoAction(ctx.ids, destacado);
+  if (result.success) {
+    toast.success(
+      destacado
+        ? `${ctx.ids.length} ${ctx.ids.length === 1 ? "producto destacado" : "productos destacados"} en la portada.`
+        : `${ctx.ids.length} ${ctx.ids.length === 1 ? "producto sacado" : "productos sacados"} de la portada.`,
+    );
+    ctx.finalizar();
+  } else {
+    toast.error(result.error || "No se pudieron cambiar los destacados.");
+  }
+}
+
 export const ACCIONES_MASIVAS: AccionMasiva[] = [
   {
     clave: "precios",
@@ -510,6 +541,32 @@ export const ACCIONES_MASIVAS: AccionMasiva[] = [
         ? "Ninguno de los seleccionados está visible en el catálogo"
         : null,
     Modal: ModalCompartir,
+  },
+  {
+    clave: "destacar",
+    label: () => "Destacar en la portada",
+    icono: Star,
+    prioridad: 35,
+    grupo: "catalogo",
+    // Solo si hay alguno sin destacar. Con los 8 ya marcados la entrada no
+    // haría nada más que devolver el error del tope.
+    visible: (ctx) => ctx.productos.some((p) => !p.destacado_en),
+    // Destacar algo que el catálogo no muestra es armar una vidriera con un
+    // hueco: la portada filtra por publicado/stock ANTES de mirar la marca.
+    bloqueada: (ctx) =>
+      ctx.productos.every((p) => !p.publicado)
+        ? "Ninguno de los seleccionados está publicado en el catálogo"
+        : null,
+    ejecutar: (ctx) => cambiarDestacado(ctx, true),
+  },
+  {
+    clave: "quitar-destacado",
+    label: () => "Quitar de la portada",
+    icono: StarOff,
+    prioridad: 36,
+    grupo: "catalogo",
+    visible: (ctx) => ctx.productos.some((p) => Boolean(p.destacado_en)),
+    ejecutar: (ctx) => cambiarDestacado(ctx, false),
   },
   {
     clave: "publicar",

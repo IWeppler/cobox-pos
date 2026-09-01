@@ -84,6 +84,10 @@ export interface Producto {
   thumbnail_url?: string | null;
   grid_url: string | null;
   creado_en: string;
+  /** Cuándo se marcó como destacado de la portada del catálogo público.
+   * null = no destacado. La portada muestra los 8 con la marca más reciente.
+   * Ver features/store/lib/portada-catalogo.ts. */
+  destacado_en?: string | null;
   publicado: boolean;
   slug: string | null;
   descripcion?: string | null;
@@ -138,6 +142,9 @@ export type ProductoIndice = Pick<
   | "grid_url"
   | "slug"
   | "publicado"
+  // Sin esto la barra de selección no sabe cuántos destacados hay ya, y el
+  // tope de 8 se descubriría recién al escribir.
+  | "destacado_en"
   // Sin esto, Inventario muestra "12 u." de un producto que se vende por kilo.
   | "unidad_medida"
 > & {

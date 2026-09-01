@@ -34,7 +34,7 @@ import {
   construirPortadaCategorias,
   esModoPortada,
   PARAM_VER_TODO,
-  recienLlegados,
+  seleccionPortada,
   VALOR_VER_TODO,
 } from "../lib/portada-catalogo";
 
@@ -49,8 +49,9 @@ interface CategoriaProp {
 
 interface StoreCatalogProps {
   /**
-   * La portada YA calculada por el server: tarjetas de categoría y 8 recién
-   * llegados. Es lo único que viaja en el HTML — el catálogo completo lo pide
+   * La portada YA calculada por el server: tarjetas de categoría y la fila de
+   * 8 productos (los destacados si el comercio marcó alguno, si no los recién
+   * llegados). Es lo único que viaja en el HTML — el catálogo completo lo pide
    * este componente aparte. Ver `calcularPortada`.
    */
   portadaInicial: PortadaCatalogo | null;
@@ -331,10 +332,13 @@ function CatalogContent({
   const modoPortada = modoPortadaUrl && productosFiltrados.length > 0;
 
   // `productosFiltrados` en la portada equivale a "todo lo visible" (sin
-  // categoría, sin búsqueda, sin filtros), así que sirve de base tanto para
-  // los recién llegados como para el total del botón de salida.
-  const recientes = useMemo(
-    () => (modoPortada ? recienLlegados(productosFiltrados) : []),
+  // categoría, sin búsqueda, sin filtros), así que sirve de base tanto para la
+  // fila de 8 como para el total del botón de salida.
+  const fila = useMemo(
+    () =>
+      modoPortada
+        ? seleccionPortada(productosFiltrados)
+        : { productos: [], origen: "recientes" as const },
     [modoPortada, productosFiltrados],
   );
 
@@ -525,7 +529,8 @@ function CatalogContent({
       return (
         <StoreHome
           categorias={portadaInicial.categorias}
-          recientes={portadaInicial.recientes}
+          productos={portadaInicial.productos}
+          origen={portadaInicial.origen}
           totalProductos={portadaInicial.totalProductos}
           onSelectCategoria={handleSelectCategoria}
           onVerTodo={handleVerTodo}
@@ -563,7 +568,8 @@ function CatalogContent({
     return (
       <StoreHome
         categorias={categoriasPortada}
-        recientes={recientes}
+        productos={fila.productos}
+        origen={fila.origen}
         totalProductos={productosFiltrados.length}
         onSelectCategoria={handleSelectCategoria}
         onVerTodo={handleVerTodo}

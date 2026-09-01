@@ -30,6 +30,7 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  Star,
 } from "lucide-react";
 import { ShareButton } from "@/shared/components/share-button";
 import {
@@ -457,6 +458,14 @@ export function StockTable({
                             </button>
                           </AbrirDetalle>
                           <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
+                            {/* Uno de los 8 de la portada del catálogo. Misma
+                                marca que la vista de grilla. */}
+                            {producto.destacado_en && (
+                              <Star
+                                className="h-3 w-3 shrink-0 fill-warning text-warning"
+                                aria-label="Destacado en la portada del catálogo"
+                              />
+                            )}
                             {producto.marca && (
                               <span className="text-[9px] sm:text-[10px] uppercase font-medium tracking-wider bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/50 truncate max-w-24">
                                 {producto.marca}

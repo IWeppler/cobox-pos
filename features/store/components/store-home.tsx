@@ -4,27 +4,34 @@ import Image from "next/image";
 import { ArrowRight, ImageOff } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import type { Producto } from "@/entities/productos/types";
-import type { EntradaPortada } from "../lib/portada-catalogo";
+import type { EntradaPortada, OrigenPortada } from "../lib/portada-catalogo";
 import { ProductCard } from "./product-card";
 import { CarruselHorizontal } from "./carrusel-horizontal";
 
 /**
- * Portada del catálogo: categorías + recién llegados.
+ * Portada del catálogo: categorías + una fila de 8 productos.
  *
  * Reemplaza a la grilla completa con filtros que se mostraba de entrada. La
  * idea es que el visitante primero elija POR DÓNDE entrar; los filtros de
  * talle y color aparecen adentro de la categoría, donde ya son una lista
  * legible en vez del inventario entero.
+ *
+ * La fila de 8 son los DESTACADOS que el comercio marcó desde Inventario, o
+ * los recién llegados si no marcó ninguno. Quién es cuál lo decide
+ * `seleccionPortada`, no este componente.
  */
 export function StoreHome({
   categorias,
-  recientes,
+  productos,
+  origen,
   totalProductos,
   onSelectCategoria,
   onVerTodo,
 }: Readonly<{
   categorias: EntradaPortada[];
-  recientes: Producto[];
+  /** La fila de 8: destacados o recién llegados, ya resuelta por seleccionPortada. */
+  productos: Producto[];
+  origen: OrigenPortada;
   totalProductos: number;
   onSelectCategoria: (id: string) => void;
   onVerTodo: () => void;
@@ -99,19 +106,23 @@ export function StoreHome({
         </section>
       )}
 
-      {recientes.length > 0 && (
-        <section aria-labelledby="portada-recientes">
+      {productos.length > 0 && (
+        <section aria-labelledby="portada-fila">
           <div className="flex items-end justify-between gap-4 mb-5">
             <h2
-              id="portada-recientes"
+              id="portada-fila"
               className="text-lg sm:text-xl font-semibold tracking-tight text-foreground"
             >
-              Recién llegados
+              {/* El título tiene que decir la verdad: si el comercio eligió
+                  estos 8 a mano no son "recién llegados", y al revés. La
+                  decisión ya viene tomada en `origen` — acá no se deduce
+                  mirando los productos. */}
+              {origen === "destacados" ? "Destacados" : "Recién llegados"}
             </h2>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12">
-            {recientes.map((producto, index) => (
+            {productos.map((producto, index) => (
               <ProductCard
                 key={producto.id}
                 producto={producto}

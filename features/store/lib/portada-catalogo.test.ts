@@ -4,7 +4,10 @@ import {
   construirPortadaCategorias,
   esModoPortada,
   imagenDePortada,
+  destacados,
+  MAX_DESTACADOS,
   recienLlegados,
+  seleccionPortada,
 } from "./portada-catalogo";
 
 const producto = (over: Partial<Producto>): Producto =>
@@ -187,5 +190,81 @@ describe("construirPortadaCategorias", () => {
       resolverCategoriaId: resolver,
     });
     expect(entrada.imagen).toBeNull();
+  });
+});
+
+describe("destacados", () => {
+  it("ordena del último marcado al primero", () => {
+    const productos = [
+      producto({ id: "viejo", destacado_en: "2026-08-01T00:00:00Z" }),
+      producto({ id: "nuevo", destacado_en: "2026-08-30T00:00:00Z" }),
+      producto({ id: "medio", destacado_en: "2026-08-15T00:00:00Z" }),
+    ];
+    expect(destacados(productos).map((p) => p.id)).toEqual([
+      "nuevo",
+      "medio",
+      "viejo",
+    ]);
+  });
+
+  it("ignora los que no están marcados", () => {
+    const productos = [
+      producto({ id: "sin-marca" }),
+      producto({ id: "marcado", destacado_en: "2026-08-01T00:00:00Z" }),
+      producto({ id: "nulo", destacado_en: null }),
+    ];
+    expect(destacados(productos).map((p) => p.id)).toEqual(["marcado"]);
+  });
+
+  it("recorta al tope aunque haya más marcados de la cuenta", () => {
+    const productos = Array.from({ length: 12 }, (_, i) =>
+      producto({ id: String(i), destacado_en: `2026-08-${10 + i}T00:00:00Z` }),
+    );
+    expect(destacados(productos)).toHaveLength(MAX_DESTACADOS);
+  });
+
+  it("no muta el array recibido", () => {
+    const productos = [
+      producto({ id: "a", destacado_en: "2026-08-01T00:00:00Z" }),
+      producto({ id: "b", destacado_en: "2026-08-30T00:00:00Z" }),
+    ];
+    destacados(productos);
+    expect(productos.map((p) => p.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("seleccionPortada", () => {
+  it("los destacados ganan sobre los recién llegados", () => {
+    const productos = [
+      producto({ id: "nuevo-sin-foto", creado_en: "2026-08-30T00:00:00Z" }),
+      producto({
+        id: "elegido",
+        creado_en: "2026-01-01T00:00:00Z",
+        destacado_en: "2026-08-20T00:00:00Z",
+      }),
+    ];
+    const fila = seleccionPortada(productos);
+    expect(fila.origen).toBe("destacados");
+    expect(fila.productos.map((p) => p.id)).toEqual(["elegido"]);
+  });
+
+  it("sin ningún destacado cae a recién llegados, como siempre", () => {
+    const productos = [
+      producto({ id: "viejo", creado_en: "2026-01-01T00:00:00Z" }),
+      producto({ id: "nuevo", creado_en: "2026-08-30T00:00:00Z" }),
+    ];
+    const fila = seleccionPortada(productos);
+    expect(fila.origen).toBe("recientes");
+    expect(fila.productos.map((p) => p.id)).toEqual(["nuevo", "viejo"]);
+  });
+
+  it("un destacado que no llega filtrado no se cuela: la marca no es permiso", () => {
+    // `seleccionPortada` recibe los YA visibles. Si el destacado se despublicó
+    // no está en la lista, y la portada tiene que caer a recién llegados en vez
+    // de quedar vacía.
+    const visibles = [producto({ id: "otro", creado_en: "2026-08-30T00:00:00Z" })];
+    const fila = seleccionPortada(visibles);
+    expect(fila.origen).toBe("recientes");
+    expect(fila.productos.map((p) => p.id)).toEqual(["otro"]);
   });
 });

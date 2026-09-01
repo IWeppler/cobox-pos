@@ -141,3 +141,65 @@ export function construirPortadaCategorias(params: {
         null,
     }));
 }
+
+/**
+ * Cuántos productos puede destacar el comercio.
+ *
+ * Coincide con `CANTIDAD_RECIEN_LLEGADOS` porque los destacados ocupan LA
+ * MISMA fila de la portada: son 8 para que la grilla cierre en 2×4 y 4×2 sin
+ * dejar un hueco, igual que los recién llegados a los que reemplazan.
+ *
+ * El tope lo aplica la app (`bulkToggleDestacadoAction` cuenta antes de
+ * escribir), no la base — ver el comentario de la migración
+ * 20260901140000. Acá se recorta igual, como red: si por lo que sea quedaran
+ * 9 marcados, la portada muestra 8 y no una fila descuadrada.
+ */
+export const MAX_DESTACADOS = 8;
+
+/** De dónde salieron los productos que muestra la portada. */
+export type OrigenPortada = "destacados" | "recientes";
+
+/**
+ * Los destacados, del último marcado al primero.
+ *
+ * Ordena por `destacado_en` descendente, así que el que se marcó recién queda
+ * arriba: es el orden que ya espera quien acaba de armar la vidriera, y no
+ * necesita una segunda columna ni una UI de arrastrar.
+ *
+ * Recibe productos YA filtrados por stock/visibilidad, igual que
+ * `recienLlegados`: un producto destacado que después se despublicó o se quedó
+ * sin stock NO puede colarse en la portada por estar marcado. La marca es una
+ * preferencia, no un permiso.
+ */
+export function destacados(
+  productos: Producto[],
+  limite: number = MAX_DESTACADOS,
+): Producto[] {
+  return productos
+    .filter((p) => Boolean(p.destacado_en))
+    .sort((a, b) => (a.destacado_en! < b.destacado_en! ? 1 : -1))
+    .slice(0, limite);
+}
+
+/**
+ * Qué fila de productos va en la portada.
+ *
+ * Los destacados GANAN cuando hay alguno; sin ninguno cae a los recién
+ * llegados, que es lo que la portada mostró siempre. Ese fallback es lo que
+ * hace que la función se pueda soltar en los cuatro negocios el mismo día: el
+ * que no marca nada no ve ningún cambio.
+ *
+ * Devuelve el `origen` en vez de que lo deduzca la UI mirando si el array
+ * tiene algo con `destacado_en`: el título de la sección ("Destacados" vs
+ * "Recién llegados") tiene que decir la verdad, y esa decisión ya se tomó acá.
+ */
+export function seleccionPortada(
+  productos: Producto[],
+  limite: number = MAX_DESTACADOS,
+): { productos: Producto[]; origen: OrigenPortada } {
+  const elegidos = destacados(productos, limite);
+  if (elegidos.length > 0) {
+    return { productos: elegidos, origen: "destacados" };
+  }
+  return { productos: recienLlegados(productos, limite), origen: "recientes" };
+}
