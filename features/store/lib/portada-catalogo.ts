@@ -177,7 +177,20 @@ export function destacados(
 ): Producto[] {
   return productos
     .filter((p) => Boolean(p.destacado_en))
-    .sort((a, b) => (a.destacado_en! < b.destacado_en! ? 1 : -1))
+    // El empate DEVUELVE 0, y no es un detalle: destacar 8 productos de una es
+    // un solo UPDATE con un solo `new Date().toISOString()`, así que los 8
+    // quedan con el timestamp idéntico al milisegundo (verificado en
+    // producción: 8 filas, 1 solo valor distinto). Un comparador que devuelve
+    // -1 en el empate afirma `a > b` Y `b > a` del mismo par, y ante eso el
+    // orden que sale queda "definido por la implementación" — con DOS lugares
+    // que ordenan por separado (el server en `calcularPortada` y el navegador
+    // acá) eso es pedir que la portada se reacomode sola al hidratar.
+    // Con 0, el sort es estable y el empate cae al orden de entrada, que es
+    // `creado_en desc`: entre dos destacados a la vez, primero el más nuevo.
+    .sort((a, b) => {
+      if (a.destacado_en === b.destacado_en) return 0;
+      return a.destacado_en! < b.destacado_en! ? 1 : -1;
+    })
     .slice(0, limite);
 }
 

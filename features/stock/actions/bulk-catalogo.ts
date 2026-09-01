@@ -85,6 +85,24 @@ export async function bulkToggleDestacadoAction(
   }
 
   if (destacado) {
+    // El lote solo YA no entra: se rechaza sin consultar nada.
+    //
+    // No es una optimización, es lo que evita un 414. `/stock` deja
+    // "seleccionar los N que coinciden con los filtros" —en Evens son ~1.700
+    // productos— y el `not.in` de abajo mete un UUID por cada id en la URL:
+    // con 1.700 son ~61 kB y PostgREST corta con "Request-URI Too Large". El
+    // usuario vería "no se pudo verificar" en vez del mensaje del tope, que es
+    // la respuesta correcta y que además ya se sabe sin preguntarle a la base.
+    // Con este guard, la consulta de abajo nunca corre con más de 8 ids.
+    if (productIds.length > MAX_DESTACADOS) {
+      return {
+        error:
+          `La portada muestra ${MAX_DESTACADOS} destacados y estás eligiendo ` +
+          `${productIds.length}. Elegí como máximo ${MAX_DESTACADOS}.`,
+        success: false,
+      };
+    }
+
     // Los que YA están destacados y no son parte de este lote. Los del lote se
     // excluyen porque volver a marcar uno ya marcado no suma un destacado
     // nuevo: sin este `not.in` una selección de 8 que incluya a los 8 actuales

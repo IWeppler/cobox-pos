@@ -961,7 +961,20 @@ export function CartPanelAdmin({
         }
       />
 
-      <CartSidebarHeader isPOSMode={isPOSMode} onClose={closeSidebar} />
+      {/* La flecha de volver vive ACÁ, al lado del título, y no adentro del
+          paso de pago: es navegación entre pasos del ticket, no un control
+          del formulario de cobro. Adentro empujaba el contenido hacia abajo y
+          quedaba a media pantalla; en el header está siempre en el mismo
+          lugar, como el de cerrar. */}
+      <CartSidebarHeader
+        isPOSMode={isPOSMode}
+        onClose={closeSidebar}
+        onBack={
+          effectiveCheckoutStep === "PAYMENT"
+            ? () => setCheckoutStep("CART")
+            : undefined
+        }
+      />
 
       {effectiveCheckoutStep === "CART" ? (
         <CartStepItems
@@ -1001,7 +1014,6 @@ export function CartPanelAdmin({
           promocionesElegibles={promocionesElegibles}
           promocionActivaId={promocionActivaId}
           onPromocionChange={setPromocionId}
-          onBackToCart={() => setCheckoutStep("CART")}
         >
           {items.length > 0 ? (
             <CartSidebarFooter

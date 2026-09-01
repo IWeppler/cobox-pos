@@ -268,3 +268,57 @@ describe("seleccionPortada", () => {
     expect(fila.productos.map((p) => p.id)).toEqual(["otro"]);
   });
 });
+
+describe("destacados: empate de timestamp", () => {
+  // Destacar 8 de una es un solo UPDATE con un solo timestamp, así que el
+  // empate no es un caso raro: es EL caso. Verificado en producción — las 8
+  // filas de Estilo Bonito tienen `2026-09-01 02:28:52.832+00` exacto.
+  const MISMO = "2026-09-01T02:28:52.832Z";
+
+  it("conserva los 8 y no pierde ninguno", () => {
+    const productos = Array.from({ length: 8 }, (_, i) =>
+      producto({ id: `p${i}`, destacado_en: MISMO }),
+    );
+    const salida = destacados(productos);
+    expect(salida).toHaveLength(8);
+    expect(new Set(salida.map((p) => p.id)).size).toBe(8);
+  });
+
+  it("con empate respeta el orden de entrada (sort estable)", () => {
+    const productos = [
+      producto({ id: "nuevo", creado_en: "2026-08-30T00:00:00Z", destacado_en: MISMO }),
+      producto({ id: "medio", creado_en: "2026-05-01T00:00:00Z", destacado_en: MISMO }),
+      producto({ id: "viejo", creado_en: "2026-01-01T00:00:00Z", destacado_en: MISMO }),
+    ];
+    expect(destacados(productos).map((p) => p.id)).toEqual([
+      "nuevo",
+      "medio",
+      "viejo",
+    ]);
+  });
+
+  it("el server y el navegador ordenan igual sobre la misma entrada", () => {
+    // `calcularPortada` (server) y `seleccionPortada` (cliente) corren esto por
+    // separado sobre listas que llegan en el mismo orden. Si el resultado no
+    // coincidiera, la portada se reacomodaría sola al hidratar.
+    const productos = Array.from({ length: 8 }, (_, i) =>
+      producto({ id: `p${i}`, destacado_en: MISMO }),
+    );
+    const server = destacados(productos).map((p) => p.id);
+    const cliente = destacados([...productos]).map((p) => p.id);
+    expect(cliente).toEqual(server);
+  });
+
+  it("un timestamp distinto sigue ganando sobre los empatados", () => {
+    const productos = [
+      producto({ id: "empatado-a", destacado_en: MISMO }),
+      producto({ id: "posterior", destacado_en: "2026-09-01T10:00:00.000Z" }),
+      producto({ id: "empatado-b", destacado_en: MISMO }),
+    ];
+    expect(destacados(productos).map((p) => p.id)).toEqual([
+      "posterior",
+      "empatado-a",
+      "empatado-b",
+    ]);
+  });
+});

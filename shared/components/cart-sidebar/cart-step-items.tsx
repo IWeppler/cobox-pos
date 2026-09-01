@@ -1,6 +1,7 @@
 "use client";
 
 import { CartItemStore } from "@/entities/cart/types";
+import Image from "next/image";
 import { Button } from "@/shared/ui/button";
 import { Barcode, ShoppingBag, X } from "lucide-react";
 import { CantidadControl } from "./cantidad-control";
@@ -52,7 +53,27 @@ export function CartStepItems({
       <div className="flex-1 overflow-y-auto p-2">
         {items.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
-            <ShoppingBag className="mb-4 h-12 w-12 opacity-30" />
+            {/* `alt=""` a propósito: la ilustración no agrega nada que el
+                texto de abajo no diga, así que anunciarla dos veces con un
+                lector de pantalla es ruido.
+
+                El PNG son 1230×1278 y 462 kB, pero en pantalla nunca pasa de
+                160px: `sizes` es lo que hace que el optimizador de Next sirva
+                una variante chica en WebP/AVIF en vez del original.
+
+                `dark:opacity-50` porque la ilustración es gris casi blanco y
+                NO se adapta al tema, al revés del ícono que reemplaza (usaba
+                `currentColor`). Sobre fondo claro queda sutil, como estaba;
+                sobre fondo oscuro, a full, es un carrito blanco que grita más
+                que el texto que tiene al lado. */}
+            <Image
+              src="/empty-cart.png"
+              alt=""
+              width={1230}
+              height={1278}
+              sizes="160px"
+              className="mb-2 h-40 w-auto dark:opacity-50"
+            />
             <p className="text-sm font-medium">Tu carrito esta vacio</p>
           </div>
         ) : (

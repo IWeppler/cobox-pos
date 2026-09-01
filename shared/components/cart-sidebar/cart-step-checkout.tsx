@@ -1,8 +1,7 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect } from "react";
 import {
-  ArrowLeft,
   Banknote,
   CreditCard,
   Plus,
@@ -16,7 +15,6 @@ import {
 import { CreateSalePaymentInput } from "@/entities/ventas/types";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
 import {
   Select,
   SelectContent,
@@ -49,7 +47,6 @@ interface CartStepCheckoutProps {
   promocionesElegibles: PromocionDB[];
   promocionActivaId: string;
   onPromocionChange: (promocionId: string) => void;
-  onBackToCart: () => void;
   children?: ReactNode;
 }
 
@@ -80,13 +77,17 @@ export function CartStepCheckout({
   promocionesElegibles,
   promocionActivaId,
   onPromocionChange,
-  onBackToCart,
   children,
 }: Readonly<CartStepCheckoutProps>) {
-  const [anticipoManual, setAnticipoManual] = useState<number | "">("");
-  const anticipoActual =
-    anticipoManual === "" ? anticipoMinimo : Number(anticipoManual);
-  const montoObjetivo = isCuentaCorriente ? anticipoActual : totalFinal;
+  // El anticipo de cuenta corriente NO se edita en este paso: se tipea en
+  // `payment-modal.tsx` y vuelve por su `onConfirm`. Acá solo se propone el
+  // mínimo configurado como monto de arranque.
+  //
+  // Había un `anticipoManual` con su handler, resto de cuando sí se editaba
+  // inline. Nadie llamaba al handler, así que el estado era siempre "" y el
+  // anticipo siempre el mínimo: un useState que parecía editable y no lo era,
+  // que es justo la clase de cosa que alguien "arregla" mal más adelante.
+  const montoObjetivo = isCuentaCorriente ? anticipoMinimo : totalFinal;
   // `montoAsignado` es la base: lo que ese cobro cubre del ticket. Por eso
   // la diferencia ("falta asignar") se calcula sin recargo — si el recargo
   // contara, un método recargado parecería cubrir más ticket del que cubre.
@@ -148,14 +149,6 @@ export function CartStepCheckout({
     onModoMixtoChange(false);
   };
 
-  const handleAnticipoChange = (value: string) => {
-    const nextValue = value === "" ? "" : Number(value);
-    setAnticipoManual(nextValue);
-    if (!modoMixto) {
-      syncSinglePayment(nextValue === "" ? anticipoMinimo : Number(nextValue));
-    }
-  };
-
   const handleSelectPagoRapido = (metodoId: string) => {
     onModoMixtoChange(false);
     syncSinglePayment(montoObjetivo, metodoId);
@@ -204,16 +197,6 @@ export function CartStepCheckout({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
       <div className="flex-1 overflow-y-auto p-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onBackToCart}
-          className="mb-3 h-9 px-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="mr-1.5 h-4 w-4" />
-          Volver
-        </Button>
-
         <div className="space-y-4">
           {/* TIPO DE VENTA */}
           <section className="space-y-3 rounded-lg border border-border bg-muted p-4">

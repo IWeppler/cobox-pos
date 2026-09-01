@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { invalidarCatalogoDeSesion } from "@/shared/lib/cache-catalogo";
 
 /** SELECCION = los ids que el usuario marcó en la tabla/grilla de stock.
  * `actualizaciones_precio.tipo_alcance` es `text` sin CHECK, así que el valor
@@ -355,6 +356,12 @@ export async function aplicarPreciosAction(
     await supabase.from("actualizaciones_precio_items").insert(itemsHistorial);
 
     revalidatePath("/stock");
+    revalidatePath("/store", "layout");
+    // El precio es lo que la vidriera muestra: sin invalidar el tag, el
+    // catálogo público sigue sirviendo los precios viejos desde
+    // `unstable_cache` hasta que vence el TTL. `revalidatePath` solo no
+    // alcanza — ver cache-catalogo.ts.
+    await invalidarCatalogoDeSesion(supabase);
     return { success: true };
   } catch (error: unknown) {
     console.error("Error en aplicarPreciosAction:", error);
@@ -579,5 +586,9 @@ export async function revertirPreciosAction(loteId: string) {
     .eq("id", loteId);
 
   revalidatePath("/stock");
+  // Revertir devuelve los precios anteriores, así que la vidriera también
+  // tiene que volver atrás. Mismo motivo que en aplicarPreciosAction.
+  revalidatePath("/store", "layout");
+  await invalidarCatalogoDeSesion(supabase);
   return { success: true };
 }
