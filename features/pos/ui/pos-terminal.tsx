@@ -47,6 +47,9 @@ import { useAtajosTeclado } from "@/shared/hooks/use-atajos-teclado";
  * no hay que esperar a que la búsqueda quede en cero para poder crearlo. */
 const RESULTADOS_PARA_OFRECER_CARGA = 6;
 
+/** Cuántos productos se dibujan por tanda. Ver `productosVisibles`. */
+const PAGINA = 24;
+
 interface PosTerminalProps {
   productos: Producto[];
   categorias: Array<{
@@ -129,6 +132,7 @@ export function PosTerminal({
   const [filtrosVariantes, setFiltrosVariantes] = useState<
     Record<string, string[]>
   >({});
+  const [visibleCount, setVisibleCount] = useState(PAGINA);
 
   // Estados para el Modal Rápido
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
@@ -173,7 +177,13 @@ export function PosTerminal({
     tipo,
     filtrosVariantes,
     orden: "mas_vendidos",
-    visibleCount: 1000,
+    // SIN `visibleCount`: acá el corte se hace ABAJO, después de ordenar por
+    // stock. Antes decía `visibleCount: 1000` y no hacía nada — el hook lo usa
+    // solo para `productosVisibles`, y la grilla mapeaba `productosFiltrados`,
+    // que es la lista entera. O sea que el POS dibujaba las 1.226 tarjetas de
+    // Evens en el primer pintado, sin virtualización, con su imagen, su
+    // resumen de stock y su URL para compartir cada una. Ese era el TBT de
+    // 1.080 ms.
   });
 
   // Padres primero (con sus hijos embebidos, para que el toolbar los
@@ -212,6 +222,50 @@ export function PosTerminal({
       }),
     [productosFiltrados],
   );
+
+  /**
+   * Lo que REALMENTE se dibuja.
+   *
+   * El corte va acá y no adentro de `useCatalogFilters` por el orden de las
+   * operaciones: el hook cortaría sobre el resultado del filtro, y el "con
+   * stock primero" se aplica DESPUÉS. Cortando antes, la primera pantalla de
+   * un catálogo con mucho agotado podría quedar entera sin stock — justo lo
+   * que ese orden existe para evitar.
+   *
+   * `PAGINA` arranca en 24 y no en 12 (el número de la tienda pública) porque
+   * en una tablet apaisada la grilla es de 4 columnas: 12 llenan tres filas y
+   * se vería el fondo abajo apenas carga.
+   */
+  const productosVisibles = useMemo(
+    () => productosOrdenados.slice(0, visibleCount),
+    [productosOrdenados, visibleCount],
+  );
+  const hayMasProductos = visibleCount < productosOrdenados.length;
+
+  // Al cambiar la búsqueda, la categoría o los filtros, la lista es OTRA y el
+  // scroll vuelve arriba: mostrar 200 de la búsqueda anterior sería pagar
+  // render por lo que nadie está mirando. `useMemo` y no `useEffect` para que
+  // el reset ocurra en el mismo render del cambio y no en uno posterior, que
+  // dibujaría una vez de más.
+  const claveDeLista = `${searchQuery}|${tipo}|${JSON.stringify(filtrosVariantes)}`;
+  const [claveAnterior, setClaveAnterior] = useState(claveDeLista);
+  if (claveAnterior !== claveDeLista) {
+    setClaveAnterior(claveDeLista);
+    setVisibleCount(PAGINA);
+  }
+
+  /** Suma una página cuando el scroll se acerca al fondo del contenedor. Sin
+   * botón: en el mostrador, buscar un producto scrolleando no puede pedir un
+   * click extra. El margen de 600 px hace que la página siguiente ya esté
+   * dibujada cuando se llega. */
+  const handleScrollProductos = () => {
+    if (!hayMasProductos) return;
+    const el = contenedorProductosRef.current;
+    if (!el) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 600) {
+      setVisibleCount((n) => n + PAGINA);
+    }
+  };
 
   // En kiosco y almacén la venta es por nombre, no de vista: la grilla pasa a
   // lista y el ticket del carrito deja de mostrar miniaturas. Se decide una
@@ -462,6 +516,12 @@ export function PosTerminal({
     })),
   ]);
 
+  // Sobre la lista COMPLETA, no sobre `productosVisibles`: "hay menos de 6
+  // resultados" es una afirmación sobre lo que existe, no sobre lo que entró
+  // en la primera tanda. Con la visible, un catálogo grande diría siempre 24 y
+  // la oferta de cargar no aparecería nunca. Mismo motivo para el
+  // `length === 0` de más abajo, que decide si mostrar "No se encontraron
+  // productos".
   const ofrecerCarga =
     vista === "vender" &&
     searchQuery.trim().length > 0 &&
@@ -543,6 +603,7 @@ export function PosTerminal({
         {/* Área de productos: es lo único que cambia entre Vender y Cargar. */}
         <div
           ref={contenedorProductosRef}
+          onScroll={handleScrollProductos}
           className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] p-2 min-h-0"
         >
           {vista === "cargar" ? (
@@ -564,7 +625,7 @@ export function PosTerminal({
             // qué es del rubro y no un toggle.
             <>
               <PosProductList
-                productos={productosOrdenados}
+                productos={productosVisibles}
                 stockTotalDe={getStockTotal}
                 cantidadEnCarritoDe={(producto) =>
                   cantidadEnCarrito.get(producto.id) ?? 0
@@ -597,7 +658,7 @@ export function PosTerminal({
               ref={grillaRef}
               className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-20 lg:pb-0"
             >
-              {productosOrdenados.map((producto, index) => {
+              {productosVisibles.map((producto, index) => {
                 const primeraImagen = resolverImagenPrincipal(producto);
 
                 const stockTotal = getStockTotal(producto);

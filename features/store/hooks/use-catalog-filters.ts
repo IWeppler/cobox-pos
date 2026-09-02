@@ -51,7 +51,16 @@ interface UseCatalogFiltersProps {
   tipo: string;
   filtrosVariantes: Record<string, string | string[]>;
   orden: string;
-  visibleCount: number;
+  /**
+   * Cuántos productos devolver en `productosVisibles`. Opcional: sin él,
+   * `productosVisibles` es la lista entera y `hayMasProductos` es false.
+   *
+   * Lo omite quien necesita PAGINAR DESPUÉS de reordenar. Es el caso del POS,
+   * que ordena "con stock primero" sobre el resultado del filtro: si el corte
+   * pasara acá, esa página podría quedar entera sin stock. Ver el comentario
+   * de `productosVisibles` en pos-terminal.tsx.
+   */
+  visibleCount?: number;
 }
 
 export interface CategoriaResuelta {
@@ -352,8 +361,12 @@ export function useCatalogFilters({
     productosFiltrados,
   ]);
 
-  const productosVisibles = productosFiltrados.slice(0, visibleCount);
-  const hayMasProductos = visibleCount < productosFiltrados.length;
+  const productosVisibles =
+    visibleCount === undefined
+      ? productosFiltrados
+      : productosFiltrados.slice(0, visibleCount);
+  const hayMasProductos =
+    visibleCount !== undefined && visibleCount < productosFiltrados.length;
 
   const hayFiltrosActivos =
     tipo !== "todos" ||
