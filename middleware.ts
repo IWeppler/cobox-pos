@@ -18,6 +18,10 @@ import {
   HEADER_IMPERSONATE,
   HEADER_NEGOCIO_ACTIVO,
 } from "@/shared/lib/negocio-activo";
+import {
+  leerClaimComerz,
+  resolverContextoDesdeClaim,
+} from "@/shared/lib/contexto-desde-claims";
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
@@ -199,9 +203,21 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // `getClaims()` y no `getUser()`.
+  //
+  // `getUser()` SIEMPRE va al servidor de auth: 5.616 requests en 24 h, 140 ms
+  // de media. `getClaims()` verifica el JWT LOCAL con WebCrypto contra el JWKS
+  // cacheado — este proyecto está en claves asimétricas y se confirmó leyendo
+  // un token real (ES256, con `kid`). No es un atajo que baje la garantía: es
+  // lo que el propio `.d.ts` de supabase-js recomienda sobre `getSession()`,
+  // que sí devuelve datos sin verificar.
+  //
+  // Con claves simétricas caería a red igual que `getUser()`, así que si algún
+  // día se rota a un secreto legacy esto deja de ahorrar pero sigue siendo
+  // correcto.
+  const { data: verificado } = await supabase.auth.getClaims();
+  const claims = verificado?.claims ?? null;
+  const user = claims ? { id: claims.sub as string } : null;
 
   const isAuthRoute = pathname.startsWith("/auth");
   // Las páginas legales se linkean desde el login: tienen que abrirse sin
@@ -243,21 +259,57 @@ export async function middleware(request: NextRequest) {
   // Y es el costo que NO baja moviendo la región de las funciones: el
   // middleware es runtime edge, corre cerca del usuario y lejos de la base
   // siempre. Lo único que se puede hacer es ir menos veces.
+  //
+  // DE DÓNDE SALE AHORA. Del claim `comerz` que escribe el custom access token
+  // hook (20260903110000): trae el mapa {negocio: rol}, el negocio único y si
+  // es super admin. Todo eso lo calculó la base al emitir el token; acá solo
+  // se elige cuál corresponde a la cookie de esta request, que es lo único que
+  // el token no puede saber. Ver `contexto-desde-claims.ts`.
   let rolActual: string | null = null;
   let rol = null;
   let esSuperAdmin = false;
-  if (user) {
-    // El cast es porque `contexto_sesion` es nueva y todavía no está en los
-    // tipos generados de Supabase. La forma la fija la migración
-    // 20260822170000.
-    const { data } = await supabase.rpc("contexto_sesion").maybeSingle();
-    const contexto = data as {
-      rol: string | null;
-      es_super_admin: boolean | null;
-    } | null;
 
-    rolActual = contexto?.rol ?? null;
-    esSuperAdmin = contexto?.es_super_admin ?? false;
+  if (user) {
+    const claim = leerClaimComerz(claims);
+
+    if (claim) {
+      const contexto = resolverContextoDesdeClaim(claim, {
+        negocioActivo,
+        impersonando,
+      });
+      rolActual = contexto.rol;
+      esSuperAdmin = contexto.esSuperAdmin;
+    } else {
+      // FALLBACK A LA BASE, y es PERMANENTE, no andamio de la migración.
+      //
+      // Un token puede no traer el claim por motivos que no se van a terminar
+      // nunca: sesiones emitidas antes de registrar el hook (hasta 60 min), el
+      // hook desregistrado, una rotación de clave, o el propio hook cayendo en
+      // su rama de error —que devuelve el evento intacto justamente para no
+      // dejar a Auth sin emitir tokens—.
+      //
+      // La salida NO puede ser un rol por defecto: uno permisivo abre rutas y
+      // uno restrictivo deja gente afuera. La base ya sabe la respuesta.
+      //
+      // SE LOGUEA A PROPÓSITO. Sin esto, dentro de tres meses no habría forma
+      // de saber si cae acá el 0,3% de las requests (lo esperado) o el 40%
+      // (algo se rompió). El conteo sale gratis de los logs de Supabase
+      // —`rpc/contexto_sesion` se cuenta solo— pero el MOTIVO solo se sabe
+      // desde acá.
+      const motivo = claims
+        ? "claim-ausente-o-version-desconocida"
+        : "sin-claims-verificados";
+      console.warn(`[CLAIMS] fallback a contexto_sesion: ${motivo}`);
+
+      const { data } = await supabase.rpc("contexto_sesion").maybeSingle();
+      const contexto = data as {
+        rol: string | null;
+        es_super_admin: boolean | null;
+      } | null;
+
+      rolActual = contexto?.rol ?? null;
+      esSuperAdmin = contexto?.es_super_admin ?? false;
+    }
 
     // Si por algún motivo falla, asumimos el rol más restrictivo (VENDEDOR)
     rol = rolActual || "VENDEDOR";
