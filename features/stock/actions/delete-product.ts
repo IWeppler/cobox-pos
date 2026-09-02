@@ -9,6 +9,35 @@ import {
   recolectarPathsDeImagenes,
 } from "@/features/stock/lib/borrar-imagenes-producto";
 
+/**
+ * Traduce el freno de la base cuando el producto tiene unidades con IMEI.
+ *
+ * Desde 20260902150000 la FK de `unidades_serie` es RESTRICT y no CASCADE:
+ * borrar un producto ya no puede borrar el registro de garantía de un equipo
+ * vendido. Postgres devuelve 23503, y sin traducirlo la pantalla mostraba
+ * "Ocurrió un error al eliminar" — que no dice qué pasó ni qué hacer, así que
+ * quien lo intenta reintenta para siempre.
+ *
+ * Se mira el nombre de la constraint y no solo el código: 23503 es cualquier
+ * violación de clave foránea, y confundir "tiene IMEIs" con otra causa sería
+ * cambiar un mensaje inútil por uno equivocado.
+ */
+const FK_UNIDADES_SERIE = "unidades_serie_producto_variante_id_fkey";
+
+function mensajeDeBorrado(error: {
+  code?: string;
+  message?: string;
+}): string | null {
+  if (error.code !== "23503") return null;
+  if (!error.message?.includes(FK_UNIDADES_SERIE)) return null;
+
+  return (
+    "No se puede eliminar: tiene unidades con IMEI registradas. " +
+    "Se conservan para la garantía y la trazabilidad de los equipos vendidos. " +
+    "Si el producto ya no se vende, despublicalo en vez de borrarlo."
+  );
+}
+
 export async function eliminarProductoAction(id: string) {
   try {
     const cookieStore = await cookies();
@@ -25,7 +54,9 @@ export async function eliminarProductoAction(id: string) {
     if (error) {
       console.error(error);
       return {
-        error: "No se pudo eliminar el producto de la base de datos.",
+        error:
+          mensajeDeBorrado(error) ??
+          "No se pudo eliminar el producto de la base de datos.",
         success: false,
       };
     }
@@ -72,8 +103,14 @@ export async function bulkDeleteProductsAction(productIds: string[]) {
 
   if (error) {
     console.error("Error en bulkDelete:", error);
+    // En lote no se sabe CUÁL de los seleccionados tiene los IMEIs, y el
+    // borrado es todo-o-nada: ninguno se eliminó. Decirlo es la diferencia
+    // entre reintentar a ciegas y sacar el de electro de la selección.
+    const porImei = mensajeDeBorrado(error);
     return {
-      error: "Ocurrió un error al eliminar los productos.",
+      error: porImei
+        ? "No se eliminó ninguno: alguno de los seleccionados tiene unidades con IMEI registradas, que se conservan para la garantía. Sacalo de la selección y volvé a intentar."
+        : "Ocurrió un error al eliminar los productos.",
       success: false,
     };
   }
