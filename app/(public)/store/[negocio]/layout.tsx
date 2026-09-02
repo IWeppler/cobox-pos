@@ -9,7 +9,7 @@ import { HEADER_MODO_CATALOGO } from "@/shared/lib/host-comerz";
 import { urlDelPanel } from "@/shared/lib/ruteo-host";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import { COLUMNAS_CONFIG_PUBLICA } from "@/shared/lib/columnas-publicas";
+import { leerConfigPublica } from "@/entities/config/lib/leer-config-publica";
 import type { Metadata } from "next";
 
 // El título sale del negocio que se está mirando: no hay tienda por defecto
@@ -52,11 +52,8 @@ export default async function PublicLayout({
 
   // Las categorías principales (sin padre) van al menú hamburguesa de mobile:
   // son las mismas que muestra la portada del catálogo.
-  const [{ data: config }, { data: categorias }] = await Promise.all([
-    supabase
-      .from("configuracion_pos")
-      .select(COLUMNAS_CONFIG_PUBLICA)
-      .maybeSingle(),
+  const [config, { data: categorias }] = await Promise.all([
+    leerConfigPublica(),
     supabase
       .from("categorias")
       .select("id, nombre, slug")

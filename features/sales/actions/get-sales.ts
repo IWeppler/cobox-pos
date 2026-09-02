@@ -2,17 +2,56 @@
 
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
+import { traerTodo } from "@/shared/lib/traer-todo";
 
-export async function getVentasAction(opts?: { soloPropias?: boolean }) {
+/**
+ * El historial de ventas.
+ *
+ * Iba SIN paginar, y eso no era una consulta pesada sino una bomba de tiempo:
+ * PostgREST corta en 1.000 filas EN SILENCIO (ver shared/lib/traer-todo.ts).
+ * Ordenado por `fecha_venta` desc, al pasar las 1.000 ventas lo que se cae es
+ * lo más VIEJO, y esta consulta la consumen el panel y /reportes — o sea que
+ * el síntoma no iba a ser "faltan ventas en el historial" sino ingresos,
+ * costo y ganancia calculados sobre un subconjunto, sin un error ni un log.
+ * Es el mismo bug que ya se comió el catálogo el 12/8/2026, en la tabla que
+ * mueve plata. Evens estaba en 629 al 2/9/2026.
+ *
+ * `desde` / `hasta` acotan por `fecha_venta` (ISO). Van SIN default a
+ * propósito: los consumidores de hoy hacen su propio corte por período en
+ * memoria y varios necesitan el historial entero (el CRM de /reportes mide
+ * recencia y frecuencia; el panel compara contra el período anterior y contra
+ * el día típico de la misma semana). Un default acá cambiaría números en
+ * pantalla sin que nadie lo pidiera; que lo pase el que sabe qué ventana
+ * necesita.
+ */
+export async function getVentasAction(opts?: {
+  soloPropias?: boolean;
+  desde?: string;
+  hasta?: string;
+}) {
   try {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    // Incluimos los nuevos campos de resumen y el array de venta_pagos
-    let query = supabase
-      .from("ventas")
-      .select(
-        `
+    // El usuario se resuelve UNA vez, afuera de la fábrica de páginas: adentro
+    // sería un viaje a auth por cada página que pida traerTodo.
+    let vendedorId: string | null = null;
+    if (opts?.soloPropias) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      vendedorId = user?.id ?? null;
+    }
+
+    // `filaDesde` / `filaHasta` son el rango de FILAS de la paginación; no
+    // confundir con `opts.desde` / `opts.hasta`, que son fechas.
+    const { data, error } = await traerTodo(
+      "ventas (historial)",
+      (filaDesde, filaHasta) => {
+        let query = supabase
+          .from("ventas")
+          .select(
+            `
         id,
         total,
         total_bruto,
@@ -66,17 +105,24 @@ export async function getVentasAction(opts?: { soloPropias?: boolean }) {
           estado_pago_operacion
         )
       `,
-      )
-      .order("fecha_venta", { ascending: false });
+            { count: "exact" },
+          )
+          .order("fecha_venta", { ascending: false })
+          // Desempate obligatorio: `traerTodo` pide las páginas EN PARALELO
+          // cuando tiene el count, así que un orden ambiguo no devuelve las
+          // filas desordenadas sino que DUPLICA unas y se saltea otras entre
+          // páginas. Hoy no hay empates (935 ventas, 935 `fecha_venta`
+          // distintas), pero dos cajas cerrando en el mismo microsegundo no
+          // pueden decidir si un ticket se cuenta dos veces.
+          .order("id", { ascending: false });
 
-    if (opts?.soloPropias) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) query = query.eq("vendedor_id", user.id);
-    }
+        if (vendedorId) query = query.eq("vendedor_id", vendedorId);
+        if (opts?.desde) query = query.gte("fecha_venta", opts.desde);
+        if (opts?.hasta) query = query.lte("fecha_venta", opts.hasta);
 
-    const { data, error } = await query;
+        return query.range(filaDesde, filaHasta);
+      },
+    );
 
     if (error) {
       console.error("Error fetching ventas:", error);
@@ -120,7 +166,10 @@ export async function getPagosCuentaCorrienteAction() {
 
     if (error) {
       console.error("Error fetching pagos de cuenta corriente:", error);
-      return { data: null, error: "No se pudieron cargar los cobros de deuda." };
+      return {
+        data: null,
+        error: "No se pudieron cargar los cobros de deuda.",
+      };
     }
 
     return { data, error: null };

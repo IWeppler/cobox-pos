@@ -90,8 +90,7 @@ export async function editarProductoAction(
   const grids = formData.getAll("grids") as File[];
   const masters = formData.getAll("masters") as File[];
   const imagenesAEliminarStr = formData.get("imagenesAEliminar") as
-    | string
-    | null;
+    string | null;
   const imagenesAEliminar: string[] = imagenesAEliminarStr
     ? (JSON.parse(imagenesAEliminarStr) as string[])
     : [];
@@ -106,7 +105,7 @@ export async function editarProductoAction(
 
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
-  
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -394,45 +393,112 @@ async function procesarVariantes(
     userId: string | null;
   },
 ): Promise<VariantesResult> {
-  const { id, negocioId, categoria_id, tieneVariantes, stockBase, formData, userId } =
-    params;
+  const {
+    id,
+    negocioId,
+    categoria_id,
+    tieneVariantes,
+    stockBase,
+    formData,
+    userId,
+  } = params;
 
   try {
     if (!tieneVariantes) {
-      const { data: unicoAnterior } = await supabase
+      // Se leen TODAS, no `.maybeSingle()`. Con `maybeSingle` un producto que
+      // hoy tiene varias variantes y se está convirtiendo a "sin variantes"
+      // devolvía error, el código lo ignoraba y `unicoAnterior` quedaba en
+      // null — o sea que el caso funcionaba de casualidad, porque después
+      // borraba todo igual. Acá se necesita saber cuál sobrevive.
+      const { data: variantesActuales } = await supabase
         .from("producto_variantes")
-        .select("id, stock, precio, costo, sku")
+        .select("id, stock, precio, costo, sku, atributos, created_at")
         .eq("producto_id", id)
-        .maybeSingle();
+        .order("created_at", { ascending: true });
 
-      // El código de la variante única. `has()` y no `get()`: este bloque
-      // borra y reinserta la variante, así que un formulario que no manda el
-      // campo —la edición rápida, o un producto con variantes— tiene que
-      // CONSERVAR el código que ya estaba, no vaciarlo. Vaciarlo a propósito
-      // sigue siendo posible: el campo viaja presente y en blanco.
+      // La que sobrevive: la que ya era la variante única si existe, y si no
+      // la más vieja. Mismo criterio que la fusión de 20260902100000.
+      const unicoAnterior =
+        (variantesActuales ?? []).find(
+          (v) => Object.keys(v.atributos ?? {}).length === 0,
+        ) ??
+        (variantesActuales ?? [])[0] ??
+        null;
+
+      // El código de la variante única. `has()` y no `get()`: un formulario
+      // que no manda el campo —la edición rápida, o un producto con
+      // variantes— tiene que CONSERVAR el código que ya estaba, no vaciarlo.
+      // Vaciarlo a propósito sigue siendo posible: el campo viaja presente y
+      // en blanco.
       const sku = formData.has("sku")
-        ? ((formData.get("sku") as string | null)?.trim().toUpperCase() ||
-          null)
+        ? (formData.get("sku") as string | null)?.trim().toUpperCase() || null
         : (unicoAnterior?.sku ?? null);
 
-      const { error: delVarError } = await supabase
-        .from("producto_variantes")
-        .delete()
-        .eq("producto_id", id);
-      if (delVarError) throw delVarError;
+      // ANTES ACÁ HABÍA UN DELETE DE TODAS + INSERT, y era el mismo bug que
+      // 20260902110000 sacó de `guardar_variantes_producto`, entrando por otra
+      // puerta: los productos SIN variantes no pasan por esa RPC, así que su
+      // guardado seguía destruyendo el UUID de la variante en cada edición.
+      // Con 129 productos en esa situación no era teórico — se vio dispararse
+      // en Estilo Bonito cinco minutos después de aplicar aquella migración.
+      //
+      // Lo que rompía: `ventas_items.variante_id` y `movimientos_stock` no
+      // tienen FK, así que quedaban apuntando a un id muerto sin error; y como
+      // este bloque corre suelto desde Node (no adentro de una RPC), el
+      // trigger de `movimientos_stock` veía el DELETE y el INSERT como dos
+      // movimientos —un -3 y un +3 sobre la misma mercadería— con origen
+      // DESCONOCIDO, porque `set_config` no cruza transacciones desde acá.
+      //
+      // Con UPDATE, editar un producto sin tocarle el stock no escribe NINGÚN
+      // movimiento (el trigger corta con `new.stock is not distinct from
+      // old.stock`), y si el stock cambia escribe uno solo con el delta real.
+      // El origen sigue quedando DESCONOCIDO cuando cambia: declararlo exige
+      // que la escritura viva adentro de una RPC, y eso es otro cambio.
+      let unicoNuevo: { id: string } | null = null;
 
-      const { data: unicoNuevo, error: insVarError } = await supabase
-        .from("producto_variantes")
-        .insert({
-          negocio_id: negocioId,
-          producto_id: id,
-          nombre_display: "Único",
-          stock: stockBase,
-          sku,
-        })
-        .select("id")
-        .single();
-      if (insVarError) throw insVarError;
+      if (unicoAnterior) {
+        const { data, error: updVarError } = await supabase
+          .from("producto_variantes")
+          .update({
+            nombre_display: "Único",
+            atributos: {},
+            stock: stockBase,
+            sku,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", unicoAnterior.id)
+          .select("id")
+          .single();
+        if (updVarError) throw updVarError;
+        unicoNuevo = data;
+
+        // El producto pasó de tener variantes a no tenerlas: las demás se van
+        // de verdad. Es una eliminación real, no el reciclado de antes.
+        const sobrantes = (variantesActuales ?? [])
+          .filter((v) => v.id !== unicoAnterior.id)
+          .map((v) => v.id);
+
+        if (sobrantes.length > 0) {
+          const { error: delSobrantesError } = await supabase
+            .from("producto_variantes")
+            .delete()
+            .in("id", sobrantes);
+          if (delSobrantesError) throw delSobrantesError;
+        }
+      } else {
+        const { data, error: insVarError } = await supabase
+          .from("producto_variantes")
+          .insert({
+            negocio_id: negocioId,
+            producto_id: id,
+            nombre_display: "Único",
+            stock: stockBase,
+            sku,
+          })
+          .select("id")
+          .single();
+        if (insVarError) throw insVarError;
+        unicoNuevo = data;
+      }
 
       // Legacy support
       const { error: delStockError } = await supabase
@@ -443,7 +509,12 @@ async function procesarVariantes(
 
       const { error: insStockError } = await supabase
         .from("productos_stock")
-        .insert({ producto_id: id, variante: "Único", cantidad: stockBase, negocio_id: negocioId });
+        .insert({
+          producto_id: id,
+          variante: "Único",
+          cantidad: stockBase,
+          negocio_id: negocioId,
+        });
       if (insStockError) throw insStockError;
 
       const { error: auditError } = await supabase
@@ -538,9 +609,7 @@ async function procesarVariantes(
     const variantesConAtributos = variantesRaw.filter(
       (v) =>
         v.valores &&
-        Object.entries(v.valores).some(
-          ([k, val]) => k.trim() && val?.trim(),
-        ),
+        Object.entries(v.valores).some(([k, val]) => k.trim() && val?.trim()),
     );
 
     if (opciones.length === 0 || variantesConAtributos.length === 0) {
@@ -568,7 +637,10 @@ async function procesarVariantes(
       const stockProvisto =
         v.stock !== undefined && v.stock !== null && v.stock.trim() !== "";
       return Boolean(
-        v.precio?.trim() || v.precio_costo?.trim() || stockProvisto || v.sku?.trim(),
+        v.precio?.trim() ||
+        v.precio_costo?.trim() ||
+        stockProvisto ||
+        v.sku?.trim(),
       );
     });
 
@@ -637,9 +709,8 @@ async function procesarVariantes(
     // confirmación (ConfirmSaveVariantsModal) — la RPC solo deja pasar
     // faltantes que estén en esta lista; cualquier otra sigue bloqueando
     // el guardado igual que antes.
-    const confirmadasEliminarStr = formData.get(
-      "confirmadasEliminar",
-    ) as string | null;
+    const confirmadasEliminarStr = formData.get("confirmadasEliminar") as
+      string | null;
     const confirmadasEliminar = confirmadasEliminarStr
       ? (JSON.parse(confirmadasEliminarStr) as Record<string, string>[])
       : [];

@@ -11,6 +11,11 @@ export interface ConfigPosDeLaRequest {
   /** El tipo viene de ConfiguracionPOS: el layout lo pasa derecho al Sidebar y
    * a la navbar, así que un `string` suelto acá se convertiría en un `as` allá. */
   modo_caja: ConfiguracionPOS["modo_caja"];
+  /** No lo usa el layout: lo usan las PÁGINAS que este mismo request va a
+   * renderizar (el panel y Carga Rápida), que antes se leían la fila otra vez
+   * solo por esta columna. Viaja acá porque la lectura ya se está pagando.
+   * Se normaliza en el consumidor con `normalizarRubro`, que es fail-closed. */
+  rubro: ConfiguracionPOS["rubro"];
 }
 
 /**
@@ -55,9 +60,7 @@ export interface ConfigPosDeLaRequest {
  * Queda afuera `-code-verifier`, que existe durante el login en /auth y
  * todavía no es una sesión.
  */
-function haySesion(
-  cookieStore: Awaited<ReturnType<typeof cookies>>,
-): boolean {
+function haySesion(cookieStore: Awaited<ReturnType<typeof cookies>>): boolean {
   return cookieStore
     .getAll()
     .some(
@@ -91,7 +94,7 @@ export const leerConfigPos = cache(
     const supabase = createClient(cookieStore);
     const { data, error } = await supabase
       .from("configuracion_pos")
-      .select("id, posName, posLogo, modo_caja")
+      .select("id, posName, posLogo, modo_caja, rubro")
       .limit(1)
       .maybeSingle();
 

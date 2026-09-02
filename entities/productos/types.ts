@@ -116,11 +116,18 @@ export interface Producto {
  * tiers de imagen (`imagen_url`/`thumbnail_url`/`grid_url`) porque cada
  * superficie necesita el suyo: la tabla usa el thumbnail (150px, fila
  * chica), la grilla usa `grid_url` (320px, celda de ~230-400px en
- * tablet — ver diagnóstico de borrosidad). Sigue sin traer `descripcion`,
- * `creado_en` ni `producto_variante_valores` completos de variante — esos
- * solo hacen falta para el formulario de edición de UN producto, que los
- * trae con su propio fetch on-demand al abrir el sheet (ver
+ * tablet — ver diagnóstico de borrosidad). Sigue sin traer `descripcion` ni
+ * `creado_en` — esos solo hacen falta para el formulario de edición de UN
+ * producto, que los trae con su propio fetch on-demand al abrir el sheet (ver
  * getStockDetalleProductoAction).
+ *
+ * Tampoco trae ya `producto_variante_valores` ni el espejo legacy `stock`, que
+ * estaban de más: el primero solo se lee cuando `producto_variantes.atributos`
+ * viene vacío (cero variantes en esa situación en los seis negocios) y el
+ * segundo solo bajo `incluirStockLegacy`, que nadie pasa. Eran 664 kB de los
+ * 2,54 MB del índice de Evens. Están fuera del tipo a propósito: si mañana
+ * alguien los necesita, el compilador lo manda a agregarlos también al select
+ * en vez de dejarlo leer `undefined` en silencio.
  *
  * `sku` de variante SÍ se trae desde T4: en rubro electro la fila de
  * inventario muestra el EAN, que se guarda en ese mismo campo. Es un texto
@@ -151,14 +158,6 @@ export type ProductoIndice = Pick<
   categoria?: CategoriaRelacion | null;
   producto_variantes?: Pick<
     ProductoVariante,
-    | "id"
-    | "sku"
-    | "nombre_display"
-    | "precio"
-    | "costo"
-    | "stock"
-    | "atributos"
-    | "producto_variante_valores"
+    "id" | "sku" | "nombre_display" | "precio" | "costo" | "stock" | "atributos"
   >[];
-  stock?: Pick<ProductoStock, "cantidad">[];
 };

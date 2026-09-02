@@ -8,28 +8,12 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { resolveTenant } from "@/shared/lib/tenant";
 import { urlDeCatalogo } from "@/shared/lib/dominios";
-import { createPublicClient } from "@/shared/config/supabase/server";
 import { formatearMoneda } from "@/shared/utils/formatters";
 import { elegirImagenOg, imagenOgConMime } from "@/shared/lib/og-imagen";
-import { COLUMNAS_CONFIG_PUBLICA } from "@/shared/lib/columnas-publicas";
+import { leerConfigPublica } from "@/entities/config/lib/leer-config-publica";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
-
-/**
- * La config de la tienda se lee con el cliente público (anon + x-negocio-slug).
- * No sirve getConfiguracionAction(): ese usa el cliente con sesión, que no
- * manda el slug, y en el catálogo devolvía siempre 0 filas (PGRST116) — de ahí
- * el "Tienda Online" en vez del nombre del comercio y el WhatsApp vacío.
- */
-async function getConfigPublica() {
-  const supabase = await createPublicClient();
-  const { data } = await supabase
-    .from("configuracion_pos")
-    .select(COLUMNAS_CONFIG_PUBLICA)
-    .maybeSingle();
-  return data;
-}
 
 interface PageProps {
   params: Promise<{ negocio: string; producto: string }>;
@@ -52,7 +36,7 @@ export async function generateMetadata({
 
   const [{ data: producto }, config] = await Promise.all([
     getProductoBySlugAction(slug),
-    getConfigPublica(),
+    leerConfigPublica(),
   ]);
 
   if (!producto) return {};
@@ -101,13 +85,16 @@ export async function generateMetadata({
 export default async function ProductoPage({ params }: Readonly<PageProps>) {
   const { negocio, producto: slug } = await params;
   const headersDelRequest = await headers();
-  await resolveTenant({ hostname: headersDelRequest.get("host"), slug: negocio });
+  await resolveTenant({
+    hostname: headersDelRequest.get("host"),
+    slug: negocio,
+  });
 
   // El producto y la config van en paralelo; los similares NO pueden ir acá
   // porque dependen del `tipo` del producto, que todavía no se conoce.
   const [productoRes, config] = await Promise.all([
     getProductoBySlugAction(slug),
-    getConfigPublica(),
+    leerConfigPublica(),
   ]);
 
   const { data: producto, error } = productoRes;

@@ -94,11 +94,15 @@ export function StockView({
   // Misma lógica de filtrado de siempre (buildPropiedadesFiltro /
   // resolverAtributosVariante no cambiaron), corriendo ahora sobre el
   // índice liviano en vez del catálogo completo con todas las columnas.
+  //
+  // Ya no se pide `incluirFallbackRelacional`: el índice dejó de traer
+  // `producto_variante_valores` porque ese fallback no se activaba nunca (solo
+  // corre con `atributos` vacío, y no hay ninguna variante así en los seis
+  // negocios). Pedirlo acá sería declarar que se usa un dato que no llega.
+  // El fallback por `nombre_display`, que es el que de verdad rescata las 72
+  // variantes sin atributos, sigue en pie sin ningún flag.
   const propiedadesGlobales = useMemo(
-    () =>
-      buildPropiedadesFiltro(productosIndice, {
-        incluirFallbackRelacional: true,
-      }),
+    () => buildPropiedadesFiltro(productosIndice),
     [productosIndice],
   );
 
@@ -114,9 +118,7 @@ export function StockView({
 
           return (
             p.producto_variantes?.some((variante) => {
-              const atributos = resolverAtributosVariante(variante, {
-                incluirFallbackRelacional: true,
-              });
+              const atributos = resolverAtributosVariante(variante);
               return (
                 atributos[propiedad]?.toLowerCase() === valor.toLowerCase()
               );
@@ -200,7 +202,11 @@ export function StockView({
 
   const arbolCategorias = useMemo(
     () =>
-      construirArbolCategorias(categoriasDB, conteosExistencia, conteosMostrados),
+      construirArbolCategorias(
+        categoriasDB,
+        conteosExistencia,
+        conteosMostrados,
+      ),
     [categoriasDB, conteosExistencia, conteosMostrados],
   );
 
@@ -224,7 +230,11 @@ export function StockView({
     return productosFiltradosSinCategoria.filter((p) =>
       idsAMatchear.has(resolverCategoriaIdDeProducto(p)),
     );
-  }, [productosFiltradosSinCategoria, idsAMatchear, resolverCategoriaIdDeProducto]);
+  }, [
+    productosFiltradosSinCategoria,
+    idsAMatchear,
+    resolverCategoriaIdDeProducto,
+  ]);
 
   // Búsqueda transversal: cuántos resultados matchean búsqueda+variante
   // por fuera de la categoría/subcategoría activa.
@@ -404,28 +414,28 @@ export function StockView({
       {seleccion.cantidad > 0 ? (
         <BarraSeleccion seleccion={seleccion} ctx={ctxSeleccion} />
       ) : (
-      <StockFiltersToolbar
-        rubro={rubro}
-        view={view}
-        onViewChange={setView}
-        searchQuery={searchQuery}
-        onSearchChange={handleSearchChange}
-        categoriaActiva={categoriaActiva}
-        onCategoriaChange={handleCategoriaChange}
-        categoriasDisponibles={categoriasDisponibles}
-        totalProductos={productosIndice.length}
-        productosDelNegocio={productosDelNegocio}
-        resultadosFueraDeCategoria={resultadosFueraDeCategoria}
-        hayFiltrosActivos={hayFiltrosActivos}
-        propiedadesGlobales={propiedadesGlobales}
-        filtrosVariantes={filtrosVariantes}
-        onFiltroVarianteChange={handleFiltroVarianteChange}
-        isAdmin={isAdmin}
-        onLimpiarFiltros={limpiarFiltros}
-        slugCategoriaActiva={slugCategoriaActiva}
-        nombreCategoriaActiva={nombreCategoriaActiva}
-        nombreComercio={nombreComercio}
-      />
+        <StockFiltersToolbar
+          rubro={rubro}
+          view={view}
+          onViewChange={setView}
+          searchQuery={searchQuery}
+          onSearchChange={handleSearchChange}
+          categoriaActiva={categoriaActiva}
+          onCategoriaChange={handleCategoriaChange}
+          categoriasDisponibles={categoriasDisponibles}
+          totalProductos={productosIndice.length}
+          productosDelNegocio={productosDelNegocio}
+          resultadosFueraDeCategoria={resultadosFueraDeCategoria}
+          hayFiltrosActivos={hayFiltrosActivos}
+          propiedadesGlobales={propiedadesGlobales}
+          filtrosVariantes={filtrosVariantes}
+          onFiltroVarianteChange={handleFiltroVarianteChange}
+          isAdmin={isAdmin}
+          onLimpiarFiltros={limpiarFiltros}
+          slugCategoriaActiva={slugCategoriaActiva}
+          nombreCategoriaActiva={nombreCategoriaActiva}
+          nombreComercio={nombreComercio}
+        />
       )}
 
       {/* 3. VISTAS */}

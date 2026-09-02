@@ -6,10 +6,8 @@ import { createPublicClient } from "@/shared/config/supabase/server";
 import { headers } from "next/headers";
 import { resolveTenant } from "@/shared/lib/tenant";
 import { urlDeCatalogo } from "@/shared/lib/dominios";
-import {
-  COLUMNAS_CATEGORIA_PUBLICA,
-  COLUMNAS_CONFIG_PUBLICA,
-} from "@/shared/lib/columnas-publicas";
+import { COLUMNAS_CATEGORIA_PUBLICA } from "@/shared/lib/columnas-publicas";
+import { leerConfigPublica } from "@/entities/config/lib/leer-config-publica";
 import {
   elegirImagenOg,
   elegirImagenOgConEtiqueta,
@@ -23,7 +21,11 @@ export const dynamic = "force-dynamic";
 
 interface StorePageProps {
   params: Promise<{ negocio: string }>;
-  searchParams: Promise<{ categoria?: string; sub?: string; productos?: string }>;
+  searchParams: Promise<{
+    categoria?: string;
+    sub?: string;
+    productos?: string;
+  }>;
 }
 
 async function resolverBaseUrl() {
@@ -93,10 +95,8 @@ export async function generateMetadata({
   const { categoria, sub, productos } = await searchParams;
 
   const supabase = await createPublicClient();
-  const { data: config } = await supabase
-    .from("configuracion_pos")
-    .select("posName, posLogo")
-    .maybeSingle();
+  // La misma lectura que hace el render de abajo: `cache()` las une en una.
+  const config = await leerConfigPublica();
 
   const nombreComercio = config?.posName || "Tienda Online";
   const baseUrl = await resolverBaseUrl();
@@ -241,16 +241,13 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
 
   const supabase = await createPublicClient();
 
-  const [productosRes, configRes, categoriasRes] = await Promise.all([
+  const [productosRes, config, categoriasRes] = await Promise.all([
     // Cacheado por negocio (ver shared/lib/cache-catalogo.ts). El slug sale del
     // tenant YA resuelto, no del parámetro de la URL: en modo subdominio el
     // param y el host podrían discrepar, y la clave del cache tiene que salir
     // de la misma resolución que autorizó la página.
     getProductosPublicosCacheados(datosNegocio.slug, negocio_id),
-    supabase
-      .from("configuracion_pos")
-      .select(COLUMNAS_CONFIG_PUBLICA)
-      .maybeSingle(),
+    leerConfigPublica(),
     supabase
       .from("categorias")
       .select(COLUMNAS_CATEGORIA_PUBLICA)
@@ -260,7 +257,6 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
 
   const productos = productosRes.data || [];
   const error = productosRes.error;
-  const config = configRes.data;
   const categoriasDB = categoriasRes.data || [];
 
   // La portada se calcula ACÁ y viaja sola. Antes se mandaba el catálogo

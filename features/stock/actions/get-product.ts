@@ -10,6 +10,39 @@ import {
 } from "@/entities/productos/lib/stock-disponible";
 import { traerTodo } from "@/shared/lib/traer-todo";
 
+/**
+ * El catálogo con detalle, para el panel, /reportes y Carga Rápida.
+ *
+ * Ya NO trae `producto_variante_valores`. Era la relación normalizada de
+ * atributos, embebida a dos niveles más (atributos + atributo_valores): 474 kB
+ * de los 2,70 MB de Evens, sobre 6.485 filas. La lee `resolverAtributosVariante`
+ * y SOLO cuando `producto_variantes.atributos` viene vacío — y medido sobre los
+ * seis negocios, de 5.747 variantes hay CERO en ese estado (72 tienen
+ * `atributos` vacío y ninguna de esas tiene fila en la relación, así que caen
+ * al parseo de `nombre_display`, que sigue igual). O sea que el bloque no era
+ * un fallback poco usado: no se leía nunca. Además ninguno de los consumidores
+ * de ESTA consulta lo toca, ni siquiera por el fallback.
+ *
+ * El que SÍ lo necesita es `getStockDetalleProductoAction`, y lo conserva: el
+ * formulario de edición pasa por `parseLegacyVariant`, que tiene la precedencia
+ * AL REVÉS (prefiere la relación sobre `atributos`). Es un producto por vez.
+ *
+ * `stock:productos_stock` —el espejo legacy— se QUEDA acá, y es la sorpresa de
+ * esta limpieza. En el catálogo público se pudo sacar porque nadie lo leía,
+ * pero el panel lee el stock EXCLUSIVAMENTE de ahí, en cinco lugares:
+ * `get-dashboard-metrics` (unidades y stock valorizado), `detectar-quiebres`
+ * (dos veces, y una usa `s.variante`), `detectar-riesgo-categoria` y
+ * `detectar-estacionalidad`. Ninguno mira `producto_variantes.stock`, que es la
+ * fuente canónica. Sacarlo pondría en cero el stock valorizado y apagaría las
+ * alertas sin un error.
+ *
+ * Que esos cinco lean el espejo es deuda aparte y hay que arreglarla, pero no
+ * de prepo: espejo y canónica NO dicen lo mismo hoy. De 1.987 productos
+ * coinciden 1.967 y difieren 20 (3 en Evens, 17 en Estilo Bonito, donde los
+ * totales igual cierran porque los desvíos se compensan). Cambiar la fuente
+ * mueve números del panel, así que es su propio cambio con su propia
+ * verificación.
+ */
 export async function getStockAction(): Promise<{
   data: Producto[] | null;
   error: string | null;
@@ -30,11 +63,7 @@ export async function getStockAction(): Promise<{
         id, nombre, tipo, precio, precio_costo, imagen_url, thumbnail_url, slug, publicado, descripcion, categoria_id, creado_en,
         categoria:categorias(id, nombre, slug),
         producto_variantes(
-          id, sku, nombre_display, precio, costo, stock, atributos,
-          producto_variante_valores(
-            atributo:atributos(nombre),
-            atributo_valor:atributo_valores(valor)
-          )
+          id, sku, nombre_display, precio, costo, stock, atributos
         ),
         stock:productos_stock(id, variante, cantidad)
         `,
@@ -65,6 +94,25 @@ export async function getStockAction(): Promise<{
   }
 }
 
+/**
+ * El índice de /stock. Perdió los dos bloques duplicados: 2,54 MB a 1,91 MB.
+ *
+ * `producto_variante_valores` por el mismo motivo que en `getStockAction` (ver
+ * ahí la medición). Acá el consumidor es `stock-view.tsx`, que es el ÚNICO
+ * lugar del repo que pasa `incluirFallbackRelacional: true` — o sea que era el
+ * único que podía llegar a leerlo, y no llega nunca porque ninguna variante
+ * tiene `atributos` vacío con relación cargada.
+ *
+ * `stock:productos_stock(cantidad)` porque acá SÍ está muerto, al revés que en
+ * `getStockAction`. Los dos caminos que podrían leerlo no lo hacen:
+ * `buildPropiedadesFiltro` solo lo mira bajo `incluirStockLegacy`, que en los
+ * dos call sites del repo se pasa explícitamente en `false`; y `getTotalStock`
+ * lo toma como fallback de `producto_variantes` con un `||`, que sobre un array
+ * vacío no cae — y PostgREST devuelve `[]`, nunca `undefined`, porque el embed
+ * de variantes está siempre. Por si el `||` llegara a caer alguna vez: hay 9
+ * productos sin variantes en los seis negocios y NINGUNO tiene fila en el
+ * espejo, así que el fallback devolvería 0 con el bloque y sin él.
+ */
 export async function getStockIndexAction(): Promise<{
   data: ProductoIndice[] | null;
   error: string | null;
@@ -85,13 +133,8 @@ export async function getStockIndexAction(): Promise<{
         imagen_url, thumbnail_url, grid_url, slug, publicado, unidad_medida, destacado_en,
         categoria:categorias(id, nombre, slug),
         producto_variantes(
-          id, sku, nombre_display, precio, costo, stock, atributos,
-          producto_variante_valores(
-            atributo:atributos(nombre),
-            atributo_valor:atributo_valores(valor)
-          )
-        ),
-        stock:productos_stock(cantidad)
+          id, sku, nombre_display, precio, costo, stock, atributos
+        )
         `,
           { count: "exact" },
         )

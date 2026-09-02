@@ -1,5 +1,4 @@
 import { getVentasAction } from "@/features/sales/actions/get-sales";
-import { getStockAction } from "@/features/stock/actions/get-product";
 import { VentasTable } from "@/features/sales/ui/sale-table";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
@@ -30,15 +29,16 @@ export default async function VentasPage() {
   const puedeAnular = Boolean(puedeAnularRes.data);
   const puedeVerTodas = Boolean(puedeVerTodasRes.data);
 
-  // 3. Cargar las ventas y los productos
-  const [ventasResponse, productosResponse] = await Promise.all([
-    getVentasAction({ soloPropias: !puedeVerTodas }),
-    getStockAction(),
-  ]);
+  // 3. Cargar las ventas.
+  //
+  // Acá también se traía `getStockAction()` —el catálogo entero con variantes,
+  // 2,70 MB en Evens— para pasárselo a VentasTable como prop `productos`. La
+  // prop estaba declarada en la interfaz pero el componente NUNCA la leía: se
+  // descargaba y se descartaba en cada carga de /ventas.
+  const ventasResponse = await getVentasAction({ soloPropias: !puedeVerTodas });
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
   const error = ventasResponse.error;
-  const productos = productosResponse.data;
 
   return (
     <div className="space-y-6">
@@ -49,7 +49,6 @@ export default async function VentasPage() {
       ) : (
         <VentasTable
           ventas={ventas || []}
-          productos={productos || []}
           userRole={userRole}
           puedeAnular={puedeAnular}
         />

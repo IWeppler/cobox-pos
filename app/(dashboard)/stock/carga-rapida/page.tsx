@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
-import { createClient } from "@/shared/config/supabase/server";
 import { getStockAction } from "@/features/stock/actions/get-product";
+import { leerConfigPos } from "@/entities/config/lib/leer-config-pos";
 import { normalizarRubro } from "@/entities/config/types";
 import { CargaRapidaPageClient } from "@/features/carga-rapida/ui/carga-rapida-page-client";
 import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
@@ -9,15 +8,15 @@ import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
 export const dynamic = "force-dynamic";
 
 export default async function CargaRapidaPage() {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
   const { user } = await getUsuarioActual();
   if (!user) redirect("/auth");
 
-  const [{ data: productos }, { data: config }] = await Promise.all([
+  // El rubro sale de `leerConfigPos`, que los layouts de este mismo request ya
+  // llamaron: `cache()` lo devuelve sin viajar de nuevo. Era la segunda lectura
+  // de la misma fila en la misma request.
+  const [{ data: productos }, config] = await Promise.all([
     getStockAction(),
-    supabase.from("configuracion_pos").select("rubro").single(),
+    leerConfigPos(),
   ]);
 
   // Solo para ahorrarle al cliente el round-trip (y el spinner "Buscando en

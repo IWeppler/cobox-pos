@@ -3,6 +3,7 @@ import {
   getPagosCuentaCorrienteAction,
 } from "@/features/sales/actions/get-sales";
 import { getStockAction } from "@/features/stock/actions/get-product";
+import { leerConfigPos } from "@/entities/config/lib/leer-config-pos";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { getDashboardMetrics } from "@/features/dashboard/lib/get-dashboard-metrics";
@@ -178,10 +179,11 @@ export default async function DashboardPage({
       formatearFechaISO(rangoInsights.inicio),
       formatearFechaISO(rangoInsights.fin),
     ),
-    // El rubro, para saber si este comercio reserva. Entra en esta misma tanda
-    // y no en una consulta aparte: es una fila chica y en serie costaría un
-    // viaje entero a Ohio.
-    supabase.from("configuracion_pos").select("rubro").single(),
+    // El rubro, para saber si este comercio reserva. Sale de `leerConfigPos`,
+    // que los dos layouts de este mismo request YA llamaron: el `cache()` de
+    // React devuelve la fila sin viajar de nuevo. Antes era una consulta
+    // propia, o sea la segunda lectura de la misma fila en la misma request.
+    leerConfigPos(),
   ]);
 
   const ventas = (ventasResponse.data || []) as unknown as Venta[];
@@ -603,7 +605,7 @@ export default async function DashboardPage({
                 cantidadBajasPendientes={cantidadBajasPendientes}
                 reservasActivas={reservasActivas}
                 mostrarReservas={rubroUsaReservas(
-                  normalizarRubro(configResponse.data?.rubro),
+                  normalizarRubro(configResponse?.rubro),
                 )}
               />
             </div>

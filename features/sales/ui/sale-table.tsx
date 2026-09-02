@@ -8,7 +8,6 @@ import {
   VentaItem,
   getSupabaseRelation,
 } from "@/entities/ventas/types";
-import { Producto } from "@/entities/productos/types";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { createClient } from "@/shared/config/supabase/client";
 import {
@@ -32,7 +31,6 @@ const ITEMS_POR_PAGINA = 10;
 
 interface VentasTableProps {
   ventas: Venta[];
-  productos: Producto[];
   userRole: string;
   puedeAnular: boolean;
 }
@@ -412,9 +410,7 @@ export function VentasTable({
                           </TableCell>
 
                           <TableCell>
-                            <p
-                              className="text-[10px] uppercase font-semibold text-muted-foreground"
-                            >
+                            <p className="text-[10px] uppercase font-semibold text-muted-foreground">
                               {metodoPago}
                             </p>
                           </TableCell>
