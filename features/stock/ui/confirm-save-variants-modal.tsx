@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Loader2, Plus, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, Plus, Sparkles } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,11 +10,14 @@ import {
   DialogDescription,
 } from "@/shared/ui/dialog";
 import { Button } from "@/shared/ui/button";
-import { Label } from "@/shared/ui/label";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { formatearMoneda } from "@/shared/utils/formatters";
 
-export type VarianteDiffTipo = "eliminada" | "modificada" | "nueva";
+export type VarianteDiffTipo =
+  | "eliminada"
+  | "renombrada"
+  | "modificada"
+  | "nueva";
 
 export type VarianteDiffRow = {
   key: string;
@@ -24,9 +27,12 @@ export type VarianteDiffRow = {
   stockDespues: number | null;
   precioAntes: number | null;
   precioDespues: number | null;
-  // Solo se usa para tipo "eliminada" — es lo que se manda al RPC como
-  // "confirmadas para eliminar" cuando el usuario tilda el checkbox acá.
+  // Se usa para "eliminada" y "renombrada" — es lo que se manda al RPC como
+  // "confirmadas para eliminar": en los dos casos la combinación vieja deja
+  // de existir con esa key.
   atributos?: Record<string, string>;
+  // Solo para "renombrada": cómo se va a llamar la combinación después.
+  labelDestino?: string;
 };
 
 type ConfirmSaveVariantsModalProps = {
@@ -62,6 +68,7 @@ function GrupoDiff({
   icono,
   filas,
   claseFila,
+  renderSeleccion,
   renderStock,
   renderPrecio,
 }: {
@@ -69,6 +76,8 @@ function GrupoDiff({
   icono: React.ReactNode;
   filas: VarianteDiffRow[];
   claseFila?: string;
+  /** Celda al inicio de la fila; hoy la usa el checkbox de eliminación. */
+  renderSeleccion?: (fila: VarianteDiffRow) => React.ReactNode;
   renderStock: (fila: VarianteDiffRow) => React.ReactNode;
   renderPrecio: (fila: VarianteDiffRow) => React.ReactNode;
 }) {
@@ -85,7 +94,19 @@ function GrupoDiff({
           <tbody className="divide-y divide-border">
             {filas.map((fila) => (
               <tr key={fila.key} className={claseFila}>
-                <td className="px-3 py-2 font-medium">{fila.atributosLabel}</td>
+                {renderSeleccion && (
+                  <td className="pl-3 py-2 w-8 align-top">
+                    {renderSeleccion(fila)}
+                  </td>
+                )}
+                <td className="px-3 py-2 font-medium">
+                  {fila.atributosLabel}
+                  {fila.labelDestino && (
+                    <span className="block text-[11px] font-normal text-muted-foreground">
+                      pasa a llamarse {fila.labelDestino}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
                   {renderStock(fila)}
                 </td>
@@ -109,15 +130,33 @@ export function ConfirmSaveVariantsModal({
   isSubmitting,
   onConfirm,
 }: ConfirmSaveVariantsModalProps) {
-  const [entendido, setEntendido] = useState(false);
+  // Una eliminación con mercadería se confirma de a una. El checkbox único
+  // para toda la lista funcionaba mientras las bajas fueran deliberadas,
+  // pero cuando se agrega o se quita una propiedad la lista se llena de
+  // filas y un solo tilde las autoriza todas de golpe: así se perdieron 11
+  // pares de zapatillas en Evens el 1/9/2026. Tildar de a una hace que
+  // borrar 10 combinaciones cueste 10 gestos, que es exactamente lo que
+  // tiene que costar.
+  const [confirmadas, setConfirmadas] = useState<Record<string, boolean>>({});
 
-  const { eliminadas, modificadas, nuevas } = useMemo(() => {
+  const { eliminadas, renombradas, modificadas, nuevas } = useMemo(() => {
     return {
       eliminadas: filas.filter((f) => f.tipo === "eliminada"),
+      renombradas: filas.filter((f) => f.tipo === "renombrada"),
       modificadas: filas.filter((f) => f.tipo === "modificada"),
       nuevas: filas.filter((f) => f.tipo === "nueva"),
     };
   }, [filas]);
+
+  // Las que están en cero no tienen mercadería que perder: se listan, pero
+  // no frenan el guardado. El freno se reserva para lo que cuesta plata.
+  const eliminadasConStock = useMemo(
+    () => eliminadas.filter((f) => (f.stockAntes ?? 0) > 0),
+    [eliminadas],
+  );
+  const faltanConfirmar = eliminadasConStock.filter(
+    (f) => !confirmadas[f.key],
+  ).length;
 
   const hayEliminaciones = eliminadas.length > 0;
   // Defensivo: en el flujo normal edit-sheet.tsx ya filtra esto antes de
@@ -126,10 +165,10 @@ export function ConfirmSaveVariantsModal({
   // mostrar una tabla en blanco.
   const sinCambios = !isLoadingDiff && filas.length === 0;
   const puedeConfirmar =
-    !isLoadingDiff && !isSubmitting && (!hayEliminaciones || entendido);
+    !isLoadingDiff && !isSubmitting && faltanConfirmar === 0;
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) setEntendido(false);
+    if (!next) setConfirmadas({});
     onOpenChange(next);
   };
 
@@ -178,6 +217,17 @@ export function ConfirmSaveVariantsModal({
                   </span>
                 )}
                 {eliminadas.length > 0 &&
+                  (renombradas.length > 0 ||
+                    modificadas.length > 0 ||
+                    nuevas.length > 0) &&
+                  ", "}
+                {renombradas.length > 0 && (
+                  <span className="font-medium">
+                    {renombradas.length} se renombra
+                    {renombradas.length === 1 ? "" : "n"}
+                  </span>
+                )}
+                {renombradas.length > 0 &&
                   (modificadas.length > 0 || nuevas.length > 0) &&
                   ", "}
                 {modificadas.length > 0 && (
@@ -202,6 +252,22 @@ export function ConfirmSaveVariantsModal({
                     icono={<AlertTriangle className="w-3.5 h-3.5" />}
                     filas={eliminadas}
                     claseFila="bg-[var(--bg-danger)]"
+                    renderSeleccion={(fila) =>
+                      (fila.stockAntes ?? 0) > 0 ? (
+                        <input
+                          type="checkbox"
+                          aria-label={`Confirmar que se elimina ${fila.atributosLabel} con ${fila.stockAntes} en stock`}
+                          checked={confirmadas[fila.key] ?? false}
+                          onChange={(e) =>
+                            setConfirmadas((prev) => ({
+                              ...prev,
+                              [fila.key]: e.target.checked,
+                            }))
+                          }
+                          className="w-4 h-4 rounded border-destructive text-destructive focus:ring-destructive accent-destructive cursor-pointer"
+                        />
+                      ) : null
+                    }
                     renderStock={(fila) => (
                       <span className="text-destructive">
                         {fila.stockAntes} → 0
@@ -209,6 +275,20 @@ export function ConfirmSaveVariantsModal({
                     )}
                     renderPrecio={() => (
                       <span className="text-destructive">—</span>
+                    )}
+                  />
+
+                  <GrupoDiff
+                    titulo="Se renombran (conservan su stock)"
+                    icono={<ArrowRight className="w-3.5 h-3.5" />}
+                    filas={renombradas}
+                    renderStock={(fila) => <span>{fila.stockAntes}</span>}
+                    renderPrecio={(fila) => (
+                      <span>
+                        {fila.precioAntes
+                          ? formatearMoneda(fila.precioAntes)
+                          : "—"}
+                      </span>
                     )}
                   />
 
@@ -266,27 +346,31 @@ export function ConfirmSaveVariantsModal({
                 </div>
               </ScrollArea>
 
-              {hayEliminaciones && (
+              {eliminadasConStock.length > 0 && (
                 <div className="flex items-start gap-2 bg-[var(--bg-danger)] p-3 rounded-lg border border-destructive/40">
-                  <input
-                    type="checkbox"
-                    id="confirm_eliminaciones"
-                    checked={entendido}
-                    onChange={(e) => setEntendido(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 rounded border-destructive text-destructive focus:ring-destructive accent-destructive cursor-pointer shrink-0"
-                  />
-                  <Label
-                    htmlFor="confirm_eliminaciones"
-                    className="text-destructive cursor-pointer leading-tight font-medium text-xs"
-                  >
-                    Sí, entiendo que se van a eliminar {eliminadas.length}{" "}
-                    variante{eliminadas.length === 1 ? "" : "s"} y su stock (
-                    {eliminadas.reduce(
+                  <AlertTriangle className="w-4 h-4 mt-0.5 text-destructive shrink-0" />
+                  <p className="text-destructive leading-tight font-medium text-xs">
+                    {eliminadasConStock.length} variante
+                    {eliminadasConStock.length === 1 ? "" : "s"} con mercadería
+                    cargada van a desaparecer, y con {eliminadasConStock.length === 1 ? "ella" : "ellas"}{" "}
+                    {eliminadasConStock.reduce(
                       (sum, f) => sum + (f.stockAntes ?? 0),
                       0,
                     )}{" "}
-                    unidades en total).
-                  </Label>
+                    unidades.{" "}
+                    {faltanConfirmar > 0 ? (
+                      <>
+                        Tildá cada una en la lista para confirmar
+                        {faltanConfirmar < eliminadasConStock.length
+                          ? ` (faltan ${faltanConfirmar}).`
+                          : "."}{" "}
+                        Si no es lo que buscabas, cancelá: el stock que ves en
+                        la grilla es el que se va a guardar.
+                      </>
+                    ) : (
+                      <>Confirmaste todas.</>
+                    )}
+                  </p>
                 </div>
               )}
             </>

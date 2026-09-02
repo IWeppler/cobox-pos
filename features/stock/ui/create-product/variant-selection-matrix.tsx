@@ -74,9 +74,17 @@ export const VariantSelectionMatrix = memo(function VariantSelectionMatrix({
                 value={pivotSelections[pivot.nombre] ?? pivot.valores[0]}
                 onValueChange={(val) => onPivotChange(pivot.nombre, val)}
               >
-                <TabsList>
+                {/* El TabsList de shared es `w-fit` con alto fijo, pensado
+                para tres o cuatro solapas: con los 11 talles de una zapatilla
+                se pasaba del ancho del sheet y los últimos quedaban cortados
+                —invisibles y sin scroll que los alcanzara—, así que ni se
+                podían marcar ni se veía que existieran. Envuelve en varios
+                renglones en vez de scrollear porque acá cada solapa es una
+                opción a elegir, no una lista larga por la que se navega: si
+                se esconden, el usuario no sabe que están. */}
+                <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 group-data-horizontal/tabs:h-auto">
                   {pivot.valores.map((val) => (
-                    <TabsTrigger key={val} value={val}>
+                    <TabsTrigger key={val} value={val} className="h-7 flex-none">
                       {pivot.nombre}: {val}
                     </TabsTrigger>
                   ))}

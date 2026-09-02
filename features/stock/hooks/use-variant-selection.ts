@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildVariantKey } from "../utils/parse-legacy-variant";
+import { quitarOpcionVariante } from "../lib/quitar-opcion-variante";
 import {
   findDuplicatePropertyNames,
   findGenericPropertyNames,
@@ -269,7 +270,7 @@ export function useVariantSelection({
   }, []);
 
   const handleRemoveOption = useCallback((id: string) => {
-    setOpciones((prev) => prev.filter((o) => o.id !== id || !o.bloqueado));
+    setOpciones((prev) => quitarOpcionVariante(prev, id));
     setCustomTypeMode((prev) => {
       const next = { ...prev };
       delete next[id];

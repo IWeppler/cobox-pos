@@ -52,6 +52,7 @@ import {
   isSingleVariantProduct,
   parseLegacyVariant,
 } from "../utils/parse-legacy-variant";
+import { emparejarPorEsquema } from "../lib/emparejar-variantes-por-esquema";
 import {
   ConfirmSaveVariantsModal,
   type VarianteDiffRow,
@@ -218,6 +219,16 @@ export function ProductEditDetailSheet({
 type EditableProducto = Producto & {
   categoria_id?: string | null;
 };
+
+/** "Talle: 39 / Color: Negro/blanco" — como se nombra una combinación en el
+ * modal de confirmación, del mismo modo en las dos puntas del diff. */
+function labelDeVariante(valores: Record<string, string>): string {
+  return (
+    Object.entries(valores)
+      .map(([prop, valor]) => `${prop}: ${valor}`)
+      .join(" / ") || "Variante"
+  );
+}
 
 function EditProductForm({
   producto,
@@ -586,6 +597,24 @@ function EditProductForm({
       ]),
     );
 
+    // Emparejamiento por propiedades comunes: cuando el guardado agrega o
+    // quita una propiedad, la key de todas las combinaciones cambia y el
+    // diff crudo las leería como "se eliminan todas y se crean otras
+    // tantas". El módulo distingue el renombre del borrado real.
+    const renombresPorKeyBase = emparejarPorEsquema(
+      (existentes ?? []).map((ex) => {
+        const atributos = (ex.atributos as Record<string, string>) ?? {};
+        return { key: buildVariantKey(atributos), valores: atributos };
+      }),
+      variantSelection.variantes.map((v) => ({
+        key: v.key,
+        valores: v.valores,
+      })),
+    );
+
+    /** key del form -> stock que hereda de la variante que la precede. */
+    const renombradas = new Map<string, { stockAntes: number | null }>();
+
     // Pasada 1: lo que hoy existe en base — eliminadas (no está en el
     // payload) y modificadas (stock o precio distinto).
     const filasEliminadasYModificadas: VarianteDiffRow[] = [];
@@ -601,6 +630,29 @@ function EditProductForm({
       const enPayload = formVariantesPorKey.get(key);
 
       if (!enPayload) {
+        // ¿Es la misma combinación con otro esquema de atributos? Si el
+        // emparejamiento por propiedades comunes la encuentra, esta fila no
+        // desaparece: se reescribe con la key nueva y se lleva su stock.
+        const keyDestino = renombresPorKeyBase.get(key);
+
+        if (keyDestino && !renombradas.has(keyDestino)) {
+          renombradas.set(keyDestino, { stockAntes: ex.stock });
+          filasEliminadasYModificadas.push({
+            key,
+            atributosLabel,
+            tipo: "renombrada",
+            stockAntes: ex.stock,
+            stockDespues: ex.stock,
+            precioAntes,
+            precioDespues: precioAntes,
+            atributos,
+            labelDestino: labelDeVariante(
+              formVariantesPorKey.get(keyDestino)?.valores ?? {},
+            ),
+          });
+          return;
+        }
+
         filasEliminadasYModificadas.push({
           key,
           atributosLabel,
@@ -636,22 +688,37 @@ function EditProductForm({
       }
     });
 
-    // Pasada 2: lo que trae el payload y no existe en base todavía.
+    // Pasada 2: lo que trae el payload y no existe en base todavía. Las que
+    // son el destino de un renombre NO son nuevas: ya se listaron del otro
+    // lado, y contarlas dos veces infla la tabla justo cuando lo que hace
+    // falta es que se lea corto.
     const filasNuevas: VarianteDiffRow[] = [];
     formVariantesPorKey.forEach((v, key) => {
-      if (existentesPorKey.has(key)) return;
+      if (existentesPorKey.has(key) || renombradas.has(key)) return;
       filasNuevas.push({
         key,
-        atributosLabel:
-          Object.entries(v.valores)
-            .map(([k, val]) => `${k}: ${val}`)
-            .join(" / ") || "Variante",
+        atributosLabel: labelDeVariante(v.valores),
         tipo: "nueva",
         stockAntes: null,
         stockDespues: v.stock?.trim() ? parsearCantidadDeEntrada(v.stock) : 0,
         precioAntes: null,
         precioDespues: v.precio?.trim() ? Number.parseFloat(v.precio) : null,
       });
+    });
+
+    // El renombre solo conserva la mercadería si el stock efectivamente
+    // viaja: la grilla cartesiana genera las combinaciones nuevas con el
+    // stock vacío, y la RPC borra y reinserta, así que sin esto la fila
+    // nueva nacería en cero. Se escribe en la grilla —no en el FormData—
+    // para que el usuario vea el número correcto aunque cancele el guardado.
+    renombradas.forEach(({ stockAntes }, keyDestino) => {
+      const destino = formVariantesPorKey.get(keyDestino);
+      if (destino?.stock?.trim()) return;
+      variantSelection.handleVarChange(
+        keyDestino,
+        "stock",
+        (stockAntes ?? 0).toString(),
+      );
     });
 
     const filas = [...filasEliminadasYModificadas, ...filasNuevas];
@@ -679,8 +746,16 @@ function EditProductForm({
     // a aceptar como excepción al freno de variantes faltantes. Cualquier
     // otra faltante que aparezca del lado servidor (estado stale, carrera
     // entre pestañas) sigue bloqueando el guardado.
+    // Las renombradas también entran: para la RPC su combinación vieja
+    // desaparece igual (se borra y se reinserta con la key nueva), así que
+    // sin declararlas el guardado quedaría bloqueado. La diferencia entre
+    // una y otra es de dónde sale la autorización — la eliminación con
+    // mercadería se tilda fila por fila, el renombre no borra nada.
     const atributosConfirmados = diffFilas
-      .filter((f) => f.tipo === "eliminada" && f.atributos)
+      .filter(
+        (f) =>
+          (f.tipo === "eliminada" || f.tipo === "renombrada") && f.atributos,
+      )
       .map((f) => f.atributos);
     if (atributosConfirmados.length > 0) {
       pendingFormData.set(

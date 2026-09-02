@@ -11,7 +11,7 @@ import type { Opcion, VarianteInput } from "../types";
  * la trata como una combinación nueva, con stock en blanco, y el próximo
  * guardado la reinserta pisando el stock real con 0.
  */
-function normalizeKeyPart(value: string): string {
+export function normalizeKeyPart(value: string): string {
   return value
     .trim()
     .toLowerCase()
