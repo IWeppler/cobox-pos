@@ -1,16 +1,13 @@
 import { PosPageClient } from "@/features/pos/ui/pos-page-client";
-import { createClient } from "@/shared/config/supabase/server";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
 import { puedeCobrarCuentaCorriente } from "@/features/clients/lib/puede-cobrar-cc";
+import { leerConfigPos } from "@/entities/config/lib/leer-config-pos";
+import { normalizarRubro } from "@/entities/config/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function PosPage() {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
   // Verificamos permisos
   const { user } = await getUsuarioActual();
   if (!user) redirect("/auth");
@@ -19,5 +16,17 @@ export default async function PosPage() {
   // `puedeCobrarCuentaCorriente` está cacheada por request.
   const puedeCobrarCc = await puedeCobrarCuentaCorriente();
 
-  return <PosPageClient puedeCobrarCuentaCorriente={puedeCobrarCc} />;
+  // El rubro, GRATIS: `leerConfigPos` ya la llamaron los dos layouts de este
+  // mismo request y está cacheada con `cache()` de React, así que esto no
+  // paga ningún viaje. Baja al cliente para que el ticket y la grilla se
+  // dibujen bien desde el primer pintado — era lo único que el carrito
+  // necesitaba del catálogo, y lo hacía esperar 2,06 MB por un string.
+  const config = await leerConfigPos();
+
+  return (
+    <PosPageClient
+      puedeCobrarCuentaCorriente={puedeCobrarCc}
+      rubroInicial={normalizarRubro(config?.rubro)}
+    />
+  );
 }

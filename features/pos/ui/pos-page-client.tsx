@@ -7,9 +7,8 @@ import { conNegocio, queryKeys } from "@/shared/lib/query-keys";
 import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { PosTerminal } from "@/features/pos/ui/pos-terminal";
 import { CartPanelAdmin } from "@/features/pos/ui/cart-panel-admin";
-import { Skeleton } from "@/shared/ui/skeleton";
 import { AvisoDatosGuardados } from "@/shared/components/aviso-datos-guardados";
-import { RUBRO_DEFAULT } from "@/entities/config/types";
+import { RUBRO_DEFAULT, type Rubro } from "@/entities/config/types";
 
 const CATALOG_STALE_TIME_MS = 3 * 60 * 1000;
 
@@ -21,10 +20,21 @@ interface PosPageClientProps {
   /** Permiso `clientes.cobrar_cc`, resuelto en la página (server). Decide si
    * la barra del POS ofrece "Cobrar deuda". */
   puedeCobrarCuentaCorriente?: boolean;
+  /**
+   * El rubro, resuelto en el SERVER y sin costo (ver la página: sale de
+   * `leerConfigPos`, que los layouts de este mismo request ya cachearon).
+   *
+   * Viene por acá y no del catálogo porque era la ÚNICA cosa que
+   * `CartPanelAdmin` necesitaba de esos 2,06 MB: un string. El ticket entero
+   * —métodos de pago, promociones, config, el carrito del store— no depende
+   * del catálogo, y sin embargo esperaba a que llegara.
+   */
+  rubroInicial?: Rubro;
 }
 
 export function PosPageClient({
   puedeCobrarCuentaCorriente = false,
+  rubroInicial = RUBRO_DEFAULT,
 }: Readonly<PosPageClientProps> = {}) {
   const negocioActivo = useNegocioActivo();
   // `?q=` es cómo entra un producto elegido en la paleta (Ctrl+K): en vez de
@@ -42,11 +52,21 @@ export function PosPageClient({
     gcTime: CACHE_OFFLINE_MS,
   });
 
-  if (isLoading) {
-    return <PosSkeleton />;
-  }
-
-  if (error || data?.error) {
+  // ACÁ VIVÍA `if (isLoading) return <PosSkeleton />`, que reemplazaba la
+  // PANTALLA ENTERA hasta que llegaba el catálogo. Con 2,06 MB en Slow 4G eso
+  // eran 7,3 s de LCP contra una pantalla en la que no existía nada: ni el
+  // buscador (era un `<Skeleton>`, no un `<input>`), ni el ticket, ni los
+  // botones. Un escaneo antes de que cargara perdía las teclas, porque no
+  // había input al que fueran.
+  //
+  // Ahora el shell se monta siempre y el catálogo llega después. Lo que
+  // depende de él es solo la grilla y las pills de categoría; el resto ya
+  // podía funcionar.
+  //
+  // El ERROR sí sigue reemplazando la pantalla: sin catálogo no se puede
+  // vender, y un shell que parece usable pero no encuentra nada es peor que
+  // decirlo. Va con `!isLoading` para no pisar el estado de carga.
+  if (!isLoading && (error || data?.error)) {
     return (
       <div className="flex h-48 w-full items-center justify-center rounded-xl bg-destructive/10 text-destructive border border-destructive/20 p-6 text-center">
         <p className="font-medium">
@@ -74,6 +94,15 @@ export function PosPageClient({
             de /pos vuelva a filtrar: sin ella, `busquedaInicial` solo se
             leería en el primer render. Remontar no toca el carrito, que
             vive en el store. */}
+        {/* Se monta SIEMPRE, con el catálogo vacío mientras viene en camino.
+            `cargandoCatalogo` es lo que le permite distinguir "todavía no
+            llegó" de "no hay": sin eso la grilla diría "No se encontraron
+            productos" y ofrecería CREAR lo que la vendedora acaba de escanear.
+
+            La `key` es `busquedaInicial`, que no cambia cuando llegan los
+            datos, así que el terminal NO se remonta: lo tipeado antes de que
+            cargara el catálogo sobrevive en `searchQuery` y el filtro se
+            re-corre solo. */}
         <PosTerminal
           key={busquedaInicial}
           busquedaInicial={busquedaInicial}
@@ -82,27 +111,22 @@ export function PosPageClient({
           permitirVentaSinStock={data?.data?.permitirVentaSinStock}
           nombreComercio={data?.data?.nombreComercio}
           mostrarSinStock={data?.data?.mostrarSinStock}
-          rubro={data?.data?.rubro ?? RUBRO_DEFAULT}
+          rubro={data?.data?.rubro ?? rubroInicial}
           puedeCobrarCuentaCorriente={puedeCobrarCuentaCorriente}
+          cargandoCatalogo={isLoading}
         />
-        <CartPanelAdmin rubro={data?.data?.rubro ?? RUBRO_DEFAULT} />
+        {/* El rubro del server, no `RUBRO_DEFAULT`: el ticket ya se dibuja
+            bien desde el primer pintado, sin esperar al catálogo y sin
+            cambiar de layout cuando llega (`posSinImagenes` decide si el
+            ticket muestra miniaturas). */}
+        <CartPanelAdmin rubro={data?.data?.rubro ?? rubroInicial} />
       </div>
     </div>
   );
 }
 
-function PosSkeleton() {
-  return (
-    <div className="flex h-full w-full gap-4 p-4">
-      <div className="flex-1 space-y-4">
-        <Skeleton className="h-10 w-full max-w-md rounded-lg" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {[...Array(8)].map((_, i) => (
-            <Skeleton key={i} className="h-40 rounded-lg" />
-          ))}
-        </div>
-      </div>
-      <Skeleton className="hidden lg:block w-80 rounded-lg" />
-    </div>
-  );
-}
+// Acá vivía `PosSkeleton`, el placeholder de PANTALLA COMPLETA. Se fue con el
+// early return que lo usaba: ahora el shell es real desde el primer pintado y
+// lo único que se dibuja en falso es la grilla, con `GrillaSkeleton` adentro
+// de `PosTerminal` — donde puede usar la misma grilla y la misma altura que
+// las tarjetas de verdad, que es lo que evita el salto de layout.

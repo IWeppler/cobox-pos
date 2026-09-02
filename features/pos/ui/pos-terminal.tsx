@@ -67,6 +67,17 @@ interface PosTerminalProps {
   /** Búsqueda con la que arranca la pantalla. Hoy la manda la paleta (Ctrl+K)
    * por `?q=` cuando se elige un producto desde otra pantalla. */
   busquedaInicial?: string;
+  /**
+   * El catálogo todavía viene en camino, y `productos` está vacío por eso y no
+   * porque el comercio no tenga nada.
+   *
+   * La distinción NO es cosmética. Sin ella, la grilla vacía dispara "No se
+   * encontraron productos" —y, si la vendedora ya tipeó o escaneó algo, además
+   * ofrece CREAR ese producto— cuando la verdad es que todavía no sabemos si
+   * existe. Decirle que no está y ofrecerle cargarlo es peor que hacerla
+   * esperar: termina con el producto duplicado.
+   */
+  cargandoCatalogo?: boolean;
 }
 
 const getStockTotal = (producto: Producto) => {
@@ -97,6 +108,7 @@ export function PosTerminal({
   rubro,
   puedeCobrarCuentaCorriente = false,
   busquedaInicial = "",
+  cargandoCatalogo = false,
 }: Readonly<PosTerminalProps>) {
   const abrirCobroCc = useCobroCcStore((state) => state.abrir);
   // El buscador de la barra: lo comparten la tecla "F" y la Carga rápida.
@@ -470,7 +482,11 @@ export function PosTerminal({
           categoriaActiva={tipo}
           onCategoriaChange={setTipo}
           categoriasDisponibles={categoriasDisponibles}
-          totalProductos={productos.length}
+          // Mientras el catálogo no llegó, `productos.length` es 0 y el
+          // toolbar mostraría "0 productos", que es un dato equivocado, no uno
+          // que falta. `undefined` lo deja sin contador hasta que haya algo
+          // que contar.
+          totalProductos={cargandoCatalogo ? undefined : productos.length}
           resultadosFueraDeCategoria={matchesFueraDeCategoria}
           hayFiltrosActivos={hayFiltrosActivos}
           propiedadesGlobales={propiedadesGlobales}
@@ -533,6 +549,8 @@ export function PosTerminal({
             <div className="pb-20 lg:pb-0">
               <CargaRapidaPanel carga={carga} />
             </div>
+          ) : cargandoCatalogo ? (
+            <GrillaSkeleton busqueda={searchQuery} />
           ) : productosOrdenados.length === 0 && !ofrecerCarga ? (
             <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
               <ShoppingBag className="w-12 h-12 mb-4 opacity-20" />
@@ -616,9 +634,7 @@ export function PosTerminal({
                       // pixel el contenido de la card al prenderse: con la
                       // grilla llena, ese salto se nota más que la marca.
                       className={`flex flex-col text-left rounded-lg bg-card transition-all overflow-hidden x w-full h-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background ${
-                        enCarrito > 0
-                          ? "ring-2 ring-primary/60"
-                          : ""
+                        enCarrito > 0 ? "ring-2 ring-primary/60" : ""
                       } ${
                         !bloqueado
                           ? "shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-150"
@@ -759,6 +775,60 @@ export function PosTerminal({
         onClose={() => setIsModalOpen(false)}
         permitirVentaSinStock={permitirVentaSinStock}
       />
+    </div>
+  );
+}
+
+/**
+ * La grilla mientras el catálogo viene en camino.
+ *
+ * Skeleton y no spinner: un spinner no dice cuánto ni de qué, y sobre todo no
+ * reserva el espacio. Estas tarjetas usan la MISMA grilla y la misma altura
+ * que las reales (`grid-cols-2 md:3 lg:4`, `aspect-square` + pie de texto), así
+ * que cuando llegan los productos ocupan el lugar que ya estaba dibujado y no
+ * hay salto de layout.
+ *
+ * Son 8 y no 40: alcanzan para llenar la primera pantalla en mobile y en
+ * desktop, y dibujar más sería pagar render por algo que se va a reemplazar.
+ *
+ * Lo de `busqueda` es lo que evita el peor caso de la carga diferida. El
+ * buscador ahora existe desde el primer pintado, así que la vendedora puede
+ * tipear —o el lector puede escanear— antes de que llegue el catálogo. Esas
+ * teclas NO se pierden: `searchQuery` es estado y el filtro se re-corre solo
+ * cuando llegan los datos. Pero sin decir nada, la pantalla se ve igual que
+ * una búsqueda sin resultados. La línea de abajo es la diferencia entre "no
+ * existe" y "todavía no sé".
+ */
+function GrillaSkeleton({ busqueda }: Readonly<{ busqueda: string }>) {
+  return (
+    <div className="pb-20 lg:pb-0">
+      {busqueda.trim() !== "" && (
+        <p
+          className="px-1 pb-3 text-sm text-muted-foreground"
+          aria-live="polite"
+        >
+          Buscando &quot;{busqueda.trim()}&quot;… el catálogo está terminando de
+          cargar.
+        </p>
+      )}
+
+      <div
+        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"
+        aria-hidden="true"
+      >
+        {Array.from({ length: 8 }, (_, i) => (
+          <div
+            key={i}
+            className="rounded-xl border border-border overflow-hidden"
+          >
+            <div className="aspect-square w-full animate-pulse bg-muted" />
+            <div className="p-2 space-y-2">
+              <div className="h-3 w-4/5 animate-pulse rounded bg-muted" />
+              <div className="h-3 w-2/5 animate-pulse rounded bg-muted" />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

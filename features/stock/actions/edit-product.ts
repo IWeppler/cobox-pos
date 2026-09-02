@@ -24,22 +24,12 @@ import { parsearCantidadDeEntrada } from "@/shared/lib/unidad-venta";
 
 type SupabaseServerClient = ReturnType<typeof createClient>;
 
-type AuditoriaVarianteRow = {
-  negocio_id: string;
-  producto_id: string;
-  variante_id_anterior: string | null;
-  variante_id_nueva: string | null;
-  atributos: Record<string, string>;
-  nombre_display: string | null;
-  accion: "CREADA" | "ACTUALIZADA" | "ELIMINADA" | "BLOQUEADO_FALTANTE";
-  stock_anterior: number | null;
-  stock_nuevo: number | null;
-  precio_anterior: number | null;
-  precio_nuevo: number | null;
-  costo_anterior: number | null;
-  costo_nuevo: number | null;
-  editado_por: string | null;
-};
+// Acá vivía `AuditoriaVarianteRow`, el tipo de la fila que este archivo
+// insertaba a mano en `producto_variantes_auditoria` para el producto sin
+// variantes. Ya no hace falta: ese camino pasa por
+// `guardar_variantes_producto`, que escribe su propia auditoría con el mismo
+// criterio que el resto. Un tipo menos que mantener sincronizado a mano con
+// una tabla.
 
 export type ImagenesResult = {
   success: boolean;
@@ -405,137 +395,80 @@ async function procesarVariantes(
 
   try {
     if (!tieneVariantes) {
-      // Se leen TODAS, no `.maybeSingle()`. Con `maybeSingle` un producto que
-      // hoy tiene varias variantes y se está convirtiendo a "sin variantes"
-      // devolvía error, el código lo ignoraba y `unicoAnterior` quedaba en
-      // null — o sea que el caso funcionaba de casualidad, porque después
-      // borraba todo igual. Acá se necesita saber cuál sobrevive.
+      // Un producto sin variantes se guarda por la MISMA RPC que uno con
+      // variantes: es el caso degenerado de "una sola combinación, la vacía".
+      //
+      // Antes esto era un bloque aparte con `.delete()` + `.insert()` crudos
+      // sobre `producto_variantes`, y de ahí salían tres problemas:
+      //
+      //   1. Destruía el UUID de la variante en cada guardado — el mismo bug
+      //      que 20260902110000 sacó de la RPC, entrando por otra puerta. Se
+      //      arregló pasándolo a UPDATE, pero quedaban los otros dos.
+      //   2. Corría suelto desde Node, así que el trigger de
+      //      `movimientos_stock` no podía saber el ORIGEN: `set_config` no
+      //      cruza transacciones desde acá, y todo cambio de stock quedaba con
+      //      origen DESCONOCIDO. Adentro de la RPC, el wrapper declara
+      //      EDICION_VARIANTES y escribe el movimiento NETO.
+      //   3. Eran DOS escritores para la misma tabla, con dos criterios: el
+      //      freno de mercadería, la auditoría y el espejo legacy vivían solo
+      //      en uno de los dos. Toda la historia de este archivo dice que dos
+      //      caminos a la misma tabla terminan divergiendo.
+      //
+      // La identidad de la variante única es la clave vacía
+      // (`atributos_comparables('{}') = ''`), así que la RPC la matchea contra
+      // la "Único" que ya existe y la ACTUALIZA conservando su id.
       const { data: variantesActuales } = await supabase
         .from("producto_variantes")
-        .select("id, stock, precio, costo, sku, atributos, created_at")
-        .eq("producto_id", id)
-        .order("created_at", { ascending: true });
+        .select("id, atributos")
+        .eq("producto_id", id);
 
-      // La que sobrevive: la que ya era la variante única si existe, y si no
-      // la más vieja. Mismo criterio que la fusión de 20260902100000.
-      const unicoAnterior =
-        (variantesActuales ?? []).find(
-          (v) => Object.keys(v.atributos ?? {}).length === 0,
-        ) ??
-        (variantesActuales ?? [])[0] ??
-        null;
+      // Convertir un producto CON variantes a uno sin variantes es una baja
+      // deliberada de todas las combinaciones que tenía, y el freno de la RPC
+      // bloquea cualquier baja no confirmada que tenga stock. Se confirman
+      // acá: el usuario lo pidió sacando la sección de variantes del
+      // formulario. Sin esto, "Quitar variantes" quedaría bloqueado para
+      // cualquier producto con mercadería, que es la mayoría.
+      const confirmadasEliminar = (variantesActuales ?? [])
+        .map((v) => v.atributos ?? {})
+        .filter((a) => Object.keys(a).length > 0);
 
-      // El código de la variante única. `has()` y no `get()`: un formulario
-      // que no manda el campo —la edición rápida, o un producto con
-      // variantes— tiene que CONSERVAR el código que ya estaba, no vaciarlo.
-      // Vaciarlo a propósito sigue siendo posible: el campo viaja presente y
-      // en blanco.
       const sku = formData.has("sku")
         ? (formData.get("sku") as string | null)?.trim().toUpperCase() || null
-        : (unicoAnterior?.sku ?? null);
+        : null;
 
-      // ANTES ACÁ HABÍA UN DELETE DE TODAS + INSERT, y era el mismo bug que
-      // 20260902110000 sacó de `guardar_variantes_producto`, entrando por otra
-      // puerta: los productos SIN variantes no pasan por esa RPC, así que su
-      // guardado seguía destruyendo el UUID de la variante en cada edición.
-      // Con 129 productos en esa situación no era teórico — se vio dispararse
-      // en Estilo Bonito cinco minutos después de aplicar aquella migración.
-      //
-      // Lo que rompía: `ventas_items.variante_id` y `movimientos_stock` no
-      // tienen FK, así que quedaban apuntando a un id muerto sin error; y como
-      // este bloque corre suelto desde Node (no adentro de una RPC), el
-      // trigger de `movimientos_stock` veía el DELETE y el INSERT como dos
-      // movimientos —un -3 y un +3 sobre la misma mercadería— con origen
-      // DESCONOCIDO, porque `set_config` no cruza transacciones desde acá.
-      //
-      // Con UPDATE, editar un producto sin tocarle el stock no escribe NINGÚN
-      // movimiento (el trigger corta con `new.stock is not distinct from
-      // old.stock`), y si el stock cambia escribe uno solo con el delta real.
-      // El origen sigue quedando DESCONOCIDO cuando cambia: declararlo exige
-      // que la escritura viva adentro de una RPC, y eso es otro cambio.
-      let unicoNuevo: { id: string } | null = null;
+      const { data: rpcUnico, error: rpcUnicoError } = await supabase.rpc(
+        "guardar_variantes_producto",
+        {
+          p_producto_id: id,
+          p_negocio_id: negocioId,
+          p_variantes: [
+            {
+              atributos: {},
+              nombre_display: "Único",
+              precio: null,
+              costo: null,
+              stock_input: String(stockBase),
+              sku,
+              relaciones: [],
+            },
+          ],
+          p_editado_por: userId,
+          p_confirmadas_eliminar: confirmadasEliminar,
+        },
+      );
+      if (rpcUnicoError) throw rpcUnicoError;
 
-      if (unicoAnterior) {
-        const { data, error: updVarError } = await supabase
-          .from("producto_variantes")
-          .update({
-            nombre_display: "Único",
-            atributos: {},
-            stock: stockBase,
-            sku,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", unicoAnterior.id)
-          .select("id")
-          .single();
-        if (updVarError) throw updVarError;
-        unicoNuevo = data;
-
-        // El producto pasó de tener variantes a no tenerlas: las demás se van
-        // de verdad. Es una eliminación real, no el reciclado de antes.
-        const sobrantes = (variantesActuales ?? [])
-          .filter((v) => v.id !== unicoAnterior.id)
-          .map((v) => v.id);
-
-        if (sobrantes.length > 0) {
-          const { error: delSobrantesError } = await supabase
-            .from("producto_variantes")
-            .delete()
-            .in("id", sobrantes);
-          if (delSobrantesError) throw delSobrantesError;
-        }
-      } else {
-        const { data, error: insVarError } = await supabase
-          .from("producto_variantes")
-          .insert({
-            negocio_id: negocioId,
-            producto_id: id,
-            nombre_display: "Único",
-            stock: stockBase,
-            sku,
-          })
-          .select("id")
-          .single();
-        if (insVarError) throw insVarError;
-        unicoNuevo = data;
+      const resultadoUnico = rpcUnico as {
+        success: boolean;
+        blocked?: boolean;
+      };
+      if (!resultadoUnico.success) {
+        return {
+          success: false,
+          error:
+            "No se pudo guardar el producto: la base bloqueó la baja de variantes con stock. Volvé a abrirlo y confirmá el cambio.",
+        };
       }
-
-      // Legacy support
-      const { error: delStockError } = await supabase
-        .from("productos_stock")
-        .delete()
-        .eq("producto_id", id);
-      if (delStockError) throw delStockError;
-
-      const { error: insStockError } = await supabase
-        .from("productos_stock")
-        .insert({
-          producto_id: id,
-          variante: "Único",
-          cantidad: stockBase,
-          negocio_id: negocioId,
-        });
-      if (insStockError) throw insStockError;
-
-      const { error: auditError } = await supabase
-        .from("producto_variantes_auditoria")
-        .insert({
-          negocio_id: negocioId,
-          producto_id: id,
-          variante_id_anterior: unicoAnterior?.id ?? null,
-          variante_id_nueva: unicoNuevo?.id ?? null,
-          atributos: {},
-          nombre_display: "Único",
-          accion: unicoAnterior ? "ACTUALIZADA" : "CREADA",
-          stock_anterior: unicoAnterior?.stock ?? null,
-          stock_nuevo: stockBase,
-          precio_anterior: unicoAnterior?.precio ?? null,
-          precio_nuevo: null,
-          costo_anterior: unicoAnterior?.costo ?? null,
-          costo_nuevo: null,
-          editado_por: userId,
-        } satisfies AuditoriaVarianteRow);
-      if (auditError) console.error("[EDIT PRODUCT AUDIT ERROR]", auditError);
 
       return { success: true };
     }

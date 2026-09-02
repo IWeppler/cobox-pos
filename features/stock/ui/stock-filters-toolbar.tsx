@@ -114,7 +114,10 @@ interface StockFiltersToolbarProps {
   categoriaActiva: string;
   onCategoriaChange: (categoria: string) => void;
   categoriasDisponibles: CategoriaToolbar[];
-  totalProductos: number;
+  /** `undefined` mientras el catálogo se está cargando: el chip "Todas" sale
+   * sin número en vez de decir "(0)", que sería un dato equivocado y no uno
+   * que falta. Lo usa el POS, que ahora monta la barra antes que el catálogo. */
+  totalProductos?: number;
   hayFiltrosActivos: boolean;
   propiedadesGlobales: Record<string, string[]>;
   filtrosVariantes: Record<string, string | string[]>;
@@ -695,7 +698,7 @@ export function StockFiltersToolbar({
                     }`}
                     onClick={() => onCategoriaChange("todos")}
                   >
-                    Todas ({totalProductos})
+                    {totalProductos === undefined ? "Todas" : `Todas (${totalProductos})`}
                   </Button>
 
                   {categoriasDisponibles.map((categoria) => {

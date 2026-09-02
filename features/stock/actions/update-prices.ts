@@ -10,9 +10,7 @@ import { invalidarCatalogoDeSesion } from "@/shared/lib/cache-catalogo";
  * nuevo entra al historial sin migración. */
 export type AlcancePrecio = "TODOS" | "CATEGORIA" | "SELECCION";
 export type OperacionPrecio =
-  | "AUMENTAR_PORCENTAJE"
-  | "REDUCIR_PORCENTAJE"
-  | "FIJAR_MARGEN";
+  "AUMENTAR_PORCENTAJE" | "REDUCIR_PORCENTAJE" | "FIJAR_MARGEN";
 export type CampoObjetivo = "PRECIO" | "COSTO" | "AMBOS";
 export type TipoRedondeo = "SIN_REDONDEO" | "10" | "50" | "100" | "90" | "99";
 
@@ -338,11 +336,16 @@ export async function aplicarPreciosAction(
         });
       }
 
+      // `updated_at` va explícito: la columna no tiene trigger, así que solo
+      // se mueve si el que escribe la escribe. Un cambio de precio que no la
+      // toca es un cambio que ninguna sincronización incremental puede ver.
+      // Mismo criterio que `ajustar_stock_variante` desde 20260902160000.
       const { error: variantesUpdateError } = await supabase
         .from("producto_variantes")
         .update({
           costo: item.costo_nuevo,
           precio: item.precio_nuevo,
+          updated_at: new Date().toISOString(),
         })
         .eq("producto_id", item.producto_id);
 
@@ -368,8 +371,7 @@ export async function aplicarPreciosAction(
     const message = error instanceof Error ? error.message : null;
     return {
       error:
-        message ||
-        "Ocurrió un error inesperado al actualizar los precios.",
+        message || "Ocurrió un error inesperado al actualizar los precios.",
     };
   }
 }
@@ -382,7 +384,10 @@ export async function listarHistorialPreciosAction(): Promise<
   const supabase = createClient(cookieStore);
 
   if (!(await esUsuarioAdmin(supabase))) {
-    return { error: "Solo un administrador puede ver el historial de ajustes de precio." };
+    return {
+      error:
+        "Solo un administrador puede ver el historial de ajustes de precio.",
+    };
   }
 
   const { data: lotes, error: lotesError } = await supabase
@@ -441,7 +446,9 @@ export async function previsualizarRevertirPreciosAction(
   const supabase = createClient(cookieStore);
 
   if (!(await esUsuarioAdmin(supabase))) {
-    return { error: "Solo un administrador puede revertir un ajuste de precios." };
+    return {
+      error: "Solo un administrador puede revertir un ajuste de precios.",
+    };
   }
 
   const { data: items, error: fetchError } = await supabase
@@ -450,7 +457,9 @@ export async function previsualizarRevertirPreciosAction(
     .eq("lote_id", loteId);
 
   if (fetchError || !items || items.length === 0)
-    return { error: "No se encontraron los datos de este ajuste para previsualizar." };
+    return {
+      error: "No se encontraron los datos de este ajuste para previsualizar.",
+    };
 
   const productoIds = [...new Set(items.map((i) => i.producto_id))];
   const varianteIds = items
@@ -490,7 +499,8 @@ export async function previsualizarRevertirPreciosAction(
         precio_al_revertir: precioAlRevertir,
         costo_actual: costoActual,
         costo_al_revertir: costoAlRevertir,
-        cambia: precioActual !== precioAlRevertir || costoActual !== costoAlRevertir,
+        cambia:
+          precioActual !== precioAlRevertir || costoActual !== costoAlRevertir,
       };
     }
 
@@ -504,7 +514,8 @@ export async function previsualizarRevertirPreciosAction(
       precio_al_revertir: precioAlRevertir,
       costo_actual: costoActual,
       costo_al_revertir: costoAlRevertir,
-      cambia: precioActual !== precioAlRevertir || costoActual !== costoAlRevertir,
+      cambia:
+        precioActual !== precioAlRevertir || costoActual !== costoAlRevertir,
     };
   });
 
@@ -517,7 +528,9 @@ export async function revertirPreciosAction(loteId: string) {
   const supabase = createClient(cookieStore);
 
   if (!(await esUsuarioAdmin(supabase))) {
-    return { error: "Solo un administrador puede revertir un ajuste de precios." };
+    return {
+      error: "Solo un administrador puede revertir un ajuste de precios.",
+    };
   }
 
   const { data: lote } = await supabase
@@ -549,11 +562,23 @@ export async function revertirPreciosAction(loteId: string) {
   for (const item of items) {
     if (item.variante_id) {
       // Fila a nivel variante: revertir solo esa variante puntual.
+      //
+      // El `variante_id` puede apuntar a una variante que YA NO EXISTE: desde
+      // 20260902190000 la columna no tiene FK, así que el id se conserva
+      // cuando la variante se borra. Ese UPDATE afecta 0 filas y está bien —
+      // una variante que no existe no tiene precio que restaurar.
+      //
+      // NO convertir esto en "si no existe, caé a la rama de producto": eso es
+      // exactamente lo que hacía el ON DELETE SET NULL anterior, y era un bug.
+      // La fila de una variante borrada se disfrazaba de fila de nivel
+      // producto y pisaba `productos.precio` con el precio viejo de la
+      // variante. Eran 66 productos afectados cuando se midió.
       await supabase
         .from("producto_variantes")
         .update({
           costo: item.costo_anterior,
           precio: item.precio_anterior,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", item.variante_id);
     } else {
@@ -574,6 +599,7 @@ export async function revertirPreciosAction(loteId: string) {
           .update({
             costo: item.costo_anterior,
             precio: item.precio_anterior,
+            updated_at: new Date().toISOString(),
           })
           .eq("producto_id", item.producto_id);
       }
