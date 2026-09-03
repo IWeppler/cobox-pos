@@ -1,7 +1,8 @@
 import { CartItemStore } from "@/entities/cart/types";
 import { CreateSalePaymentInput } from "@/entities/ventas/types";
-import { MetodoPago } from "@/entities/payments/types";
+import { MetodoPago, TipoMetodo } from "@/entities/payments/types";
 import { DescuentoDetalle, PromocionDB } from "./types";
+import type { TotalesPedido } from "@/shared/lib/totales-pedido-publico";
 
 export type CanalVenta = "PUBLICO" | "POS";
 
@@ -13,6 +14,19 @@ interface PromocionesElegiblesParams {
   metodosPago: MetodoPago[];
   /** Default "POS": preserva el comportamiento histórico para el admin. */
   canal?: CanalVenta;
+  /**
+   * Canal PUBLICO: qué TIPO de pago eligió la clienta en el paso 2.
+   *
+   * Antes el carrito público no tenía este dato —el medio se resolvía después
+   * por WhatsApp— y las promos por método pasaban como elegibles SIEMPRE, para
+   * poder mostrarlas como aviso. Ahora que se elige antes de enviar, una promo
+   * por método es elegible o no según el tipo, igual que en el POS.
+   *
+   * Sin tipo elegido NO son elegibles: un descuento por pagar en efectivo no
+   * se puede dar por hecho cuando todavía no se sabe cómo se paga, y un total
+   * que lo incluya de prepo es un total que después sube.
+   */
+  tipoPagoSeleccionado?: TipoMetodo | null;
 }
 
 export function getPromocionesElegibles({
@@ -22,6 +36,7 @@ export function getPromocionesElegibles({
   items,
   metodosPago,
   canal = "POS",
+  tipoPagoSeleccionado = null,
 }: PromocionesElegiblesParams) {
   const ahora = new Date();
 
@@ -55,13 +70,16 @@ export function getPromocionesElegibles({
         return true;
 
       case "METODO_PAGO": {
-        // En el carrito público todavía no se eligió medio de pago (eso se
-        // define después por WhatsApp) — se muestra como informativo sin
-        // exigir una selección que no existe en ese flujo.
-        if (canal === "PUBLICO") return true;
-
         const metodosPromo =
           promo.promociones_metodos_pago?.map((m) => m.metodo_pago) || [];
+
+        // El catálogo público elige UN tipo, no una lista de pagos como el
+        // POS: alcanza con que la promo incluya ese tipo.
+        if (canal === "PUBLICO") {
+          if (!tipoPagoSeleccionado) return false;
+          return metodosPromo.includes(tipoPagoSeleccionado);
+        }
+
         const selectedTipos = pagos.map(
           (p) => metodosPago.find((m) => m.id === p.metodoPagoId)?.tipo,
         );
@@ -179,17 +197,24 @@ export function calcularDescuentoCarritoPublico({
   promocionesElegibles,
   totalCarrito,
   items,
+  tipoPagoElegido = null,
 }: {
   promocionesElegibles: PromocionDB[];
   totalCarrito: number;
   items: CartItemStore[];
+  /**
+   * Con un tipo de pago elegido, las promos por método dejan de ser un aviso y
+   * compiten por el descuento como cualquier otra: ya se sabe si aplican. Sin
+   * tipo, `getPromocionesElegibles` ni siquiera las devuelve.
+   */
+  tipoPagoElegido?: TipoMetodo | null;
 }): DescuentoCarritoPublico {
-  const calculables = promocionesElegibles.filter(
-    (p) => p.tipo_regla !== "METODO_PAGO",
-  );
-  const informativasCondicionales = promocionesElegibles.filter(
-    (p) => p.tipo_regla === "METODO_PAGO",
-  );
+  const calculables = tipoPagoElegido
+    ? promocionesElegibles
+    : promocionesElegibles.filter((p) => p.tipo_regla !== "METODO_PAGO");
+  const informativasCondicionales = tipoPagoElegido
+    ? []
+    : promocionesElegibles.filter((p) => p.tipo_regla === "METODO_PAGO");
 
   const acumulables = calculables.filter((p) => p.acumulable);
   const exclusivas = calculables.filter((p) => !p.acumulable);
@@ -296,89 +321,89 @@ export function generarLinkWhatsApp({
 
 export type ModalidadEntregaPublica = "RETIRO" | "ENVIO";
 
+/**
+ * El mensaje de WhatsApp del pedido.
+ *
+ * NO CALCULA NADA. Recibe los totales ya resueltos por
+ * `calcularTotalesPedido` —los mismos que la clienta acaba de ver en el
+ * pie— y los escribe. Antes recibía un total y tres listas de avisos, y
+ * armaba con eso un texto que hablaba de descuentos "a confirmar" y recargos
+ * "no incluidos": el mensaje decía una cosa y la pantalla otra, y el que
+ * tenía que reconciliarlas era el comercio, a mano, por chat.
+ *
+ * El desglose viaja ENTERO —subtotal, descuento, recargo, envío— y no solo el
+ * total, porque del otro lado hay una persona que va a cargar esa venta en el
+ * POS y necesita saber de dónde sale cada peso.
+ */
 export function generarLinkWhatsAppPublico({
   numeroWhatsApp,
   nombreComercio,
   items,
-  total,
+  totales,
+  etiquetaPago,
   nombreCliente,
   modalidad,
   direccion,
   localidad,
-  costoEnvio,
+  envioACoordinar,
   nota,
-  promocionesAplicadas,
-  promocionesCondicionales,
-  metodosConRecargo,
 }: {
   numeroWhatsApp?: string;
   nombreComercio?: string | null;
   items: CartItemStore[];
-  /** Ya con el descuento de las promos calculables restado. */
-  total: number;
+  totales: TotalesPedido;
+  /** Cómo eligió pagar, con la etiqueta que vio en pantalla. */
+  etiquetaPago: string;
   nombreCliente: string;
   modalidad: ModalidadEntregaPublica;
   direccion?: string;
   localidad?: string;
-  costoEnvio?: number;
+  /** Envío sin costo calculable: el mensaje lo dice en vez de callarlo. */
+  envioACoordinar?: boolean;
   nota?: string;
-  /** Ya restadas del total de arriba. */
-  promocionesAplicadas?: PromocionDB[];
-  /** Dependen del método de pago: aviso aparte, no afectan el total. */
-  promocionesCondicionales?: PromocionDB[];
-  /** Métodos que cobran recargo. Informativo: el total de arriba NO lo
-   * incluye porque todavía no se sabe con qué va a pagar. */
-  metodosConRecargo?: { nombre: string; recargo_porcentaje: number }[];
 }) {
   if (!numeroWhatsApp) return "#";
 
+  const pesos = (monto: number) => `$${monto.toLocaleString("es-AR")}`;
   const nombre = nombreComercio?.trim() || "el negocio";
+
   let mensaje = `Hola ${nombre}!\nQuiero realizar el siguiente pedido:\n\n`;
 
   items.forEach((item) => {
     mensaje += `${item.cantidad}x ${item.nombre} (${item.tipo})\n`;
-    mensaje += ` - Talle: ${item.variante} - $${(
-      item.precio * item.cantidad
-    ).toLocaleString("es-AR")}\n`;
+    mensaje += ` - Talle: ${item.variante} - ${pesos(
+      item.precio * item.cantidad,
+    )}\n`;
   });
 
-  mensaje += `\nTOTAL (con descuento aplicado): $${total.toLocaleString("es-AR")}\n`;
+  mensaje += `\nSubtotal: ${pesos(totales.subtotal)}`;
+  if (totales.descuento) {
+    mensaje += `\n${totales.descuento.etiqueta}: -${pesos(totales.descuento.monto)}`;
+  }
+  if (totales.recargo) {
+    mensaje += `\n${totales.recargo.etiqueta}: +${pesos(totales.recargo.monto)}`;
+  }
+  if (totales.envio) {
+    mensaje += `\nEnvío: ${pesos(totales.envio.monto)}`;
+  }
+  mensaje += `\nTOTAL: ${pesos(totales.total)}`;
 
-  mensaje += `\nNombre: ${nombreCliente}`;
+  mensaje += `\n\nNombre: ${nombreCliente}`;
+  mensaje += `\nPago: ${etiquetaPago}`;
+
   if (modalidad === "ENVIO") {
-    mensaje += `\nModalidad: Envío a domicilio`;
+    mensaje += `\nEntrega: Envío a domicilio`;
     mensaje += `\nLocalidad: ${localidad}`;
     mensaje += `\nDirección: ${direccion}`;
-    if (costoEnvio && costoEnvio > 0) {
-      mensaje += `\nCosto de envío: $${costoEnvio.toLocaleString("es-AR")}`;
+    if (envioACoordinar) {
+      mensaje += `\n(costo de envío a coordinar)`;
     }
   } else {
-    mensaje += `\nModalidad: Retiro en local`;
+    mensaje += `\nEntrega: Retiro en local`;
   }
 
   if (nota?.trim()) {
     mensaje += `\nNota: ${nota.trim()}`;
-  }
-
-  if (promocionesAplicadas && promocionesAplicadas.length > 0) {
-    mensaje += `\n\nDescuentos aplicados:`;
-    promocionesAplicadas.forEach((promo) => {
-      mensaje += `\n- ${formatearPromoPublica(promo)}`;
-    });
-  }
-
-  if (promocionesCondicionales && promocionesCondicionales.length > 0) {
-    mensaje += `\n\nPromos según método de pago (a confirmar):`;
-    promocionesCondicionales.forEach((promo) => {
-      mensaje += `\n- ${formatearPromoPublica(promo)}`;
-    });
-  }
-
-  if (metodosConRecargo && metodosConRecargo.length > 0) {
-    mensaje += `\n\nRecargos según método de pago (no incluidos en el total):`;
-    metodosConRecargo.forEach((metodo) => {
-      mensaje += `\n- ${metodo.nombre}: +${metodo.recargo_porcentaje}%`;
-    });
   }
 
   mensaje += `\n\nTienen stock disponible para confirmar?`;

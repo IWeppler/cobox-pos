@@ -34,6 +34,48 @@ interface CantidadControlProps {
  * kilo, el peso se despeja solo. Es la misma cuenta al revés y evita que la
  * vendedora la haga con la calculadora del celular.
  */
+/**
+ * Un paso del stepper: −1 o +1.
+ *
+ * EXISTE PARA QUE SE VEA CUÁL DE LOS DOS SE PUEDE APRETAR. Los dos botones se
+ * dibujaban igual —el mismo gris tenue— y el deshabilitado solo se distinguía
+ * por un `opacity-40` que sobre gris claro no se ve. O sea que la línea no
+ * decía nada sobre lo más importante que puede decir: si queda otra unidad
+ * para agregar. Con una sola en stock, el "+" invitaba a apretarlo y no pasaba
+ * nada, que se lee como que la app se colgó.
+ *
+ * Habilitado: color de texto pleno y fondo al hover, como cualquier control
+ * vivo. Deshabilitado: gris apagado, sin hover y sin cursor de mano — tres
+ * señales en vez de una, porque en un celular no hay hover que ayude.
+ */
+function BotonPaso({
+  onClick,
+  deshabilitado,
+  etiqueta,
+  children,
+}: Readonly<{
+  onClick: () => void;
+  deshabilitado: boolean;
+  etiqueta: string;
+  children: React.ReactNode;
+}>) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={deshabilitado}
+      aria-label={etiqueta}
+      className={`flex h-full w-8 items-center justify-center transition-colors ${
+        deshabilitado
+          ? "cursor-not-allowed bg-muted/40 text-muted-foreground/35"
+          : "cursor-pointer text-foreground hover:bg-muted active:bg-muted"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function CantidadControl({
   cantidad,
   precio,
@@ -46,26 +88,24 @@ export function CantidadControl({
 
   if (!fraccionable) {
     return (
-      <div className="flex h-8 items-center border border-border">
-        <button
-          type="button"
+      <div className="flex h-8 items-center overflow-hidden rounded-md border border-border">
+        <BotonPaso
           onClick={() => onChange(cantidad - 1)}
-          disabled={cantidad <= 1}
-          className="flex h-full w-8 items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-40"
+          deshabilitado={cantidad <= 1}
+          etiqueta="Quitar una unidad"
         >
           <Minus className="h-3.5 w-3.5" />
-        </button>
+        </BotonPaso>
         <span className="w-8 text-center font-mono text-xs font-medium text-foreground">
           {cantidad}
         </span>
-        <button
-          type="button"
+        <BotonPaso
           onClick={() => onChange(cantidad + 1)}
-          disabled={cantidad >= stockMaximo}
-          className="flex h-full w-8 items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-40"
+          deshabilitado={cantidad >= stockMaximo}
+          etiqueta="Agregar una unidad"
         >
           <Plus className="h-3.5 w-3.5" />
-        </button>
+        </BotonPaso>
       </div>
     );
   }
@@ -136,7 +176,7 @@ function ControlPorPeso({
         <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
           Peso
         </span>
-        <div className="flex h-8 items-center border border-border pr-2">
+        <div className="flex h-8 items-center overflow-hidden rounded-md border border-border pr-2">
           <input
             type="text"
             inputMode="decimal"
@@ -164,7 +204,7 @@ function ControlPorPeso({
         <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
           O por importe
         </span>
-        <div className="flex h-8 items-center border border-border pl-2">
+        <div className="flex h-8 items-center overflow-hidden rounded-md border border-border pl-2">
           <span className="font-mono text-[10px] text-muted-foreground">$</span>
           <input
             type="text"

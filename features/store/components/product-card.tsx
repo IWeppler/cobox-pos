@@ -5,6 +5,7 @@ import { ShoppingBag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useLinkCatalogo } from "@/shared/lib/use-negocio";
+import { PrecioConDescuento } from "./precio-con-descuento";
 
 interface ProductCardProps {
   producto: Producto;
@@ -70,10 +71,12 @@ export function ProductCard({
             {producto.nombre || "Sin nombre"}
           </h3>
         </Link>
-        <div className="mt-1 flex items-center justify-between">
-          <span className="text-sm font-bold text-foreground">
-            ${(producto.precio || 0).toLocaleString("es-AR")}
-          </span>
+        <div className="mt-1">
+          <PrecioConDescuento
+            precio={producto.precio || 0}
+            categoria={producto.tipo}
+            classNamePrecio="text-sm font-bold text-foreground"
+          />
         </div>
       </div>
     </div>

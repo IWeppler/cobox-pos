@@ -1,9 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { getCatalogoPanelAction } from "@/shared/actions/catalogo-panel";
-import { conNegocio, queryKeys } from "@/shared/lib/query-keys";
-import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
+import { useCatalogoPanel } from "@/shared/hooks/use-catalogo-panel";
 import { StockView } from "@/features/stock/ui/stock-view";
 // El MISMO esqueleto que dibuja `stock/loading.tsx`. Ver ahí por qué se
 // comparte: son dos cargas seguidas (la ruta y después el catálogo) y con dos
@@ -13,12 +10,6 @@ import { AvisoDatosGuardados } from "@/shared/components/aviso-datos-guardados";
 import { RUBRO_DEFAULT } from "@/entities/config/types";
 import type { UsoDelPlan } from "@/features/planes/actions/uso-del-plan";
 
-const CATALOG_STALE_TIME_MS = 3 * 60 * 1000;
-
-/** Cuánto sobrevive el catálogo, en memoria y en el celular. Ver
- * `shared/lib/cache-offline.ts`. */
-const CACHE_OFFLINE_MS = 24 * 60 * 60 * 1000;
-
 export function StockPageClient({
   userRole,
   uso,
@@ -26,21 +17,11 @@ export function StockPageClient({
   userRole: string;
   uso?: UsoDelPlan | null;
 }) {
-  const negocioActivo = useNegocioActivo();
-  const { data, isLoading, error, dataUpdatedAt } = useQuery({
-    // La MISMA entrada que usa /pos: una sola consulta para las dos
-    // pantallas. Acá el catálogo se usa TAL CUAL viene —sin filtrar— porque
-    // Inventario tiene que mostrar también lo despublicado: un producto que
-    // se sacó de la vidriera hay que poder verlo para corregirlo.
-    queryKey: conNegocio(queryKeys.catalogo, negocioActivo?.id),
-    queryFn: getCatalogoPanelAction,
-    staleTime: CATALOG_STALE_TIME_MS,
-    // `gcTime` largo y explícito: sin esto React Query descarta la query a
-    // los 5 minutos de no usarse, y el guardado en disco que viene después
-    // ya no la encuentra. O sea que el cache offline se vaciaba justo
-    // después de un rato sin tocar la app — que es cuando hace falta.
-    gcTime: CACHE_OFFLINE_MS,
-  });
+  // La MISMA entrada que usa /pos: una sola consulta para las dos pantallas.
+  // Acá el catálogo se usa TAL CUAL viene —sin filtrar— porque Inventario
+  // tiene que mostrar también lo despublicado: un producto que se sacó de la
+  // vidriera hay que poder verlo para corregirlo.
+  const { data, isLoading, error, dataUpdatedAt } = useCatalogoPanel();
 
   if (isLoading) {
     return (

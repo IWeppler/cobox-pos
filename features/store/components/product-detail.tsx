@@ -15,6 +15,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCartStore } from "@/shared/store/cart-store";
 import { useRutaCatalogo } from "@/shared/lib/use-negocio";
+import { PrecioConDescuento } from "./precio-con-descuento";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { resolverAtributosVariante } from "@/entities/productos/lib/build-propiedades-filtro";
 import { compararTalles } from "@/entities/productos/lib/comparar-talles";
@@ -438,8 +439,13 @@ export function ProductDetail({
         </h1>
 
         {config?.mostrar_precios !== false && (
-          <div className="text-xl md:text-2xl font-medium text-foreground mb-6 md:mb-8">
-            ${(producto.precio || 0).toLocaleString("es-AR")}
+          <div className="mb-6 md:mb-8">
+            <PrecioConDescuento
+              precio={producto.precio || 0}
+              categoria={producto.tipo}
+              classNamePrecio="text-xl md:text-2xl font-medium text-foreground"
+              tamano="ficha"
+            />
           </div>
         )}
 

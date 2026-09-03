@@ -2,21 +2,12 @@
 
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { getCatalogoPanelAction } from "@/shared/actions/catalogo-panel";
-import { conNegocio, queryKeys } from "@/shared/lib/query-keys";
 import { soloVendibles } from "@/features/pos/lib/solo-vendibles";
-import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
+import { useCatalogoPanel } from "@/shared/hooks/use-catalogo-panel";
 import { PosTerminal } from "@/features/pos/ui/pos-terminal";
 import { CartPanelAdmin } from "@/features/pos/ui/cart-panel-admin";
 import { AvisoDatosGuardados } from "@/shared/components/aviso-datos-guardados";
 import { RUBRO_DEFAULT, type Rubro } from "@/entities/config/types";
-
-const CATALOG_STALE_TIME_MS = 3 * 60 * 1000;
-
-/** Cuánto sobrevive el catálogo, en memoria y en el celular. Ver
- * `shared/lib/cache-offline.ts`. */
-const CACHE_OFFLINE_MS = 24 * 60 * 60 * 1000;
 
 interface PosPageClientProps {
   /** Permiso `clientes.cobrar_cc`, resuelto en la página (server). Decide si
@@ -38,24 +29,15 @@ export function PosPageClient({
   puedeCobrarCuentaCorriente = false,
   rubroInicial = RUBRO_DEFAULT,
 }: Readonly<PosPageClientProps> = {}) {
-  const negocioActivo = useNegocioActivo();
   // `?q=` es cómo entra un producto elegido en la paleta (Ctrl+K): en vez de
   // agregarlo al ticket a ciegas —con talles y colores, elegir la variante es
   // una decisión— deja el POS con esa búsqueda hecha.
   const busquedaInicial = useSearchParams().get("q") ?? "";
-  const { data, isLoading, error, dataUpdatedAt } = useQuery({
-    // La MISMA entrada que usa /stock. Ir de una pantalla a la otra ya no
-    // vuelve a bajar el catálogo: antes eran dos consultas con casi los
-    // mismos productos y ~4 MB entre las dos. Ver `catalogo-panel.ts`.
-    queryKey: conNegocio(queryKeys.catalogo, negocioActivo?.id),
-    queryFn: getCatalogoPanelAction,
-    staleTime: CATALOG_STALE_TIME_MS,
-    // `gcTime` largo y explícito: sin esto React Query descarta la query a
-    // los 5 minutos de no usarse, y el guardado en disco que viene después
-    // ya no la encuentra. O sea que el cache offline se vaciaba justo
-    // después de un rato sin tocar la app — que es cuando hace falta.
-    gcTime: CACHE_OFFLINE_MS,
-  });
+  // La MISMA entrada que usa /stock, y con la misma sincronización
+  // incremental: ir de una pantalla a la otra no vuelve a bajar nada, y
+  // volver a abrir la app baja solo lo que cambió. Ver
+  // `shared/hooks/use-catalogo-panel.ts`.
+  const { data, isLoading, error, dataUpdatedAt } = useCatalogoPanel();
 
   // El catálogo canónico viene sin filtrar (/stock necesita ver también lo
   // despublicado). Acá se queda lo vendible, que es el filtro que antes hacía

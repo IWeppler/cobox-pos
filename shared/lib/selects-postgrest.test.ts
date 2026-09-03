@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -28,7 +28,11 @@ describe("selects de PostgREST", () => {
     maxBuffer: 1 << 28,
   })
     .split("\n")
-    .filter(Boolean);
+    .filter(Boolean)
+    // `git ls-files` lista el ÍNDICE, no el disco: un archivo borrado y
+    // todavía sin `git add` sigue apareciendo, y el test se caía con ENOENT
+    // en vez de decir nada sobre selects. Borrar un archivo es trabajo normal.
+    .filter((archivo) => existsSync(archivo));
 
   it("hay archivos para escanear (si no, el test pasa por vacío)", () => {
     expect(archivos.length).toBeGreaterThan(100);

@@ -3,12 +3,14 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { Producto } from "@/entities/productos/types";
-import { normalizarRubro, type Rubro } from "@/entities/config/types";
 import {
   anotarStockDisponible,
   contarReservasActivasPorVariante,
 } from "@/entities/productos/lib/stock-disponible";
 import { traerTodo } from "@/shared/lib/traer-todo";
+import { COLUMNAS_CATALOGO_PANEL } from "@/shared/lib/columnas-catalogo-panel";
+import { leerRestoCatalogo, type RestoCatalogo } from "@/shared/lib/resto-catalogo";
+import { calcularCursor } from "@/shared/lib/cursor-catalogo";
 
 /**
  * EL catálogo del panel. Una sola consulta para /pos y para /stock.
@@ -53,28 +55,23 @@ import { traerTodo } from "@/shared/lib/traer-todo";
  * propósito y unirlos habría metido datos del comercio en la vidriera.
  */
 
-/** Las columnas del panel: la unión de lo que pedían las dos pantallas.
- *
- * En UNA línea a propósito: los tipos generados de supabase-js parsean el
- * string del select en tiempo de compilación y un salto de línea adentro de la
- * interpolación les da ParserError. Mismo motivo que en columnas-publicas.ts. */
-const COLUMNAS_CATALOGO_PANEL =
-  "id, negocio_id, nombre, slug, tipo, categoria_id, precio, precio_costo, unidad_medida, descripcion, marca, modelo, genero, atributos_globales, imagen_url, thumbnail_url, grid_url, publicado, creado_en, destacado_en, categoria:categorias(id, nombre, slug), producto_variantes(id, sku, nombre_display, precio, costo, stock, atributos)";
-
-export interface CatalogoPanel {
+export interface CatalogoPanel extends RestoCatalogo {
   /** TODOS los productos del negocio, sin filtrar. Cada pantalla se queda con
    * lo suyo: /pos con los publicados, /stock con todo. */
   productos: Producto[];
-  categorias: Array<{
-    id: string;
-    nombre: string;
-    slug?: string | null;
-    parent_id?: string | null;
-  }>;
-  permitirVentaSinStock: boolean;
-  nombreComercio: string;
-  mostrarSinStock: boolean;
-  rubro: Rubro;
+  /**
+   * Hasta qué momento este catálogo está al día. Es lo que hace que la
+   * PRÓXIMA carga no vuelva a bajar los 245 kB enteros: viaja adentro del
+   * dato, así que el cache offline lo guarda y lo restaura junto con los
+   * productos, sin ningún almacenamiento aparte.
+   *
+   * Y esa es la razón de que esté acá y no en su propia entrada de IndexedDB:
+   * cursor y catálogo tienen que ser SIEMPRE de la misma foto. Guardados por
+   * separado, un guardado que falla y otro que no dejarían un cursor adelantado
+   * sobre un catálogo viejo, y el delta se saltearía en silencio todo lo del
+   * medio. Juntos en el mismo objeto no hay forma de que se separen.
+   */
+  cursor: string;
 }
 
 export async function getCatalogoPanelAction(): Promise<{
@@ -84,7 +81,11 @@ export async function getCatalogoPanelAction(): Promise<{
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const [productosRes, reservasRes, categoriasRes, configRes] =
+  // ANTES de leer, no después: lo que se escriba mientras corren las consultas
+  // tiene que caer del lado de "todavía no lo tengo". Ver `cursor-catalogo.ts`.
+  const cursor = calcularCursor();
+
+  const [productosRes, reservasRes, resto] =
     await Promise.all([
       // Paginado: sin esto PostgREST corta en 1000 EN SILENCIO y las dos
       // pantallas mienten por omisión. Ver shared/lib/traer-todo.ts.
@@ -96,15 +97,10 @@ export async function getCatalogoPanelAction(): Promise<{
           .range(desde, hasta),
       ),
       supabase.from("reservas").select("variante_id").eq("estado", "ACTIVA"),
-      supabase
-        .from("categorias")
-        .select("id, nombre, slug, parent_id")
-        .eq("activa", true)
-        .order("orden", { ascending: true }),
-      supabase
-        .from("configuracion_pos")
-        .select("permitir_venta_sin_stock, posName, mostrar_sin_stock, rubro")
-        .maybeSingle(),
+      // Categorías y config, completas. Las comparte con el delta para que las
+      // dos respuestas tengan exactamente la misma forma. Ver
+      // `resto-catalogo.ts`.
+      leerRestoCatalogo(supabase),
     ]);
 
   if (productosRes.error) {
@@ -127,27 +123,8 @@ export async function getCatalogoPanelAction(): Promise<{
     ),
   }));
 
-  // No aborta la pantalla si la config falla —se puede seguir vendiendo— pero
-  // tampoco se traga el error: los cuatro valores caen al default a la vez y
-  // el síntoma sería "mi comercio se llama Tienda Online".
-  if (configRes.error) {
-    console.error(
-      "[CATALOGO PANEL] No se pudo leer configuracion_pos; se usan defaults:",
-      configRes.error,
-    );
-  }
-
   return {
-    data: {
-      productos,
-      categorias: categoriasRes.data ?? [],
-      permitirVentaSinStock: configRes.data?.permitir_venta_sin_stock ?? false,
-      nombreComercio: configRes.data?.posName || "Tienda Online",
-      mostrarSinStock: configRes.data?.mostrar_sin_stock ?? true,
-      // `normalizarRubro` ya es fail-closed: con un valor desconocido o sin
-      // config devuelve indumentaria. No hace falta un `??` encima.
-      rubro: normalizarRubro(configRes.data?.rubro),
-    },
+    data: { ...resto, productos, cursor },
     error: null,
   };
 }

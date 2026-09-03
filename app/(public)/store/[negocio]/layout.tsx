@@ -10,6 +10,10 @@ import { urlDelPanel } from "@/shared/lib/ruteo-host";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { leerConfigPublica } from "@/entities/config/lib/leer-config-publica";
+import { DescuentosPagoProvider } from "@/features/store/components/descuentos-pago-provider";
+import { COLUMNAS_PROMOCION_PUBLICA } from "@/shared/lib/columnas-publicas";
+import type { PromocionDB } from "@/shared/components/cart-sidebar/types";
+import type { MetodoPublico } from "@/shared/lib/opciones-pago-publicas";
 import type { Metadata } from "next";
 
 // El título sale del negocio que se está mirando: no hay tienda por defecto
@@ -52,18 +56,37 @@ export default async function PublicLayout({
 
   // Las categorías principales (sin padre) van al menú hamburguesa de mobile:
   // son las mismas que muestra la portada del catálogo.
-  const [config, { data: categorias }] = await Promise.all([
-    leerConfigPublica(),
-    supabase
-      .from("categorias")
-      .select("id, nombre, slug")
-      .eq("activa", true)
-      .is("parent_id", null)
-      .order("orden", { ascending: true }),
-  ]);
+  //
+  // Promociones y métodos se leen ACÁ, una sola vez, y bajan por contexto: los
+  // necesitan todas las tarjetas de la grilla, la ficha y el carrito. Ver
+  // `DescuentosPagoProvider` para por qué no los pide cada uno por su cuenta.
+  const [config, { data: categorias }, { data: promociones }, { data: metodos }] =
+    await Promise.all([
+      leerConfigPublica(),
+      supabase
+        .from("categorias")
+        .select("id, nombre, slug")
+        .eq("activa", true)
+        .is("parent_id", null)
+        .order("orden", { ascending: true }),
+      supabase
+        .from("promociones")
+        .select(
+          `${COLUMNAS_PROMOCION_PUBLICA}, promociones_metodos_pago ( metodo_pago ), promociones_categorias ( categoria_nombre )`,
+        )
+        .eq("activa", true),
+      supabase
+        .from("metodos_pago")
+        .select("tipo, recargo_porcentaje, activo")
+        .eq("activo", true),
+    ]);
 
   return (
     <ModoCatalogoProvider modo={modo}>
+      <DescuentosPagoProvider
+        promociones={(promociones ?? []) as unknown as PromocionDB[]}
+        metodos={(metodos ?? []) as MetodoPublico[]}
+      >
       <div className="min-h-screen bg-background flex flex-col">
         <Navbar branding={config} categorias={categorias ?? []} />
         <CartPanelPublico numeroWhatsApp={config?.whatsapp} />
@@ -125,6 +148,7 @@ export default async function PublicLayout({
           holgado. Revisar el número con datos reales en unos días. */}
       <Analytics />
       <SpeedInsights sampleRate={0.5} />
+      </DescuentosPagoProvider>
     </ModoCatalogoProvider>
   );
 }
