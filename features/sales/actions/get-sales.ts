@@ -91,6 +91,7 @@ export async function getVentasAction(opts?: {
           cae
         ),
         venta_pagos (
+          metodo_pago_id,
           metodo_nombre,
           metodo_tipo,
           monto_base,

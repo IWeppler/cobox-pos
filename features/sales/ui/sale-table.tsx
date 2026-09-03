@@ -21,11 +21,17 @@ import {
 import { Badge } from "@/shared/ui/badge";
 import { ChevronLeft, ChevronRight, Eye, Receipt } from "lucide-react";
 import { AnularVentaModal } from "./cancel-sale-modal";
+import { CorregirPagoModal } from "./corregir-pago-modal";
 import { Button } from "@/shared/ui/button";
 import { TicketSheet } from "./ticket-sheet";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
-import { formatearNumeroComprobante } from "@/shared/lib/facturacion";
+import { numeroTicketVenta } from "@/features/sales/lib/numero-ticket";
 import { SaleTableHeader } from "./sale-table-header";
+import {
+  ESTADO_TODOS,
+  METODO_TODOS,
+  type EstadoVentaFiltro,
+} from "./sale-table-filtros";
 
 const ITEMS_POR_PAGINA = 10;
 
@@ -33,14 +39,22 @@ interface VentasTableProps {
   ventas: Venta[];
   userRole: string;
   puedeAnular: boolean;
+  /** Permiso `ventas.corregir_pago`. Separado de `puedeAnular` a propósito:
+   * corregir el medio de cobro de la venta propia en el turno abierto no
+   * cancela nada, y es lo que hoy obliga a llamar a la dueña. */
+  puedeCorregirPago?: boolean;
 }
 
 export function VentasTable({
   ventas = [],
   userRole,
   puedeAnular,
+  puedeCorregirPago = false,
 }: Readonly<VentasTableProps>) {
   const [filtroNombre, setFiltroNombre] = useState("");
+  const [filtroEstado, setFiltroEstado] =
+    useState<EstadoVentaFiltro>(ESTADO_TODOS);
+  const [filtroMetodo, setFiltroMetodo] = useState<string>(METODO_TODOS);
   const [orden, setOrden] = useState("recientes");
   const [paginaActual, setPaginaActual] = useState(1);
 
@@ -104,31 +118,83 @@ export function VentasTable({
     };
   };
 
+  /**
+   * El cobro de una venta corregible, o null.
+   *
+   * Corregir el método solo tiene sentido —y solo lo permite la RPC— cuando hay
+   * UN cobro y la venta no quedó con deuda: con pago mixto «cambiar el método»
+   * no dice de cuál de los dos se habla, y con deuda el cambio toca el saldo
+   * del cliente. Los dos casos se rechazan igual en el server; acá se usan para
+   * no ofrecer un botón que va a fallar.
+   *
+   * El chequeo que NO se puede hacer acá es el del turno abierto, que es el más
+   * frecuente. Ese lo contesta la RPC y el modal lo muestra como error.
+   */
+  const cobroCorregible = (venta: Venta) => {
+    if (venta.estado_operacion === "ANULADA") return null;
+    if (Number(venta.monto_pendiente || 0) > 0) return null;
+
+    const cobros = (venta.venta_pagos || []).filter(
+      (pago) => (pago.tipo_movimiento ?? "PAGO_VENTA") === "PAGO_VENTA",
+    );
+
+    return cobros.length === 1 ? cobros[0] : null;
+  };
+
   const getPagoLabel = (venta: Venta) => {
     const pagos = venta.venta_pagos || [];
     if (venta.es_pago_mixto || pagos.length > 1) return "Mixto";
     return pagos[0]?.metodo_nombre || venta.metodo_pago || "EFECTIVO";
   };
 
+  /**
+   * Los métodos de pago que REALMENTE aparecen en el historial cargado, no la
+   * lista de `metodos_pago`.
+   *
+   * Es lo que hace que el filtro no ofrezca nunca una opción vacía: un método
+   * configurado la semana pasada y todavía sin usar daría cero resultados, y un
+   * método ya desactivado —pero presente en ventas viejas— no se podría filtrar
+   * si la lista saliera de la configuración de hoy. Las etiquetas son las
+   * mismas que muestra la columna, `getPagoLabel`, "Mixto" incluido.
+   */
+  const metodosPresentes = useMemo(() => {
+    const vistos = new Set<string>();
+    for (const venta of ventas) vistos.add(getPagoLabel(venta));
+    return [...vistos].sort((a, b) => a.localeCompare(b, "es"));
+  }, [ventas]);
+
   const ventasFiltradasYOrdenadas = useMemo(() => {
     const resultado = ventas.filter((venta) => {
       const items = venta.ventas_items || [];
       if (items.length === 0) return false;
 
-      const searchLower = filtroNombre.toLowerCase().replace("#", "");
-      const numeroRecibo = venta.id.split("-")[0].toLowerCase();
-      const matchRecibo = numeroRecibo.includes(searchLower);
-      const matchCliente = getClienteNombre(venta)
-        .toLowerCase()
-        .includes(searchLower);
+      // Se busca por TICKET y por CLIENTE, ya no por producto. El producto
+      // estaba de más: los nombres del catálogo se repiten en cientos de
+      // ventas, así que buscar "remera" devolvía media pantalla y no ayudaba a
+      // encontrar UNA venta. Lo que se busca en un historial es un ticket que
+      // alguien tiene en la mano o las compras de una clienta que está
+      // enfrente.
+      //
+      // El `#` se ignora para que se pueda pegar el número tal como está
+      // impreso, y el match es por `includes`: tipear "417" encuentra
+      // "0001-00000417" sin obligar a escribir los ceros.
+      const busqueda = filtroNombre.toLowerCase().replace(/#/g, "").trim();
+      const coincideBusqueda =
+        busqueda === "" ||
+        numeroTicketVenta(venta).toLowerCase().includes(busqueda) ||
+        getClienteNombre(venta).toLowerCase().includes(busqueda);
 
-      const matchesFiltros = items.some((item: VentaItem) => {
-        const producto = getSupabaseRelation(item.producto);
-        const nombre = producto?.nombre?.toLowerCase() || "";
-        return nombre.includes(searchLower) || matchRecibo || matchCliente;
-      });
+      if (!coincideBusqueda) return false;
 
-      return matchesFiltros;
+      if (filtroEstado !== ESTADO_TODOS) {
+        if (getEstadoPago(venta).variant !== filtroEstado) return false;
+      }
+
+      if (filtroMetodo !== METODO_TODOS) {
+        if (getPagoLabel(venta) !== filtroMetodo) return false;
+      }
+
+      return true;
     });
 
     resultado.sort((a, b) => {
@@ -169,7 +235,7 @@ export function VentasTable({
     });
 
     return resultado;
-  }, [ventas, filtroNombre, orden]);
+  }, [ventas, filtroNombre, filtroEstado, filtroMetodo, orden]);
 
   const totalPaginas = Math.ceil(
     ventasFiltradasYOrdenadas.length / ITEMS_POR_PAGINA,
@@ -191,6 +257,19 @@ export function VentasTable({
 
   const handleOrderChange = (value: string) => {
     setOrden(value);
+    setPaginaActual(1);
+  };
+
+  // Volver a la página 1 con cada filtro no es un detalle: filtrando desde la
+  // página 4 el resultado puede tener 2 páginas, y la tabla se quedaría
+  // mostrando una página vacía sobre un filtro que sí tiene resultados.
+  const handleEstadoChange = (value: string) => {
+    setFiltroEstado(value as EstadoVentaFiltro);
+    setPaginaActual(1);
+  };
+
+  const handleMetodoChange = (value: string) => {
+    setFiltroMetodo(value);
     setPaginaActual(1);
   };
 
@@ -247,11 +326,7 @@ export function VentasTable({
       // fallaron al emitir tampoco: ahí se reimprime el identificador de la
       // venta, igual que siempre. Se toma el comprobante de emisión (el
       // primero), no una nota de crédito posterior.
-      nroRecibo:
-        formatearNumeroComprobante(
-          venta.comprobantes?.[0]?.punto_venta,
-          venta.comprobantes?.[0]?.numero,
-        ) ?? venta.id.split("-")[0].toUpperCase(),
+      nroRecibo: numeroTicketVenta(venta),
       fecha: formatearFechaHora(venta.fecha_venta),
       vendedor: getSupabaseRelation(venta.perfiles)?.nombre || "Administrador",
       descuentoMonto: descuento
@@ -288,6 +363,11 @@ export function VentasTable({
         orderValue={orden}
         onOrderChange={handleOrderChange}
         orderOptions={ordenOptions}
+        estadoValue={filtroEstado}
+        onEstadoChange={handleEstadoChange}
+        metodoValue={filtroMetodo}
+        onMetodoChange={handleMetodoChange}
+        metodosOptions={metodosPresentes}
       />
 
       {/* TABLA O EMPTY STATE */}
@@ -347,8 +427,13 @@ export function VentasTable({
                           className="hover:bg-muted/20 cursor-pointer transition-colors border-b border-border/40"
                           onClick={() => abrirTicket(venta)}
                         >
+                          {/* EL MISMO número que sale impreso en el recibo.
+                              Ver `numero-ticket.ts`: antes acá iba el prefijo
+                              del UUID y en el papel el número del
+                              comprobante, así que con el ticket en la mano no
+                              había forma de encontrar la fila. */}
                           <TableCell className="font-mono font-medium tracking-wider text-muted-foreground text-xs pl-4 sm:pl-6">
-                            #{venta.id.split("-")[0].toUpperCase()}
+                            #{numeroTicketVenta(venta)}
                           </TableCell>
 
                           <TableCell
@@ -435,6 +520,25 @@ export function VentasTable({
                               >
                                 <Eye className="w-4.5 h-4.5" />
                               </Button>
+
+                              {puedeCorregirPago &&
+                                (() => {
+                                  const cobro = cobroCorregible(venta);
+                                  return cobro ? (
+                                    <CorregirPagoModal
+                                      ventaId={venta.id}
+                                      metodoActualId={cobro.metodo_pago_id}
+                                      metodoActualNombre={cobro.metodo_nombre}
+                                      montoBase={Number(
+                                        cobro.monto_base ?? cobro.monto_bruto,
+                                      )}
+                                      totalActual={Number(venta.total)}
+                                      recargoActual={Number(
+                                        venta.recargo_metodo_total || 0,
+                                      )}
+                                    />
+                                  ) : null;
+                                })()}
 
                               {puedeAnular && !isAnulada && (
                                 <AnularVentaModal
@@ -569,7 +673,7 @@ export function VentasTable({
 
                     <div className="flex items-center justify-between pt-3 border-t border-border/50">
                       <span className="text-xs font-medium text-muted-foreground truncate pr-2">
-                        Ticket #{venta.id.split("-")[0].toUpperCase()}
+                        Ticket #{numeroTicketVenta(venta)}
                       </span>
                       <div
                         className="flex items-center gap-2"
@@ -584,6 +688,25 @@ export function VentasTable({
                         >
                           <Eye className="w-4 h-4 text-muted-foreground" />
                         </Button>
+                        {puedeCorregirPago &&
+                          (() => {
+                            const cobro = cobroCorregible(venta);
+                            return cobro ? (
+                              <CorregirPagoModal
+                                ventaId={venta.id}
+                                metodoActualId={cobro.metodo_pago_id}
+                                metodoActualNombre={cobro.metodo_nombre}
+                                montoBase={Number(
+                                  cobro.monto_base ?? cobro.monto_bruto,
+                                )}
+                                totalActual={Number(venta.total)}
+                                recargoActual={Number(
+                                  venta.recargo_metodo_total || 0,
+                                )}
+                              />
+                            ) : null;
+                          })()}
+
                         {puedeAnular && !isAnulada && (
                           <div className="[&>button]:h-8 [&>button]:w-8 [&>button]:rounded-lg [&>button]:border [&>button]:border-transparent [&>button:hover]:border-danger/10">
                             <AnularVentaModal

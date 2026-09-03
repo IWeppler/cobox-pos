@@ -101,7 +101,7 @@ export function CartItemRow({
           <button
             type="button"
             onClick={onRemove}
-            className="flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+            className="flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
             aria-label={`Quitar ${item.nombre}`}
           >
             <X className="h-4 w-4" />

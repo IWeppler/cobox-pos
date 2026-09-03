@@ -7,7 +7,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import { Search, ArrowUpDown } from "lucide-react";
+import { Search } from "lucide-react";
+import {
+  ESTADOS_VENTA,
+  METODO_TODOS,
+} from "./sale-table-filtros";
 
 export interface SaleTableHeaderOption {
   value: string;
@@ -20,52 +24,111 @@ interface SaleTableHeaderProps {
   orderValue: string;
   onOrderChange: (value: string) => void;
   orderOptions: SaleTableHeaderOption[];
+  estadoValue: string;
+  onEstadoChange: (value: string) => void;
+  metodoValue: string;
+  onMetodoChange: (value: string) => void;
+  /** Los métodos que aparecen en el historial, no los configurados. Ver la
+   * tabla: una opción que da cero resultados es peor que no ofrecerla. */
+  metodosOptions: string[];
   actions?: ReactNode;
 }
 
+/**
+ * La barra de búsqueda y filtros del historial.
+ *
+ * DOS FILAS EN MOBILE, UNA EN ESCRITORIO, y no es una decisión estética: son
+ * cuatro controles y el buscador es el único donde se escribe. Apretados en una
+ * sola fila de celular, el input quedaba en ~90px —cuatro caracteres— justo
+ * cuando lo que se pega ahí es un número de ticket de trece. Arriba el
+ * buscador a todo el ancho; abajo los tres selects repartiéndose la fila.
+ *
+ * Los selects no se colapsan a íconos como hacía el de orden: un ícono no
+ * puede mostrar QUÉ filtro está activo, y un filtro activo invisible es la
+ * causa clásica del "me desaparecieron las ventas".
+ */
 export function SaleTableHeader({
   searchValue,
   onSearchChange,
   orderValue,
   onOrderChange,
   orderOptions,
+  estadoValue,
+  onEstadoChange,
+  metodoValue,
+  onMetodoChange,
+  metodosOptions,
 }: Readonly<SaleTableHeaderProps>) {
   return (
-    <div className="flex flex-row gap-2 sm:gap-3 items-center bg-card p-2 sm:p-3 rounded-xl border border-border">
-      {/* 1. Buscador (Toma todo el espacio disponible) */}
-      <div className="relative flex-1 min-w-0">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2 sm:flex-row sm:items-center sm:gap-3 sm:p-3">
+      <div className="relative min-w-0 flex-1">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground sm:h-5 sm:w-5" />
         <Input
-          placeholder="Buscar por producto o #recibo..."
-          className="pl-9 sm:pl-10 h-10 text-xs sm:text-sm rounded-lg border-border/60 bg-muted focus-visible:bg-background shadow-none transition-colors w-full"
+          placeholder="Buscar por cliente o #ticket..."
+          className="h-10 w-full rounded-lg border-border/60 bg-muted pl-9 text-xs shadow-none transition-colors focus-visible:bg-background sm:pl-10 sm:text-sm"
           value={searchValue}
-          onChange={(event) => {
-            onSearchChange(event.target.value);
-          }}
+          onChange={(event) => onSearchChange(event.target.value)}
         />
       </div>
 
-      {/* 2. Filtro (Cuadrado en móviles, Desplegable completo en PC) */}
-      <div className="shrink-0">
-        <Select value={orderValue} onValueChange={onOrderChange}>
-          {/* Usamos [&>svg]:hidden en móviles para ocultar la flecha por defecto de shadcn y mostrar nuestro ícono */}
-          <SelectTrigger className="h-10 w-10 sm:w-44 border-border/60 bg-white shadow-none font-medium px-0 sm:px-3 flex items-center justify-center sm:justify-between [&>svg]:hidden sm:[&>svg]:block">
-            <span className="hidden sm:inline-flex truncate">
-              <SelectValue placeholder="Ordenar por..." />
-            </span>
-            <div className="flex sm:hidden items-center justify-center">
-              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </SelectTrigger>
-          <SelectContent className="rounded-xl">
-            {orderOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex items-center gap-2 sm:gap-3">
+        <FiltroSelect
+          value={estadoValue}
+          onChange={onEstadoChange}
+          placeholder="Estado"
+          opciones={ESTADOS_VENTA.map((estado) => ({ ...estado }))}
+        />
+
+        <FiltroSelect
+          value={metodoValue}
+          onChange={onMetodoChange}
+          placeholder="Pago"
+          opciones={[
+            { value: METODO_TODOS, label: "Todos los pagos" },
+            ...metodosOptions.map((metodo) => ({
+              value: metodo,
+              label: metodo,
+            })),
+          ]}
+        />
+
+        <FiltroSelect
+          value={orderValue}
+          onChange={onOrderChange}
+          placeholder="Ordenar"
+          opciones={orderOptions}
+        />
       </div>
     </div>
+  );
+}
+
+function FiltroSelect({
+  value,
+  onChange,
+  placeholder,
+  opciones,
+}: Readonly<{
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  opciones: SaleTableHeaderOption[];
+}>) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      {/* `flex-1 min-w-0` en mobile para que los tres se repartan el ancho sin
+          desbordar, y ancho fijo en escritorio para que no bailen al cambiar
+          de opción. */}
+      <SelectTrigger className="h-10 min-w-0 flex-1 rounded-lg border-border/60 bg-muted px-2.5 text-xs font-medium shadow-none sm:w-40 sm:flex-none sm:px-3 sm:text-sm">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent className="rounded-xl">
+        {opciones.map((opcion) => (
+          <SelectItem key={opcion.value} value={opcion.value}>
+            {opcion.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
