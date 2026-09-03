@@ -194,8 +194,7 @@ export function UpdatePricesModal({
     } else {
       toast.success("¡Precios actualizados con éxito!");
       handleOpenChange(false);
-      queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-      queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
       router.refresh();
       onAplicado?.();
     }

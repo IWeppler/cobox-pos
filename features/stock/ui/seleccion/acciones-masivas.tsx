@@ -103,8 +103,7 @@ export interface AccionMasiva {
 
 /** Invalida lo que toca cualquier escritura masiva de productos. */
 function invalidarStock(queryClient: ReturnType<typeof useQueryClient>) {
-  queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-  queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+  queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
 }
 
 export function useFinalizarSeleccion(limpiar: () => void) {

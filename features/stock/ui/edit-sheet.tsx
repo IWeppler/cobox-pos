@@ -388,8 +388,7 @@ function EditProductForm({
             parseProductImages(result.imagenes.urls.imagen_url),
           );
         }
-        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+        queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
         queryClient.invalidateQueries({
           queryKey: queryKeys.stock.detalle(producto.id),
         });
@@ -520,8 +519,7 @@ function EditProductForm({
       // creemos localmente: es la misma razón por la que la action parte de la
       // base y no de una lista del cliente.
       if (res.imagenes) setImagenesActuales(res.imagenes);
-      queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-      queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
       toast.success(urls.mains.length === 1 ? "Foto guardada" : "Fotos guardadas");
     } catch (error) {
       if (esErrorDeRed(error)) {
@@ -558,8 +556,7 @@ function EditProductForm({
     }
 
     if (res.imagenes) setImagenesActuales(res.imagenes);
-    queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-    queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+    queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
   };
 
   const abrirConfirmacionVariantes = async (formData: FormData) => {

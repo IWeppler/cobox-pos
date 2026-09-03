@@ -29,8 +29,7 @@ export function TogglePublicado({
             ? "Producto visible en la tienda"
             : "Producto oculto de la tienda",
         );
-        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+        queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
         router.refresh();
       } else {
         toast.error(res.error || "No se pudo cambiar el estado");

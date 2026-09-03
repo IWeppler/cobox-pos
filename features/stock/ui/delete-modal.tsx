@@ -46,8 +46,7 @@ export function EliminarProductoModal({
       if (result.success) {
         setIsOpen(false);
         toast.success(`El producto ${nombre} ha sido eliminado`);
-        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+        queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
         router.refresh();
       } else if (result.error) {
         toast.error(result.error);

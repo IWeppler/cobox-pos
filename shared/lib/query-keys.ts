@@ -16,11 +16,21 @@ export function conNegocio<T extends readonly unknown[]>(
 }
 
 export const queryKeys = {
-  pos: {
-    productos: ["pos", "productos"] as const,
-  },
+  /**
+   * EL catálogo del panel: UNA entrada para /pos y /stock.
+   *
+   * Antes eran dos (`pos.productos` y `stock.index`) con casi los mismos
+   * productos en dos formas distintas, así que ir de una pantalla a la otra
+   * volvía a bajar ~2 MB con el 90% ya en memoria. Ver
+   * `shared/actions/catalogo-panel.ts` para los números y para por qué la
+   * consulta viene SIN filtrar (cada pantalla se queda con lo suyo).
+   *
+   * Efecto colateral bienvenido: los diez lugares que invalidaban las dos
+   * claves ahora invalidan una. Dos claves que había que acordarse de tocar
+   * juntas eran una a la que alguien se iba a olvidar.
+   */
+  catalogo: ["catalogo", "panel"] as const,
   stock: {
-    index: ["stock", "index"] as const,
     detalle: (productoId: string) => ["stock", "detalle", productoId] as const,
   },
   clientes: {
@@ -40,8 +50,7 @@ export const queryKeys = {
  * Configuración debe invalidar estas tres para no esperar el staleTime.
  */
 export const CATALOG_QUERY_KEYS = [
-  queryKeys.pos.productos,
-  queryKeys.stock.index,
+  queryKeys.catalogo,
   queryKeys.clientes.listado,
 ] as const;
 
@@ -59,10 +68,13 @@ export const CATALOG_QUERY_KEYS = [
  * `stock.detalle` tampoco entra: es por producto y solo hace falta con el
  * sheet de edición abierto, que es justo cuando SÍ se necesita estar online
  * para guardar.
+ *
+ * Con el catálogo unificado esto es UNA entrada y no dos. Antes se guardaban
+ * `pos.productos` y `stock.index` por separado, o sea ~4 MB de payload
+ * duplicado en el disco del celular.
  */
 const QUERIES_PERSISTIBLES: readonly (readonly string[])[] = [
-  queryKeys.pos.productos,
-  queryKeys.stock.index,
+  queryKeys.catalogo,
 ];
 
 export function esQueryPersistible(clave: readonly unknown[]): boolean {

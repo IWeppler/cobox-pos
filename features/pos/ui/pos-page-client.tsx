@@ -1,9 +1,11 @@
 "use client";
 
+import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { getPosCatalogDataAction } from "@/shared/actions/store-actions";
+import { getCatalogoPanelAction } from "@/shared/actions/catalogo-panel";
 import { conNegocio, queryKeys } from "@/shared/lib/query-keys";
+import { soloVendibles } from "@/features/pos/lib/solo-vendibles";
 import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { PosTerminal } from "@/features/pos/ui/pos-terminal";
 import { CartPanelAdmin } from "@/features/pos/ui/cart-panel-admin";
@@ -42,8 +44,11 @@ export function PosPageClient({
   // una decisión— deja el POS con esa búsqueda hecha.
   const busquedaInicial = useSearchParams().get("q") ?? "";
   const { data, isLoading, error, dataUpdatedAt } = useQuery({
-    queryKey: conNegocio(queryKeys.pos.productos, negocioActivo?.id),
-    queryFn: getPosCatalogDataAction,
+    // La MISMA entrada que usa /stock. Ir de una pantalla a la otra ya no
+    // vuelve a bajar el catálogo: antes eran dos consultas con casi los
+    // mismos productos y ~4 MB entre las dos. Ver `catalogo-panel.ts`.
+    queryKey: conNegocio(queryKeys.catalogo, negocioActivo?.id),
+    queryFn: getCatalogoPanelAction,
     staleTime: CATALOG_STALE_TIME_MS,
     // `gcTime` largo y explícito: sin esto React Query descarta la query a
     // los 5 minutos de no usarse, y el guardado en disco que viene después
@@ -51,6 +56,15 @@ export function PosPageClient({
     // después de un rato sin tocar la app — que es cuando hace falta.
     gcTime: CACHE_OFFLINE_MS,
   });
+
+  // El catálogo canónico viene sin filtrar (/stock necesita ver también lo
+  // despublicado). Acá se queda lo vendible, que es el filtro que antes hacía
+  // PostgREST. `useMemo` porque el array del cache es estable entre renders y
+  // recorrer 1.226 productos en cada uno sería trabajo regalado.
+  const vendibles = useMemo(
+    () => soloVendibles(data?.data?.productos ?? []),
+    [data?.data?.productos],
+  );
 
   // ACÁ VIVÍA `if (isLoading) return <PosSkeleton />`, que reemplazaba la
   // PANTALLA ENTERA hasta que llegaba el catálogo. Con 2,06 MB en Slow 4G eso
@@ -106,7 +120,7 @@ export function PosPageClient({
         <PosTerminal
           key={busquedaInicial}
           busquedaInicial={busquedaInicial}
-          productos={data?.data?.productos ?? []}
+          productos={vendibles}
           categorias={data?.data?.categorias ?? []}
           permitirVentaSinStock={data?.data?.permitirVentaSinStock}
           nombreComercio={data?.data?.nombreComercio}

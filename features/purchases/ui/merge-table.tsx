@@ -754,8 +754,7 @@ export function MergeTable({
 
       const nuevoProd = res.producto as Producto;
       setLocalProductos((prevProductos) => [...prevProductos, nuevoProd]);
-      queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-      queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
 
       const precioUnificado = Number(params.precio || nuevoProd.precio || 0);
       setItems((prevItems) =>
@@ -1008,8 +1007,7 @@ export function MergeTable({
         } else {
           toast.success("¡Orden conciliada! Stock actualizado.");
         }
-        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+        queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
         // Guardado real confirmado contra el server: el borrador local ya
         // no tiene sentido, no debe quedar un borrador fantasma.
         await deleteMergeDraft(orden.id).catch(() => {});

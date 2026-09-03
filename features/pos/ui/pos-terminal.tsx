@@ -345,8 +345,7 @@ export function PosTerminal({
   const handleCargaRapidaFinalizada = (cargados: ProductoCargado[]) => {
     setVista("vender");
     setSearchQuery("");
-    queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
-    queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
+    queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
 
     if (cargados.length === 0) return;
 

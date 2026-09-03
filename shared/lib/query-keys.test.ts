@@ -3,15 +3,15 @@ import { conNegocio, esQueryPersistible, queryKeys } from "./query-keys";
 
 describe("esQueryPersistible", () => {
   it("guarda el catálogo del POS y el de Inventario", () => {
-    expect(esQueryPersistible(queryKeys.pos.productos)).toBe(true);
-    expect(esQueryPersistible(queryKeys.stock.index)).toBe(true);
+    expect(esQueryPersistible(queryKeys.catalogo)).toBe(true);
+    expect(esQueryPersistible(queryKeys.catalogo)).toBe(true);
   });
 
   it("sigue guardándolos con el negocio pegado al final", () => {
     // `conNegocio` agrega el id al final, así que el match tiene que ser por
     // PREFIJO o el cache offline no guardaría nada en la app real.
     expect(
-      esQueryPersistible(conNegocio(queryKeys.pos.productos, "negocio-1")),
+      esQueryPersistible(conNegocio(queryKeys.catalogo, "negocio-1")),
     ).toBe(true);
   });
 

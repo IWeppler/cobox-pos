@@ -1,11 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { getStockPageDataAction } from "@/features/stock/actions/get-product";
+import { getCatalogoPanelAction } from "@/shared/actions/catalogo-panel";
 import { conNegocio, queryKeys } from "@/shared/lib/query-keys";
 import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { StockView } from "@/features/stock/ui/stock-view";
-import { Skeleton } from "@/shared/ui/skeleton";
+// El MISMO esqueleto que dibuja `stock/loading.tsx`. Ver ahí por qué se
+// comparte: son dos cargas seguidas (la ruta y después el catálogo) y con dos
+// dibujos distintos la pantalla parpadearía dos veces antes de mostrar datos.
+import { StockSkeleton } from "@/features/stock/ui/stock-skeleton";
 import { AvisoDatosGuardados } from "@/shared/components/aviso-datos-guardados";
 import { RUBRO_DEFAULT } from "@/entities/config/types";
 import type { UsoDelPlan } from "@/features/planes/actions/uso-del-plan";
@@ -25,8 +28,12 @@ export function StockPageClient({
 }) {
   const negocioActivo = useNegocioActivo();
   const { data, isLoading, error, dataUpdatedAt } = useQuery({
-    queryKey: conNegocio(queryKeys.stock.index, negocioActivo?.id),
-    queryFn: getStockPageDataAction,
+    // La MISMA entrada que usa /pos: una sola consulta para las dos
+    // pantallas. Acá el catálogo se usa TAL CUAL viene —sin filtrar— porque
+    // Inventario tiene que mostrar también lo despublicado: un producto que
+    // se sacó de la vidriera hay que poder verlo para corregirlo.
+    queryKey: conNegocio(queryKeys.catalogo, negocioActivo?.id),
+    queryFn: getCatalogoPanelAction,
     staleTime: CATALOG_STALE_TIME_MS,
     // `gcTime` largo y explícito: sin esto React Query descarta la query a
     // los 5 minutos de no usarse, y el guardado en disco que viene después
@@ -67,45 +74,13 @@ export function StockPageClient({
           estando: al llegar al tope, las puertas de alta de mercadería se
           apagan y explican por qué (ver stock-filters-toolbar). */}
       <StockView
-        productosIndice={data?.data?.productosIndice ?? []}
+        productosIndice={data?.data?.productos ?? []}
         userRole={userRole}
         nombreComercio={data?.data?.nombreComercio ?? "Tienda Online"}
         mostrarSinStock={data?.data?.mostrarSinStock ?? true}
         rubro={data?.data?.rubro ?? RUBRO_DEFAULT}
         productosDelNegocio={uso?.productos}
       />
-    </div>
-  );
-}
-
-function StockSkeleton() {
-  return (
-    <div className="space-y-4 mt-8">
-      <div className="flex justify-between items-center">
-        <Skeleton className="h-10 w-64 rounded-lg" />
-        <div className="flex gap-2">
-          <Skeleton className="h-10 w-32 rounded-lg" />
-          <Skeleton className="h-10 w-32 rounded-lg" />
-        </div>
-      </div>
-      <div className="rounded-xl border border-border bg-card">
-        <div className="h-12 border-b border-border bg-muted/50 px-4 flex items-center">
-          <Skeleton className="h-4 w-full max-w-md" />
-        </div>
-        {[...Array(5)].map((_, i) => (
-          <div
-            key={i}
-            className="p-4 border-b border-border flex items-center gap-4"
-          >
-            <Skeleton className="h-12 w-12 rounded-md" />
-            <div className="space-y-2 flex-1">
-              <Skeleton className="h-4 w-1/4" />
-              <Skeleton className="h-3 w-1/3" />
-            </div>
-            <Skeleton className="h-8 w-24 rounded-full" />
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

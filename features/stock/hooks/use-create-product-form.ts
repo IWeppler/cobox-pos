@@ -183,8 +183,7 @@ export function useCreateProductForm(control?: ControlDeApertura) {
       if (result.success) {
         toast.success("Producto creado con éxito");
         handleOpenChange(false);
-        queryClient.invalidateQueries({ queryKey: queryKeys.stock.index });
-        queryClient.invalidateQueries({ queryKey: queryKeys.pos.productos });
+        queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
         router.refresh();
       } else if (result.error) {
         toast.error(result.error);

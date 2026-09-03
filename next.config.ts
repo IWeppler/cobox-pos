@@ -110,6 +110,56 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "10mb",
     },
+
+    /**
+     * Cuánto vale una ruta ya visitada en el router cache del NAVEGADOR.
+     *
+     * El default de `dynamic` es 0, o sea que no se cachea nada: volver a una
+     * ruta que se visitó hace cinco segundos vuelve a pedir el RSC entero.
+     * Medido en producción, yendo a /stock por SEGUNDA vez con el catálogo ya
+     * en memoria de React Query: 432 ms de viaje al servidor para traer 3 kB
+     * de cáscara que el navegador ya tenía.
+     *
+     * Y hay un segundo efecto, menos obvio: los `<Link>` que no declaran
+     * `prefetch` usan ESTE valor para decidir cuánto vale lo prefetcheado. Con
+     * 0, el prefetch nace vencido. O sea que los `loading.tsx` que se
+     * agregaron para que la navegación se sienta inmediata no servirían de
+     * nada sin esto: Next precargaría el estado de carga y lo tiraría antes de
+     * poder usarlo. Los dos cambios se necesitan mutuamente.
+     *
+     * ─────────────────────────────────────────────────────────────────────
+     * POR QUÉ 30 SEGUNDOS Y NO MÁS, que es donde está el riesgo real.
+     *
+     * Lo que se cachea es el RSC, y CADA RUTA arriesga algo distinto:
+     *
+     *   /pos y /stock ..... su RSC son 3 kB de shell: los datos los trae
+     *                       React Query aparte, con su propio staleTime de 3
+     *                       minutos. Cachear el shell NO agrega ni un segundo
+     *                       de desactualización. Es ganancia pura.
+     *   /ventas ........... su RSC son 1.113 kB CON los datos adentro (es
+     *                       server component y hace await de getVentasAction).
+     *                       Acá sí: una venta hecha en OTRA caja podría no
+     *                       aparecer hasta 30 s.
+     *
+     * Ese último caso es el que fija el número, y es acotado por dos motivos.
+     * Primero, `create-sale.ts` termina con `revalidatePath("/", "layout")`:
+     * el navegador que vendió se limpia el cache entero, así que la vendedora
+     * SIEMPRE ve su propia venta al instante. Solo las otras cajas ven la
+     * demora. Segundo, la app ya tolera 3 minutos de desactualización en el
+     * stock del catálogo, que es un dato bastante más caliente que el
+     * historial de ventas. Treinta segundos es un orden de magnitud menos.
+     *
+     * Si algún día /ventas deja de traer sus datos en el RSC —tiene los
+     * parámetros `desde`/`hasta` esperando un consumidor— este número puede
+     * subir sin pensarlo, porque el único riesgo venía de ahí.
+     *
+     * `static` se deja en su default (300): rige solo para Links con
+     * `prefetch={true}` explícito, y no hay ninguno.
+     * ─────────────────────────────────────────────────────────────────────
+     */
+    staleTimes: {
+      dynamic: 30,
+    },
   },
   images: {
     // Sigue apagado, y a propósito: las fotos de producto y los logos ya
