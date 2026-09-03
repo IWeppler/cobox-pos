@@ -138,3 +138,107 @@ describe("cobros de cuenta corriente", () => {
     expect(m.cobrosCuentaCorriente).toBe(0);
   });
 });
+
+describe("devoluciones parciales en las métricas", () => {
+  /**
+   * La venta con devolución sigue CONFIRMADA (ver 20260903160000), así que no
+   * la filtra `ventasOperativas`: sin el neteo, estos casos contarían el ticket
+   * entero.
+   *
+   * La invariante que sostiene toda esta cuenta es
+   * `monto_devuelto = base_devuelta + recargo_cc_devuelto`: el recargo por
+   * MÉTODO nunca se devuelve porque se lo quedó el banco (20260903190000), y el
+   * de CUENTA CORRIENTE sí porque no se lo quedó nadie (20260903200000).
+   */
+  const contado = (extra: Partial<Venta>) =>
+    ({
+      ...ventaBase,
+      // $10.000 de mercadería + $1.500 de recargo por método.
+      total: 11500,
+      recargo_metodo_total: 1500,
+      precio_costo: 6000,
+      ...extra,
+    }) as unknown as Venta;
+
+  it("resta lo devuelto de los ingresos y NO toca el recargo por método", () => {
+    const m = metricas([
+      contado({
+        monto_devuelto: 4000,
+        base_devuelta: 4000,
+        ventas_items: [
+          { precio_costo: 2400, cantidad_devuelta: 1 },
+        ] as unknown as Venta["ventas_items"],
+      }),
+    ]);
+
+    expect(m.ingresos).toBe(6000);
+    // El banco se quedó su comisión igual: el recargo cobrado no baja.
+    expect(m.recargosCobrados).toBe(1500);
+  });
+
+  it("resta también el COSTO de lo devuelto, o el margen queda peor que el real", () => {
+    const m = metricas([
+      contado({
+        monto_devuelto: 4000,
+        base_devuelta: 4000,
+        ventas_items: [
+          { precio_costo: 2400, cantidad_devuelta: 1 },
+        ] as unknown as Venta["ventas_items"],
+      }),
+    ]);
+
+    // Ingresos 6.000 menos costo neto 3.600.
+    expect(m.gananciaBrutaVentas).toBe(2400);
+    expect(m.ingresos - m.gananciaBrutaVentas).toBe(3600);
+  });
+
+  it("una venta devuelta entera no deja ingresos ni ganancia, pero sí el recargo", () => {
+    const m = metricas([
+      contado({
+        monto_devuelto: 10000,
+        base_devuelta: 10000,
+        ventas_items: [
+          { precio_costo: 6000, cantidad_devuelta: 1 },
+        ] as unknown as Venta["ventas_items"],
+      }),
+    ]);
+
+    expect(m.ingresos).toBe(0);
+    expect(m.gananciaBrutaVentas).toBe(0);
+    // Sigue en 1.500: esa plata la clienta la pagó y el banco la retuvo.
+    expect(m.recargosCobrados).toBe(1500);
+  });
+
+  it("en cuenta corriente el recargo perdonado también baja de ingresos", () => {
+    // Fiado de $100.000 + 15% de recargo de CC = $115.000. Se devuelven
+    // $40.000 de mercadería, así que se le perdonan $6.000 de recargo.
+    const m = metricas([
+      {
+        ...ventaBase,
+        total: 115000,
+        recargo_metodo_total: 0,
+        recargo_cc_monto: 15000,
+        monto_pendiente: 115000,
+        precio_costo: 50000,
+        monto_devuelto: 46000,
+        base_devuelta: 40000,
+        recargo_cc_devuelto: 6000,
+        ventas_items: [
+          { precio_costo: 20000, cantidad_devuelta: 1 },
+        ] as unknown as Venta["ventas_items"],
+      } as unknown as Venta,
+    ]);
+
+    // Quedan $60.000 de mercadería + $9.000 de recargo de CC.
+    expect(m.ingresos).toBe(69000);
+    expect(m.gananciaBrutaVentas).toBe(39000);
+  });
+
+  it("una venta sin devolución no cambia", () => {
+    const m = metricas([contado({})]);
+
+    expect(m.ingresos).toBe(10000);
+    expect(m.recargosCobrados).toBe(1500);
+    expect(m.gananciaBrutaVentas).toBe(4000);
+  });
+});

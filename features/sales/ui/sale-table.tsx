@@ -19,9 +19,25 @@ import {
   TableRow,
 } from "@/shared/ui/table";
 import { Badge } from "@/shared/ui/badge";
-import { ChevronLeft, ChevronRight, Eye, Receipt } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  MoreVertical,
+  Receipt,
+  RotateCcw,
+  Undo2,
+  Wallet,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/ui/dropdown-menu";
 import { AnularVentaModal } from "./cancel-sale-modal";
 import { CorregirPagoModal } from "./corregir-pago-modal";
+import { DevolucionModal } from "./devolucion-modal";
 import { Button } from "@/shared/ui/button";
 import { TicketSheet } from "./ticket-sheet";
 import { formatearFechaHora, formatearMoneda } from "@/shared/utils/formatters";
@@ -35,6 +51,25 @@ import {
 
 const ITEMS_POR_PAGINA = 10;
 
+/** Lo devuelto de una venta, debajo del total. No se dibuja nada si no hubo
+ * devolución: un renglón vacío en cada fila del historial es ruido permanente
+ * a cambio de una alineación que nadie mira. */
+function MontoDevuelto({ venta }: Readonly<{ venta: Venta }>) {
+  const devuelto = Number(venta.monto_devuelto || 0);
+  if (devuelto <= 0) return null;
+
+  const neto = Number(venta.total) - devuelto;
+
+  return (
+    <div className="mt-0.5 text-xs text-warning">
+      − {formatearMoneda(devuelto)} devuelto
+      <span className="ml-1 text-muted-foreground">
+        (neto {formatearMoneda(neto)})
+      </span>
+    </div>
+  );
+}
+
 interface VentasTableProps {
   ventas: Venta[];
   userRole: string;
@@ -43,6 +78,10 @@ interface VentasTableProps {
    * corregir el medio de cobro de la venta propia en el turno abierto no
    * cancela nada, y es lo que hoy obliga a llamar a la dueña. */
   puedeCorregirPago?: boolean;
+  /** Permiso `ventas.devolver`, separado de `ventas.anular`: devolver un
+   * renglón con el ticket adelante es la operación del mostrador; anular la
+   * venta entera es otra cosa. */
+  puedeDevolver?: boolean;
 }
 
 export function VentasTable({
@@ -50,6 +89,7 @@ export function VentasTable({
   userRole,
   puedeAnular,
   puedeCorregirPago = false,
+  puedeDevolver = false,
 }: Readonly<VentasTableProps>) {
   const [filtroNombre, setFiltroNombre] = useState("");
   const [filtroEstado, setFiltroEstado] =
@@ -60,6 +100,24 @@ export function VentasTable({
 
   const [ticketAbierto, setTicketAbierto] = useState<TicketData | null>(null);
   const [branding, setBranding] = useState<ConfiguracionPOS | null>(null);
+
+  /**
+   * Qué acción está abierta y sobre qué venta.
+   *
+   * UN estado para toda la tabla, y los tres modales se montan UNA vez abajo,
+   * fuera del `map`. Antes cada fila traía sus propios modales: con diez filas
+   * por página eran hasta treinta diálogos montados para usar ninguno o uno.
+   *
+   * Además es lo que permite que los disparadores vivan en el menú de tres
+   * puntos: un `DialogTrigger` adentro de un `DropdownMenu` se desmonta junto
+   * con el menú al cerrarse, y el diálogo no llega a abrirse nunca.
+   */
+  const [accionAbierta, setAccionAbierta] = useState<{
+    venta: Venta;
+    accion: "devolver" | "corregir" | "anular";
+  } | null>(null);
+
+  const cerrarAccion = () => setAccionAbierta(null);
 
   const isAdmin = userRole === "ADMIN";
 
@@ -139,6 +197,95 @@ export function VentasTable({
     );
 
     return cobros.length === 1 ? cobros[0] : null;
+  };
+
+  /**
+   * Si esta venta admite devolución parcial, con las MISMAS condiciones que la
+   * RPC. No es duplicación por comodidad: la RPC igual rechaza lo que no
+   * corresponde, pero ofrecer un botón que siempre falla enseña a ignorar
+   * botones. Lo único que no se puede saber acá es lo que cambió desde que se
+   * cargó la grilla, y para eso está el guard del server.
+   */
+  const esDevolvible = (venta: Venta) => {
+    if (venta.estado_operacion === "ANULADA") return false;
+    if (Number(venta.monto_devuelto || 0) >= Number(venta.total)) return false;
+
+    // Cuenta corriente: la devolución baja la deuda, así que no importa con
+    // qué se cobró el anticipo ni cuántos cobros haya. Solo hace falta que
+    // exista el cliente al que acreditarle.
+    if (Number(venta.monto_pendiente || 0) > 0) return !!venta.cliente_id;
+
+    // Contado: un solo cobro, y de un medio que se pueda devolver.
+    const cobro = cobroCorregible(venta);
+    if (!cobro) return false;
+    return ["EFECTIVO", "TRANSFERENCIA"].includes(cobro.metodo_tipo);
+  };
+
+  /**
+   * El menú de la fila.
+   *
+   * Es una FUNCIÓN que devuelve JSX, no un componente definido acá adentro: un
+   * componente declarado dentro del render es un tipo nuevo en cada pasada, así
+   * que React lo desmonta y lo vuelve a montar — y el menú se cerraría solo
+   * apenas cambie cualquier estado de la tabla.
+   *
+   * Si la venta no admite ninguna acción, no se dibuja: un menú de tres puntos
+   * que se abre vacío es peor que no tenerlo.
+   */
+  const menuAcciones = (venta: Venta) => {
+    const isAnulada =
+      venta.estado_operacion === "ANULADA" || venta.estado_pago === "ANULADA";
+    const puedeDevolverEsta = puedeDevolver && esDevolvible(venta);
+    const puedeCorregirEsta = puedeCorregirPago && !!cobroCorregible(venta);
+    const puedeAnularEsta = puedeAnular && !isAnulada;
+
+    if (!puedeDevolverEsta && !puedeCorregirEsta && !puedeAnularEsta) {
+      return null;
+    }
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0 cursor-pointer rounded-md text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
+            title="Más acciones"
+            aria-label="Más acciones"
+          >
+            <MoreVertical className="h-4.5 w-4.5" />
+          </Button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent align="end" className="rounded-xl">
+          {puedeDevolverEsta && (
+            <DropdownMenuItem
+              onSelect={() => setAccionAbierta({ venta, accion: "devolver" })}
+            >
+              <Undo2 className="mr-2 h-4 w-4 text-muted-foreground" />
+              Devolver parte
+            </DropdownMenuItem>
+          )}
+          {puedeCorregirEsta && (
+            <DropdownMenuItem
+              onSelect={() => setAccionAbierta({ venta, accion: "corregir" })}
+            >
+              <Wallet className="mr-2 h-4 w-4 text-muted-foreground" />
+              Corregir el cobro
+            </DropdownMenuItem>
+          )}
+          {puedeAnularEsta && (
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => setAccionAbierta({ venta, accion: "anular" })}
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Anular la venta
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
   };
 
   const getPagoLabel = (venta: Venta) => {
@@ -357,6 +504,67 @@ export function VentasTable({
         onClose={() => setTicketAbierto(null)}
       />
 
+      {/* Los tres diálogos se montan UNA vez para toda la tabla, no uno por
+          fila. Ver `accionAbierta`. */}
+      {accionAbierta?.accion === "devolver" && (
+        <DevolucionModal
+          ventaId={accionAbierta.venta.id}
+          numeroTicket={numeroTicketVenta(accionAbierta.venta)}
+          open
+          onOpenChange={(abierto) => !abierto && cerrarAccion()}
+        />
+      )}
+
+      {accionAbierta?.accion === "corregir" &&
+        (() => {
+          const cobro = cobroCorregible(accionAbierta.venta);
+          if (!cobro) return null;
+          return (
+            <CorregirPagoModal
+              ventaId={accionAbierta.venta.id}
+              metodoActualId={cobro.metodo_pago_id}
+              metodoActualNombre={cobro.metodo_nombre}
+              montoBase={Number(cobro.monto_base ?? cobro.monto_bruto)}
+              totalActual={Number(accionAbierta.venta.total)}
+              recargoActual={Number(
+                accionAbierta.venta.recargo_metodo_total || 0,
+              )}
+              open
+              onOpenChange={(abierto) => !abierto && cerrarAccion()}
+            />
+          );
+        })()}
+
+      {accionAbierta?.accion === "anular" &&
+        (() => {
+          const items = accionAbierta.venta.ventas_items || [];
+          const primerItem = items[0];
+          const producto = getSupabaseRelation(primerItem?.producto);
+          const varios = items.length > 1;
+
+          return (
+            <AnularVentaModal
+              id={accionAbierta.venta.id}
+              productoNombre={
+                varios
+                  ? "Ticket Completo"
+                  : producto?.nombre || "Varios artículos"
+              }
+              cantidad={
+                varios
+                  ? accionAbierta.venta.cantidad
+                  : (primerItem?.cantidad ?? 0)
+              }
+              variante={
+                varios ? "Varios artículos" : (primerItem?.variante ?? "")
+              }
+              isProductoEliminado={!producto}
+              open
+              onOpenChange={(abierto) => !abierto && cerrarAccion()}
+            />
+          );
+        })()}
+
       <SaleTableHeader
         searchValue={filtroNombre}
         onSearchChange={handleSearchChange}
@@ -417,9 +625,6 @@ export function VentasTable({
                       const clienteNombre = getClienteNombre(venta);
                       const estadoPago = getEstadoPago(venta);
                       const metodoPago = getPagoLabel(venta);
-                      const isAnulada =
-                        venta.estado_operacion === "ANULADA" ||
-                        venta.estado_pago === "ANULADA";
 
                       return (
                         <TableRow
@@ -504,6 +709,13 @@ export function VentasTable({
                             <div className="font-mono font-medium text-foreground">
                               {formatearMoneda(venta.total)}
                             </div>
+                            {/* Una venta con devolución no puede verse igual
+                                que una sin ella: la venta queda CONFIRMADA a
+                                propósito (ver 20260903160000) y sin este
+                                renglón el historial diría que entró el total.
+                                El neto va abajo y no reemplaza al total, que
+                                es lo que se vendió. */}
+                            <MontoDevuelto venta={venta} />
                           </TableCell>
 
                           <TableCell
@@ -521,46 +733,7 @@ export function VentasTable({
                                 <Eye className="w-4.5 h-4.5" />
                               </Button>
 
-                              {puedeCorregirPago &&
-                                (() => {
-                                  const cobro = cobroCorregible(venta);
-                                  return cobro ? (
-                                    <CorregirPagoModal
-                                      ventaId={venta.id}
-                                      metodoActualId={cobro.metodo_pago_id}
-                                      metodoActualNombre={cobro.metodo_nombre}
-                                      montoBase={Number(
-                                        cobro.monto_base ?? cobro.monto_bruto,
-                                      )}
-                                      totalActual={Number(venta.total)}
-                                      recargoActual={Number(
-                                        venta.recargo_metodo_total || 0,
-                                      )}
-                                    />
-                                  ) : null;
-                                })()}
-
-                              {puedeAnular && !isAnulada && (
-                                <AnularVentaModal
-                                  id={venta.id}
-                                  productoNombre={
-                                    itemsExtra > 0
-                                      ? "Ticket Completo"
-                                      : nombrePrincipal || "Varios artículos"
-                                  }
-                                  cantidad={
-                                    itemsExtra > 0
-                                      ? venta.cantidad
-                                      : primerItem.cantidad
-                                  }
-                                  variante={
-                                    itemsExtra > 0
-                                      ? "Varios artículos"
-                                      : primerItem.variante
-                                  }
-                                  isProductoEliminado={isEliminado}
-                                />
-                              )}
+                              {menuAcciones(venta)}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -600,9 +773,6 @@ export function VentasTable({
                 const clienteNombre = getClienteNombre(venta);
                 const estadoPago = getEstadoPago(venta);
                 const metodoPago = getPagoLabel(venta);
-                const isAnulada =
-                  venta.estado_operacion === "ANULADA" ||
-                  venta.estado_pago === "ANULADA";
 
                 return (
                   <div
@@ -636,6 +806,7 @@ export function VentasTable({
                         <div className="font-semibold text-foreground text-lg">
                           {formatearMoneda(venta.total)}
                         </div>
+                        <MontoDevuelto venta={venta} />
                       </div>
                     </div>
 
@@ -688,48 +859,7 @@ export function VentasTable({
                         >
                           <Eye className="w-4 h-4 text-muted-foreground" />
                         </Button>
-                        {puedeCorregirPago &&
-                          (() => {
-                            const cobro = cobroCorregible(venta);
-                            return cobro ? (
-                              <CorregirPagoModal
-                                ventaId={venta.id}
-                                metodoActualId={cobro.metodo_pago_id}
-                                metodoActualNombre={cobro.metodo_nombre}
-                                montoBase={Number(
-                                  cobro.monto_base ?? cobro.monto_bruto,
-                                )}
-                                totalActual={Number(venta.total)}
-                                recargoActual={Number(
-                                  venta.recargo_metodo_total || 0,
-                                )}
-                              />
-                            ) : null;
-                          })()}
-
-                        {puedeAnular && !isAnulada && (
-                          <div className="[&>button]:h-8 [&>button]:w-8 [&>button]:rounded-lg [&>button]:border [&>button]:border-transparent [&>button:hover]:border-danger/10">
-                            <AnularVentaModal
-                              id={venta.id}
-                              productoNombre={
-                                itemsExtra > 0
-                                  ? "Ticket Completo"
-                                  : nombrePrincipal || "Varios artículos"
-                              }
-                              cantidad={
-                                itemsExtra > 0
-                                  ? venta.cantidad
-                                  : primerItem.cantidad
-                              }
-                              variante={
-                                itemsExtra > 0
-                                  ? "Varios artículos"
-                                  : primerItem.variante
-                              }
-                              isProductoEliminado={isEliminado}
-                            />
-                          </div>
-                        )}
+                        {menuAcciones(venta)}
                       </div>
                     </div>
                   </div>

@@ -13,6 +13,8 @@ export interface VentaItem {
   producto_id?: string | null;
   variante: string;
   cantidad: number;
+  /** Unidades ya devueltas de este renglón. Ver 20260903160000. */
+  cantidad_devuelta?: number;
   precio_unitario: number;
   precio_costo?: number;
   descuento_monto?: number;
@@ -115,6 +117,13 @@ export interface Venta {
    * no contarlo como venta de mercadería. */
   recargo_metodo_total?: number;
   es_pago_mixto?: boolean;
+  /** Lo devuelto de esta venta, con el recargo prorrateado. La venta sigue
+   * CONFIRMADA: el ingreso neto es `total - monto_devuelto`. Ver
+   * 20260903160000. */
+  monto_devuelto?: number;
+  /** De `monto_devuelto`, cuánto es mercadería. Lo que sobra es el recargo
+   * prorrateado. Los reportes restan cada parte de donde la habían sumado. */
+  base_devuelta?: number;
 }
 
 export interface TicketItemData {

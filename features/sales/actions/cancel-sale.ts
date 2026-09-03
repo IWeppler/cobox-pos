@@ -5,10 +5,17 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { resolverTurnoActivo } from "@/entities/caja/lib/resolve-turno-activo";
 import { requiereNotaCredito } from "@/shared/lib/facturacion";
+import { normalizarMotivoAnulacion } from "@/features/sales/lib/motivo-anulacion";
 
 export async function anularVentaAction(
   ventaId: string,
+  /** A dónde va la mercadería. Es el DESTINO, no el motivo: son dos preguntas
+   * distintas y hasta 20260903140000 compartían una columna. */
   motivoDevolucion: "RESTAURAR_STOCK" | "BAJA",
+  /** Por qué se cae la venta. Lista cerrada, ver `motivo-anulacion.ts`. */
+  motivoCodigo?: string | null,
+  /** Una línea de detalle, sobre todo para OTRO. */
+  motivoDetalle?: string | null,
 ) {
   try {
     const cookieStore = await cookies();
@@ -107,6 +114,12 @@ export async function anularVentaAction(
         p_venta_id: ventaId,
         p_motivo: motivoDevolucion,
         p_turno_id: turnoDevolucionId,
+        // Fail-closed: un código que este código no conoce NO se manda. Que la
+        // columna quede en null es la verdad ("no se sabe"); un valor
+        // inventado ensucia la única medición que justifica el campo — cuántas
+        // anulaciones son en realidad una venta mal cargada.
+        p_motivo_codigo: normalizarMotivoAnulacion(motivoCodigo),
+        p_motivo_detalle: motivoDetalle?.trim() || null,
       });
 
     if (anulacionError || !resultadoAnulacion) {
@@ -123,6 +136,8 @@ export async function anularVentaAction(
     const anulacion = resultadoAnulacion as {
       efectivo_devuelto: number;
       no_efectivo_a_devolver: number;
+      /** Recargo por método que NO se reintegra: se lo quedó el banco. */
+      recargo_no_devuelto: number;
       credito_aplicado: number;
       excedente_ya_pagado: number;
     };
@@ -262,6 +277,15 @@ export async function anularVentaAction(
     if (anulacion.no_efectivo_a_devolver > 0) {
       avisos.push(
         `$${Math.round(anulacion.no_efectivo_a_devolver).toLocaleString("es-AR")} se cobraron por tarjeta o transferencia: devolvelos por ese medio, no salen de la caja.`,
+      );
+    }
+    // Desde 20260903210000 la anulación devuelve la BASE de cada cobro, no el
+    // bruto. Que la vendedora lo sepa importa: la clienta pagó $115.000 y
+    // recibe $100.000, y si no se lo puede explicar, la diferencia la termina
+    // poniendo el comercio para no discutir.
+    if (anulacion.recargo_no_devuelto > 0) {
+      avisos.push(
+        `No se devolvieron $${Math.round(anulacion.recargo_no_devuelto).toLocaleString("es-AR")} de recargo por medio de pago: esa comisión se la quedó el banco y no la reintegra.`,
       );
     }
     if (anulacion.excedente_ya_pagado > 0) {

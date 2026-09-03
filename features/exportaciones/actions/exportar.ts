@@ -115,7 +115,11 @@ async function construirFilas(
       const { data } = await supabase
         .from("ventas")
         .select(
-          "id, fecha_venta, estado_operacion, estado_pago, metodo_pago, total, recargo_metodo_total, precio_costo, comision_total, total_neto, monto_cobrado, monto_pendiente, cantidad, clientes(nombre), perfiles(nombre), comprobantes(tipo, punto_venta, numero)",
+          // `ventas_items` viaja SOLO por el costo de lo devuelto: es lo único
+          // que no se puede sacar de la cabecera, porque `ventas` guarda
+          // cuánta plata volvió pero no cuánto costaba esa mercadería. Ver
+          // `filasVentas`.
+          "id, fecha_venta, estado_operacion, estado_pago, metodo_pago, total, recargo_metodo_total, precio_costo, comision_total, total_neto, monto_cobrado, monto_pendiente, monto_devuelto, base_devuelta, cantidad, clientes(nombre), perfiles(nombre), comprobantes(tipo, punto_venta, numero), ventas_items(precio_costo, cantidad_devuelta)",
         )
         .gte("fecha_venta", desde)
         .lte("fecha_venta", hasta)

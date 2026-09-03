@@ -19,6 +19,12 @@ import { formatearNumeroComprobante } from "@/shared/lib/facturacion";
  *    lo decida.
  *  - Una venta ANULADA aparece, marcada como anulada. Sacarla haría que la
  *    numeración tenga huecos sin explicación.
+ *  - Una venta con DEVOLUCIÓN PARCIAL aparece con su importe bruto y las
+ *    columnas de lo devuelto al lado. No se netea la columna que ya existía,
+ *    por la misma razón: el comprobante que el cliente se llevó dice el bruto,
+ *    y una planilla cuyo "Total cobrado" no coincide con el papel es una
+ *    planilla que no se puede conciliar. El neto va calculado en su propia
+ *    columna, que es lo que el contador suma.
  */
 
 export type Fila = Record<string, string | number | null>;
@@ -59,6 +65,15 @@ export interface VentaExport {
   total_neto?: number | null;
   monto_cobrado?: number | null;
   monto_pendiente?: number | null;
+  /** Lo devuelto de esta venta, con el recargo prorrateado. */
+  monto_devuelto?: number | null;
+  /** De lo devuelto, cuánto es mercadería. */
+  base_devuelta?: number | null;
+  /** Solo para el costo de lo devuelto: `ventas.precio_costo` es el costo de
+   * TODO lo vendido y no dice cuánto de eso volvió. */
+  ventas_items?:
+    | { precio_costo?: number | null; cantidad_devuelta?: number | null }[]
+    | null;
   cantidad?: number | null;
   clientes?: { nombre?: string | null } | null;
   perfiles?: { nombre?: string | null } | null;
@@ -70,6 +85,19 @@ export function filasVentas(ventas: readonly VentaExport[]): Fila[] {
     const comprobante = v.comprobantes?.[0];
     const total = num(v.total);
     const recargo = num(v.recargo_metodo_total);
+
+    // Devoluciones parciales. Se AGREGAN columnas y no se modifican las que ya
+    // estaban, por el mismo criterio con el que una venta anulada aparece
+    // marcada en vez de desaparecer: el comprobante que el cliente se llevó
+    // dice el importe bruto, y una planilla donde "Total cobrado" no coincide
+    // con el papel es una planilla que el contador no puede conciliar. Lo neto
+    // va al lado, calculado.
+    const devuelto = num(v.monto_devuelto);
+    const mercaderiaDevuelta = num(v.base_devuelta);
+    const costoDevuelto = (v.ventas_items ?? []).reduce(
+      (acc, item) => acc + num(item.precio_costo) * num(item.cantidad_devuelta),
+      0,
+    );
 
     return {
       Fecha: formatearFechaHoraExport(v.fecha_venta),
@@ -90,7 +118,18 @@ export function filasVentas(ventas: readonly VentaExport[]): Fila[] {
       "Total cobrado": total,
       "Recargo por medio de pago": recargo,
       "Venta de mercadería": total - recargo,
+      Devuelto: devuelto,
+      "Mercadería devuelta": mercaderiaDevuelta,
+      // Lo devuelto ENTERO baja de la venta neta, no solo la mercadería: en un
+      // fiado, `monto_devuelto` incluye el recargo de cuenta corriente
+      // perdonado, que también estaba adentro del total. El recargo por método
+      // no entra nunca — el banco no lo reintegra.
+      // La diferencia entre "Devuelto" y "Mercadería devuelta" es, entonces,
+      // exactamente el recargo de cuenta corriente que se le perdonó.
+      "Venta neta de devoluciones": total - recargo - devuelto,
       "Costo de la mercadería": num(v.precio_costo),
+      "Costo de lo devuelto": costoDevuelto,
+      "Costo neto de devoluciones": num(v.precio_costo) - costoDevuelto,
       "Comisión del procesador": num(v.comision_total),
       "Neto acreditado": num(v.total_neto),
       Cobrado: num(v.monto_cobrado),

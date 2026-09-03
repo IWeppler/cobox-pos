@@ -118,9 +118,14 @@ async function obtenerIngresosRemitos(
 
 // ----------------------------------------------------------------------
 // FUENTE 2 — Ingresos por devolución de cliente (venta anulada con
-// motivo_anulacion = 'RESTAURAR_STOCK'). Sin esa columna esto no se podía
+// destino_mercaderia = 'RESTAURAR_STOCK'). Sin esa columna esto no se podía
 // reconstruir en absoluto — no había ninguna tabla que registrara cuál de
 // los dos caminos de anularVentaAction se había tomado.
+//
+// Se lee `destino_mercaderia` y ya no `motivo_anulacion`: son el mismo dato
+// —la vieja se sigue escribiendo por compatibilidad y el backfill de
+// 20260903140000 copió todo lo histórico— pero la columna nueva es la que dice
+// lo que guarda. La vieja está deprecada y se va a sacar.
 // ----------------------------------------------------------------------
 async function obtenerIngresosDevoluciones(
   supabase: SupabaseServerClient,
@@ -133,7 +138,7 @@ async function obtenerIngresosDevoluciones(
       "id, fecha_venta, vendedor_id, ventas_items ( id, producto_id, variante, cantidad, productos ( nombre ) )",
     )
     .eq("estado_operacion", "ANULADA")
-    .eq("motivo_anulacion", "RESTAURAR_STOCK");
+    .eq("destino_mercaderia", "RESTAURAR_STOCK");
 
   if (fechaDesde) query = query.gte("fecha_venta", fechaDesde);
   if (fechaHasta) query = query.lte("fecha_venta", fechaHasta);

@@ -201,3 +201,63 @@ describe("filasMovimientosGenerales", () => {
     expect(filas[0].Concepto).toBe("Cobro de cuenta corriente");
   });
 });
+
+describe("filasVentas con devolución parcial", () => {
+  const ventaDevuelta = {
+    id: "v-2",
+    fecha_venta: "2026-09-03T10:00:00",
+    estado_operacion: "CONFIRMADA",
+    estado_pago: "PAGADA",
+    metodo_pago: "EFECTIVO",
+    total: 10000,
+    recargo_metodo_total: 0,
+    precio_costo: 5000,
+    comision_total: 0,
+    total_neto: 10000,
+    monto_cobrado: 10000,
+    monto_pendiente: 0,
+    monto_devuelto: 4000,
+    base_devuelta: 4000,
+    ventas_items: [
+      { precio_costo: 2000, cantidad_devuelta: 1 },
+      { precio_costo: 3000, cantidad_devuelta: 0 },
+    ],
+    cantidad: 2,
+    clientes: null,
+    perfiles: { nombre: "Mara" },
+    comprobantes: [{ tipo: "TICKET", punto_venta: 1, numero: 99 }],
+  };
+
+  it("NO netea la columna que el contador concilia contra el papel", () => {
+    // El comprobante que la clienta se llevó dice $10.000. Si "Total cobrado"
+    // dijera $6.000, la planilla no cierra contra el ticket.
+    const [f] = filasVentas([ventaDevuelta]);
+    expect(f["Total cobrado"]).toBe(10000);
+    expect(f["Venta de mercadería"]).toBe(10000);
+  });
+
+  it("agrega lo devuelto y el neto en columnas propias", () => {
+    const [f] = filasVentas([ventaDevuelta]);
+    expect(f["Devuelto"]).toBe(4000);
+    expect(f["Mercadería devuelta"]).toBe(4000);
+    expect(f["Venta neta de devoluciones"]).toBe(6000);
+  });
+
+  it("netea también el costo, o el margen de la planilla queda mal", () => {
+    // Sin esto el contador restaría $5.000 de costo a $6.000 de venta neta.
+    const [f] = filasVentas([ventaDevuelta]);
+    expect(f["Costo de lo devuelto"]).toBe(2000);
+    expect(f["Costo neto de devoluciones"]).toBe(3000);
+  });
+
+  it("una venta sin devolución muestra ceros, no vacíos", () => {
+    // Celdas vacías rompen las sumas de una columna en Excel.
+    const [f] = filasVentas([
+      { ...ventaDevuelta, monto_devuelto: null, base_devuelta: null, ventas_items: [] },
+    ]);
+    expect(f["Devuelto"]).toBe(0);
+    expect(f["Costo de lo devuelto"]).toBe(0);
+    expect(f["Venta neta de devoluciones"]).toBe(10000);
+    expect(f["Costo neto de devoluciones"]).toBe(5000);
+  });
+});

@@ -230,9 +230,39 @@ export function getDashboardMetrics(
     // "Ingresos" y "Ganancia bruta" hablen solo de mercadería. La resta que
     // hace reportes/page.tsx (ingresos - gananciaBruta = costo de mercadería)
     // sigue cerrando porque ambos quedan sobre la misma base.
+    // Lo DEVUELTO se resta acá y no se filtra la venta entera: una venta con
+    // devolución parcial sigue siendo una venta, con su ticket y su fecha, y
+    // sacarla del conjunto se llevaría también lo que sí se vendió. Ver
+    // 20260903160000: la venta queda CONFIRMADA a propósito.
+    //
+    // TODO lo devuelto baja de INGRESOS, y el recargo por método no se toca.
+    // No es una simplificación: `monto_devuelto` es base más recargo de cuenta
+    // corriente perdonado (20260903200000), y los dos están adentro de
+    // `ventas.total` y afuera de `recargo_metodo_total` — o sea que los dos
+    // eran ingreso de mercadería para esta cuenta.
+    //
+    // El recargo por MÉTODO nunca se devuelve —se lo quedó el banco, ver
+    // 20260903190000— así que `recargosCobrados` no se toca. Restárselo sería
+    // descontar de la ganancia una plata que el comercio efectivamente perdió
+    // pero que el cliente igual pagó.
     const recargoTicket = Number(v.recargo_metodo_total || 0);
-    const totalTicket = Number(v.total || 0) - recargoTicket;
-    const costoTicket = Number(v.precio_costo || 0);
+    const devuelto = Number(v.monto_devuelto || 0);
+    const totalTicket = Number(v.total || 0) - recargoTicket - devuelto;
+
+    // El COSTO de lo devuelto también sale, o la ganancia bruta quedaría con
+    // los ingresos bajados y el costo entero — un margen peor que el real
+    // justo en las ventas que tuvieron devolución. Sale de los renglones y no
+    // de una columna nueva porque `ventas.precio_costo` es Σ(precio_costo ×
+    // cantidad) de los renglones (verificado 12 de 12 en el histórico), así
+    // que restar Σ(precio_costo × cantidad_devuelta) es la misma cuenta al
+    // revés y sobre la misma fuente.
+    const costoDevuelto = (v.ventas_items ?? []).reduce(
+      (acc, item) =>
+        acc +
+        Number(item.precio_costo || 0) * Number(item.cantidad_devuelta || 0),
+      0,
+    );
+    const costoTicket = Number(v.precio_costo || 0) - costoDevuelto;
 
     recargosCobrados += recargoTicket;
     ingresosBrutos += totalTicket;

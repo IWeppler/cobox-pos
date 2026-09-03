@@ -2,14 +2,13 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Wallet, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogTrigger,
 } from "@/shared/ui/dialog";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -59,6 +58,8 @@ export function CorregirPagoModal({
   montoBase,
   totalActual,
   recargoActual,
+  open,
+  onOpenChange,
 }: Readonly<{
   ventaId: string;
   metodoActualId?: string | null;
@@ -67,8 +68,14 @@ export function CorregirPagoModal({
   montoBase: number;
   totalActual: number;
   recargoActual: number;
+  /** Controlado desde el menú de la fila. Ver `sale-table.tsx`: un
+   * DialogTrigger adentro de un DropdownMenu se desmonta con el menú antes de
+   * que el diálogo llegue a abrirse. */
+  open: boolean;
+  onOpenChange: (abierto: boolean) => void;
 }>) {
-  const [abierto, setAbierto] = useState(false);
+  const abierto = open;
+  const setAbierto = onOpenChange;
   // `null` es "todavía no se pidieron", que no es lo mismo que "no hay
   // ninguno": con un array vacío como inicial, el modal diría "no hay otros
   // métodos" durante el viaje al server.
@@ -147,16 +154,6 @@ export function CorregirPagoModal({
 
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 cursor-pointer text-muted-foreground hover:text-foreground sm:h-9 sm:w-9"
-          title="Corregir el método de cobro"
-        >
-          <Wallet className="h-4 w-4 sm:h-5 sm:w-5" />
-        </Button>
-      </DialogTrigger>
 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

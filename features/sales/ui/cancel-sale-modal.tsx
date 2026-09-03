@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { anularVentaAction } from "../actions/cancel-sale";
+import {
+  getRestaurabilidadVentaAction,
+  type RestaurabilidadVenta,
+} from "../actions/restaurabilidad-venta";
 import { toast } from "sonner";
 
 import {
@@ -10,12 +14,16 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogTrigger,
 } from "@/shared/ui/dialog";
 import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import {
+  MOTIVOS_ANULACION,
+  type MotivoAnulacion,
+} from "@/features/sales/lib/motivo-anulacion";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
-import { RotateCcw, AlertTriangle, PackagePlus, Loader2 } from "lucide-react";
+import { AlertTriangle, PackagePlus, Loader2 } from "lucide-react";
 
 interface AnularVentaModalProps {
   id: string;
@@ -23,6 +31,11 @@ interface AnularVentaModalProps {
   cantidad: number;
   variante: string;
   isProductoEliminado: boolean;
+  /** Controlado desde el menú de la fila. Ver `sale-table.tsx`: un
+   * DialogTrigger adentro de un DropdownMenu se desmonta junto con el menú,
+   * antes de que el modal llegue a abrirse. */
+  open: boolean;
+  onOpenChange: (abierto: boolean) => void;
 }
 
 export function AnularVentaModal({
@@ -31,16 +44,49 @@ export function AnularVentaModal({
   cantidad,
   variante,
   isProductoEliminado,
+  open,
+  onOpenChange,
 }: Readonly<AnularVentaModalProps>) {
-  const [isOpen, setIsOpen] = useState(false);
+  // Controlado, y hacía falta por dos motivos. El primero es que la vista
+  // previa de restaurabilidad se pide al ABRIR: es una consulta que solo tiene
+  // sentido cuando alguien va a anular de verdad, no en cada una de las diez
+  // filas de la página. El segundo es que `setIsOpen(false)` ya estaba escrito
+  // al terminar la anulación y no cerraba nada — el Dialog era no controlado,
+  // así que el modal quedaba abierto sobre una venta ya anulada.
+  const isOpen = open;
+  const setIsOpen = onOpenChange;
+  const [restaurabilidad, setRestaurabilidad] =
+    useState<RestaurabilidadVenta | null>(null);
   const [isPending, startTransition] = useTransition();
   const [motivo, setMotivo] = useState<"RESTAURAR_STOCK" | "BAJA">(
     "RESTAURAR_STOCK",
   );
+  // El POR QUÉ arranca sin elegir a propósito: un default sería el valor que
+  // se guarda cuando nadie mira, y esa es justo la medición que se busca.
+  const [motivoCodigo, setMotivoCodigo] = useState<MotivoAnulacion | null>(null);
+  const [motivoDetalle, setMotivoDetalle] = useState("");
+
+  useEffect(() => {
+    if (!isOpen || restaurabilidad !== null) return;
+
+    let vigente = true;
+    getRestaurabilidadVentaAction(id).then((resultado) => {
+      if (vigente) setRestaurabilidad(resultado);
+    });
+
+    return () => {
+      vigente = false;
+    };
+  }, [isOpen, restaurabilidad, id]);
 
   const handleAnular = () => {
     startTransition(async () => {
-      const result = await anularVentaAction(id, motivo);
+      const result = await anularVentaAction(
+        id,
+        motivo,
+        motivoCodigo,
+        motivoDetalle,
+      );
 
       if (result.success) {
         setIsOpen(false);
@@ -79,17 +125,7 @@ export function AnularVentaModal({
   };
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-danger hover:text-danger h-8 w-8 sm:h-9 sm:w-9 cursor-pointer shrink-0"
-          title="Anular Venta"
-        >
-          <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
@@ -113,7 +149,9 @@ export function AnularVentaModal({
               </Label>
               <RadioGroup
                 value={motivo}
-                onValueChange={(v) => setMotivo(v as any)}
+                onValueChange={(valor) =>
+                  setMotivo(valor === "BAJA" ? "BAJA" : "RESTAURAR_STOCK")
+                }
               >
                 <div
                   className={`flex items-start space-x-3 p-3 rounded-lg border-2 transition-colors cursor-pointer ${motivo === "RESTAURAR_STOCK" ? "border-success bg-success/10" : "border-border"}`}
@@ -160,6 +198,75 @@ export function AnularVentaModal({
             </div>
           )}
 
+          {/* POR QUÉ se cae la venta, que es otra pregunta que a dónde va la
+              mercadería — hasta 20260903140000 compartían una columna y la
+              segunda no tenía respuesta. Es obligatorio y a propósito: si se
+              puede saltear queda vacío en el 90% de los casos y la única
+              medición que justifica el campo no se puede hacer. Es un tap más
+              en una operación que en Evens pasa una vez cada 39 ventas. */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">
+              ¿Por qué se anula? <span className="text-danger">*</span>
+            </Label>
+            <div className="grid gap-1.5">
+              {MOTIVOS_ANULACION.map((opcion) => {
+                const activo = motivoCodigo === opcion.codigo;
+                return (
+                  <button
+                    key={opcion.codigo}
+                    type="button"
+                    onClick={() => setMotivoCodigo(opcion.codigo)}
+                    aria-pressed={activo}
+                    className={`cursor-pointer rounded-lg border px-3 py-2 text-left transition-colors ${
+                      activo
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted"
+                    }`}
+                  >
+                    <span className="block text-sm font-medium text-foreground">
+                      {opcion.label}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {opcion.ayuda}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {motivoCodigo === "OTRO" && (
+              <Input
+                value={motivoDetalle}
+                onChange={(evento) => setMotivoDetalle(evento.target.value)}
+                placeholder="Contá en una línea qué pasó"
+                className="h-10 rounded-md"
+                autoFocus
+              />
+            )}
+          </div>
+
+          {/* Lo que NO va a volver al inventario, dicho ANTES y no en un aviso
+              después de que la plata salió de la caja. Ver
+              `restaurabilidad-venta.ts`: quedan 116 renglones históricos cuya
+              variante ya no se puede resolver, y hasta ahora la vendedora se
+              enteraba cuando ya no había nada que decidir. */}
+          {motivo === "RESTAURAR_STOCK" &&
+            restaurabilidad &&
+            restaurabilidad.sinRestaurar.length > 0 && (
+              <div className="rounded-lg border border-warning/20 bg-warning/10 p-3">
+                <p className="text-sm font-medium text-warning">
+                  {restaurabilidad.restaurables === 0
+                    ? "Nada de esta venta va a volver al inventario."
+                    : `${restaurabilidad.sinRestaurar.length} de estos renglones no van a volver al inventario.`}
+                </p>
+                <p className="mt-1 text-xs text-warning/90">
+                  {restaurabilidad.sinRestaurar.join(", ")}. Su variante ya no
+                  existe en el catálogo, así que hay que cargar esas unidades a
+                  mano.
+                </p>
+              </div>
+            )}
+
           {isProductoEliminado && (
             <div className="bg-danger/10 border border-danger/20 p-4 rounded-xl flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-danger shrink-0" />
@@ -182,7 +289,7 @@ export function AnularVentaModal({
             <Button
               variant="destructive"
               onClick={handleAnular}
-              disabled={isPending}
+              disabled={isPending || !motivoCodigo}
             >
               {isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />

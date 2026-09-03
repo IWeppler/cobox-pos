@@ -36,7 +36,7 @@ export function CartSidebarHeader({
             // ocupando 36px de área táctil —que en un POS que se usa con el
             // dedo no se negocia— pero aporta 20px de alto, los mismos que el
             // texto que tiene al lado.
-            className="-my-2 -ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="-my-2 -ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
             aria-label="Volver al ticket"
           >
             <ArrowLeft className="h-4.5 w-4.5" />
@@ -44,9 +44,7 @@ export function CartSidebarHeader({
         ) : (
           <ShoppingBag className="w-4 h-4 shrink-0" />
         )}
-        <span className="truncate">
-          {isPOSMode ? "Ticket" : "Tu Carrito"}
-        </span>
+        <span className="truncate">{isPOSMode ? "Ticket" : "Tu Carrito"}</span>
       </h2>
       <button
         type="button"

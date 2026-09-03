@@ -22,18 +22,26 @@ export default async function VentasPage() {
     if (rolActual) userRole = rolActual;
   }
 
-  const [puedeAnularRes, puedeVerTodasRes, puedeCorregirPagoRes] =
-    await Promise.all([
+  const [
+    puedeAnularRes,
+    puedeVerTodasRes,
+    puedeCorregirPagoRes,
+    puedeDevolverRes,
+  ] = await Promise.all([
       supabase.rpc("tiene_permiso", { clave: "ventas.anular" }),
       supabase.rpc("tiene_permiso", { clave: "ventas.ver_todas" }),
       // Permiso propio, no derivado de `ventas.anular`: corregir el medio de
       // cobro de la venta propia con el turno abierto lo pueden hacer las
       // vendedoras, anular no. Ver 20260903130000.
       supabase.rpc("tiene_permiso", { clave: "ventas.corregir_pago" }),
+      // También propio: devolver un renglón no es anular la venta. Ver
+      // 20260903160000.
+      supabase.rpc("tiene_permiso", { clave: "ventas.devolver" }),
     ]);
   const puedeAnular = Boolean(puedeAnularRes.data);
   const puedeVerTodas = Boolean(puedeVerTodasRes.data);
   const puedeCorregirPago = Boolean(puedeCorregirPagoRes.data);
+  const puedeDevolver = Boolean(puedeDevolverRes.data);
 
   // 3. Cargar las ventas.
   //
@@ -58,6 +66,7 @@ export default async function VentasPage() {
           userRole={userRole}
           puedeAnular={puedeAnular}
           puedeCorregirPago={puedeCorregirPago}
+          puedeDevolver={puedeDevolver}
         />
       )}
     </div>
