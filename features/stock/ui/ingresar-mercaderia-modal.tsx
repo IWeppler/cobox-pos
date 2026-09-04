@@ -32,6 +32,7 @@ import {
   plantillaImportProductos,
 } from "@/features/stock/lib/plantilla-import-productos";
 import { planillaAConciliacionAction } from "@/features/stock/actions/planilla-a-conciliacion";
+import { BorradoresIngresoLista } from "@/features/stock/ui/borradores-ingreso-lista";
 
 const EXTENSIONES = [".csv", ".tsv", ".xlsx", ".xls"];
 
@@ -163,6 +164,12 @@ export function IngresarMercaderiaModal({
         </DialogHeader>
 
         <div className="space-y-3">
+          {/* LO EMPEZADO Y SIN TERMINAR, PRIMERO. Antes la única forma de
+              enterarse de que un remito quedó a medias era volver a subir el
+              mismo archivo y toparse con el guard de hash — y el remito de
+              proveedor, que no tiene hash, no avisaba nunca. */}
+          <BorradoresIngresoLista onIr={() => onOpenChange(false)} />
+
           {/* PROVEEDOR — primero porque es el caso más frecuente y el que más
               trabajo ahorra: sus nombres nunca coinciden con el catálogo. */}
           <button

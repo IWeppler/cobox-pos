@@ -7,15 +7,11 @@ import { toast } from "sonner";
 import { Layers, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/ui/select";
 import { queryKeys } from "@/shared/lib/query-keys";
-import { resolverCategoriaDisplayLabel } from "@/shared/utils/category-tree";
+import {
+  CategoriaPadreHijoSelect,
+  useArbolParaElegir,
+} from "@/shared/components/categoria-padre-hijo-select";
 import type { ItemResuelto, OrdenCompra } from "@/entities/compras/types";
 import type { Rubro } from "@/entities/config/types";
 import {
@@ -60,9 +56,13 @@ import { ProgresoOverlay } from "./progreso-overlay";
  * default correcto no es "vacío", es ×2. */
 const RECARGO_DEFAULT = 100;
 
+// La columna de categoría lleva DOS selects (padre y subcategoría) apilados,
+// así que necesita más ancho mínimo que cuando era uno solo: con 160px el
+// nombre del padre se cortaba justo donde se distinguen "Ropa Mujer" de "Ropa
+// Niña".
 const COLUMNAS =
-  "grid-cols-[32px_minmax(200px,1.4fr)_minmax(160px,1fr)_minmax(120px,0.8fr)_104px_104px_minmax(150px,1fr)_40px]";
-const ANCHO_MINIMO = "min-w-[1080px]";
+  "grid-cols-[32px_minmax(200px,1.4fr)_minmax(190px,1.1fr)_minmax(120px,0.8fr)_104px_104px_minmax(150px,1fr)_40px]";
+const ANCHO_MINIMO = "min-w-[1110px]";
 
 type BorradorCargaInicial = {
   version: 1;
@@ -125,23 +125,15 @@ export function CargaInicialTable({
     [filas],
   );
   /**
-   * Las opciones del select, etiquetadas "Padre › Hijo".
+   * El árbol para los selectores de categoría, padre → subcategoría.
    *
-   * El árbol repite nombres entre audiencias —este comercio tiene dos
-   * "Abrigos", uno bajo Hombre y otro bajo Mujer—, así que una lista que
-   * muestre solo el nombre de la hoja ofrece dos opciones idénticas y elegir
-   * es adivinar. Mismo helper que usa la columna de categoría de Inventario.
+   * Antes era UN select plano con las 50 categorías de Evens etiquetadas
+   * "Padre › Hijo", y esta pantalla lo abre una vez POR FILA: un remito de 94
+   * grupos es 94 veces scrollear la misma lista larga. Ahora son dos pasos (7
+   * padres, después los hijos de ese padre), con el mismo componente que la
+   * otra pantalla de esta conciliación.
    */
-  const opcionesCategoria = useMemo(
-    () =>
-      categorias
-        .map((c) => ({
-          id: c.id,
-          label: resolverCategoriaDisplayLabel(categorias, c.id) || c.nombre,
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label, "es")),
-    [categorias],
-  );
+  const arbolCategorias = useArbolParaElegir(categorias);
 
   const categoriasNuevas = useMemo(
     () =>
@@ -483,18 +475,14 @@ export function CargaInicialTable({
             {seleccion.size} seleccionado{seleccion.size === 1 ? "" : "s"}
           </span>
 
-          <Select value={categoriaEnLote} onValueChange={setCategoriaEnLote}>
-            <SelectTrigger size="sm" className="h-9! w-52 bg-background">
-              <SelectValue placeholder="Categoría" />
-            </SelectTrigger>
-            <SelectContent>
-              {opcionesCategoria.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CategoriaPadreHijoSelect
+            arbol={arbolCategorias}
+            categoriasFlat={categorias}
+            value={categoriaEnLote}
+            onChange={setCategoriaEnLote}
+            size="sm"
+            triggerClassName="h-9! w-52 bg-background"
+          />
           <Button
             size="sm"
             variant="secondary"
@@ -619,47 +607,33 @@ export function CargaInicialTable({
                 </div>
 
                 <div className="min-w-0">
-                  <Select
+                  {/* `h-9!` y no `h-9`: el trigger trae
+                      `sm:data-[size=sm]:h-7`, un selector de más especificidad
+                      que una clase suelta, así que en desktop ganaba él y el
+                      select quedaba 8px más bajo que el input de al lado.
+
+                      El placeholder del select 1 lleva la categoría propuesta
+                      cuando no hay ninguna elegida: es lo que se va a CREAR si
+                      no se toca nada, y esconderlo detrás de "Elegí categoría"
+                      lo dejaba sin avisar. */}
+                  <CategoriaPadreHijoSelect
+                    arbol={arbolCategorias}
+                    categoriasFlat={categorias}
                     value={fila.categoriaId ?? ""}
-                    onValueChange={(val) =>
+                    onChange={(val) =>
                       editarFila(fila.key, {
                         categoriaId: val,
                         categoriaNombreNueva: null,
                       })
                     }
-                  >
-                    {/* `h-9!` y no `h-9`: el trigger trae
-                        `sm:data-[size=sm]:h-7`, un selector de más
-                        especificidad que una clase suelta, así que en desktop
-                        ganaba él y el select quedaba 8px más bajo que el input
-                        de al lado.
-
-                        Y SelectValue va SIN children: con children, Radix
-                        muestra eso en vez del ítem elegido — como acá venían
-                        `undefined` para las filas sin categoría, el trigger se
-                        dibujaba vacío y la categoría precargada no se veía
-                        seleccionada aunque el valor estuviera puesto. */}
-                    <SelectTrigger
-                      size="sm"
-                      aria-label="Categoría"
-                      className="h-9! w-full bg-background"
-                    >
-                      <SelectValue
-                        placeholder={
-                          fila.categoriaNombreNueva
-                            ? `${fila.categoriaNombreNueva} (nueva)`
-                            : "Elegí categoría"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {opcionesCategoria.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    size="sm"
+                    triggerClassName="h-9! w-full bg-background"
+                    placeholderPadre={
+                      fila.categoriaNombreNueva
+                        ? `${fila.categoriaNombreNueva} (nueva)`
+                        : "Elegí categoría"
+                    }
+                  />
                   {!fila.categoriaId && fila.categoriaNombreNueva && (
                     <p className="mt-0.5 flex items-center gap-1 text-[11px] text-chart-3">
                       <Sparkles className="h-3 w-3" /> se crea

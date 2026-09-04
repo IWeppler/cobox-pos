@@ -30,6 +30,7 @@ export const PERMISOS = {
   CAJA_CERRAR_AJENA: "caja.cerrar_ajena",
   CAJA_VER_GERENCIAL: "caja.ver_gerencial",
   STOCK_IMPORTAR_PLANILLA: "stock.importar_planilla",
+  STOCK_INGRESAR_REMITO: "stock.ingresar_remito",
   CLIENTES_COBRAR_CC: "clientes.cobrar_cc",
   CONFIGURACION_FACTURACION: "configuracion.facturacion",
   REPORTES_VER_MODULO: "reportes.ver_modulo",

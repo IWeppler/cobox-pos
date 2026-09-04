@@ -25,13 +25,6 @@ import { Input } from "@/shared/ui/input";
 import { Badge } from "@/shared/ui/badge";
 import { Label } from "@/shared/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -86,10 +79,13 @@ import {
   BucketDesconocido,
 } from "../lib/match-classification";
 import {
-  construirArbolCategorias,
   resolverCategoriaDisplayLabel,
   type CategoriaBase,
 } from "@/shared/utils/category-tree";
+import {
+  CategoriaPadreHijoSelect,
+  useArbolParaElegir,
+} from "@/shared/components/categoria-padre-hijo-select";
 
 interface MergeTableProps {
   orden: OrdenCompra;
@@ -226,116 +222,6 @@ function SearchableSelect({
   );
 }
 
-/** Deriva el padre (o la propia categoría, si es raíz/suelta) a partir de
- * un categoria_id ya resuelto — para precargar el select 1 cuando el
- * valor final ya se conoce (ej. sugerencia del import, override previo). */
-function derivarSeleccionCategoria(
-  categoriaId: string | null | undefined,
-  categoriasFlat: CategoriaBase[],
-): { padreId: string; categoriaId: string } {
-  if (!categoriaId) return { padreId: "", categoriaId: "" };
-  const categoria = categoriasFlat.find((c) => c.id === categoriaId);
-  if (!categoria) return { padreId: "", categoriaId: "" };
-  return {
-    padreId: categoria.parent_id ?? categoria.id,
-    categoriaId: categoria.id,
-  };
-}
-
-// Selector de categoría en dos pasos (padre → subcategoría) — mismo
-// patrón ya usado en /stock para "Mover" en masa y en los chips del
-// catálogo público, no un dropdown agrupado nuevo (ese tenía además un
-// bug visual: el padre aparecía dos veces, como header Y como opción).
-// Select 1 lista padres (con hijos) + categorías sueltas. Select 2 solo
-// aparece si el padre elegido tiene hijos, y siempre incluye "Todo
-// {Padre}, sin subcategoría específica" — mismo criterio que el chip
-// "Todo {Padre}" de la navegación del catálogo. `value`/`onChange` son el
-// categoria_id FINAL (igual contrato que el <Select> plano que reemplaza).
-function CategoriaPadreHijoSelect({
-  arbol,
-  categoriasFlat,
-  value,
-  onChange,
-  disabled,
-  triggerClassName = "w-full",
-  size,
-}: Readonly<{
-  arbol: ReturnType<typeof construirArbolCategorias>;
-  categoriasFlat: CategoriaBase[];
-  value: string;
-  onChange: (categoriaId: string) => void;
-  disabled?: boolean;
-  triggerClassName?: string;
-  size?: "sm" | "default";
-}>) {
-  const [padreId, setPadreId] = useState(
-    () => derivarSeleccionCategoria(value, categoriasFlat).padreId,
-  );
-
-  // Si `value` cambia desde afuera (precarga del modal, override de otro
-  // lado, reset), resincroniza el padre derivado — si no, el select 2
-  // podría seguir mostrando los hijos del padre anterior.
-  useEffect(() => {
-    setPadreId(derivarSeleccionCategoria(value, categoriasFlat).padreId);
-  }, [value, categoriasFlat]);
-
-  const padreSeleccionado = arbol.padres.find((p) => p.id === padreId) ?? null;
-
-  const handlePadreChange = (val: string) => {
-    setPadreId(val);
-    const esPadreConHijos = arbol.padres.some(
-      (p) => p.id === val && p.hijos.length > 0,
-    );
-    // Padre sin hijos (o categoría suelta): el destino final ya se conoce
-    // con este solo click. Padre con hijos: esperamos el select 2.
-    onChange(esPadreConHijos ? "" : val);
-  };
-
-  return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <Select
-        value={padreId}
-        onValueChange={handlePadreChange}
-        disabled={disabled}
-      >
-        <SelectTrigger size={size} className={triggerClassName}>
-          <SelectValue placeholder="Categoría" />
-        </SelectTrigger>
-        <SelectContent>
-          {arbol.padres.map((padre) => (
-            <SelectItem key={padre.id} value={padre.id}>
-              {padre.nombre}
-            </SelectItem>
-          ))}
-          {arbol.sinPadre.map((cat) => (
-            <SelectItem key={cat.id} value={cat.id}>
-              {cat.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {padreSeleccionado && padreSeleccionado.hijos.length > 0 && (
-        <Select value={value} onValueChange={onChange} disabled={disabled}>
-          <SelectTrigger size={size} className={triggerClassName}>
-            <SelectValue placeholder="Subcategoría" />
-          </SelectTrigger>
-          <SelectContent>
-            {padreSeleccionado.hijos.map((hijo) => (
-              <SelectItem key={hijo.id} value={hijo.id}>
-                {hijo.nombre}
-              </SelectItem>
-            ))}
-            <SelectItem value={padreSeleccionado.id}>
-              Todo {padreSeleccionado.nombre}, sin subcategoría específica
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      )}
-    </div>
-  );
-}
-
 export function MergeTable({
   orden,
   itemsOriginales,
@@ -437,14 +323,9 @@ export function MergeTable({
     fetchCats();
   }, []);
 
-  // Árbol para los dos <Select> de categoría de esta pantalla — mismo
-  // constructor que ya usa el filtro de /stock (construirArbolCategorias),
-  // acá sin conteos de stock: cada categoría "existe" siempre (count 1),
-  // solo nos interesa la agrupación padre → hijos para mostrar contexto.
-  const arbolCategoriasDB = useMemo(() => {
-    const countsUno = Object.fromEntries(categoriasDB.map((c) => [c.id, 1]));
-    return construirArbolCategorias(categoriasDB, countsUno);
-  }, [categoriasDB]);
+  // Árbol para los dos <Select> de categoría de esta pantalla. Sin conteos:
+  // acá se ELIGE, no se filtra, así que cada categoría existe siempre.
+  const arbolCategoriasDB = useArbolParaElegir(categoriasDB);
 
   // sugerirCategoria (category-suggestions.ts) es un diccionario portable
   // entre tenants — devuelve NOMBRES a propósito, nunca ids hardcodeados.
