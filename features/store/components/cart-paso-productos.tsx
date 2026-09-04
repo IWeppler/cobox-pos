@@ -12,11 +12,7 @@ import { CartItemRow } from "@/shared/components/cart-sidebar/cart-item-row";
  * dirección y forma de pago es otra. Mezcladas en una sola pantalla, el
  * formulario empuja los productos fuera de la vista justo cuando la clienta
  * quiere revisarlos.
- *
- * NO HAY "VACIAR CARRITO". Cada ítem se quita con su propia X, que es lo mismo
- * pero sin poder equivocarse: un botón que borra todo, al lado del que
- * continúa, en una pantalla que se usa con el pulgar, no tiene ningún caso de
- * uso que lo justifique.
+
  */
 export function CartPasoProductos({
   items,

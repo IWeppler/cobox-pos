@@ -296,7 +296,7 @@ export function CartStepCheckout({
                         className={`flex min-h-18 flex-col items-center justify-center gap-2 border px-2 py-3 text-xs font-bold transition-colors rounded-lg cursor-pointer ${
                           isSelected
                             ? "border-primary bg-card text-primary"
-                            : "border-border text-muted-foreground hover:text-foreground"
+                            : "border-border bg-card text-muted-foreground hover:text-foreground"
                         }`}
                       >
                         <Icon className="h-5 w-5" />

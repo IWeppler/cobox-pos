@@ -134,7 +134,7 @@ export function CartSidebarFooter({
 
   return (
     <>
-      <div className="shrink-0 border-t border-border bg-card p-5 z-10">
+      <div className="shrink-0 border-t border-border bg-card p-3 z-10">
         <div className="space-y-2 mb-4">
           <div className="flex items-center justify-between font-mono text-sm text-muted-foreground">
             <span>SUBTOTAL</span>
@@ -227,14 +227,6 @@ export function CartSidebarFooter({
             Enviar Pedido
           </Link>
         )}
-
-        <button
-          onClick={onClearCart}
-          disabled={isPending}
-          className="w-full mt-4 text-xs tracking-wide text-muted-foreground hover:text-destructive transition-colors font-medium disabled:opacity-50 cursor-pointer"
-        >
-          Vaciar {isPOSMode ? "venta" : "carrito"}
-        </button>
       </div>
 
       {modalAbierto && (

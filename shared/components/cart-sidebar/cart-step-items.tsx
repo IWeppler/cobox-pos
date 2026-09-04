@@ -102,7 +102,7 @@ export function CartStepItems({
       </div>
 
       {items.length > 0 ? (
-        <div className="shrink-0 border-t border-border bg-card p-5">
+        <div className="shrink-0 border-t border-border bg-card p-3">
           <div className="mb-4 flex items-center justify-between">
             <span className="font-mono text-xl font-medium uppercase text-foreground">
               Subtotal

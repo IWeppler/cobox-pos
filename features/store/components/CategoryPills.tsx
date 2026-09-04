@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { FolderOpen, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import type { ArbolCategorias } from "@/shared/utils/category-tree";
 
@@ -114,7 +114,7 @@ export function CategoryPills({
           className={`${pillBase} gap-1.5 font-bold border-primary/30 text-foreground hover:bg-primary/10`}
           onClick={() => onSelectCategoria(padre.id)}
         >
-          <FolderOpen className="w-3.5 h-3.5 text-primary" />
+          {/* <FolderOpen className="w-3.5 h-3.5 text-primary" /> */}
           {padre.nombre}{" "}
           <span className="ml-1 opacity-60 font-normal">({padre.count})</span>
         </Button>

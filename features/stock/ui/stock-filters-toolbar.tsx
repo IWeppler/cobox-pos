@@ -12,7 +12,6 @@ import {
   ClipboardList,
   Filter,
   FilterX,
-  FolderOpen,
   HandCoins,
   LayoutGrid,
   List,
@@ -648,9 +647,15 @@ export function StockFiltersToolbar({
             >
               {padreEnVista ? (
                 <>
+                  {/* La pill de volver es STICKY, así que las subcategorías le
+                      pasan por debajo: su fondo tiene que ser 100% opaco. El
+                      `dark:` es obligatorio — la variante outline trae
+                      `dark:bg-input/30` y twMerge NO lo pisa con un
+                      `bg-background` sin modificador, así que en modo oscuro
+                      quedaba al 30% y el texto se volvía ilegible al deslizar. */}
                   <Button
                     variant="outline"
-                    className="rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 shadow-none border-border/60 sticky left-0 bg-background gap-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="rounded-full h-10 px-4 text-xs font-semibold shrink-0 shadow-none border-border/60 sticky left-0 z-10 bg-background dark:bg-background hover:bg-muted dark:hover:bg-muted gap-1.5 text-muted-foreground hover:text-foreground"
                     onClick={() => onCategoriaChange("todos")}
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
@@ -663,7 +668,7 @@ export function StockFiltersToolbar({
                       <Button
                         key={hijo.value}
                         variant={isActive ? "default" : "outline"}
-                        className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none border-border/60 ${
+                        className={`rounded-full bg-blue-500 h-10 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none border-border/60 ${
                           isActive
                             ? "bg-foreground text-background border-transparent"
                             : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -677,7 +682,7 @@ export function StockFiltersToolbar({
 
                   <Button
                     variant={categoriaActiva === padreEnVista.value ? "default" : "outline"}
-                    className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none border-border/60 ${
+                    className={`rounded-full bg-red-500 h-10 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none border-border/60 ${
                       categoriaActiva === padreEnVista.value
                         ? "bg-foreground text-background border-transparent"
                         : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -691,7 +696,7 @@ export function StockFiltersToolbar({
                 <>
                   <Button
                     variant={categoriaActiva === "todos" ? "default" : "outline"}
-                    className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 shadow-none border-border/60 ${
+                    className={`rounded-full bg-green-500 h-10 px-4 text-xs font-semibold shrink-0 shadow-none border-border/60 ${
                       categoriaActiva === "todos"
                         ? "bg-foreground text-background border-transparent"
                         : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -710,7 +715,7 @@ export function StockFiltersToolbar({
                       <Button
                         key={categoria.value}
                         variant="outline"
-                        className={`rounded-full h-10 md:h-8 px-4 text-xs font-semibold shrink-0 transition-colors shadow-none gap-1.5 ${
+                        className={`rounded-full h-10 px-4 text-xs font-semibold bg-blue-500 shrink-0 transition-colors shadow-none gap-1.5 ${
                           esPadre
                             ? "border-primary/30 bg-background text-foreground font-bold hover:bg-primary/10"
                             : isActive
@@ -719,7 +724,7 @@ export function StockFiltersToolbar({
                         }`}
                         onClick={() => onCategoriaChange(categoria.value)}
                       >
-                        {esPadre && <FolderOpen className="w-3.5 h-3.5 text-primary" />}
+                        {/* {esPadre && <FolderOpen className="w-3.5 h-3.5 text-primary" />} */}
                         {categoria.nombre} ({categoria.count})
                       </Button>
                     );
