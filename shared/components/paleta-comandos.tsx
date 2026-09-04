@@ -105,6 +105,11 @@ const ATAJOS: {
   },
   { teclas: "Enter", que: "Agregar el producto marcado", soloEnPos: true },
   {
+    teclas: "Ctrl + Espacio",
+    que: "Confirmar la carga rápida",
+    soloEnPos: true,
+  },
+  {
     teclas: "Alt + 1…9",
     que: "Agregar el producto N de la grilla",
     soloEnPos: true,

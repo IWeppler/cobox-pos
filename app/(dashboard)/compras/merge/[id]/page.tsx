@@ -1,7 +1,13 @@
 import { ItemResuelto, SugerenciaSimilitud } from "@/entities/compras/types";
 import { Producto } from "@/entities/productos/types";
+import { leerConfigPos } from "@/entities/config/lib/leer-config-pos";
+import { normalizarRubro } from "@/entities/config/types";
 import { getOrdenParaMergeAction } from "@/features/purchases/actions/merge-purchase";
-import { MergeTable } from "@/features/purchases/ui/merge-table";
+import {
+  ConciliacionClient,
+  type BorradorGuardado,
+} from "@/features/purchases/ui/conciliacion-client";
+import type { CategoriaReal } from "@/features/purchases/lib/resolve-import-categoria";
 import { bloquearVendedor } from "@/shared/config/supabase/guard-rol";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +24,21 @@ export default async function MergePage({ params }: Readonly<PageProps>) {
 
   const { id } = await params;
 
-  const { orden, items, productos, sugerenciasSimilitud, error } =
-    await getOrdenParaMergeAction(id);
+  // El rubro decide el diccionario de términos con el que se infiere la
+  // categoría de cada fila. Sale de `leerConfigPos`, que los layouts de este
+  // mismo request ya llamaron: `cache()` lo devuelve sin viajar de nuevo.
+  const [
+    {
+      orden,
+      items,
+      productos,
+      sugerenciasSimilitud,
+      categorias,
+      borrador,
+      error,
+    },
+    config,
+  ] = await Promise.all([getOrdenParaMergeAction(id), leerConfigPos()]);
 
   if (error || !orden) {
     return (
@@ -39,11 +58,14 @@ export default async function MergePage({ params }: Readonly<PageProps>) {
 
   return (
     <div className="w-full mx-auto pb-12">
-      <MergeTable
+      <ConciliacionClient
         orden={orden}
-        itemsOriginales={items as ItemResuelto[]}
+        items={items as ItemResuelto[]}
         productos={productos as Producto[]}
         sugerenciasSimilitud={sugerenciasSimilitud as SugerenciaSimilitud[]}
+        categorias={(categorias ?? []) as CategoriaReal[]}
+        rubro={normalizarRubro(config?.rubro)}
+        borrador={borrador as BorradorGuardado}
       />
     </div>
   );

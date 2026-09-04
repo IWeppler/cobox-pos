@@ -101,6 +101,8 @@ export async function getOrdenParaMergeAction(ordenId: string) {
       items: [],
       productos: [],
       sugerenciasSimilitud: [],
+      categorias: [],
+      borrador: null,
     };
   }
 
@@ -111,6 +113,8 @@ export async function getOrdenParaMergeAction(ordenId: string) {
       items: [],
       productos: [],
       sugerenciasSimilitud: [],
+      categorias: [],
+      borrador: null,
     };
   }
 
@@ -121,6 +125,8 @@ export async function getOrdenParaMergeAction(ordenId: string) {
       items: [],
       productos: [],
       sugerenciasSimilitud: [],
+      categorias: [],
+      borrador: null,
     };
   }
 
@@ -198,7 +204,9 @@ export async function getOrdenParaMergeAction(ordenId: string) {
       }
 
       if (baseline.marca && s.marca) {
-        if (baseline.marca.trim().toLowerCase() !== s.marca.trim().toLowerCase()) {
+        if (
+          baseline.marca.trim().toLowerCase() !== s.marca.trim().toLowerCase()
+        ) {
           return false;
         }
       }
@@ -212,12 +220,27 @@ export async function getOrdenParaMergeAction(ordenId: string) {
     );
   }
 
+  // El borrador del modo carga inicial vive en la base, no en el navegador
+  // (ver 20260904120000). Se lee acá y no en un round-trip aparte del cliente:
+  // la pantalla no puede pintar filas vacías y después reemplazarlas.
+  const { data: borradorRow } = await supabase
+    .from("ordenes_borradores")
+    .select("payload, actualizado_en")
+    .eq("orden_id", ordenId)
+    .maybeSingle();
+
   return {
     error: null,
     orden: ordenRes.data,
     items: itemsRes.data || [],
     productos: productosRes.data || [],
     sugerenciasSimilitud,
+    // Las categorías del comercio ya se leyeron acá arriba para filtrar las
+    // sugerencias por audiencia; el modo carga inicial las necesita para el
+    // select de cada fila. Sin esto llegaban vacías y el desplegable se abría
+    // sin una sola opción — se veía como un select que no responde.
+    categorias: categoriasRes.data || [],
+    borrador: borradorRow ?? null,
   };
 }
 
@@ -247,7 +270,8 @@ export async function crearProductoAlVueloAction(
     // Las imágenes se guardan bajo la carpeta del negocio: es lo que la policy
     // de storage exige para poder escribir.
     const { data: negocioId } = await supabase.rpc("negocio_actual");
-    if (!negocioId) return { error: "No hay un negocio activo en esta sesión." };
+    if (!negocioId)
+      return { error: "No hay un negocio activo en esta sesión." };
 
     const slug = `${slugify(nombre)}-${Math.random().toString(36).substring(2, 6)}`;
     let categoria_id: string | null = null;

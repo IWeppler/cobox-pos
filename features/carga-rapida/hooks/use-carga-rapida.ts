@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Producto } from "@/entities/productos/types";
 import type { Rubro } from "@/entities/config/types";
-import { matchPorNombre, matchSkuExacto, normalizarQuery } from "../lib/matching";
+import {
+  matchPorNombre,
+  matchSkuExacto,
+  normalizarQuery,
+} from "../lib/matching";
 import { prefillAVariantes } from "../lib/maestro-prefill";
 import { confirmarCargaAction } from "../actions/confirmar-carga";
 import {
@@ -49,6 +53,18 @@ type AltaRapidaPendiente = {
   maestro: PrefillMaestro | null;
 };
 
+/** Las celdas de la tabla que pueden recibir el foco por teclado. Es el mismo
+ * nombre que usa la celda en su `data-celda`, así el hook nombra el destino
+ * sin tener refs de la tabla. */
+export type CampoDeFoco =
+  | "nombre"
+  | "codigo"
+  | "talle"
+  | "color"
+  | "precioCompra"
+  | "precioVenta"
+  | "cantidad";
+
 type VarianteResuelta = {
   varianteId: string;
   productoId: string;
@@ -64,6 +80,21 @@ type VarianteResuelta = {
  * sku reales en prod todavía contra los que afinar el patrón. */
 function pareceCodigo(q: string): boolean {
   return !/\s/.test(q);
+}
+
+/**
+ * Más estricta que `pareceCodigo`, y para otra decisión: si lo tipeado va a
+ * la columna Código o a la columna Producto de la fila nueva.
+ *
+ * `pareceCodigo` alcanza para decidir a QUÉ preguntarle al Catálogo Maestro
+ * (probar el EAN primero es barato y si falla hay fallback por texto), pero
+ * acá el costo del error es distinto: con esa heurística "remera" —una sola
+ * palabra— entraría como código y dejaría la fila sin nombre, obligando a
+ * retipearlo. Un código de barras o un SKU escaneado tiene 6+ caracteres y
+ * al menos un dígito; una palabra suelta no.
+ */
+function pareceCodigoDeBarras(q: string): boolean {
+  return pareceCodigo(q) && q.length >= 6 && /\d/.test(q);
 }
 
 export function useCargaRapida(
@@ -97,6 +128,13 @@ export function useCargaRapida(
     string | null
   >(null);
   const [recargoGlobal, setRecargoGlobal] = useState<number | "">("");
+  /** Celda que tiene que recibir el foco apenas se renderice la fila nueva.
+   * Lo decide el hook (sabe por qué nació la línea) y lo aplica la tabla (es
+   * la que tiene los inputs). */
+  const [focoPendiente, setFocoPendiente] = useState<{
+    clienteLineaId: string;
+    campo: CampoDeFoco;
+  } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -157,7 +195,10 @@ export function useCargaRapida(
             ...l,
             variantes: l.variantes.map((v, i) =>
               i === 0
-                ? { ...v, stock: String((Number.parseInt(v.stock, 10) || 0) + 1) }
+                ? {
+                    ...v,
+                    stock: String((Number.parseInt(v.stock, 10) || 0) + 1),
+                  }
                 : v,
             ),
           };
@@ -171,21 +212,35 @@ export function useCargaRapida(
    * Agrega una línea nueva SIN pasar por el modal de alta: nombre y nada más,
    * precio y cantidad se completan inline en la fila.
    *
-   * Es el camino de la card "crear" de la grilla del POS: ahí la persona ya
-   * decidió que el producto no existe, así que preguntarle de nuevo en un
-   * modal sobra. Si ya hay una línea para ese texto, suma en vez de duplicar
-   * — mismo criterio de dedupe que `procesarEnter`.
+   * Es el camino por defecto de TODA alta: la card "crear" de la grilla del
+   * POS y también el Enter que no matcheó nada. La persona ya sabe que el
+   * producto no existe; preguntárselo de nuevo en un modal es una pantalla de
+   * por medio para cargar tres números que entran en la fila.
+   *
+   * Si ya hay una línea para ese texto, suma en vez de duplicar — mismo
+   * criterio de dedupe que `procesarEnter`.
+   *
+   * `esCodigo`: lo escaneado/tipeado es un código, no un nombre. Va a la
+   * columna Código y el nombre queda vacío para completarlo en la fila —
+   * escribirlo como nombre dejaría productos llamados "7791234567890".
    */
-  function agregarLineaNueva(nombreCrudo: string) {
-    const nombre = nombreCrudo.trim();
-    if (!nombre) return;
+  function agregarLineaNueva(
+    textoCrudo: string,
+    opciones?: { esCodigo?: boolean },
+  ) {
+    const texto = textoCrudo.trim();
+    if (!texto) return;
 
-    const normalizado = normalizarQuery(nombre);
+    const esCodigo = opciones?.esCodigo ?? false;
+    const nombre = esCodigo ? "" : texto;
+
+    const normalizado = normalizarQuery(texto);
     const yaEsta = lineas.find(
       (l): l is LineaCargaNueva =>
         l.kind === "NUEVA" &&
         (l.queryOriginal === normalizado ||
-          normalizarQuery(l.nombre) === normalizado),
+          (l.nombre !== "" && normalizarQuery(l.nombre) === normalizado) ||
+          (l.codigo !== null && normalizarQuery(l.codigo) === normalizado)),
     );
     if (yaEsta) {
       if (!yaEsta.tieneVariantes) incrementarLinea(yaEsta.clienteLineaId);
@@ -193,14 +248,26 @@ export function useCargaRapida(
       return;
     }
 
+    const clienteLineaId = crypto.randomUUID();
+
+    // Enter en el buscador deja el cursor DENTRO de la fila recién creada: lo
+    // que sigue a agregarla es completarla, y llegar hasta ahí con el mouse o
+    // con seis Tab es la mitad del tiempo de la carga. En el primer campo que
+    // hay que completar: el nombre si entró un código escaneado (queda vacío a
+    // propósito), y si no el costo, que es el primero de los tres números.
+    setFocoPendiente({
+      clienteLineaId,
+      campo: nombre ? "precioCompra" : "nombre",
+    });
+
     setLineas((prev) => [
       ...prev,
       {
         kind: "NUEVA",
-        clienteLineaId: crypto.randomUUID(),
+        clienteLineaId,
         queryOriginal: normalizado,
         nombre,
-        codigo: null,
+        codigo: esCodigo ? texto : null,
         marca: null,
         modelo: null,
         categoriaId: null,
@@ -209,6 +276,8 @@ export function useCargaRapida(
         idMaster: null,
         tieneVariantes: false,
         cantidad: 1,
+        talle: null,
+        color: null,
       },
     ]);
     setQuery("");
@@ -293,26 +362,32 @@ export function useCargaRapida(
             variantes,
             varianteFijaLabel: Object.values(prefill.atributos).join(" / "),
           }
-        : { ...base, tieneVariantes: false, cantidad: 1 };
+        : {
+            ...base,
+            tieneVariantes: false,
+            cantidad: 1,
+            talle: null,
+            color: null,
+          };
 
     setLineas((prev) => [...prev, nueva]);
+    // Del maestro viene todo menos los precios (no los tiene y no debe
+    // inventarlos), así que el cursor va derecho al costo.
+    setFocoPendiente({
+      clienteLineaId: nueva.clienteLineaId,
+      campo: "precioCompra",
+    });
   }
 
-  /** "Ninguno de estos": sigue al alta manual con lo que ya venía tipeado, sin
-   * perder el texto. También es el camino de salida si resolver el candidato
-   * falla. */
+  /** "Ninguno de estos": carga la línea a mano con lo que ya venía tipeado,
+   * sin perder el texto. También es el camino de salida si resolver el
+   * candidato falla. */
   function abrirAltaManualDesdeMaestro() {
-    setMaestroCandidatos((actual) => {
-      if (!actual) return null;
-      const esCodigo = pareceCodigo(actual.query);
-      setAltaRapida({
-        nombrePrefill: esCodigo ? "" : actual.query,
-        codigoPrefill: esCodigo ? actual.query : "",
-        queryOriginal: actual.queryNormalizada,
-        editando: null,
-        maestro: null,
-      });
-      return null;
+    const actual = maestroCandidatos;
+    if (!actual) return;
+    setMaestroCandidatos(null);
+    agregarLineaNueva(actual.query, {
+      esCodigo: pareceCodigoDeBarras(actual.query),
     });
   }
 
@@ -440,8 +515,7 @@ export function useCargaRapida(
           // pareceCodigo() marca "moto" como código (no tiene espacios), así
           // que sin este fallback tipear una sola palabra no encontraba nada.
           if (!maestro) {
-            const candidatos =
-              await buscarEnCatalogoMaestroPorNombreAction(q);
+            const candidatos = await buscarEnCatalogoMaestroPorNombreAction(q);
             if (candidatos.length > 0) {
               setMaestroCandidatos({
                 lista: candidatos,
@@ -457,19 +531,14 @@ export function useCargaRapida(
       }
 
       // Con match del maestro la variante ya está resuelta: línea directo a la
-      // lista. Sin match, el alta manual de siempre abre el modal.
+      // lista. Sin match, la línea entra igual de directo y se completa en la
+      // fila — el alta ya no pasa por un modal.
       if (maestro) {
         agregarLineaDesdeMaestro(maestro, normalizado);
         return;
       }
 
-      setAltaRapida({
-        nombrePrefill: esCodigo ? "" : q,
-        codigoPrefill: esCodigo ? q : "",
-        queryOriginal: normalizado,
-        editando: null,
-        maestro: null,
-      });
+      agregarLineaNueva(q, { esCodigo: pareceCodigoDeBarras(q) });
       return;
     }
     if (candidatos.length === 1) {
@@ -495,8 +564,14 @@ export function useCargaRapida(
       | { tieneVariantes: false; cantidad: number }
       | {
           tieneVariantes: true;
-          opciones: Extract<LineaCargaNueva, { tieneVariantes: true }>["opciones"];
-          variantes: Extract<LineaCargaNueva, { tieneVariantes: true }>["variantes"];
+          opciones: Extract<
+            LineaCargaNueva,
+            { tieneVariantes: true }
+          >["opciones"];
+          variantes: Extract<
+            LineaCargaNueva,
+            { tieneVariantes: true }
+          >["variantes"];
         }
     ),
   ) {
@@ -513,7 +588,8 @@ export function useCargaRapida(
       precioCompra: datos.precioCompra,
       precioVenta: datos.precioVenta,
       // Se preserva al reeditar una línea que ya venía del maestro.
-      idMaster: altaRapida.maestro?.idMaster ?? altaRapida.editando?.idMaster ?? null,
+      idMaster:
+        altaRapida.maestro?.idMaster ?? altaRapida.editando?.idMaster ?? null,
     };
     const nueva: LineaCargaNueva = datos.tieneVariantes
       ? {
@@ -522,11 +598,28 @@ export function useCargaRapida(
           opciones: datos.opciones,
           variantes: datos.variantes,
         }
-      : { ...base, tieneVariantes: false, cantidad: datos.cantidad };
+      : {
+          ...base,
+          tieneVariantes: false,
+          cantidad: datos.cantidad,
+          // El modal no edita talle/color (son inline en la fila): al
+          // reeditar una línea simple hay que preservar lo que ya se cargó,
+          // o guardar el modal se los comería sin avisar.
+          talle:
+            altaRapida.editando && !altaRapida.editando.tieneVariantes
+              ? altaRapida.editando.talle
+              : null,
+          color:
+            altaRapida.editando && !altaRapida.editando.tieneVariantes
+              ? altaRapida.editando.color
+              : null,
+        };
 
     setLineas((prev) =>
       datos.editandoLineaId
-        ? prev.map((l) => (l.clienteLineaId === datos.editandoLineaId ? nueva : l))
+        ? prev.map((l) =>
+            l.clienteLineaId === datos.editandoLineaId ? nueva : l,
+          )
         : [...prev, nueva],
     );
     setAltaRapida(null);
@@ -576,8 +669,89 @@ export function useCargaRapida(
     );
   }
 
+  /**
+   * Calcula el precio de venta de TODAS las líneas nuevas a partir de su
+   * costo y el recargo global: `ceil(costo * (1 + r/100))`, la misma cuenta
+   * que "Aplicar recargo global" en la conciliación de remitos y que la
+   * sugerencia del modal de alta.
+   *
+   * Es explícito (botón) y no automático a propósito: pisa precios de venta
+   * ya tipeados a mano, y eso tiene que ser una decisión, no un efecto de
+   * tocar el campo del porcentaje.
+   *
+   * Las líneas EXISTENTE quedan afuera: su precio es el del catálogo y la
+   * Carga rápida no cambia precios de lo que ya existe (confirmar-carga ni
+   * siquiera manda ese dato). Las que no tienen costo cargado tampoco se
+   * tocan — sin costo la cuenta daría 0, o sea una línea que después frena la
+   * confirmación por precio inválido.
+   */
+  function aplicarRecargoGlobal() {
+    if (recargoGlobal === "" || Number(recargoGlobal) < 0) {
+      toast.error("Cargá un porcentaje de recargo antes de aplicarlo.");
+      return;
+    }
+
+    const factor = 1 + Number(recargoGlobal) / 100;
+    // Los conteos se calculan ACÁ y no dentro del updater: en StrictMode el
+    // updater corre dos veces y los contadores saldrían al doble.
+    const nuevas = lineas.filter((l) => l.kind === "NUEVA");
+    const aplicadas = nuevas.filter((l) => l.precioCompra > 0).length;
+    const sinCosto = nuevas.length - aplicadas;
+
+    setLineas((prev) =>
+      prev.map((l) =>
+        l.kind === "NUEVA" && l.precioCompra > 0
+          ? { ...l, precioVenta: Math.ceil(l.precioCompra * factor) }
+          : l,
+      ),
+    );
+
+    if (aplicadas === 0) {
+      toast.error(
+        "Ninguna línea nueva tiene costo cargado: no hay sobre qué calcular el recargo.",
+      );
+      return;
+    }
+
+    toast.success(
+      `Recargo del ${recargoGlobal}% aplicado a ${aplicadas} línea${
+        aplicadas === 1 ? "" : "s"
+      }.${sinCosto > 0 ? ` ${sinCosto} sin costo quedaron como estaban.` : ""}`,
+    );
+  }
+
+  /**
+   * Edición inline de los campos de texto de una línea nueva: nombre, código,
+   * talle y color.
+   *
+   * `nombre` es string y puede quedar vacío mientras se tipea (la fila se
+   * marca y `confirmar` la frena). Los otros tres guardan null cuando quedan
+   * vacíos: talle y color son opcionales y un string vacío llegaría al alta
+   * como un atributo sin valor.
+   *
+   * Talle, color y código solo aplican a líneas sin variantes. Las que traen
+   * grilla (o variante fija del maestro) ya tienen sus atributos y su sku ahí
+   * adentro: un talle suelto al lado sería un segundo lugar diciendo lo mismo.
+   */
+  function updateTextoLinea(
+    clienteLineaId: string,
+    campo: "nombre" | "codigo" | "talle" | "color",
+    valor: string,
+  ) {
+    setLineas((prev) =>
+      prev.map((l) => {
+        if (l.clienteLineaId !== clienteLineaId || l.kind !== "NUEVA") return l;
+        if (campo === "nombre") return { ...l, nombre: valor };
+        if (l.tieneVariantes) return l;
+        return { ...l, [campo]: valor.trim() ? valor : null };
+      }),
+    );
+  }
+
   function removeLinea(clienteLineaId: string) {
-    setLineas((prev) => prev.filter((l) => l.clienteLineaId !== clienteLineaId));
+    setLineas((prev) =>
+      prev.filter((l) => l.clienteLineaId !== clienteLineaId),
+    );
   }
 
   async function confirmar() {
@@ -590,6 +764,21 @@ export function useCargaRapida(
     //
     // El COSTO no se exige: se puede cargar un producto para poder cobrarlo
     // ya y completar el costo después (ver validarLinea en confirmar-carga).
+    // Un escaneo sin match entra a la fila con el código y SIN nombre (poner
+    // "7791234567890" de nombre sería peor que dejarlo vacío), así que el
+    // nombre faltante es un caso normal, no un borde.
+    const sinNombre = lineas.find(
+      (l): l is LineaCargaNueva => l.kind === "NUEVA" && !l.nombre.trim(),
+    );
+    if (sinNombre) {
+      toast.error(
+        `Falta el nombre de la línea${
+          sinNombre.codigo ? ` del código ${sinNombre.codigo}` : ""
+        }.`,
+      );
+      return;
+    }
+
     const incompleta = lineas.find((l): l is LineaCargaNueva => {
       if (l.kind !== "NUEVA") return false;
       if (l.precioVenta <= 0) return true;
@@ -681,13 +870,21 @@ export function useCargaRapida(
     agregarLineaNueva,
     updateCantidad,
     updatePrecioLinea,
+    updateTextoLinea,
     removeLinea,
     confirmar,
     isConfirming,
     buscandoEnMaestro,
+    focoPendiente,
+    onFocoAplicado: () => setFocoPendiente(null),
     inputRef,
+    /** Devuelve el foco al campo de escaneo. Es la vuelta al punto de partida
+     * desde cualquier lado de la tabla: terminada una fila, lo siguiente
+     * siempre es escanear el producto que sigue. */
+    enfocarBuscador: () => inputRef.current?.focus(),
     modalAbierto,
     recargoGlobal,
     setRecargoGlobal,
+    aplicarRecargoGlobal,
   };
 }

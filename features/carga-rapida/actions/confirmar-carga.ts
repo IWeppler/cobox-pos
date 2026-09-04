@@ -5,6 +5,8 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { invalidarCatalogoDeSesion } from "@/shared/lib/cache-catalogo";
 import { crearProductoAction } from "@/features/stock/actions/create-product";
+import { buildVariantKey } from "@/features/stock/utils/parse-legacy-variant";
+import type { Opcion, VarianteInput } from "@/features/stock/types";
 import type {
   ConfirmarCargaResponse,
   LineaCarga,
@@ -132,6 +134,51 @@ async function procesarLineaExistente(
   };
 }
 
+/**
+ * Talle y color cargados inline en una línea simple: se convierten en UNA
+ * combinación (opciones + una variante), que es la misma forma que manda el
+ * modal de alta y el prefill del maestro.
+ *
+ * Se hace acá y no en el cliente para que exista UN solo lugar que decida
+ * cómo se escribe un atributo tipeado al vuelo. La canonicalización de
+ * "Talle"/"Color" y de sus valores la sigue haciendo crearProductoAction
+ * (construirCacheAtributos), igual que en el alta completa: acá solo se arma
+ * el payload.
+ *
+ * Devuelve null cuando la línea no trae ninguno de los dos — ahí sigue siendo
+ * un producto "Único" con stock a nivel línea, exactamente como antes.
+ */
+function variantesDesdeTalleColor(
+  linea: Extract<LineaCarga, { kind: "NUEVA"; tieneVariantes: false }>,
+): { opciones: Opcion[]; variantes: VarianteInput[] } | null {
+  const entradas: [string, string][] = [];
+  if (linea.talle?.trim()) entradas.push(["Talle", linea.talle.trim()]);
+  if (linea.color?.trim()) entradas.push(["Color", linea.color.trim()]);
+  if (entradas.length === 0) return null;
+
+  const valores = Object.fromEntries(entradas);
+
+  return {
+    opciones: entradas.map(([nombre, valor]) => ({
+      id: crypto.randomUUID(),
+      nombre,
+      valores: [valor],
+    })),
+    variantes: [
+      {
+        key: buildVariantKey(valores),
+        valores,
+        // Vacíos: la variante hereda el precio y el costo del producto, que
+        // son los que se cargaron inline en la fila.
+        precio: "",
+        precio_costo: "",
+        stock: String(linea.cantidad),
+        sku: linea.codigo ?? "",
+      },
+    ],
+  };
+}
+
 async function procesarLineaNueva(
   linea: Extract<LineaCarga, { kind: "NUEVA" }>,
 ): Promise<ResultadoLineaCarga> {
@@ -147,11 +194,21 @@ async function procesarLineaNueva(
   formData.set("descripcion", "");
   formData.set("precio", String(linea.precioVenta));
   formData.set("precio_costo", String(linea.precioCompra));
-  formData.set("tieneVariantes", linea.tieneVariantes ? "true" : "false");
-  if (linea.tieneVariantes) {
-    formData.set("opciones", JSON.stringify(linea.opciones));
-    formData.set("variantes", JSON.stringify(linea.variantes));
+  // Una línea simple con talle o color deja de ser simple: se manda como
+  // combinación única, con el mismo payload que el alta completa.
+  const desdeTalleColor = linea.tieneVariantes
+    ? null
+    : variantesDesdeTalleColor(linea);
+
+  if (linea.tieneVariantes || desdeTalleColor) {
+    const { opciones, variantes } = linea.tieneVariantes
+      ? linea
+      : desdeTalleColor!;
+    formData.set("tieneVariantes", "true");
+    formData.set("opciones", JSON.stringify(opciones));
+    formData.set("variantes", JSON.stringify(variantes));
   } else {
+    formData.set("tieneVariantes", "false");
     formData.set("stockBase", String(linea.cantidad));
   }
 

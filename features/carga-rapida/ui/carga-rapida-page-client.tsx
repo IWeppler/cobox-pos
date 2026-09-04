@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { Producto } from "@/entities/productos/types";
 import type { Rubro } from "@/entities/config/types";
+import { useAtajosTeclado } from "@/shared/hooks/use-atajos-teclado";
 import { useCargaRapida } from "../hooks/use-carga-rapida";
 import { CargaRapidaInput } from "./carga-rapida-input";
 import { CargaRapidaPanel, CargaRapidaRecargo } from "./carga-rapida-panel";
@@ -24,6 +25,20 @@ export function CargaRapidaPageClient({
   rubro,
 }: Readonly<CargaRapidaPageClientProps>) {
   const carga = useCargaRapida(productosIniciales, rubro);
+
+  // La misma "f" del POS: acá el campo de escaneo es propio de la página, pero
+  // la tecla tiene que ser la misma — quien carga mercadería entra por los dos
+  // lados y no puede tener dos teclados distintos para lo mismo.
+  useAtajosTeclado([
+    { teclas: "f", correr: carga.enfocarBuscador },
+    // Misma tecla que en el POS, aunque acá no haya ticket con el que
+    // chocar: el atajo es de la Carga rápida, no de la pantalla.
+    {
+      teclas: "ctrl+Space",
+      activo: carga.lineas.length > 0 && !carga.isConfirming,
+      correr: carga.confirmar,
+    },
+  ]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 px-2 py-2">

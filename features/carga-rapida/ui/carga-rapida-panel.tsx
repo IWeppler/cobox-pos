@@ -1,6 +1,7 @@
 "use client";
 
 import { QuickAddModal } from "@/features/pos/ui/quick-add-modal";
+import { Button } from "@/shared/ui/button";
 import type { useCargaRapida } from "../hooks/use-carga-rapida";
 import { CargaRapidaLista } from "./carga-rapida-lista";
 import { CargaRapidaProductoPicker } from "./carga-rapida-producto-picker";
@@ -26,6 +27,10 @@ export function CargaRapidaPanel({
         lineas={carga.lineas}
         onUpdateCantidad={carga.updateCantidad}
         onUpdatePrecio={carga.updatePrecioLinea}
+        onUpdateTexto={carga.updateTextoLinea}
+        onVolverAlBuscador={carga.enfocarBuscador}
+        focoPendiente={carga.focoPendiente}
+        onFocoAplicado={carga.onFocoAplicado}
         onRemove={carga.removeLinea}
         onEditarNueva={carga.onEditarLineaNueva}
         onConfirmar={carga.confirmar}
@@ -70,6 +75,8 @@ export function CargaRapidaPanel({
 export function CargaRapidaRecargo({
   carga,
 }: Readonly<{ carga: EstadoCargaRapida }>) {
+  const hayLineasNuevas = carga.lineas.some((l) => l.kind === "NUEVA");
+
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -85,8 +92,29 @@ export function CargaRapidaRecargo({
           carga.setRecargoGlobal(e.target.value ? Number(e.target.value) : "")
         }
         className="w-20 h-8 rounded-md border border-border bg-background px-2 text-xs"
-        title="Recargo global para calcular el precio de venta de productos nuevos sin precio cargado. No se guarda, es solo para esta sesión."
+        title="Recargo global para calcular el precio de venta de productos nuevos. No se guarda, es solo para esta sesión."
+        onKeyDown={(e) => {
+          // Enter acá aplica: el input está fuera de la lista y quien lo tipea
+          // ya tiene la mano en el teclado.
+          if (e.key === "Enter") {
+            e.preventDefault();
+            carga.aplicarRecargoGlobal();
+          }
+        }}
       />
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="h-8 px-2.5 text-xs"
+        // Sin líneas nuevas no hay nada que recalcular; sin porcentaje
+        // tampoco. Deshabilitado antes que un toast de error evitable.
+        disabled={carga.recargoGlobal === "" || !hayLineasNuevas}
+        onClick={carga.aplicarRecargoGlobal}
+        title="Recalcula el precio de venta de las líneas nuevas: costo + recargo. Pisa los precios de venta ya cargados."
+      >
+        Aplicar
+      </Button>
     </div>
   );
 }

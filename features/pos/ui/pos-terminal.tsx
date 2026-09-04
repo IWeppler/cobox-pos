@@ -467,8 +467,28 @@ export function PosTerminal({
       correr: () => setVista((v) => (v === "cargar" ? "vender" : "cargar")),
     },
     {
+      // Confirmar la carga. Ctrl+Space y NO Ctrl+Enter: el ticket ya usa
+      // Ctrl+Enter (AtajosCarrito), CartPanelAdmin se monta afuera de este
+      // componente y sigue escuchando mientras se carga mercadería. Los dos
+      // listeners son hermanos en window, así que la misma combinación
+      // dispararía las dos cosas: confirmaría la carga Y llevaría la venta al
+      // pago. Con modificador funciona además con el foco dentro de una
+      // celda, que es justo desde donde se confirma.
+      teclas: "ctrl+Space",
+      activo:
+        vista === "cargar" && carga.lineas.length > 0 && !carga.isConfirming,
+      correr: carga.confirmar,
+    },
+    {
+      // El campo que enfoca F es el que está en pantalla: en Cargar, el
+      // buscador de la barra ES el campo de escaneo de la Carga rápida (misma
+      // barra, otro ref), así que apuntar siempre a `buscadorRef` dejaba el
+      // atajo sin efecto justo en la vista donde más se escanea.
       teclas: "f",
-      correr: () => buscadorRef.current?.focus(),
+      correr: () =>
+        vista === "cargar"
+          ? carga.enfocarBuscador()
+          : buscadorRef.current?.focus(),
     },
     // Las flechas mueven el FOCO real del DOM, no una selección propia. Con
     // foco de verdad, Enter agrega el producto sin una sola línea de código

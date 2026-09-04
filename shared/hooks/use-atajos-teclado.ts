@@ -46,9 +46,16 @@ function hayCapaAbierta(): boolean {
   );
 }
 
+/** La barra espaciadora se escribe "Space" y no " ": el separador de este
+ * formato es "+", así que un espacio literal al final de "ctrl+ " es
+ * invisible en el código y lo borra el primer formateo. */
+function normalizarTecla(tecla: string): string {
+  return tecla.toLowerCase() === "space" ? " " : tecla;
+}
+
 function coincide(evento: KeyboardEvent, teclas: string): boolean {
   const partes = teclas.split("+");
-  const tecla = partes[partes.length - 1];
+  const tecla = normalizarTecla(partes[partes.length - 1]);
   const modificadores = partes.slice(0, -1).map((m) => m.toLowerCase());
 
   const esperaCtrl = modificadores.includes("ctrl");

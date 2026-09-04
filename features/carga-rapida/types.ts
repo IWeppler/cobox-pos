@@ -37,10 +37,19 @@ type LineaCargaNuevaBase = {
 };
 
 /** Producto nuevo simple: una sola línea, cantidad editable inline en la
- * lista, igual que hoy. */
+ * lista, igual que hoy.
+ *
+ * `talle` y `color` son OPCIONALES y se cargan inline en la fila, junto con
+ * el código. Si alguno viene cargado, la línea deja de crear un producto
+ * "Único" y crea UNA combinación con esos atributos (ver procesarLineaNueva
+ * en confirmar-carga.ts). No se guardan como texto suelto: viajan como
+ * opción + variante, así pasan por la MISMA canonicalización de atributos
+ * que el alta completa y "ROJO" no entra como una marca distinta de "Rojo". */
 export type LineaCargaNuevaSimple = LineaCargaNuevaBase & {
   tieneVariantes: false;
   cantidad: number;
+  talle: string | null;
+  color: string | null;
 };
 
 /** Producto nuevo con variantes (talle/color/etc): el stock y precio
@@ -66,8 +75,7 @@ export type LineaCargaNuevaConVariantes = LineaCargaNuevaBase & {
 };
 
 export type LineaCargaNueva =
-  | LineaCargaNuevaSimple
-  | LineaCargaNuevaConVariantes;
+  LineaCargaNuevaSimple | LineaCargaNuevaConVariantes;
 
 export type LineaCarga = LineaCargaExistente | LineaCargaNueva;
 

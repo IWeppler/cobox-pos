@@ -12,6 +12,10 @@ import {
   saveMergeDraft,
   deleteMergeDraft,
 } from "../lib/merge-draft-db";
+import {
+  borrarBorradorOrdenAction,
+  guardarBorradorOrdenAction,
+} from "../actions/carga-inicial";
 import { queryKeys } from "@/shared/lib/query-keys";
 import { withTimeout, TimeoutError } from "@/shared/utils/with-timeout";
 import { runWithConcurrencyLimit } from "@/shared/utils/concurrency";
@@ -92,6 +96,14 @@ interface MergeTableProps {
   itemsOriginales: ItemResuelto[];
   productos: Producto[];
   sugerenciasSimilitud: SugerenciaSimilitud[];
+  /** Borrador de ESTE modo guardado en la base (ordenes_borradores). El de
+   * IndexedDB sigue existiendo y gana cuando los dos están: es el más
+   * inmediato. Este es el que sobrevive a cambiar de máquina o limpiar el
+   * navegador, que era el agujero real. */
+  borradorServidor?: {
+    items: ItemResuelto[];
+    productosCreados: Producto[];
+  } | null;
 }
 
 type ItemResueltoConCategoria = ItemResuelto & {
@@ -329,6 +341,7 @@ export function MergeTable({
   itemsOriginales,
   productos,
   sugerenciasSimilitud,
+  borradorServidor = null,
 }: Readonly<MergeTableProps>) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -561,9 +574,21 @@ export function MergeTable({
         if (draft && draft.items.length > 0) {
           setPendingDraft(draft);
           setDraftState("prompt");
-        } else {
-          setDraftState("ready");
+          return;
         }
+        // Sin borrador local puede haber uno en la base: el trabajo se hizo
+        // en otra máquina, o este navegador se limpió.
+        if (borradorServidor && borradorServidor.items.length > 0) {
+          setPendingDraft({
+            ordenId: orden.id,
+            items: borradorServidor.items,
+            productosCreados: borradorServidor.productosCreados ?? [],
+            actualizadoEn: Date.now(),
+          });
+          setDraftState("prompt");
+          return;
+        }
+        setDraftState("ready");
       })
       .catch(() => {
         if (!cancelled) setDraftState("ready");
@@ -571,7 +596,7 @@ export function MergeTable({
     return () => {
       cancelled = true;
     };
-  }, [orden.id]);
+  }, [orden.id, borradorServidor]);
 
   // Autoguardado del borrador local — solo una vez que se resolvió si
   // había (y qué hacer con) un borrador previo, y solo si hay cambios
@@ -597,6 +622,15 @@ export function MergeTable({
         productosCreados,
         actualizadoEn: Date.now(),
       }).catch(() => {});
+
+      // Y a la base, que es lo que sobrevive a cambiar de máquina. No se
+      // espera ni se avisa si falla: el borrador local ya quedó guardado.
+      guardarBorradorOrdenAction(orden.id, {
+        version: 1,
+        modo: "CONCILIACION",
+        items,
+        productosCreados,
+      });
     }, 500);
 
     return () => clearTimeout(timer);
@@ -998,6 +1032,7 @@ export function MergeTable({
       const res = await aprobarOrdenAction(orden.id, orden.proveedor, items);
 
       if (res.success) {
+        borrarBorradorOrdenAction(orden.id);
         if (res.yaAprobada) {
           // Camino idempotente: la RPC no tocó nada porque esta orden ya
           // estaba impactada. No es error y no hay nada que reintentar.

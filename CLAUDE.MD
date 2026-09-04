@@ -545,10 +545,98 @@ tiene 11.
   Como consecuencia hay UN solo motor de escritura de stock por ingreso
   (`aprobar_orden_compra`), que ahora también crea las unidades de
   `unidades_serie` cuando la línea trae IMEI.
+  **Eso se perdió una vez y volvió** (`20260904140000`): la migración
+  `20260819180039` reescribió la función ENTERA para aceptar cantidad decimal
+  partiendo de una copia anterior al 18/8, y se llevó puestas las dos cosas
+  que esa fecha había agregado — la creación de `unidades_serie` y el guard de
+  que un `atributos` vacío NO pise los que la variante ya tenía. Las dos
+  migraciones estaban aplicadas y ganó la última; el síntoma medible eran 5
+  líneas de remito con IMEI contra 2 filas en `unidades_serie` en toda la
+  base. La lección vale más que el arreglo: **`create or replace function` no
+  avisa de nada**, así que reescribir un cuerpo completo hay que hacerlo desde
+  el cuerpo VIVO (`pg_get_functiondef`), nunca desde el último archivo que lo
+  tocó. La migración deja un guard que falla si el cuerpo queda sin
+  `unidades_serie` o sin el `case` de atributos, mismo criterio que el guard de
+  policies de `20260816100000`.
   El guard contra subir dos veces el mismo archivo es
   `ordenes_compra.hash_planilla` (unique parcial por negocio, null en los
   remitos de proveedor): la conciliación ya protegía contra aprobar dos veces
   la misma orden, pero no contra crear dos órdenes desde el mismo archivo.
+- La conciliación tiene DOS MODOS y el default lo decide el dato, no una
+  preferencia (`features/purchases/lib/modo-conciliacion.ts`). El modo
+  CONCILIACIÓN es la pantalla de siempre: vincular cada fila contra el
+  catálogo. El modo CARGA INICIAL da vuelta el default —toda fila arranca como
+  producto nuevo, en una tabla editable, sin combobox y sin modales— y abre
+  cuando el catálogo tiene menos de 20 productos publicados o cuando menos del
+  40% de los GRUPOS del remito ya existen.
+  **El umbral no es una intuición: la premisa de la pantalla vieja era falsa.**
+  Medido sobre los 142 remitos reales de los 4 negocios, Evens matchea el
+  17,9% de los grupos y Estilo Bonito el 27,8%, con 1.226 y 572 productos en
+  catálogo — o sea que "la mayoría de las filas ya existen" no pasa ni en el
+  comercio establecido, y no mejora con el tiempo (por semana: 89, 97, 64, 95,
+  89, 84, 100, 100, 67% de grupos nuevos). El corte en 40% cae en un valle
+  vacío: 117 remitos matchean menos del 20%, 21 más del 40% y solo 3 en el
+  medio, así que mover el número entre 20 y 40 cambia de modo 3 remitos de 142.
+  El síntoma que lo hacía visible: 26 de 118 remitos de Evens quedaron
+  PENDIENTE para siempre, y los abandonados son el DOBLE de grandes que los
+  aprobados (30,3 grupos promedio contra 14,6).
+  La dueña cambia de modo a mano cuando quiere; el modo elegido queda en el
+  borrador, así que reabrir el remito no la devuelve al otro.
+  Lo que el modo NO cambia: las filas que el import sí reconoció siguen
+  vinculadas y solo suman stock. El modo cambia el default y el trabajo, no lo
+  que el remito puede hacer.
+- En carga inicial la fila se agrupa por nombre + MARCA + GÉNERO, no solo por
+  `raw_nombre` como en el modo viejo. Con la clave vieja, "babucha rustica" de
+  dos marcas distintas —o "bermuda chino" de nene y de hombre— se funden en un
+  producto: pasa en 4 de 94 grupos del primer remito de un comercio nuevo y en
+  32 de 1.309 de Estilo Bonito.
+  Todo llega PRELLENADO, no en blanco: nombre, marca y género ya venían en
+  columnas propias del remito; la categoría se infiere
+  (`inferir-categoria-fila.ts`, cuatro escalones: la columna del archivo ya
+  resuelta, el árbol por audiencia, el diccionario de términos POR RUBRO, o
+  proponer crearla); y el precio sale de costo × recargo, con default 100%
+  porque el 93,1% de los productos de Evens y el 94,4% de los de Estilo Bonito
+  tienen precio exactamente el doble del costo. Nunca más "Esperando
+  asignación": era la pantalla diciendo que no sabía algo que sí podía
+  calcular.
+  El diccionario nuevo (`terminos-por-rubro.ts`) devuelve nombres GENÉRICOS
+  ("Camperas"), no los literales de Evens que devuelve `category-suggestions.ts`
+  ("CAMPERAS Y CHALECOS DE  HOMBRE", con doble espacio): ese sirve para Evens y
+  para nadie más, y el comercio que arranca es justo el que no tiene ninguna
+  categoría con ese nombre. El genérico se resuelve por slug contra el árbol
+  local y, si no existe, es lo que se propone crear.
+  Costo y cantidad SE EDITAN, que en el modo viejo no se podía: en el primer
+  remito del comercio nuevo las 186 líneas vienen con costo 0 (la planilla
+  traía precio de venta, no costo) y no había forma de arreglarlo en esa
+  pantalla.
+- **La creación en lote es idempotente por `ordenes_items.producto_id`**
+  (`crear_productos_desde_remito`, `20260904120000`). No es un hash inventado:
+  es un dato que había que escribir igual, y escribirlo ANTES de impactar el
+  stock es lo que hace que el reintento reuse en vez de duplicar. Antes se
+  creaba de a un producto por grupo con `crearProductoAlVueloAction`, sin
+  ningún guard: doble click, reintento tras timeout o pestaña vieja creaban
+  todo dos veces. El stock queda AFUERA de esa RPC a propósito: lo sigue
+  impactando `aprobar_orden_compra`, que ya es idempotente por su propio guard.
+  Dos guards para dos escrituras es más simple que uno que tenga que decidir
+  qué hacer cuando una está hecha y la otra no. La RPC toma un row lock sobre
+  la orden (`select ... for update`) para serializar dos confirmaciones
+  simultáneas, y crea la categoría propuesta solo si la persona la dejó puesta.
+- El progreso de una conciliación vive en la BASE (`ordenes_borradores`, una
+  fila por orden, payload jsonb opaco discriminado por `modo`). El borrador de
+  IndexedDB (`merge-draft-db.ts`) se mantiene y gana cuando están los dos —es
+  el más inmediato—, pero no sobrevivía a cambiar de máquina ni a limpiar el
+  navegador, y un remito de 94 grupos es media hora de tipeo. Los dos modos
+  escriben la misma fila; sin el campo `modo` en el payload, reabrir el remito
+  podía elegir la pantalla equivocada y descartar el trabajo del otro modo.
+- **La foto NO está en el camino crítico del alta.** Nunca lo estuvo en la
+  base ni en las actions (nada la exige, y el catálogo público, el POS e
+  Inventario ya dibujan un placeholder), pero el modal de creación de la
+  conciliación la pedía en el medio: 94 productos son 94 fotos antes de poder
+  cargar el remito. Ahora se crean sin foto y el pendiente se cuenta y se
+  muestra —banner en Inventario + `/stock/fotos-pendientes`, que las sube por
+  tanda y guarda cada una en el acto, sin botón "Guardar" al final. Sacar la
+  foto del camino sin dejar el pendiente sería peor: un producto sin foto del
+  que nadie se entera se queda sin foto para siempre.
 - Lo que cambia por RUBRO son las COLUMNAS de la plantilla, no el flujo
   (`features/stock/lib/columnas-por-rubro.ts`). Las columnas base —categoría,
   producto, stock, costo, venta— son iguales en todos: es lo que hace a un

@@ -253,11 +253,6 @@ export function IngresarMercaderiaModal({
               }}
             />
           </div>
-
-          <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
-            <PackagePlus className="mt-0.5 size-3 shrink-0" />
-            Nada toca tu stock hasta que confirmes en la revisión.
-          </p>
         </div>
       </DialogContent>
     </Dialog>

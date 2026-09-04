@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { Camera } from "lucide-react";
 import { useCatalogoPanel } from "@/shared/hooks/use-catalogo-panel";
 import { StockView } from "@/features/stock/ui/stock-view";
 // El MISMO esqueleto que dibuja `stock/loading.tsx`. Ver ahí por qué se
@@ -9,6 +11,47 @@ import { StockSkeleton } from "@/features/stock/ui/stock-skeleton";
 import { AvisoDatosGuardados } from "@/shared/components/aviso-datos-guardados";
 import { RUBRO_DEFAULT } from "@/entities/config/types";
 import type { UsoDelPlan } from "@/features/planes/actions/uso-del-plan";
+
+/** Sin foto = null, cadena vacía o el array vacío serializado. Son las tres
+ * formas reales que tiene `imagen_url` en esta base. */
+function sinFoto(imagenUrl: unknown): boolean {
+  if (imagenUrl === null || imagenUrl === undefined) return true;
+  if (Array.isArray(imagenUrl)) return imagenUrl.length === 0;
+  const texto = String(imagenUrl).trim();
+  return texto === "" || texto === "[]";
+}
+
+/**
+ * El pendiente de fotos.
+ *
+ * La foto salió del camino crítico del alta —cargar un remito de 94 productos
+ * no puede depender de tener 94 fotos sacadas— y este aviso es lo que evita
+ * que "después" signifique nunca. Cuenta sobre el catálogo que la pantalla ya
+ * tiene en memoria: no cuesta una consulta más.
+ */
+function AvisoFotosPendientes({
+  productos,
+}: Readonly<{ productos: { imagen_url?: unknown }[] }>) {
+  const cuantos = productos.filter((p) => sinFoto(p.imagen_url)).length;
+  if (cuantos === 0) return null;
+
+  return (
+    <div className="px-2 md:px-4">
+      <Link
+        href="/stock/fotos-pendientes"
+        className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+      >
+        <Camera className="h-4 w-4 shrink-0" />
+        <span>
+          <strong className="font-semibold text-foreground">
+            {cuantos} producto{cuantos === 1 ? "" : "s"}
+          </strong>{" "}
+          sin foto. Cargalas cuando tengas un rato.
+        </span>
+      </Link>
+    </div>
+  );
+}
 
 export function StockPageClient({
   userRole,
@@ -48,6 +91,8 @@ export function StockPageClient({
       <div className="px-2 pt-2 empty:hidden md:px-4">
         <AvisoDatosGuardados actualizadoEn={dataUpdatedAt} que="Inventario" />
       </div>
+
+      <AvisoFotosPendientes productos={data?.data?.productos ?? []} />
 
       {/* El medidor del tope de productos vive SOLO en Perfil > Suscripción:
           acá se comía una banda arriba del inventario todos los días para un
