@@ -14,6 +14,7 @@
  */
 
 import { redondearCantidad } from "@/shared/lib/unidad-venta";
+import { ALIAS_COLUMNA_GENERO } from "@/shared/lib/alias-columna-genero";
 
 /** Headers reconocidos por columna. El primero es el nombre "oficial". */
 const ALIASES = {
@@ -48,7 +49,10 @@ const ALIASES = {
   // como `raw_genero` hasta `resolverCategoriaImport`, que cruza género
   // (padre) con el tipo de prenda (hijo) — y no a `atributos`, donde
   // partiría cada producto en una variante por género.
-  genero: ["genero", "género", "sexo", "publico", "público", "audiencia"],
+  // La lista vive en shared: el importador de remitos tiene que reconocer las
+  // MISMAS formas, y cuando eran dos listas separadas la columna "SEXO"
+  // entraba por el remito como atributo libre (ver `alias-columna-genero.ts`).
+  genero: ALIAS_COLUMNA_GENERO,
   unidadMedida: ["unidad_medida", "unidad", "unidad de medida"],
   stock: ["stock", "cantidad", "cant", "unidades"],
   imei: ["imei", "serie", "numero_serie", "nro_serie", "n_serie", "serial"],

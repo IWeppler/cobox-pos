@@ -4,6 +4,7 @@ import {
   parseNumeroLocal,
   parseProductosSheet,
 } from "./parse-productos-csv";
+import { ALIAS_COLUMNA_GENERO } from "@/shared/lib/alias-columna-genero";
 
 describe("parseNumeroLocal", () => {
   it("parsea formato es-AR con miles y decimales", () => {
@@ -86,8 +87,13 @@ describe("parseProductosSheet — columnas opcionales", () => {
     expect(res.columnasIgnoradas).toEqual([]);
   });
 
-  it("acepta 'género' con tilde y sus sinónimos de mostrador", () => {
-    for (const header of ["género", "Sexo", "PUBLICO", "audiencia"]) {
+  // Se itera la lista COMPARTIDA, no una copia: es la misma que usa el
+  // importador de remitos (`create-purchase-modal.tsx`), y cuando eran dos
+  // listas distintas una columna "SEXO" entraba por el remito como atributo
+  // libre y le pegaba "SEXO: Mujer" a cada variante. Si alguien agrega un
+  // alias que el parser no reconoce, este test lo dice.
+  it("acepta todas las formas de la columna de género que declara shared", () => {
+    for (const header of ALIAS_COLUMNA_GENERO) {
       const res = parseProductosSheet([
         [header, "Producto", "Stock"],
         ["Hombre", "Camisa", "2"],

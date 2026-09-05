@@ -10,6 +10,7 @@ import {
   RawOrderItem,
 } from "@/features/purchases/actions/create-purchase";
 import { parseNumeroLocal } from "@/features/stock/lib/parse-productos-csv";
+import { ALIAS_COLUMNA_GENERO } from "@/shared/lib/alias-columna-genero";
 import {
   Dialog,
   DialogContent,
@@ -204,7 +205,12 @@ export function ImportarPedidoModal({
       ];
 
       const knownCategoryCols = ["CATEGORIA", "CATEGORÍA", "RUBRO", "TIPO"];
-      const knownGeneroCols = ["GENERO", "GÉNERO"];
+      // La MISMA lista que reconoce la planilla propia. Cuando eran dos, esta
+      // conocía solo dos formas y una columna "SEXO" o "PUBLICO" se iba al
+      // `else` de abajo, o sea a `extraAttributes`: cada variante terminaba con
+      // "SEXO: Mujer" pegado. Eso es lo que la migración 20260904160000 tuvo
+      // que sacar de 2.238 variantes.
+      const knownGeneroCols = ALIAS_COLUMNA_GENERO;
       const knownSkuCols = ["SKU", "CODIGO", "CÓDIGO", "COD"];
       const knownMarcaCols = ["MARCA"];
 

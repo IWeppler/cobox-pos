@@ -39,7 +39,7 @@ function AvisoFotosPendientes({
     <div className="px-2 md:px-4">
       <Link
         href="/stock/fotos-pendientes"
-        className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+        className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
       >
         <Camera className="h-4 w-4 shrink-0" />
         <span>
@@ -68,7 +68,7 @@ export function StockPageClient({
 
   if (isLoading) {
     return (
-      <div className="space-y-6 mx-auto px-2 md:px-4">
+      <div className="space-y-1 mx-auto px-2">
         <StockSkeleton />
       </div>
     );

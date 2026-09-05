@@ -215,6 +215,50 @@ tiene 11.
 - Normalización de atributos: siempre vía normalizarAtributoKeyValor /
   canonicalizarValores (slugify compartido) — en creación manual Y en
   conciliación de remitos (merge-purchase.ts).
+- **El GÉNERO no es un atributo de variante, es la categoría de arriba.** En
+  indumentaria el género dice a QUIÉN está destinada la prenda, y eso acá es
+  el padre del árbol (HOMBRE › ZAPATILLAS). Viaja como `raw_genero` hasta
+  `resolverCategoriaImport`, que cruza género (padre) con tipo de prenda
+  (hijo). ÚNICA excepción: Ropa Bebé, donde Bebé/Beba sí es un eje real (la
+  misma remera talle 3 en las dos versiones) — es lo que declara la propia
+  base, con la única fila de `categoria_atributos` que apunta a Género.
+  Los datos de julio son anteriores a la regla y quedaron con la clave puesta:
+  `20260904160000` la sacó de 2.238 variantes (Evens pasó de 1.720 a 9).
+  Por qué importaba y no era prolijidad: quedó A MEDIAS —332 de 605 productos
+  de MUJER en Evens, 11 de 146 en NENA— y `build-propiedades-filtro.ts` pone
+  Género PRIMERO en la barra de filtros, así que lo primero que ofrecía la
+  pantalla era el filtro que escondía la mitad del catálogo sin decirlo.
+  Además `product-detail.tsx` arma un selector por cada clave y exige
+  elegirlas todas: en 661 productos la clienta tenía que elegir "Género:
+  Mujer" —un desplegable de una sola opción— y en el resto no.
+  Dos cosas que dejó la limpieza:
+  * **Comparar identidad de variantes va por `atributos_comparables`**, la
+    misma función del índice único `idx_variante_identidad`. Comparar el JSONB
+    crudo deja pasar "Marron" contra "MARRON": la primera corrida se cayó con
+    23505 a mitad del UPDATE por eso.
+  * Quedaron 9 variantes con Género (7 en Evens, 2 en Estilo Bonito) porque
+    sacárselo las volvía indistinguibles de otra variante del mismo producto:
+    duplicados reales de carga, y fusionarlos es decidir qué pasa con dos
+    stocks, que es del comercio y no de una migración. Las resolvió Evelyn y
+    las ejecutó `20260904170000`: PANTALON PELUCHE se PARTIÓ en dos productos
+    (adentro convivían la prenda de hombre y dos pantalones de mujer, que
+    pasaron a MUJER › ROPA DEPORTIVA), JEANS COQUETTAS se unificó por talle, y
+    las dos de Estilo Bonito se fusionaron. Hoy no queda ninguna fuera de Ropa
+    Bebé.
+    De ahí sale la regla para el próximo merge de variantes: **reapuntar
+    `ventas_items.variante_id` ANTES de borrar**. No tiene FK (el historial
+    tiene que sobrevivir a que la variante desaparezca), así que el DELETE no
+    avisa: deja el renglón apuntando a la nada y la anulación vuelve a
+    depender del match por nombre, que es justo lo que `20260816130000` vino a
+    sacar del medio. Y el movimiento de stock se registra con origen
+    EDICION_VARIANTES en vez de apagar el trigger: el nivel cambió de verdad,
+    y el +1 de la que queda contra el -1 de la que se borra cuentan la
+    historia completa.
+  Las formas en que puede venir la columna viven en
+  `shared/lib/alias-columna-genero.ts` y las comparten los DOS importadores.
+  Estaban duplicadas: la planilla propia reconocía seis y el remito de
+  proveedor solo dos, así que una columna "SEXO" entraba por el remito al
+  `else` de atributos libres y volvía a pegar el género en cada variante.
 - Aprobación de remitos: TODO (precios + stock + alias + estado) corre en la
   RPC `aprobar_orden_compra`, en una transacción y en batch (antes era un for
   con await adentro: ~1500 round-trips en el remito más grande). El guard de
