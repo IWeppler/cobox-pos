@@ -219,15 +219,6 @@ export async function registrarVentaAction(
   for (const item of items) {
     const productoIdReal = item.productoId ?? item.id;
 
-    const stockActual = stockPorClave.get(`${productoIdReal}|${item.variante}`);
-
-    if (!stockActual)
-      return { error: `Error de stock en ${item.variante}.`, success: false };
-
-    const productoData = stockActual.producto as any;
-    const precioProducto = Number(productoData?.precio) || 0;
-    const costoProducto = Number(productoData?.precio_costo) || 0;
-
     // Match por PK cuando el carrito trae varianteId (sin ambigüedad
     // posible). Si no viene — carrito armado antes de este cambio, todavía
     // en localStorage, o producto sin variante real — caemos al match por
@@ -239,10 +230,49 @@ export async function registrarVentaAction(
     // suelta y se usaba su precio sin comprobar de qué producto era: un
     // carrito manipulado podía traer el id de una variante barata de otro
     // producto. Ahora eso cae al precio del producto, que es server-side.
+    //
+    // VA ANTES DEL STOCK a propósito (ver abajo).
     const varianteData =
       (item.varianteId ? variantePorId.get(item.varianteId) : null) ??
       variantePorNombre.get(`${productoIdReal}|${item.variante}`) ??
       null;
+
+    /**
+     * El nombre con el que buscar en el espejo legacy.
+     *
+     * `productos_stock.variante` guarda el `nombre_display` como TEXTO, y esta
+     * búsqueda era por el nombre que trae el CARRITO. Eso ata la venta a que el
+     * catálogo del dispositivo esté al día: si una variante se renombró después
+     * de que ese celular cacheó el catálogo, el nombre viejo no matchea ninguna
+     * fila y la venta se cae con "Error de stock en ...", con la mercadería
+     * sobre el mostrador.
+     *
+     * Pasó el 5/9/2026: la limpieza de `Género` renombró 1.718 variantes de
+     * Evens y los dispositivos que no habían refrescado quedaron vendiendo
+     * contra nombres que ya no existían. La base estaba bien —cero variantes
+     * sin fila espejo— y aun así no se podía vender.
+     *
+     * El `id` de la variante NO cambia con un renombre, así que se prefiere el
+     * nombre ACTUAL de la variante resuelta por PK y el del carrito queda solo
+     * como respaldo. Se exige que la variante sea de ESTE producto: sin eso, un
+     * carrito con dos productos podría traer el id del otro y hacernos buscar
+     * el stock con el nombre equivocado.
+     */
+    const nombreVarianteVigente =
+      varianteData && varianteData.producto_id === productoIdReal
+        ? (varianteData.nombre_display as string)
+        : item.variante;
+
+    const stockActual =
+      stockPorClave.get(`${productoIdReal}|${nombreVarianteVigente}`) ??
+      stockPorClave.get(`${productoIdReal}|${item.variante}`);
+
+    if (!stockActual)
+      return { error: `Error de stock en ${item.variante}.`, success: false };
+
+    const productoData = stockActual.producto as any;
+    const precioProducto = Number(productoData?.precio) || 0;
+    const costoProducto = Number(productoData?.precio_costo) || 0;
 
     if (!varianteData) {
       console.warn("[VENTA VARIANTE SIN MATCH]", {
@@ -317,7 +347,10 @@ export async function registrarVentaAction(
 
     itemsResueltos.push({
       productoIdReal,
-      variante: item.variante,
+      // El nombre VIGENTE, no el que trajo el carrito: si el dispositivo tenía
+      // el catálogo viejo, guardar su texto dejaría el renglón del historial
+      // nombrando una variante que ya no existe.
+      variante: nombreVarianteVigente,
       varianteId: item.varianteId ?? varianteData?.id ?? null,
       tipo: item.tipo,
       cantidad: cantidadValidada,

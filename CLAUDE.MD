@@ -908,6 +908,31 @@ tiene 11.
 
 ## Aprendizajes que ya costaron plata (no repetir)
 
+- **Renombrar una variante NO termina en la base: el nombre también vive en el
+  catálogo cacheado de cada celular.** La venta buscaba el espejo legacy por
+  `producto_id | nombre_que_trae_el_carrito`, y ese nombre sale de la copia
+  local del catálogo. El 5/9/2026, sacar `Género` renombró 1.718 variantes de
+  Evens a las 00:12; los dispositivos que no habían resincronizado siguieron
+  mandando `"Azul/celeste / 2 / Hombre"` contra un espejo que ya decía
+  `"Azul/celeste / 2"`, y la venta se caía con **"Error de stock en ..."** con
+  la mercadería sobre el mostrador. La base estaba PERFECTA —cero variantes sin
+  fila espejo, stock y espejo en 1 y 1— y aun así no se podía vender.
+  El síntoma que lo identifica: el nombre del error **incluye el género**, que
+  es justo el pedazo que dejó de existir.
+  Dos cosas, y la segunda es la que hay que recordar:
+  1. `create-sale.ts` ya no depende del texto: resuelve la variante por
+     `varianteId` (que un renombre NO cambia) y busca el espejo por su nombre
+     ACTUAL, dejando el del carrito como respaldo. En `ventas_items.variante`
+     se guarda el nombre vigente, no el del carrito.
+  2. **Un renombre masivo en producción necesita, además de la migración, que
+     los dispositivos del local refresquen.** La sincronización incremental
+     (`catalogo-delta.ts`) los trae sola porque la migración bumpea
+     `producto_variantes.updated_at` — pero recién en el próximo sync. Si el
+     cambio es de nombres, hay que avisar de recargar el POS, o esperar que
+     alguien no pueda vender.
+  Ojo con lo que el refresh NO arregla: una variante BORRADA (la unificación de
+  duplicados borró 3 de `JEANS COQUETTAS`) no se puede vender desde un catálogo
+  viejo ni con el fix, porque ya no existe. Ahí el refresh es la única salida.
 - **Un UPDATE filtrado por RLS es un ÉXITO silencioso, no un error.** PostgREST
   devuelve 0 filas y `error: null`, así que un `.update(...).eq(...)` sin
   `.select()` no distingue "guardado" de "no tenías permiso". Todo update que
