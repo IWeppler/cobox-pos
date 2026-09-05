@@ -427,10 +427,6 @@ export function VentasTable({
         ? venta.ventas_descuentos[0]
         : null;
 
-    const pagoInfo =
-      venta.venta_pagos && venta.venta_pagos.length > 0
-        ? venta.venta_pagos[0]
-        : null;
     const clienteNombre = getClienteNombre(venta);
     const pagosDesglosados = (venta.venta_pagos || []).map((pago) => ({
       nombre: pago.metodo_nombre,
@@ -442,7 +438,27 @@ export function VentasTable({
       tipoMovimiento: pago.tipo_movimiento,
     }));
 
-    const pagosConRecargo = (venta.venta_pagos || []).filter(
+    // Totales del ticket sobre TODOS los pagos, no sobre el primero. Con un
+    // pago mixto —11 ventas reales hoy, la última del 25/8— tomar
+    // `venta_pagos[0]` mostraba la comisión y el neto de una sola de las dos
+    // mitades: un ticket de $20.000 pagado 10 y 10 declaraba $10.000 de neto.
+    // La acreditación es la PEOR de las dos: lo que el comercio quiere saber es
+    // cuándo termina de entrar todo, no cuándo entra la primera parte.
+    const pagos = venta.venta_pagos || [];
+    const comisionMontoTotal = pagos.reduce(
+      (acc, pago) => acc + Number(pago.comision_monto || 0),
+      0,
+    );
+    const montoNetoTotal = pagos.reduce(
+      (acc, pago) => acc + Number(pago.monto_neto || 0),
+      0,
+    );
+    const acreditacionDiasMax = pagos.reduce(
+      (acc, pago) => Math.max(acc, Number(pago.acreditacion_dias || 0)),
+      0,
+    );
+
+    const pagosConRecargo = pagos.filter(
       (pago) => Number(pago.recargo_monto || 0) > 0,
     );
     const recargoMetodoMonto = pagosConRecargo.reduce(
@@ -484,9 +500,9 @@ export function VentasTable({
       // no del % que el método tenga HOY.
       recargoMetodoMonto: recargoMetodoMonto || undefined,
       recargoMetodoEtiqueta: recargoMetodoEtiqueta || undefined,
-      comisionMonto: pagoInfo ? Number(pagoInfo.comision_monto) : 0,
-      montoNeto: pagoInfo ? Number(pagoInfo.monto_neto) : venta.total,
-      acreditacionDias: pagoInfo ? Number(pagoInfo.acreditacion_dias) : 0,
+      comisionMonto: comisionMontoTotal,
+      montoNeto: pagos.length > 0 ? montoNetoTotal : venta.total,
+      acreditacionDias: acreditacionDiasMax,
       pagosDesglosados,
       clienteNombre:
         clienteNombre === "Consumidor final" ? undefined : clienteNombre,

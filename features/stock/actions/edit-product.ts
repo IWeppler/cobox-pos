@@ -355,16 +355,28 @@ async function actualizarImagenesYCabecera(
   if (grid_url !== undefined) updateData.grid_url = grid_url;
   if (master_url !== undefined) updateData.master_url = master_url;
 
-  const { error: errorProducto } = await supabase
+  // Con `.select("id")`, por la misma razón que en actualizar-fotos-producto:
+  // un UPDATE filtrado por RLS vuelve con 0 filas y sin error, y esta action
+  // devolvía `success: true` sobre un guardado que no ocurrió.
+  const { data: filasTocadas, error: errorProducto } = await supabase
     .from("productos")
     .update(updateData)
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
 
   if (errorProducto) {
     console.error("[EDIT PRODUCT ERROR]", errorProducto);
     return {
       success: false,
       error: "Hubo un error al actualizar el producto base.",
+    };
+  }
+
+  if (!filasTocadas || filasTocadas.length === 0) {
+    console.error("[EDIT PRODUCT] El UPDATE no afectó ninguna fila", { id });
+    return {
+      success: false,
+      error: "No tenés permiso para editar este producto.",
     };
   }
 

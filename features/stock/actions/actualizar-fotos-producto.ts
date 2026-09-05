@@ -140,7 +140,14 @@ export async function actualizarFotosProductoAction(
     }
   }
 
-  const { error: errorUpdate } = await supabase
+  // `.select("id")` NO es decorativo: sin él, un UPDATE que la RLS filtra
+  // devuelve 0 filas y `error: null`, así que esta action retornaba
+  // `{ success: true }` y la pantalla decía "Foto guardada" sin haber guardado
+  // nada. Pasó de verdad el 5/9/2026: al exigir `stock.editar_producto` para
+  // escribir `productos`, las vendedoras subieron 104 fotos a Storage que
+  // nunca llegaron a la base, sin un solo error en Vercel. Un permiso que
+  // falta tiene que doler acá, no aparecer como éxito.
+  const { data: filasTocadas, error: errorUpdate } = await supabase
     .from("productos")
     .update({
       imagen_url: JSON.stringify(mains),
@@ -152,11 +159,26 @@ export async function actualizarFotosProductoAction(
       master_url: masters.some(Boolean) ? JSON.stringify(masters) : null,
     })
     .eq("id", productoId)
-    .eq("negocio_id", negocioId);
+    .eq("negocio_id", negocioId)
+    .select("id");
 
   if (errorUpdate) {
     console.error("[FOTOS] No se pudo actualizar la galería", errorUpdate);
     return { success: false, error: "No se pudieron guardar las fotos." };
+  }
+
+  if (!filasTocadas || filasTocadas.length === 0) {
+    // El producto se leyó recién arriba, así que existe: si el UPDATE no tocó
+    // ninguna fila es que la RLS lo filtró — típicamente un permiso que a este
+    // usuario le falta. Se dice, en vez de mentir que se guardó.
+    console.error("[FOTOS] El UPDATE no afectó ninguna fila", {
+      productoId,
+      negocioId,
+    });
+    return {
+      success: false,
+      error: "No tenés permiso para editar las fotos de este producto.",
+    };
   }
 
   revalidatePath("/stock");

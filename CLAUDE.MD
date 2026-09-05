@@ -102,6 +102,23 @@ tiene 11.
   SECURITY INVOKER, no DEFINER: el aislamiento tiene que seguir siendo la RLS
   del que llama. Verificado que un usuario apuntando a un negocio ajeno no
   escribe nada.
+  **Y al revés: toda función SECURITY DEFINER tiene que filtrar `negocio_id`
+  en CADA consulta, a mano.** DEFINER apaga la RLS, así que validar el negocio
+  del padre no alcanza — las tablas hijas hay que filtrarlas una por una.
+  `registrar_devolucion` validaba la venta y después consultaba `venta_pagos`,
+  `ventas_items` y `clientes` solo por id, y eso era explotable: hasta
+  `20260905140000` cualquiera podía dejar filas colgando de una venta ajena
+  (todas las hijas de `ventas` tenían `INSERT ... with check (true)`). Un cobro
+  fantasma dejaba la venta sin poder devolverse para siempre, y si la venta no
+  tenía cobros la devolución salía con el método del atacante. Corregido en
+  `20260905160000`, con las 6 consultas filtradas y un guard que cuenta los
+  filtros en el cuerpo.
+  **Las cuatro hijas de `ventas` ya atan el INSERT al padre**: `venta_pagos`
+  (`20260905140000`) y `ventas_items` + `devoluciones` + `devoluciones_items`
+  (`20260905180000`). El predicado no compara `negocio_id` a mano: pide que el
+  padre sea VISIBLE (`exists (select 1 from ventas v where v.id = venta_id)`),
+  y de eso ya se encarga la RLS de `ventas`. Cualquier tabla hija nueva copia
+  esa forma.
 - Anular también corre en una transacción (`anular_venta`, `20260816150000`),
   con el mismo corte: estado + cobros + egreso + crédito de CC adentro; stock y
   unidades serializadas afuera (son compensaciones y no pueden voltear una
@@ -291,6 +308,16 @@ tiene 11.
   columnas NO tienen default. El backfill escribe solo donde la aritmética de
   create-sale.ts cierra al peso (164 de 171 ventas fiadas); las 7 que no
   cierran quedan null en vez de con un número inventado.
+  **`ventas.metodo_pago` NO es fuente de verdad. La fuente es `venta_pagos`.**
+  Es una columna de texto con CHECK (EFECTIVO | TRANSFERENCIA | TARJETA |
+  PAGO_MIXTO | CUENTA_CORRIENTE) que sobrevive de antes del multimedio, la
+  escriben `registrar_venta` y `corregir_metodo_pago_venta`, y miente de dos
+  formas medidas el 5/9/2026: `BILLETERA_VIRTUAL` se aplana a `'TARJETA'`
+  (create-sale.ts:854), y las **124 ventas con entrega parcial + fiado** llevan
+  el método de la ENTREGA, no el fiado — 61 dicen EFECTIVO, 48 TRANSFERENCIA,
+  15 TARJETA, escondiendo $5.015.325 de deuda. Agrupar por esa columna da mal.
+  Ninguna señal ni reporte la usa hoy (las 8 funciones de plata leen
+  `venta_pagos`); si aparece una consulta nueva que la agrupe, está mal escrita.
   Cuenta corriente NO es una fila de `venta_pagos`, y es a propósito aunque
   conceptualmente sea una forma de saldar el ticket: para el resto del sistema
   esa tabla es PLATA QUE ENTRÓ. `posicion_dinero` arma "por acreditar" con
@@ -298,8 +325,16 @@ tiene 11.
   contaría como plata en camino) y nueve lugares en TypeScript suman
   `venta_pagos` embebido en la venta como cobrado. La comparación entre medios
   se arma en LECTURA, en `rentabilidad_por_metodo`, que no puede romper un
-  arqueo. `registrar_venta` tiene un guard que falla si alguien escribe fiado
-  ahí sin arreglar antes esos consumidores.
+  arqueo.
+  **OJO: acá decía que `registrar_venta` tiene un guard que falla si alguien
+  escribe fiado en `venta_pagos`. NO EXISTE.** Verificado sobre el cuerpo vivo
+  (`pg_get_functiondef`) el 5/9/2026: sus únicas tres excepciones son
+  `SIN_NEGOCIO_ACTIVO`, `VENTA_SIN_RENGLONES` y `CLIENTE_NO_ENCONTRADO`, y la
+  cadena `PAGO_CUENTA_CORRIENTE` no aparece en la función. La regla de no meter
+  fiado en `venta_pagos` sigue valiendo y sigue respetada por los datos (112
+  ventas fiadas, cero filas de pago), pero la sostiene el código de
+  create-sale.ts, NO la base. Si se va a escribir ahí, hay que poner el guard
+  de verdad primero.
 - `rentabilidad_por_metodo` (`20260823180705`, gateada por
   `caja.ver_gerencial`): primera señal de Comerz Insights. Recargo cobrado
   menos comisión pagada, sobre la base, por medio. Deja ver que **recargo
@@ -873,6 +908,25 @@ tiene 11.
 
 ## Aprendizajes que ya costaron plata (no repetir)
 
+- **Un UPDATE filtrado por RLS es un ÉXITO silencioso, no un error.** PostgREST
+  devuelve 0 filas y `error: null`, así que un `.update(...).eq(...)` sin
+  `.select()` no distingue "guardado" de "no tenías permiso". Todo update que
+  el usuario cree que guardó algo lleva `.select("id")` y chequeo de filas
+  afectadas.
+  Costó un día de trabajo de una empleada: el 5/9/2026 se exigió
+  `stock.editar_producto` para escribir `productos` (`20260905123115`) creyendo
+  que ninguna vendedora lo necesitaba — la UI de /stock y de fotos-pendientes
+  ya gateaban por admin. Faltó un camino: el botón de foto DENTRO del sheet de
+  edición sí es alcanzable por una vendedora, y llama
+  `actualizarFotosProductoAction`, que hace `UPDATE productos`. Mara subió
+  fotos entre las 12:52 y las 13:38 (la migración entró 12:31): **104 de 113
+  archivos quedaron huérfanos en Storage, 35 fotos perdidas**, con la pantalla
+  diciendo "Foto guardada" en cada una y CERO errores en Vercel. Revertido en
+  `20260905170000`.
+  Las dos lecciones, y la segunda es la que importa: (1) antes de restringir
+  una tabla, buscar quién la escribe siguiendo el CÓDIGO, no lo que la UI
+  parece esconder — un botón adentro de un sheet no aparece en el grep de
+  `isAdmin`; (2) el permiso que falta tiene que doler donde falta.
 - **Timeout de UI ≠ cancelación de server action.** `withTimeout` solo rechaza
   la promesa del cliente; el server sigue hasta el final. Nunca envolver en
   `withTimeout` una acción que muta stock o plata (ver comentario en
@@ -894,6 +948,36 @@ tiene 11.
 - **El aislamiento entre negocios es RLS, no el código.** Filtrar por
   `negocio_id` en la query es defensa en profundidad; si una tabla nueva
   queda sin policy RESTRICTIVE, un negocio ve los datos de otro.
+- **Y el aislamiento entre ROLES también es RLS** (`20260905120000`). Aislar
+  el negocio no alcanzaba: adentro del comercio las policies de configuración
+  y catálogo decían `true` o `auth.role() = 'authenticated'`, así que
+  cualquier miembro con cualquier rol podía escribirlas. Medido simulando a
+  una VENDEDORA de Evens: pudo tocar `configuracion_pos` (el
+  `cc_recargo_default` del 15%, el modo de facturación), `metodos_pago`
+  (`comision` y `recargo_porcentaje`), los precios de los 1.253 productos y
+  las 3 promociones. Y no hace falta un server action: el navegador ya tiene
+  supabase-js con la sesión, así que alcanza con la consola.
+  El corte NO se inventó: ya estaba declarado en `permisos` / `rol_permisos`
+  desde `20260717001048`. La migración solo hace que la base lo cumpla —
+  `productos` pide `stock.editar_producto` (borrar, `stock.eliminar_producto`),
+  `categorias` pide `stock.cambiar_categoria`, y `configuracion_pos`,
+  `metodos_pago` y el alta/baja de promociones piden `is_admin()`.
+  **Tres tablas quedaron abiertas a propósito y hay que saber por qué**:
+  `producto_variantes`, `productos_stock` y el UPDATE de `promociones`. La
+  venta las escribe con la RLS de quien vende (`ajustar_stock_variante` y
+  `registrar_venta` son SECURITY INVOKER a propósito) y la RLS es por FILA,
+  no por columna: no hay policy que diga "puede tocar `stock` pero no
+  `precio`". Cerrarlas deja al mostrador sin poder vender. La salida es mover
+  esa escritura angosta a una función SECURITY DEFINER que valide el negocio
+  por su cuenta y recién entonces cerrar la tabla; toca el camino de la venta,
+  así que va sola.
+  El predicado va `(select public.tiene_permiso('...'))` CON subselect, misma
+  razón que `current_negocio_id()`: sin él la función se evalúa una vez por
+  fila y un update masivo de precios pasa de 1 llamada a 1.253.
+  Ojo al escribir guards sobre `pg_policies`: en una policy de INSERT `qual`
+  es SIEMPRE null y en una de DELETE lo es `with_check`, así que un
+  `coalesce(qual,'true')` marca como agujero a toda policy bien escrita. El
+  primer guard de esta migración abortó por eso una migración correcta.
 
 ## Estado al 8/8/2026 (viernes)
 
