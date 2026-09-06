@@ -13,19 +13,12 @@ export interface TicketConVencimiento {
    * La porción del saldo que YA venció, imputando los pagos FIFO. Sale de
    * `deuda_cc_vencida` en la base.
    *
-   * Es OBLIGATORIO y sin default a propósito. Hasta el 30/8/2026 el recargo se
-   * calculaba sobre `monto_pendiente` entero, así que un solo ticket atrasado
-   * arrastraba a todo lo comprado después: en Evens, una clienta con $175
-   * vencidos y $104.825 de saldo iba a pagar $15.723,75 de mora, casi toda por
-   * una compra del día anterior que vencía recién en octubre. Sobre lo ya
-   * cobrado eran $37.590 de más en 19 cobros, con 5 donde no había NADA
-   * vencido.
-   *
-   * Un default acá volvería a ese comportamiento en el primer llamador que se
-   * olvide de pasarlo. Que sea obligatorio hace que el olvido sea un error de
-   * compilación y no plata de más cobrada a una clienta.
+   * YA NO ES LA BASE DEL RECARGO — se sigue pidiendo y devolviendo porque es
+   * información útil (la antigüedad, el Advisor), pero desde el 5/9/2026 el
+   * recargo se calcula sobre el SALDO COMPLETO. Ver el comentario de
+   * `calcularSaldoConRecargo`.
    */
-  monto_vencido: number | string | null | undefined;
+  monto_vencido?: number | string | null;
 }
 
 export interface SaldoConRecargo {
@@ -49,6 +42,24 @@ export interface SaldoConRecargo {
  * `ventas`. La firma quedó genérica a propósito —monto pendiente + fecha— para
  * que el server (registrarPagoDeudaAction) y la UI (tabla y detalle del
  * cliente) calculen exactamente el mismo número.
+ *
+ * LA BASE ES EL SALDO COMPLETO, y esto cambió el 5/9/2026. Entre el 30/8 y esa
+ * fecha la base fue la porción vencida FIFO, para no cobrarle mora a una
+ * clienta por lo que había comprado ayer. La dueña pidió lo contrario y es una
+ * decisión comercial, no un error de cálculo: si se atrasó, toda su cuenta
+ * entra en mora. Su ejemplo, textual: una deuda de $30.000 que entra en mora
+ * pasa a $36.000, y lo que pague después se descuenta de $36.000 — no del
+ * recargo por un lado y el capital por el otro.
+ *
+ * Lo que esa decisión cuesta, medido el día que se tomó: en Evens una clienta
+ * con $175 vencidos y $104.825 de saldo pasa de $26,25 de mora a $15.723,75.
+ * Está aceptado a sabiendas; si algún día se quiere volver atrás, la base es
+ * `montoVencido`, que se sigue calculando y devolviendo.
+ *
+ * SIGUE SIENDO ÚNICO, no compuesto: se calcula siempre sobre
+ * `monto_pendiente`, que es capital, así que recalcularlo dos veces da lo
+ * mismo. La pantalla de Configuración > Clientes lo promete con todas las
+ * letras ("se suma una única vez ... no se acumula día a día").
  */
 export function calcularSaldoConRecargo(
   ticket: TicketConVencimiento,
@@ -60,8 +71,11 @@ export function calcularSaldoConRecargo(
     Math.max(0, Number(ticket.monto_vencido) || 0),
   );
   const diasVencido = calcularDiasVencido(ticket.fecha_vencimiento);
-  const estaVencido =
-    montoVencido > 0 && diasVencido !== null && diasVencido > 0;
+  // Vencido = hay saldo y la fecha pasó. NO se exige `montoVencido > 0`: con
+  // el vencimiento anclado al ciclo de deuda (ver `recalcular_vencimiento_cc`),
+  // una clienta puede estar en mora con la imputación FIFO diciendo cero, y
+  // tiene que cobrar recargo igual. Eran 5 clientas el 5/9/2026.
+  const estaVencido = saldoBase > 0 && diasVencido !== null && diasVencido > 0;
 
   if (!estaVencido) {
     return {
@@ -78,8 +92,9 @@ export function calcularSaldoConRecargo(
     montoRecargo = Math.max(0, Number(config.recargo_mora_valor) || 0);
   } else if (config.recargo_mora_tipo === "PORCENTAJE") {
     const pct = Math.max(0, Number(config.recargo_mora_valor) || 0);
-    // Sobre lo VENCIDO, no sobre el saldo: ver el comentario de la interfaz.
-    montoRecargo = (montoVencido * pct) / 100;
+    // Sobre el SALDO COMPLETO. Es una cláusula de aceleración: si la clienta se
+    // atrasó, toda su cuenta entra en mora, no solo el tramo con fecha pasada.
+    montoRecargo = (saldoBase * pct) / 100;
   }
 
   return {

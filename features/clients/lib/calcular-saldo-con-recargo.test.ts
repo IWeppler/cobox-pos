@@ -154,11 +154,14 @@ describe("calcularSaldoConRecargo", () => {
     expect(r.montoRecargo).toBe(0);
   });
 
-  it("cobra la mora SOLO sobre la parte vencida, no sobre el saldo", () => {
-    // El caso real que lo motivó (Evens, 30/8/2026): CELESTE SCHOFER debía
-    // $104.825 con $175 vencidos —el resto de un ticket del 21/7— y el resto
-    // comprado el 11/8 y el 29/8, que vencían en septiembre y octubre. Sobre
-    // el saldo entero le tocaban $15.723,75 de mora.
+  it("cobra la mora sobre el SALDO COMPLETO, no sobre la parte vencida", () => {
+    // Es el mismo caso real de antes (Evens, CELESTE SCHOFER: $104.825 de
+    // saldo con $175 vencidos), con la respuesta dada vuelta el 5/9/2026 por
+    // decisión de la dueña: si la clienta se atrasó, toda su cuenta entra en
+    // mora. Entre el 30/8 y el 5/9 esto devolvía $26,25.
+    //
+    // El test se deja con estos números justamente porque son los que hacen
+    // visible lo que la decisión cuesta: $15.723,75 contra $26,25.
     const r = calcularSaldoConRecargo(
       {
         monto_pendiente: 104825,
@@ -168,8 +171,10 @@ describe("calcularSaldoConRecargo", () => {
       PORCENTAJE,
     );
     expect(r.estaVencido).toBe(true);
-    expect(r.montoRecargo).toBe(26.25);
-    expect(r.saldoConRecargo).toBe(104851.25);
+    expect(r.montoRecargo).toBe(15723.75);
+    expect(r.saldoConRecargo).toBe(120548.75);
+    // Se sigue informando, aunque ya no sea la base del cobro.
+    expect(r.montoVencido).toBe(175);
   });
 
   it("con todo el saldo vencido cobra lo mismo que antes", () => {
@@ -186,15 +191,28 @@ describe("calcularSaldoConRecargo", () => {
     expect(r.montoRecargo).toBe(22530);
   });
 
-  it("sin nada vencido no hay mora aunque la fecha haya pasado", () => {
-    // Pasa cuando un pago canceló FIFO lo viejo y el caché del cliente todavía
-    // arrastra la fecha: 5 de los 19 cobros de mora reales fueron así.
+  it("con la fecha pasada cobra mora aunque el FIFO diga que no hay nada vencido", () => {
+    // Con el vencimiento anclado al CICLO de deuda (20260905190000), el FIFO y
+    // la fecha del cliente ya no responden lo mismo: pagar una parte cancela lo
+    // más viejo pero NO saca a la clienta de mora. Eran 5 clientas reales el
+    // 5/9/2026, que antes de este cambio no pagaban un peso de recargo.
     const r = calcularSaldoConRecargo(
       {
         monto_pendiente: 60050,
         fecha_vencimiento: haceDias(3),
         monto_vencido: 0,
       },
+      PORCENTAJE,
+    );
+    expect(r.estaVencido).toBe(true);
+    expect(r.montoRecargo).toBe(9007.5);
+  });
+
+  it("sin saldo no hay mora, aunque la fecha haya pasado", () => {
+    // El único caso que apaga el recargo: la cuenta saldada. Es lo que cierra
+    // el ciclo — "la mora se quita cuando paga todo".
+    const r = calcularSaldoConRecargo(
+      { monto_pendiente: 0, fecha_vencimiento: haceDias(30), monto_vencido: 0 },
       PORCENTAJE,
     );
     expect(r.estaVencido).toBe(false);
@@ -217,9 +235,10 @@ describe("calcularSaldoConRecargo", () => {
     expect(r.montoRecargo).toBe(1500);
   });
 
-  it("un vencido ausente no cobra mora", () => {
-    // Fail-closed: TypeScript obliga a pasar el campo, pero si llega null o
-    // undefined desde la base la respuesta es no cobrar, no cobrar sobre todo.
+  it("un vencido ausente ya no cambia el cobro", () => {
+    // `monto_vencido` dejó de ser la base el 5/9/2026: que llegue null desde la
+    // base ya no puede apagar el recargo, porque no participa del cálculo. Se
+    // deja el caso escrito para que quede claro que el null no rompe.
     const r = calcularSaldoConRecargo(
       {
         monto_pendiente: 100000,
@@ -228,7 +247,8 @@ describe("calcularSaldoConRecargo", () => {
       },
       PORCENTAJE,
     );
-    expect(r.montoRecargo).toBe(0);
+    expect(r.montoRecargo).toBe(15000);
+    expect(r.montoVencido).toBe(0);
   });
 
   it("acepta el saldo como string, que es como lo devuelve numeric de Postgres", () => {

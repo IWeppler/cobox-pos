@@ -295,6 +295,49 @@ tiene 11.
   queda congelado en la fila del pago. La comisión se calcula sobre el bruto
   (es lo que pasa por el posnet). anon lee `recargo_porcentaje` para el
   catálogo público vía policy + GRANT por columna: `comision` NO se expone.
+- **La MORA es del ciclo de deuda, no del renglón** (`20260905190000`). Una vez
+  que la cuenta entró en mora sigue en mora hasta saldarse por completo: un pago
+  parcial no la limpia ni corre la fecha. El vencimiento lo fija el débito más
+  viejo POSTERIOR al último saldo cero, y ese ancla no se mueve hasta que el
+  saldo vuelve a cero y abre ciclo nuevo.
+  Lo pidió la dueña con un caso concreto: Vero duarte (Estilo Bonito) debía
+  $62.000, se le cobró $1.500 de mora, pagó $32.000 y el sistema la mostró AL
+  DÍA hasta el 06/10. Dos cosas la sacaban de mora a la vez — el FIFO dejaba
+  viva una compra más nueva, y `recalcular_vencimiento_cc` tenía un "piso por
+  mora cobrada" (`greatest(deuda_vieja + plazo, última_mora + plazo)`) que hacía
+  que LA PROPIA FILA DE MORA corriera el vencimiento 31 días. Cobrarle el
+  recargo le regalaba un mes. El piso se cayó; ya no hace falta, porque el
+  recargo se calcula sobre capital y recalcularlo dos veces da lo mismo.
+  Al aplicarlo, **12 clientas pasaron de "al día" a vencidas**, $467.072. La
+  peor era MIRTA GARCIA (Evens): deuda viva desde febrero, mostrada al día
+  hasta octubre, 176 días de mora escondida.
+- **La base del recargo por mora es el SALDO COMPLETO, no la porción vencida**
+  (5/9/2026). Es una cláusula de aceleración —si se atrasó, toda la cuenta entra
+  en mora— y **revierte a propósito** el arreglo del 30/8, que había hecho lo
+  contrario. Hay que saber lo que cuesta antes de volver a tocarlo: sobre
+  CELESTE SCHOFER (Evens, $104.825 de saldo con $175 vencidos) son **$15.723,75
+  de mora contra $26,25**. Está aceptado a sabiendas por la dueña; el test de
+  `calcular-saldo-con-recargo.test.ts` conserva justo esos números para que la
+  próxima persona vea el precio de la decisión y no la "corrija" de vuelta.
+  `montoVencido` se sigue calculando y devolviendo —lo usan la antigüedad y el
+  Advisor— pero ya no manda en el cobro.
+  Consecuencia que hay que tener presente: `estaVencido` dejó de exigir
+  `montoVencido > 0`. Con el ancla por ciclo, una clienta puede estar en mora
+  con el FIFO diciendo cero, y tiene que cobrar igual (eran 5 el día del
+  cambio). El único caso que apaga el recargo es saldo cero.
+- **La mora NO se aplica sola al día 31: se materializa cuando la clienta
+  paga.** No hay cron ni proceso agendado (no está instalado `pg_cron` ni hay
+  `crons` en `vercel.json`), y no hace falta: la pantalla la calcula al vuelo
+  con `calcularSaldoConRecargo` para mostrarla, y `registrarPagoDeudaAction`
+  inserta el DEBITO real justo antes del cobro. Por eso un cambio de criterio
+  como el de `20260905190000` no necesita backfill: a las clientas afectadas el
+  recargo les entra solo en su próximo pago, por el camino de siempre.
+  Lo configurable vive en Configuración > Clientes (`clients-panel.tsx`):
+  `cc_plazo_mora` (días) y `recargo_mora_tipo` / `recargo_mora_valor`
+  (NINGUNO | MONTO_FIJO | PORCENTAJE). NO existe un toggle de "se reaplica":
+  la ayuda de esa misma pantalla promete lo contrario —"se suma una única vez
+  ... no se acumula día a día"— y el cálculo lo cumple porque parte siempre de
+  capital.
 - Recargo de cuenta corriente: existía y se cobraba (`configuracion_pos.
   cc_recargo_default`, 15% en Evens, recalculado server-side) pero se disolvía
   dentro de `ventas.total` — no había columna que dijera cuánto de un ticket
