@@ -418,13 +418,12 @@ export function CartPanelAdmin({
   const promocionesElegibles = useMemo(() => {
     return getPromocionesElegibles({
       promociones: promocionesDB,
-      totalCarrito,
       pagos,
       items,
       metodosPago: metodosPagoDB,
       canal: "POS",
     });
-  }, [promocionesDB, totalCarrito, pagos, items, metodosPagoDB]);
+  }, [promocionesDB, pagos, items, metodosPagoDB]);
 
   const promocionActivaId = useMemo(() => {
     return getPromocionActivaId(promocionId, promocionesElegibles);
@@ -434,10 +433,9 @@ export function CartPanelAdmin({
     return getDescuentoDetalle({
       promocionActivaId,
       promocionesElegibles,
-      totalCarrito,
       items,
     });
-  }, [promocionActivaId, promocionesElegibles, totalCarrito, items]);
+  }, [promocionActivaId, promocionesElegibles, items]);
 
   const subtotalConDescuento = totalCarrito - descuentoDetalle.monto;
   // Lo que el recargo CC sería si se aplicara. Se calcula igual esté anulado

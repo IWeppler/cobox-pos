@@ -218,7 +218,6 @@ export function calcularTotalesPedido({
 
   const elegibles = getPromocionesElegibles({
     promociones,
-    totalCarrito: subtotal,
     pagos: [],
     items,
     metodosPago: [],

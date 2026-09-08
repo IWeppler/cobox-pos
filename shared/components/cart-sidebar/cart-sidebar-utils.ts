@@ -3,12 +3,17 @@ import { CreateSalePaymentInput } from "@/entities/ventas/types";
 import { MetodoPago, TipoMetodo } from "@/entities/payments/types";
 import { DescuentoDetalle, PromocionDB } from "./types";
 import type { TotalesPedido } from "@/shared/lib/totales-pedido-publico";
+import {
+  calcularDescuentoPromocion,
+  promocionAplica,
+  promocionVigente,
+  TIPOS_REGLA_CONOCIDOS,
+} from "@/shared/lib/descuento-promocion";
 
 export type CanalVenta = "PUBLICO" | "POS";
 
 interface PromocionesElegiblesParams {
   promociones: PromocionDB[];
-  totalCarrito: number;
   pagos: CreateSalePaymentInput[];
   items: CartItemStore[];
   metodosPago: MetodoPago[];
@@ -31,7 +36,6 @@ interface PromocionesElegiblesParams {
 
 export function getPromocionesElegibles({
   promociones,
-  totalCarrito,
   pagos,
   items,
   metodosPago,
@@ -41,79 +45,49 @@ export function getPromocionesElegibles({
   const ahora = new Date();
 
   return promociones.filter((promo) => {
-    if (promo.fecha_inicio && new Date(promo.fecha_inicio) > ahora) {
-      return false;
-    }
-    if (promo.fecha_fin && new Date(promo.fecha_fin) < ahora) {
-      return false;
-    }
+    // Vigencia (activa, fechas, límite de usos) y condición (tipo_regla,
+    // monto mínimo) salen del módulo COMPARTIDO con el server: si acá se
+    // decidiera distinto que en `create-sale.ts`, la pantalla ofrecería un
+    // descuento que la venta después no da. Ver `descuento-promocion.ts`.
+    if (!promocionVigente(promo, ahora)) return false;
 
-    if (
-      promo.limite_usos != null &&
-      (promo.usos_actuales ?? 0) >= promo.limite_usos
-    ) {
-      return false;
-    }
+    // Lo único propio del canal: la vidriera solo muestra lo que el comercio
+    // decidió publicar. No es una condición de la promo, es de la superficie.
+    if (canal === "PUBLICO" && !promo.mostrar_en_catalogo) return false;
 
-    if (promo.monto_minimo && totalCarrito < promo.monto_minimo) {
-      return false;
-    }
-
-    if (canal === "PUBLICO" && !promo.mostrar_en_catalogo) {
+    if (!TIPOS_REGLA_CONOCIDOS.has(promo.tipo_regla)) {
+      console.warn(
+        `[promociones] tipo_regla desconocido: "${promo.tipo_regla}" en la promoción "${promo.nombre}" (id: ${promo.id}) — se descarta por seguridad.`,
+      );
       return false;
     }
 
-    switch (promo.tipo_regla) {
-      case null:
-        // Sin condición específica: aplica siempre (incluye "mostrar en
-        // catálogo" ya validado arriba para el canal público).
-        return true;
-
-      case "METODO_PAGO": {
-        const metodosPromo =
-          promo.promociones_metodos_pago?.map((m) => m.metodo_pago) || [];
-
-        // El catálogo público elige UN tipo, no una lista de pagos como el
-        // POS: alcanza con que la promo incluya ese tipo.
-        if (canal === "PUBLICO") {
-          if (!tipoPagoSeleccionado) return false;
-          return metodosPromo.includes(tipoPagoSeleccionado);
-        }
-
-        const selectedTipos = pagos.map(
-          (p) => metodosPago.find((m) => m.id === p.metodoPagoId)?.tipo,
-        );
-
-        if (selectedTipos.length === 0) return false;
-
-        return selectedTipos.every(
-          (tipo) => tipo && metodosPromo.includes(tipo),
-        );
-      }
-
-      case "CATEGORIA": {
-        const categorias =
-          promo.promociones_categorias?.map((c) =>
-            c.categoria_nombre.toLowerCase(),
-          ) || [];
-
-        return items.some((item) =>
-          categorias.includes(item.tipo.toLowerCase()),
-        );
-      }
-
-      case "MONTO_MINIMO":
-        // Ya validado arriba (chequeo de monto_minimo es general a todo tipo_regla).
-        return true;
-
-      default:
-        console.warn(
-          `[promociones] tipo_regla desconocido: "${promo.tipo_regla}" en la promoción "${promo.nombre}" (id: ${promo.id}) — se descarta por seguridad.`,
-        );
-        return false;
-    }
+    return promocionAplica({
+      promo,
+      lineas: items,
+      categorias: categoriasDe(promo),
+      // El catálogo público elige UN tipo de pago; el POS puede tener varios
+      // cobros en el mismo ticket. En los dos casos la promo por método exige
+      // que TODOS sean de un método incluido, así que la diferencia es solo
+      // cómo se arma la lista.
+      tiposDePago:
+        canal === "PUBLICO"
+          ? tipoPagoSeleccionado
+            ? [tipoPagoSeleccionado]
+            : []
+          : pagos.map(
+              (p) => metodosPago.find((m) => m.id === p.metodoPagoId)?.tipo,
+            ),
+      metodosDeLaPromo:
+        promo.promociones_metodos_pago?.map((m) => m.metodo_pago) ?? [],
+    });
   });
 }
+
+/** Las categorías de una promo, normalizadas una sola vez y en un solo lugar. */
+const categoriasDe = (promo: PromocionDB): string[] =>
+  promo.promociones_categorias?.map((c) => c.categoria_nombre.toLowerCase()) ??
+  [];
 
 export function getPromocionActivaId(
   promocionId: string,
@@ -126,44 +100,33 @@ export function getPromocionActivaId(
     : "ninguna";
 }
 
+/**
+ * El monto que descuenta una promo sobre este carrito.
+ *
+ * Es una envoltura fina sobre `descuento-promocion.ts` a propósito: el cálculo
+ * TIENE que ser el mismo que corre en `create-sale.ts`, porque desde el
+ * 8/9/2026 el server lo recalcula y rechaza la venta si el cliente pide de
+ * más. Si esta función volviera a tener aritmética propia, cualquier
+ * diferencia de un peso frenaría ventas en el mostrador.
+ */
 function calcularDescuentoPromo(
   promo: PromocionDB,
-  totalCarrito: number,
   items: CartItemStore[],
 ): number {
-  let montoBase = totalCarrito;
-
-  if (promo.tipo_regla === "CATEGORIA") {
-    const categorias =
-      promo.promociones_categorias?.map((c) =>
-        c.categoria_nombre.toLowerCase(),
-      ) || [];
-
-    montoBase = items.reduce((acc, item) => {
-      if (categorias.includes(item.tipo.toLowerCase())) {
-        return acc + item.precio * item.cantidad;
-      }
-      return acc;
-    }, 0);
-  }
-
-  const descuento =
-    promo.tipo_descuento === "PORCENTAJE"
-      ? (montoBase * promo.valor_descuento) / 100
-      : promo.valor_descuento;
-
-  return Math.round(Math.min(descuento, totalCarrito));
+  return calcularDescuentoPromocion({
+    promo,
+    lineas: items,
+    categorias: categoriasDe(promo),
+  });
 }
 
 export function getDescuentoDetalle({
   promocionActivaId,
   promocionesElegibles,
-  totalCarrito,
   items,
 }: {
   promocionActivaId: string;
   promocionesElegibles: PromocionDB[];
-  totalCarrito: number;
   items: CartItemStore[];
 }): DescuentoDetalle {
   if (promocionActivaId === "ninguna") return { monto: 0, nombre: "" };
@@ -174,7 +137,7 @@ export function getDescuentoDetalle({
   if (!promo) return { monto: 0, nombre: "" };
 
   return {
-    monto: calcularDescuentoPromo(promo, totalCarrito, items),
+    monto: calcularDescuentoPromo(promo, items),
     nombre: promo.nombre,
   };
 }
@@ -221,12 +184,12 @@ export function calcularDescuentoCarritoPublico({
 
   const descuentoAcumulables = acumulables.map((promo) => ({
     promo,
-    descuento: calcularDescuentoPromo(promo, totalCarrito, items),
+    descuento: calcularDescuentoPromo(promo, items),
   }));
 
   let mejorExclusiva: { promo: PromocionDB; descuento: number } | null = null;
   for (const promo of exclusivas) {
-    const descuento = calcularDescuentoPromo(promo, totalCarrito, items);
+    const descuento = calcularDescuentoPromo(promo, items);
     if (
       !mejorExclusiva ||
       descuento > mejorExclusiva.descuento ||

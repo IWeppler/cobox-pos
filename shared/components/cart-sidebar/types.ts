@@ -12,6 +12,11 @@ export interface PromocionDB {
   limite_usos?: number | null;
   usos_actuales?: number | null;
   mostrar_en_catalogo?: boolean;
+  /** Las consultas del POS y del catálogo ya filtran por `activa`, pero el
+   * dato viaja igual (`select *`) y `promocionVigente` lo vuelve a mirar: una
+   * promo apagada no descuenta ni aunque la pantalla la tenga cargada de
+   * antes. Es el mismo chequeo que hace el server. */
+  activa?: boolean | null;
   acumulable?: boolean;
   prioridad?: number;
   promociones_metodos_pago?: { metodo_pago: string }[];

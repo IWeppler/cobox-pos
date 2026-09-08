@@ -11,6 +11,11 @@ import {
   normalizarCantidadVendible,
   redondearCantidad,
 } from "@/shared/lib/unidad-venta";
+import {
+  baseDescontable,
+  resolverDescuento,
+  type MotivoSinDescuento,
+} from "@/shared/lib/descuento-promocion";
 import { emitirComprobante } from "../lib/emitir-comprobante";
 import { ARCA_EMISION_DISPONIBLE } from "@/shared/lib/facturacion";
 
@@ -132,33 +137,54 @@ export async function registrarVentaAction(
     ...new Set(items.map((item) => item.productoId ?? item.id)),
   ];
 
-  /** La promoción y, si es por categoría, las categorías que alcanza. Va como
-   * función para poder entrar al mismo `Promise.all` que el resto. */
+  /**
+   * La promoción, con las dos tablas hijas que hacen falta para RECALCULAR su
+   * descuento acá adentro. Va como función para poder entrar al mismo
+   * `Promise.all` que el resto.
+   *
+   * Dos cosas cambiaron el 8/9/2026:
+   *
+   * 1. Se trae `activa`, que el server no miraba en ningún lado: una promoción
+   *    apagada seguía descontando desde un POS que la tenía cargada de antes.
+   *    Ojo: NO se filtra por `activa` en la consulta, y es a propósito. Quien
+   *    decide es `promocionVigente`, para que la fila siga estando disponible
+   *    en la venta OFFLINE — ahí el descuento del ticket impreso vale igual, y
+   *    filtrarla acá dejaría la venta con el total descontado pero SIN su fila
+   *    en `ventas_descuentos`, o sea un descuento que ningún reporte ve.
+   * 2. Las hijas vienen por embed, en UNA consulta. Antes eran dos seriales
+   *    (la promo y después sus categorías) y encima solo se traían las
+   *    categorías: los métodos de pago no se consultaban nunca, así que la
+   *    condición de una promo por método era incomprobable del lado del
+   *    server. Un round-trip menos y la condición completa.
+   */
   const cargarPromocion = async () => {
+    const vacio = {
+      promoData: null,
+      categoriasPromo: [] as string[],
+      metodosPromo: [] as string[],
+    };
+
     if (!promocionId || promocionId === "ninguna" || descuentoMonto <= 0) {
-      return { promoData: null, categoriasPromo: [] as string[] };
+      return vacio;
     }
 
     const { data: promo } = await supabase
       .from("promociones")
-      .select("*")
+      .select(
+        "*, promociones_metodos_pago(metodo_pago), promociones_categorias(categoria_nombre)",
+      )
       .eq("id", promocionId)
-      .single();
+      .maybeSingle();
 
-    if (!promo) return { promoData: null, categoriasPromo: [] as string[] };
-    if (promo.tipo_regla !== "CATEGORIA") {
-      return { promoData: promo, categoriasPromo: [] as string[] };
-    }
-
-    const { data: cats } = await supabase
-      .from("promociones_categorias")
-      .select("categoria_nombre")
-      .eq("promocion_id", promocionId);
+    if (!promo) return vacio;
 
     return {
       promoData: promo,
-      categoriasPromo: (cats ?? []).map((c) =>
-        c.categoria_nombre.toLowerCase(),
+      categoriasPromo: (promo.promociones_categorias ?? []).map(
+        (c: { categoria_nombre: string }) => c.categoria_nombre.toLowerCase(),
+      ),
+      metodosPromo: (promo.promociones_metodos_pago ?? []).map(
+        (m: { metodo_pago: string }) => m.metodo_pago,
       ),
     };
   };
@@ -166,7 +192,7 @@ export async function registrarVentaAction(
   const [
     { turnoId: turnoAbiertoId, requiereCajaAbierta: requiereCaja },
     { data: metodosDb },
-    { promoData, categoriasPromo },
+    { promoData, categoriasPromo, metodosPromo },
     { data: stockFilas },
     { data: variantesFilas },
   ] = await Promise.all([
@@ -185,7 +211,12 @@ export async function registrarVentaAction(
       // fila que ya estamos trayendo. Decide si este producto se puede vender
       // fraccionado (0,750 kg) o solo de a enteros.
       .select(
-        "cantidad, id, producto_id, variante, producto:productos(precio, precio_costo, unidad_medida)",
+        // `tipo` es la CATEGORÍA del producto y viaja porque contra ella
+        // matchean las promos por categoría. Se lee de la base y no del
+        // carrito por el mismo motivo que el precio: el `tipo` que manda el
+        // cliente es texto libre en un request, y con él se podría hacer
+        // entrar cualquier renglón a una promo que no le corresponde.
+        "cantidad, id, producto_id, variante, producto:productos(precio, precio_costo, unidad_medida, tipo)",
       )
       .in("producto_id", productoIds),
     supabase
@@ -352,7 +383,9 @@ export async function registrarVentaAction(
       // nombrando una variante que ya no existe.
       variante: nombreVarianteVigente,
       varianteId: item.varianteId ?? varianteData?.id ?? null,
-      tipo: item.tipo,
+      // La categoría VIGENTE en la base; el `tipo` del carrito queda de
+      // respaldo por si el producto no tiene ninguna cargada.
+      tipo: (productoData?.tipo as string | null) ?? item.tipo,
       cantidad: cantidadValidada,
       stockActual,
       precioServer: precioUsado,
@@ -446,14 +479,86 @@ export async function registrarVentaAction(
     unidadesAVender.map((u) => [u.variante_id, u.unidad_id]),
   );
 
-  let totalElegible = 0;
-  itemsResueltos.forEach((item) => {
-    const elegible =
-      !promoData || promoData.tipo_regla !== "CATEGORIA"
-        ? true
-        : categoriasPromo.includes((item.tipo || "").toLowerCase());
-    if (elegible) totalElegible += item.precioServer * item.cantidad;
-  });
+  // --- 0ter. EL DESCUENTO, RECALCULADO SERVER-SIDE ---
+  //
+  // Hasta el 8/9/2026 `descuento_monto` se tomaba del FormData y se usaba tal
+  // cual: era la ÚNICA palanca de plata que no se revalidaba. El precio de
+  // cada renglón, el recargo por método y el recargo de cuenta corriente ya se
+  // recalculaban desde la base; el descuento no, y el único freno era que el
+  // total no quedara negativo.
+  //
+  // Ahora el cálculo sale de `descuento-promocion.ts`, el MISMO módulo que usa
+  // el POS para pintar el desglose. Que sea compartido no es prolijidad: si el
+  // server calculara por su cuenta, cualquier diferencia de un peso entre las
+  // dos aritméticas frenaría ventas reales en el mostrador.
+  const lineasDescontables = itemsResueltos.map((item) => ({
+    tipo: item.tipo,
+    precio: item.precioServer,
+    cantidad: item.cantidad,
+  }));
+
+  // Los TIPOS de los cobros del ticket (EFECTIVO, TARJETA, …), que es lo que
+  // mira una promo por método. Se resuelven contra `metodosMap`, o sea contra
+  // la base: el cliente manda ids de método, nunca tipos.
+  const pagosDelTicket: CreateSalePaymentInput[] = pagosRaw
+    ? JSON.parse(pagosRaw)
+    : [];
+  const tiposDePagoDelTicket = pagosDelTicket
+    .filter((p) => Number(p.montoAsignado) > 0)
+    .map((p) => metodosMap[p.metodoPagoId]?.tipo);
+
+  const descuentoServer = promoData
+    ? resolverDescuento({
+        promo: promoData,
+        lineas: lineasDescontables,
+        categorias: categoriasPromo,
+        tiposDePago: tiposDePagoDelTicket,
+        metodosDeLaPromo: metodosPromo,
+      })
+    : { monto: 0, motivo: null as MotivoSinDescuento | null };
+
+  if (Math.abs(descuentoMonto - descuentoServer.monto) > 0.05) {
+    console.error("[VENTA DESCUENTO MISMATCH]", {
+      vendedorId: user.id,
+      promocionId,
+      descuentoCliente: descuentoMonto,
+      descuentoServer: descuentoServer.monto,
+      motivo: descuentoServer.motivo,
+      offline: esVentaOffline,
+    });
+  }
+
+  // Pedir MÁS descuento del que la promoción da no se corrige en silencio: se
+  // rechaza. Corregirlo cambiaría el total del ticket después de que la
+  // vendedora ya lo leyó en voz alta, y el error que saldría sería el genérico
+  // de "el pago no cubre el total", que no dice nada de lo que pasó.
+  //
+  // Pedir MENOS sí se acepta tal cual (el `Math.min` de abajo): el ticket que
+  // la clienta tiene en la mano dice ese número.
+  if (!esVentaOffline && descuentoMonto - descuentoServer.monto > 0.05) {
+    return {
+      error:
+        "El descuento de esta promoción cambió. Volvé a elegirla y confirmá de nuevo.",
+      success: false,
+    };
+  }
+
+  // La venta OFFLINE conserva el descuento del ticket impreso, por el mismo
+  // motivo por el que conserva el precio: la clienta ya pagó ese número y
+  // registrar otro sería cobrar una cosa y guardar otra. Queda el log de
+  // arriba como rastro.
+  const descuentoAplicado = esVentaOffline
+    ? descuentoMonto
+    : Math.min(descuentoMonto, descuentoServer.monto);
+
+  // La base sobre la que se prorratea el descuento entre renglones. Sale del
+  // mismo módulo que el monto, así que la parte y el todo no se pueden
+  // calcular con criterios distintos.
+  const totalElegible = baseDescontable(
+    promoData ?? { tipo_regla: null, tipo_descuento: "", valor_descuento: 0 },
+    lineasDescontables,
+    categoriasPromo,
+  );
 
   // --- 1. VALIDAR STOCK Y PRORRATEAR DESCUENTOS ---
   const itemsProcesados = [];
@@ -477,7 +582,7 @@ export async function registrarVentaAction(
 
     if (promoData && elegible && totalElegible > 0) {
       const pesoItem = (precioUnitario * cantidadFinal) / totalElegible;
-      const descuentoTotalLinea = descuentoMonto * pesoItem;
+      const descuentoTotalLinea = descuentoAplicado * pesoItem;
       itemDescuentoMonto = descuentoTotalLinea / cantidadFinal;
       itemPrecioFinal = precioUnitario - itemDescuentoMonto;
     }
@@ -521,7 +626,7 @@ export async function registrarVentaAction(
 
   const subtotalConDescuento = Math.max(
     0,
-    totalVentaBrutaItems - descuentoMonto,
+    totalVentaBrutaItems - descuentoAplicado,
   );
 
   // Recargo de cuenta corriente recalculado server-side desde
@@ -569,10 +674,13 @@ export async function registrarVentaAction(
   const totalConDescuentoYRecargo = subtotalConDescuento + recargoCCServer;
 
   // --- 2. VALIDACIÓN DEL ARRAY DE PAGOS ---
-  const pagosRawArray: CreateSalePaymentInput[] = pagosRaw
-    ? JSON.parse(pagosRaw)
-    : [];
-  const pagosValidos = pagosRawArray.filter((p) => Number(p.montoAsignado) > 0);
+  // Ya parseado arriba, para poder evaluar la condición de una promo por
+  // método antes de calcular el descuento. Se reusa en vez de volver a parsear
+  // el mismo string: dos parseos del mismo JSON son dos oportunidades de que
+  // el ticket cambie entre uno y otro.
+  const pagosValidos = pagosDelTicket.filter(
+    (p) => Number(p.montoAsignado) > 0,
+  );
 
   // `montoAsignado` es la BASE: lo que ese cobro imputa al ticket. El recargo
   // por método se calcula acá, con los porcentajes leídos de la base — nunca
@@ -1000,12 +1108,15 @@ export async function registrarVentaAction(
       p_items: insertItems,
       p_stock_legacy: stockLegacy,
       p_descuento:
-        promoData && promocionId && promocionId !== "ninguna" && descuentoMonto > 0
+        promoData &&
+        promocionId &&
+        promocionId !== "ninguna" &&
+        descuentoAplicado > 0
           ? {
               promocion_id: promocionId,
               promocion_nombre: promoData.nombre,
               tipo_descuento: promoData.tipo_descuento,
-              monto_descontado: descuentoMonto,
+              monto_descontado: descuentoAplicado,
             }
           : null,
       p_cc:
