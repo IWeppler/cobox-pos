@@ -112,6 +112,23 @@ const ESPECIFICAS: Record<Rubro, ColumnaPlantilla[]> = {
     { clave: "peso", descripcion: "100g, 500g, 1kg… si se vende suelto", esVariante: true },
     { clave: "unidad_medida", descripcion: "Unidad, Paquete, Caja…" },
   ],
+  // COTILLÓN. Lo que lo separa de un kiosco es el COLOR: los globos, las
+  // servilletas y los platos son el mismo artículo en ocho colores, y la
+  // clienta pide "doce globos rojos". Sin `color` como columna de variante,
+  // cada color sería un producto suelto y el catálogo se vuelve inmanejable.
+  //
+  // Lleva `unidad_medida` y `peso` por el otro lado del mostrador: las
+  // golosinas sueltas —confites, gomitas, chupetines por bolsa— se venden por
+  // kilo, y en la misma venta se cobra una piñata por unidad. Eso lo resuelve
+  // `productos.unidad_medida` producto por producto (ver `unidad-venta.ts`),
+  // y esta columna es donde se declara al ingresar la mercadería.
+  cotillon: [
+    CODIGO_BARRAS,
+    { clave: "marca", descripcion: "Marca del fabricante" },
+    { clave: "color", descripcion: "Color del artículo", esVariante: true },
+    { clave: "peso", descripcion: "100g, 500g, 1kg… si se vende suelto", esVariante: true },
+    { clave: "unidad_medida", descripcion: "Unidad, Kilogramo, Paquete…" },
+  ],
   // "Otros" no inventa columnas: no se sabe qué vende. Se queda con la base y
   // el código de barras, que es lo que sirve en cualquier mostrador.
   otros: [CODIGO_BARRAS],
@@ -152,5 +169,6 @@ export const ETIQUETA_RUBRO: Record<Rubro, string> = {
   farmacia: "Farmacia y perfumería",
   ferreteria: "Ferretería y construcción",
   quioscos: "Kiosco y autoservicio",
+  cotillon: "Cotillón y fiestas",
   otros: "Otro rubro",
 };

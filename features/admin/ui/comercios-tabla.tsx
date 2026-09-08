@@ -16,6 +16,8 @@ import {
   SelectValue,
 } from "@/shared/ui/select";
 import { CLASE_PORTAL_OSCURO } from "@/features/admin/lib/tema-portal";
+import { ETIQUETA_RUBRO } from "@/features/stock/lib/columnas-por-rubro";
+import { normalizarRubro } from "@/entities/config/types";
 import {
   BotonWhatsapp,
   CeldaAcceso,
@@ -149,6 +151,11 @@ export function ComerciosTabla({
   planes,
 }: Readonly<{ comercios: ComercioConUso[]; planes: PlanOpcion[] }>) {
   const [busqueda, setBusqueda] = useState("");
+  // El dato que llega es el rubro OPERATIVO crudo de `configuracion_pos`
+  // ("cotillon", "quioscos"), que es cómo lo guarda la base. Acá se muestra
+  // con su nombre: la tabla la lee una persona, no el parser.
+  const etiquetaDeRubro = (valor: string | null) =>
+    valor ? ETIQUETA_RUBRO[normalizarRubro(valor)] : "";
   const [estado, setEstado] = useState(TODOS);
   const [rubro, setRubro] = useState(TODOS);
   const [actividad, setActividad] = useState(TODOS);
@@ -229,7 +236,7 @@ export function ComerciosTabla({
           etiqueta="Rubro"
           valor={rubro}
           onChange={setRubro}
-          opciones={rubros.map((r) => ({ valor: r, texto: r }))}
+          opciones={rubros.map((r) => ({ valor: r, texto: etiquetaDeRubro(r) }))}
         />
         <Filtro
           etiqueta="Actividad"
@@ -283,7 +290,7 @@ export function ComerciosTabla({
                   </span>
                   {c.rubro && (
                     <span className="text-[10px] uppercase tracking-wider text-white/30">
-                      {c.rubro}
+                      {etiquetaDeRubro(c.rubro)}
                     </span>
                   )}
                 </div>

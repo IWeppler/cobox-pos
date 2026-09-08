@@ -4,6 +4,7 @@ import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { traerTodo } from "@/shared/lib/traer-todo";
+import { hashRemitoProveedor } from "../lib/hash-remito";
 import {
   resolverCategoriaImport,
   mapGeneroRopaBebe,
@@ -38,9 +39,24 @@ function conGeneroAgregado(rawVariante: string, generoValor: string): string {
   return base ? `${base} / ${segmento}` : segmento;
 }
 
+export interface RemitoDuplicado {
+  ordenId: string;
+  estado: string;
+  creadoEn: string;
+  proveedor: string;
+}
+
 export async function procesarPedidoAction(
   proveedor: string,
   items: RawOrderItem[],
+  /**
+   * Subir igual un archivo que ya se había subido. Es una decisión de la
+   * persona —el proveedor mandó dos veces la misma mercadería— así que el
+   * remito forzado queda SIN huella: no participa del guard ni contra los que
+   * vengan después. Mismo criterio que `p_forzar` en la importación de
+   * planilla, resuelto sin columna nueva.
+   */
+  forzar = false,
 ) {
   console.log(">>> [SERVER ACTION] 1. Iniciando procesarPedidoAction...");
   console.log(
@@ -87,6 +103,12 @@ export async function procesarPedidoAction(
     console.log(
       ">>> [SERVER ACTION] 5. Insertando cabecera de orden_compra...",
     );
+    // Huella del contenido. El unique parcial que ya existe
+    // (`uq_ordenes_compra_hash_planilla`, por negocio y solo donde el hash no
+    // es null) hace el trabajo: no hace falta migración, solo dejar de
+    // escribir null. Ver `hash-remito.ts` para lo que costó no tenerlo.
+    const hashPlanilla = forzar ? null : hashRemitoProveedor(items);
+
     const { data: orden, error: errorOrden } = await supabase
       .from("ordenes_compra")
       .insert({
@@ -96,9 +118,40 @@ export async function procesarPedidoAction(
           ? 0
           : total_presupuestado,
         estado: "PENDIENTE",
+        hash_planilla: hashPlanilla,
       })
       .select("id")
       .single();
+
+    // 23505 = unique_violation: este mismo archivo ya se subió. NO es un error
+    // para la persona: es la respuesta correcta, y lo único útil que se puede
+    // hacer con ella es llevarla al remito que ya existe. Se devuelve con su
+    // estado, porque "ya lo subiste y está pendiente" y "ya lo subiste y el
+    // stock entró" son dos situaciones muy distintas.
+    if (errorOrden?.code === "23505" && hashPlanilla) {
+      const { data: existente } = await supabase
+        .from("ordenes_compra")
+        .select("id, estado, creado_en, proveedor")
+        .eq("hash_planilla", hashPlanilla)
+        .maybeSingle();
+
+      if (existente) {
+        console.warn(
+          `>>> [SERVER ACTION] Remito duplicado: mismo contenido que ${existente.id} (${existente.estado}).`,
+        );
+        return {
+          success: false,
+          duplicado: {
+            ordenId: existente.id as string,
+            estado: existente.estado as string,
+            creadoEn: existente.creado_en as string,
+            proveedor: existente.proveedor as string,
+          } satisfies RemitoDuplicado,
+          error:
+            "Este archivo ya se subió antes. Abrí el remito que ya existe o subilo igual si es mercadería nueva.",
+        };
+      }
+    }
 
     if (errorOrden || !orden) {
       console.error(

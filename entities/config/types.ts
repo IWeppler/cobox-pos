@@ -15,6 +15,7 @@ export type Rubro =
   | "farmacia"
   | "ferreteria"
   | "quioscos"
+  | "cotillon"
   | "otros";
 
 export const RUBROS_VALIDOS: readonly Rubro[] = [
@@ -24,6 +25,7 @@ export const RUBROS_VALIDOS: readonly Rubro[] = [
   "farmacia",
   "ferreteria",
   "quioscos",
+  "cotillon",
   "otros",
 ] as const;
 

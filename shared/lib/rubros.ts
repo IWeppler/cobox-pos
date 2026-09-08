@@ -39,6 +39,10 @@ export const RUBROS = [
   { valor: "almacen", etiqueta: "Almacén y dietética" },
   { valor: "bebidas", etiqueta: "Bebidas" },
   { valor: "mascotas", etiqueta: "Mascotas" },
+  // Se agregó el 8/9/2026 porque faltaba: El Nono Cacho se dio de alta como
+  // "Otro" —lo único que le quedaba— y su operativo terminó en indumentaria,
+  // o sea con la plantilla de talles y colores de una tienda de ropa.
+  { valor: "cotillon", etiqueta: "Cotillón y fiestas" },
   { valor: "otro", etiqueta: "Otro" },
 ] as const;
 
@@ -103,6 +107,12 @@ const OPERATIVO_POR_COMERCIAL: Record<RubroComercial, Rubro> = {
   // Sin columnas propias que agregar: se identifican por nombre y código de
   // barras, que es lo que ya trae `otros`. Inventarles una columna sería peor
   // que no dársela — una columna siempre vacía enseña a ignorar columnas.
+  // Tiene operativo propio y no cae en `otros` porque sí aporta columnas: el
+  // COLOR parte variantes (el mismo globo en ocho colores) y la UNIDAD DE
+  // MEDIDA hace falta para las golosinas sueltas, que se venden por kilo en el
+  // mismo mostrador donde la piñata se vende por unidad.
+  cotillon: "cotillon",
+
   bazar: "otros",
   libreria: "otros",
   jugueteria: "otros",

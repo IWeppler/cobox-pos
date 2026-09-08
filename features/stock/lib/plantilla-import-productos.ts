@@ -61,6 +61,17 @@ const EJEMPLOS: Record<Rubro, FilaEjemplo[]> = {
     // Es el ejemplo que explica la columna sin tener que leer la ayuda.
     { categoria: "Golosinas", producto: "Caramelos surtidos", marca: "Arcor", peso: "500g", unidad_medida: "Kilogramo", stock: "4", precio_costo: "3200", precio_venta: "5800" },
   ],
+  cotillon: [
+    // El mismo artículo en dos colores: dos filas, mismo nombre. Es la regla
+    // que hace que después se pidan "doce globos rojos" y no haya que buscar
+    // entre ocho productos que se llaman casi igual.
+    { categoria: "Globos", codigo_barras: "7791111000111", producto: "Globo látex 12″", marca: "Sempertex", color: "Rojo", unidad_medida: "Unidad", stock: "200", precio_costo: "80", precio_venta: "200" },
+    { categoria: "Globos", codigo_barras: "7791111000111", producto: "Globo látex 12″", marca: "Sempertex", color: "Azul", unidad_medida: "Unidad", stock: "150", precio_costo: "80", precio_venta: "200" },
+    // Lo que se vende suelto: la unidad deja de ser "Unidad" y la balanza
+    // manda. Es el ejemplo que explica la columna sin leer la ayuda.
+    { categoria: "Golosinas", producto: "Confites de chocolate", marca: "Arcor", peso: "1kg", unidad_medida: "Kilogramo", stock: "8", precio_costo: "6500", precio_venta: "11900" },
+    { categoria: "Piñatas y souvenirs", producto: "Piñata cartón dinosaurio", stock: "6", unidad_medida: "Unidad", precio_costo: "4500", precio_venta: "9900" },
+  ],
   otros: [
     { categoria: "General", codigo_barras: "7790000000001", producto: "Producto de ejemplo", stock: "10", precio_costo: "1000", precio_venta: "2000" },
   ],

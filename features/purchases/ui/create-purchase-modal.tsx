@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, FormEvent, useRef } from "react";
-import { parsearCantidadDeEntrada } from "@/shared/lib/unidad-venta";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import {
   procesarPedidoAction,
-  RawOrderItem,
+  type RemitoDuplicado,
 } from "@/features/purchases/actions/create-purchase";
-import { parseNumeroLocal } from "@/features/stock/lib/parse-productos-csv";
-import { ALIAS_COLUMNA_GENERO } from "@/shared/lib/alias-columna-genero";
+import {
+  parseRemitoProveedor,
+  type ResultadoParseRemito,
+} from "@/features/purchases/lib/parse-remito-proveedor";
 import {
   Dialog,
   DialogContent,
@@ -32,61 +33,10 @@ import {
 } from "lucide-react";
 
 type ExcelCell = string | number | boolean | Date | null | undefined;
-type ExcelRow = Record<string, ExcelCell>;
 type ImportarPedidoModalProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   hideTrigger?: boolean;
-};
-
-const normalizeCellText = (value: ExcelCell) => String(value ?? "").trim();
-const normalizeHeaderText = (value: ExcelCell) =>
-  normalizeCellText(value).toUpperCase();
-
-/**
- * Clave de comparación de headers: mayúsculas + sin tildes + sin espacios,
- * guiones ni guiones bajos. Así "precio_venta", "Precio Venta" y
- * "PRECIO-VENTA" son la misma columna, venga la planilla de donde venga.
- *
- * Se usa SOLO para comparar contra las listas de columnas conocidas: el
- * header original (normalizeHeaderText) sigue siendo el que se guarda como
- * nombre de atributo de la variante, porque acá "TALLE DE PRENDA" se
- * volvería "TALLEDEPRENDA".
- */
-const normalizeHeaderKey = (value: ExcelCell) =>
-  normalizeHeaderText(value)
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[\s\-_]+/g, "");
-
-const matchColumna = (header: string, columnas: readonly string[]) =>
-  columnas.some((c) => normalizeHeaderKey(c) === normalizeHeaderKey(header));
-
-const isMeaningfulHeaderCell = (value: ExcelCell) => {
-  const text = normalizeCellText(value);
-  return text.length > 0 && !/^__EMPTY/i.test(text);
-};
-
-const findHeaderRowIndex = (rows: ExcelCell[][]) => {
-  return rows.findIndex((row) => {
-    const textCellCount = row.filter(isMeaningfulHeaderCell).length;
-    return textCellCount > 2;
-  });
-};
-
-const buildRowsFromDetectedHeaders = (rows: ExcelCell[][]): ExcelRow[] => {
-  const headerRowIndex = findHeaderRowIndex(rows);
-  if (headerRowIndex === -1) {
-    return [];
-  }
-  const headers = rows[headerRowIndex].map((cell) => normalizeHeaderText(cell));
-  return rows.slice(headerRowIndex + 1).map((row) => {
-    return headers.reduce((acc: ExcelRow, header, columnIndex) => {
-      if (!isMeaningfulHeaderCell(header)) return acc;
-      acc[header] = row[columnIndex] ?? "";
-      return acc;
-    }, {});
-  });
 };
 
 export function ImportarPedidoModal({
@@ -99,6 +49,12 @@ export function ImportarPedidoModal({
   const [proveedor, setProveedor] = useState("");
 
   const [file, setFile] = useState<File | null>(null);
+  /** El remito que ya existe con este mismo contenido, si lo hay. */
+  const [duplicado, setDuplicado] = useState<RemitoDuplicado | null>(null);
+  /** Lo que el parser entendió del archivo, para revisarlo antes de crear la orden. */
+  const [preview, setPreview] = useState<ResultadoParseRemito | null>(null);
+  /** La persona decidió subirlo igual: es mercadería nueva, no un reintento. */
+  const [forzarSubida, setForzarSubida] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const router = useRouter();
@@ -107,11 +63,11 @@ export function ImportarPedidoModal({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-    } else {
-      setFile(null);
-    }
+    setFile(selectedFile ?? null);
+    // Otro archivo, otra lectura: la preview anterior describe algo que ya no
+    // es lo que se va a subir.
+    setPreview(null);
+    setDuplicado(null);
   };
 
   const handleTriggerClick = (e: React.MouseEvent) => {
@@ -133,6 +89,8 @@ export function ImportarPedidoModal({
     const droppedFile = e.dataTransfer.files?.[0];
     if (droppedFile) {
       setFile(droppedFile);
+      setPreview(null);
+      setDuplicado(null);
     }
   };
 
@@ -167,202 +125,45 @@ export function ImportarPedidoModal({
         defval: "",
       });
 
-      const jsonData = buildRowsFromDetectedHeaders(rawRows);
+      // Todo el parseo vive en `parse-remito-proveedor.ts`: acá no queda ni
+      // una regla. Estaba adentro de este componente, sin exportar, así que no
+      // se le podía escribir un test — y por eso nadie vio que un membrete de
+      // tres celdas o una fila de totales rompían el archivo entero.
+      const analisis = parseRemitoProveedor(rawRows);
 
-      if (jsonData.length === 0) {
-        throw new Error(
-          "El archivo parece estar vacío o no tiene el formato correcto.",
-        );
+      if (analisis.error) {
+        throw new Error(analisis.error);
       }
 
-      // --- COLUMNAS CONOCIDAS ---
-      const knownNameCols = [
-        "DESCRIPCIÓN",
-        "DESCRIPCION",
-        "PRODUCTO",
-        "NOMBRE",
-        "ARTICULO",
-      ];
-      const knownCantCols = ["CANTIDAD", "CANT", "STOCK"];
-      // "PRECIO" a secas sigue siendo COSTO: en un remito el precio que manda
-      // el proveedor es lo que le cobra al comercio. El precio al público solo
-      // se toma cuando la columna lo dice explícitamente.
-      const knownPriceCols = [
-        "PRECIO UNITARIO",
-        "COSTO",
-        "PRECIO",
-        "PRECIO COSTO",
-        "PRECIO COMPRA",
-      ];
-      const knownVentaCols = [
-        "PRECIO VENTA",
-        "PRECIO DE VENTA",
-        "VENTA",
-        "PVP",
-        "PRECIO PUBLICO",
-        "PRECIO AL PUBLICO",
-        "PRECIO SUGERIDO",
-      ];
-
-      const knownCategoryCols = ["CATEGORIA", "CATEGORÍA", "RUBRO", "TIPO"];
-      // La MISMA lista que reconoce la planilla propia. Cuando eran dos, esta
-      // conocía solo dos formas y una columna "SEXO" o "PUBLICO" se iba al
-      // `else` de abajo, o sea a `extraAttributes`: cada variante terminaba con
-      // "SEXO: Mujer" pegado. Eso es lo que la migración 20260904160000 tuvo
-      // que sacar de 2.238 variantes.
-      const knownGeneroCols = ALIAS_COLUMNA_GENERO;
-      const knownSkuCols = ["SKU", "CODIGO", "CÓDIGO", "COD"];
-      const knownMarcaCols = ["MARCA"];
-
-      const mappedItems: RawOrderItem[] = jsonData
-        .map((row): RawOrderItem | null => {
-          let desc = "";
-          let cant: ExcelCell = 0;
-          let precio: ExcelCell = 0;
-          let precioVenta: ExcelCell = "";
-          let rawCategoria = "";
-          let rawGenero = "";
-          let sku = "";
-          let marca = "";
-          const extraAttributes: string[] = [];
-
-          Object.keys(row).forEach((key) => {
-            const upperKey = normalizeHeaderText(key);
-            const cellValue = row[key];
-
-            if (!upperKey || upperKey.includes("__EMPTY")) return;
-            if (cellValue === null || cellValue === undefined) return;
-
-            const normalizedValue = normalizeCellText(cellValue);
-            if (!normalizedValue) return;
-
-            if (matchColumna(upperKey, knownNameCols)) {
-              desc = normalizedValue;
-            } else if (matchColumna(upperKey, knownCantCols)) {
-              cant = cellValue;
-            } else if (matchColumna(upperKey, knownVentaCols)) {
-              // Antes de la de costo: "PRECIO VENTA" no puede caer en el
-              // genérico "PRECIO" y entrar como costo.
-              precioVenta = cellValue;
-            } else if (matchColumna(upperKey, knownPriceCols)) {
-              precio = cellValue;
-            } else if (matchColumna(upperKey, knownCategoryCols)) {
-              rawCategoria = normalizedValue;
-            } else if (matchColumna(upperKey, knownGeneroCols)) {
-              rawGenero = normalizedValue;
-            } else if (matchColumna(upperKey, knownSkuCols)) {
-              // Columna propia, NUNCA se mezcla con raw_variante — si no,
-              // el SKU terminaría pisando el nombre visible de la variante
-              // (nombre_display) y colándose como atributo filtrable.
-              sku = normalizedValue;
-            } else if (matchColumna(upperKey, knownMarcaCols)) {
-              // Columna propia también — alimenta productos.marca al crear
-              // el producto en la conciliación, no un atributo de variante.
-              marca = normalizedValue;
-            } else {
-              extraAttributes.push(`${upperKey}: ${normalizedValue}`);
-            }
-          });
-
-          if (!desc && !cant && !precio && extraAttributes.length === 0)
-            return null;
-
-          if (!desc) return null;
-
-          const normalizedDesc = normalizeHeaderText(desc);
-          const duplicatedHeaderValues = [
-            "PRODUCTO",
-            "DESCRIPCIÓN",
-            "DESCRIPCION",
-            "ARTICULO",
-          ];
-          if (duplicatedHeaderValues.includes(normalizedDesc)) return null;
-
-          // parseNumeroLocal es el mismo parser de la importación de
-          // productos: tolera "$", separador de miles y coma decimal, y —a
-          // diferencia del parseo que había acá— no rompe "1234.50", que
-          // antes perdía el punto y se leía 123450.
-          const parseNumber = (val: ExcelCell) => {
-            if (typeof val === "number") return val;
-            if (!val) return 0;
-            return parseNumeroLocal(val.toString()) ?? 0;
-          };
-
-          // SEÑALES CRUDAS DE CATEGORÍA Y GÉNERO — la resolución real
-          // (matchear contra el árbol de categorías, decidir si el género
-          // sobrevive como atributo) pasa a vivir en el servidor
-          // (resolverCategoriaImport, con acceso a la tabla `categorias`).
-          // Acá SOLO separamos y canonicalizamos texto: nunca más
-          // "primera palabra pluralizada" como categoría, ni asumir que
-          // toda fila lleva género.
-          const GENERO_CANONICO: Record<string, string> = {
-            hombre: "Hombre",
-            mujer: "Mujer",
-            niño: "Niño",
-            nene: "Niño",
-            niña: "Niña",
-            nena: "Niña",
-            unisex: "Unisex",
-            bebe: "Bebé",
-            bebé: "Bebé",
-          };
-          const rawGeneroLimpio = rawGenero.toLowerCase().trim();
-          const rawCategoriaLimpio = rawCategoria.toLowerCase().trim();
-
-          // Proveedores que usan la columna "Categoría" para poner en
-          // realidad el género (sin columna Género separada) — se
-          // reinterpreta como señal de género, no como categoría.
-          const generoDesdeCategoria =
-            !rawGenero && GENERO_CANONICO[rawCategoriaLimpio];
-
-          const generoFinal = rawGenero
-            ? (GENERO_CANONICO[rawGeneroLimpio] ?? rawGenero.trim())
-            : generoDesdeCategoria || null;
-
-          const categoriaFinal =
-            rawCategoria && !generoDesdeCategoria ? rawCategoria.trim() : null;
-
-          // Armamos la string de atributos "libres" (talle, color, etc.) —
-          // el género YA NO viaja acá: el servidor decide si sobrevive
-          // como atributo (solo Ropa Bebé) o se descarta.
-          const raw_variante =
-            extraAttributes.length > 0 ? extraAttributes.join(" / ") : "Unico";
-
-          return {
-            raw_nombre: desc,
-            raw_variante: raw_variante,
-            raw_categoria: categoriaFinal,
-            raw_genero: generoFinal,
-            raw_sku: sku || null,
-            raw_marca: marca || null,
-            // parseInt truncaba "12,5" a 12: un remito de carne entraba con
-            // medio kilo de menos, sin aviso.
-            cantidad: Math.max(0, parsearCantidadDeEntrada(cant)),
-            precio_costo: Math.max(0, parseNumber(precio)),
-            // null (no 0) cuando la planilla no trae la columna: 0 querría
-            // decir "vender a $0" y en la conciliación pisaría el precio que
-            // ya tiene el producto.
-            precio_venta: normalizeCellText(precioVenta)
-              ? Math.max(0, parseNumber(precioVenta))
-              : null,
-          };
-        })
-        .filter((item): item is RawOrderItem => item !== null);
-
-      if (mappedItems.length === 0) {
-        throw new Error(
-          "No se detectaron datos válidos en el archivo. Verifica que las columnas estén correctas.",
-        );
+      // La preview es el punto: antes esto mandaba el archivo derecho y lo que
+      // el parser no entendía se perdía sin decir una palabra. Ahora se
+      // muestra qué entra, qué no y por qué, y la persona decide.
+      if (!preview) {
+        setPreview(analisis);
+        setIsLoading(false);
+        return;
       }
 
-      const result = await procesarPedidoAction(proveedor, mappedItems);
+      const result = await procesarPedidoAction(
+        proveedor,
+        preview.filas,
+        forzarSubida,
+      );
 
       if (result.success) {
         toast.success("Pedido pre-cargado. Redirigiendo a Conciliación...");
         setOpen(false);
         setFile(null);
         setProveedor("");
+        setPreview(null);
+        setForzarSubida(false);
         router.push(`/compras/merge/${result.ordenId}`);
+      } else if (result.duplicado) {
+        // Este archivo ya se había subido. No es un error que haya que
+        // reintentar: hay dos salidas y las dos son de la persona, así que la
+        // pantalla las ofrece en vez de tirar un toast rojo y perder el
+        // trabajo. Ver `hash-remito.ts`.
+        setDuplicado(result.duplicado);
       } else {
         throw new Error(
           result.error || "Error en el servidor al guardar el pedido.",
@@ -384,6 +185,9 @@ export function ImportarPedidoModal({
     if (isLoading) return;
     setFile(null);
     setProveedor("");
+    setDuplicado(null);
+    setPreview(null);
+    setForzarSubida(false);
     setOpen(false);
   };
 
@@ -432,7 +236,116 @@ export function ImportarPedidoModal({
           </DialogDescription>
         </DialogHeader>
 
+        {preview && !duplicado && (
+          <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3 max-h-[45vh] overflow-y-auto">
+            <div>
+              <p className="font-semibold text-foreground">
+                {preview.filas.length}{" "}
+                {preview.filas.length === 1 ? "renglón" : "renglones"} listos
+                para conciliar
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Encabezados leídos en la fila {preview.filaEncabezado} del
+                archivo.
+              </p>
+            </div>
+
+            {/* Qué se entendió de cada columna. Es lo que permite darse cuenta
+                de que "PRECIO" se tomó como costo antes de que el costo quede
+                congelado en el producto. */}
+            <div className="space-y-1 text-xs">
+              {Object.entries(preview.columnasUsadas).map(([campo, columna]) => (
+                <p key={campo} className="text-foreground/80">
+                  <span className="text-muted-foreground">{campo}:</span>{" "}
+                  {columna}
+                </p>
+              ))}
+              {preview.columnasComoAtributo.length > 0 && (
+                <p className="text-foreground/80">
+                  <span className="text-muted-foreground">
+                    como atributo de la variante:
+                  </span>{" "}
+                  {preview.columnasComoAtributo.join(", ")}
+                </p>
+              )}
+            </div>
+
+            {preview.avisos.length > 0 && (
+              <div className="space-y-1 border-t border-border pt-2">
+                <p className="text-xs font-semibold text-warning">
+                  Para revisar ({preview.avisos.length})
+                </p>
+                <ul className="space-y-0.5 text-xs text-foreground/80">
+                  {preview.avisos.slice(0, 8).map((aviso) => (
+                    <li key={aviso.detalle}>· {aviso.detalle}</li>
+                  ))}
+                  {preview.avisos.length > 8 && (
+                    <li className="text-muted-foreground">
+                      y {preview.avisos.length - 8} más.
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            <p className="text-[11px] text-muted-foreground">
+              Si algo no cuadra, cancelá y corregí el archivo: acá todavía no se
+              creó nada.
+            </p>
+          </div>
+        )}
+
+        {duplicado && (
+          <div className="rounded-xl border border-warning bg-warning/10 p-4 space-y-3">
+            <div>
+              <p className="font-semibold text-warning">
+                Este archivo ya se subió
+              </p>
+              <p className="mt-1 text-sm text-foreground/80">
+                Tiene el mismo contenido que el remito de{" "}
+                <strong>{duplicado.proveedor}</strong> del{" "}
+                {new Date(duplicado.creadoEn).toLocaleDateString("es-AR")}
+                {duplicado.estado === "APROBADA"
+                  ? ", que ya impactó el stock. Subirlo de nuevo lo sumaría dos veces."
+                  : ", que quedó pendiente de conciliar."}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                className="flex-1"
+                onClick={() => {
+                  setOpen(false);
+                  setDuplicado(null);
+                  router.push(`/compras/merge/${duplicado.ordenId}`);
+                }}
+              >
+                Abrir el remito que ya existe
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  // Es mercadería nueva que casualmente viene igual. Se marca
+                  // la intención y se vuelve a mandar; ese remito queda sin
+                  // huella y por lo tanto fuera del guard.
+                  setForzarSubida(true);
+                  setDuplicado(null);
+                }}
+              >
+                Es otra entrega, subirlo igual
+              </Button>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6 pt-2">
+          {forzarSubida && (
+            <p className="rounded-lg border border-warning/60 bg-warning/5 px-3 py-2 text-xs text-foreground/80">
+              Se va a subir aunque el contenido repita un remito anterior.
+            </p>
+          )}
           <a
             href="/plantilla-productos.csv"
             download
@@ -557,7 +470,11 @@ export function ImportarPedidoModal({
               className="px-6"
               disabled={isLoading || !file || !proveedor.trim()}
             >
-              {isLoading ? "Procesando Archivo..." : "Leer Archivo"}
+              {isLoading
+                ? "Procesando Archivo..."
+                : preview
+                  ? `Crear remito con ${preview.filas.length} ${preview.filas.length === 1 ? "renglón" : "renglones"}`
+                  : "Leer Archivo"}
             </Button>
           </div>
         </form>

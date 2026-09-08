@@ -16,6 +16,7 @@ const RUBROS: Rubro[] = [
   "farmacia",
   "ferreteria",
   "quioscos",
+  "cotillon",
   "otros",
 ];
 
@@ -32,6 +33,24 @@ describe("plantillaImportProductos", () => {
     expect(res.columnasIgnoradas).toEqual([]);
     expect(res.invalidas).toEqual([]);
     expect(res.filas).toHaveLength(3);
+  });
+
+  it("la de cotillón trae color y unidad de medida, y un ejemplo por kilo", () => {
+    const csv = plantillaImportProductos("cotillon");
+    const [encabezado, ...filas] = comoMatriz(csv);
+
+    // Color parte variantes: es lo que separa a un cotillón de un kiosco.
+    expect(encabezado).toContain("color");
+    // Y la unidad de medida es lo que deja convivir la piñata por unidad con
+    // los confites por kilo en el mismo mostrador.
+    expect(encabezado).toContain("unidad_medida");
+    expect(csv).toContain("Kilogramo");
+
+    const res = parseProductosSheet(comoMatriz(csv));
+    expect(res.error).toBeNull();
+    expect(res.columnasIgnoradas).toEqual([]);
+    expect(res.invalidas).toEqual([]);
+    expect(res.filas).toHaveLength(filas.filter((f) => f.some(Boolean)).length);
   });
 
   it("la plantilla de indumentaria también", () => {

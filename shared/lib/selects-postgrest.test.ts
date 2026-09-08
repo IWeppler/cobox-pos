@@ -65,5 +65,9 @@ describe("selects de PostgREST", () => {
         `Mové la explicación afuera de la llamada .select().\n` +
         problemas.map((p) => `  - ${p}`).join("\n"),
     ).toEqual([]);
-  });
+    // Lee el repo entero desde el disco. Con la suite completa corriendo en
+    // paralelo se pasa del default de 5 s y falla por timeout, no por haber
+    // encontrado algo — pasó dos veces el 8/9/2026 y las dos costaron una
+    // corrida extra para descartar que fuera una regresión.
+  }, 20_000);
 });

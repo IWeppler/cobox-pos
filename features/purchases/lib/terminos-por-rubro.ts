@@ -296,6 +296,43 @@ const QUIOSCOS: ReglaTermino[] = [
   { terminos: ["cuaderno", "birome", "lapiz", "goma"], categoria: "Librería" },
 ];
 
+const COTILLON: ReglaTermino[] = [
+  {
+    terminos: ["globo", "inflable", "helio"],
+    categoria: "Globos",
+  },
+  {
+    terminos: ["piñata", "pinata", "sorpresa", "souvenir", "cotillon"],
+    categoria: "Piñatas y souvenirs",
+  },
+  {
+    terminos: ["guirnalda", "banderin", "cartel", "letrero", "adorno"],
+    categoria: "Decoración",
+  },
+  {
+    terminos: ["vela", "velita", "numero", "bengala"],
+    categoria: "Velas",
+  },
+  {
+    // Antes que "descartable" a secas: el vaso y el plato son lo que se pide
+    // por nombre en el mostrador.
+    terminos: ["vaso", "plato", "servilleta", "mantel", "descartable", "bandeja"],
+    categoria: "Mesa y descartables",
+  },
+  {
+    terminos: ["disfraz", "antifaz", "peluca", "corona", "vincha", "gorro"],
+    categoria: "Disfraces y accesorios",
+  },
+  {
+    terminos: ["confite", "gomita", "caramelo", "chupetin", "chocolate", "golosina"],
+    categoria: "Golosinas",
+  },
+  {
+    terminos: ["papel", "bolsa", "moño", "cinta", "regalo"],
+    categoria: "Envoltorios",
+  },
+];
+
 /**
  * Rubro → diccionario. `otros` va vacío a propósito: sin saber qué vende el
  * comercio, cualquier término sería una adivinanza, y la fila se completa a
@@ -308,6 +345,7 @@ export const TERMINOS_POR_RUBRO: Record<Rubro, ReglaTermino[]> = {
   farmacia: FARMACIA,
   ferreteria: FERRETERIA,
   quioscos: QUIOSCOS,
+  cotillon: COTILLON,
   otros: [],
 };
 

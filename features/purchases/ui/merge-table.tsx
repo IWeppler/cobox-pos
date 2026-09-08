@@ -82,6 +82,8 @@ import {
   detectarFusiones,
   nombresPorProductoCompartido,
 } from "../lib/fusiones-remito";
+import { precioAlAsociar } from "../lib/precio-al-asociar";
+import { construirPesos, evaluarCandidato } from "../lib/afinidad-nombre";
 import {
   resolverCategoriaDisplayLabel,
   type CategoriaBase,
@@ -582,7 +584,36 @@ export function MergeTable({
     [fusiones],
   );
 
+  /**
+   * Peso de cada palabra del catálogo, para saber cuánta confianza merece cada
+   * sugerencia. Se calcula UNA vez por pantalla: recorrer 1.600 productos por
+   * cada uno de los 43 grupos de un remito sería hacerlo 43 veces.
+   */
+  const pesosCatalogo = useMemo(
+    () => construirPesos(localProductos.map((p) => p.nombre)),
+    [localProductos],
+  );
+
   // --- Handlers Grupales ---
+
+  /**
+   * Qué precio proponer para una fila ya vinculada a un producto existente.
+   * Vive en `precio-al-asociar.ts` con sus tests; acá solo se le pasan los
+   * cuatro datos que hacen falta.
+   */
+  const propuestaPrecio = (
+    item: ItemResueltoConCategoria,
+    productoId: string | null,
+  ) => {
+    const prod = productoReal(productoId);
+    return precioAlAsociar({
+      costoRemito: item.precio_costo,
+      precioSugeridoRemito: item.precio_venta_sugerido,
+      precioEnLaFila: item.precio_venta_actualizado,
+      costoActualProducto: prod?.precio_costo,
+      precioActualProducto: prod?.precio,
+    });
+  };
 
   const handleAssignProduct = (rawNombre: string, newProductId: string) => {
     const prod = productoReal(newProductId);
@@ -613,10 +644,19 @@ export function MergeTable({
           return {
             ...item,
             producto_id: newProductId,
-            // Si ya se calculó un precio (recargo global o edición manual), lo respetamos.
-            // Solo caemos al precio actual del producto si todavía no hay nada calculado.
-            precio_venta_actualizado:
-              item.precio_venta_actualizado || prod?.precio || 0,
+            // Asociar a un producto que ya existe es, casi siempre, ACTUALIZARLO:
+            // entra mercadería con un costo nuevo. Antes acá quedaba el precio
+            // viejo (`item.precio_venta_actualizado || prod?.precio`), así que
+            // al aprobar se escribía el costo nuevo con el precio de antes y el
+            // margen se comía solo. Ahora el precio se recalcula manteniendo el
+            // margen que ese producto ya tenía. Ver `precio-al-asociar.ts`.
+            precio_venta_actualizado: precioAlAsociar({
+              costoRemito: item.precio_costo,
+              precioSugeridoRemito: item.precio_venta_sugerido,
+              precioEnLaFila: item.precio_venta_actualizado,
+              costoActualProducto: prod?.precio_costo,
+              precioActualProducto: prod?.precio,
+            }).precio,
             estado_match:
               item.estado_match === "DESCONOCIDO"
                 ? "NUEVO_ALIAS"
@@ -1521,21 +1561,56 @@ export function MergeTable({
                                 posibleMatch.candidato.categoriaId,
                               )
                             : "";
+                          // Qué tan confiable es la sugerencia, midiendo si las
+                          // palabras que DISTINGUEN al producto coinciden. El
+                          // trigrama de la RPC no puede: con "VESTIDO EGRESADA
+                          // ALANA" y "…ALINA", casi todo el nombre es igual.
+                          const afinidad = evaluarCandidato(
+                            rawNombre,
+                            posibleMatch.candidato.nombre,
+                            pesosCatalogo,
+                            localProductos.length,
+                          );
+                          const dudosa = afinidad.confianza === "baja";
                           return (
                             <div className="flex flex-col gap-2">
-                              <div className="flex items-start justify-between gap-2 p-2 bg-sky-300/10 border border-sky-300 rounded-md">
+                              <div
+                                className={`flex items-start justify-between gap-2 p-2 rounded-md border ${
+                                  dudosa
+                                    ? "bg-chart-5/10 border-chart-5"
+                                    : "bg-sky-300/10 border-sky-300"
+                                }`}
+                              >
                                 <div className="min-w-0">
-                                  <p className="font-semibold text-sky-400 flex items-center gap-1.5 truncate">
+                                  <p
+                                    className={`font-semibold flex items-center gap-1.5 truncate ${
+                                      dudosa ? "text-chart-5" : "text-sky-400"
+                                    }`}
+                                  >
                                     <Search className="w-3.5 h-3.5 shrink-0" />
                                     {posibleMatch.candidato.nombre}
                                   </p>
-                                  <p className="text-[11px] text-sky-300 mt-0.5">
-                                    ~
-                                    {Math.round(
-                                      posibleMatch.candidato.score * 100,
-                                    )}
-                                    % similar
-                                  </p>
+                                  {dudosa ? (
+                                    // Lo único que importa acá es en QUÉ se
+                                    // diferencian: el porcentaje de similitud
+                                    // empuja a confirmar, y es justo lo que
+                                    // hacía fusionar dos prendas distintas.
+                                    <p className="text-[11px] text-chart-5 mt-0.5">
+                                      {afinidad.faltantes.length > 0
+                                        ? `El remito dice "${afinidad.faltantes.join(", ")}" y este producto no.`
+                                        : "Los nombres se parecen, pero no coinciden."}
+                                      {afinidad.sobrantes.length > 0 &&
+                                        ` En el sistema dice "${afinidad.sobrantes.join(", ")}".`}
+                                    </p>
+                                  ) : (
+                                    <p className="text-[11px] text-sky-300 mt-0.5">
+                                      ~
+                                      {Math.round(
+                                        posibleMatch.candidato.score * 100,
+                                      )}
+                                      % similar
+                                    </p>
+                                  )}
                                   {(posibleMatch.candidato.marca ||
                                     candidatoCategoriaLabel) && (
                                     <p className="text-[11px] text-sky-300 mt-0.5 truncate">
@@ -1549,10 +1624,45 @@ export function MergeTable({
                                         .join(" · ")}
                                     </p>
                                   )}
+                                  {/* El costo y el precio del candidato: con
+                                      nombres que se diferencian en dos letras
+                                      ("CADARUVE CF" y "CADARUVE CR"), el
+                                      número es lo que permite darse cuenta de
+                                      que es OTRA prenda antes de confirmar. */}
+                                  {(() => {
+                                    const cand = productoReal(
+                                      posibleMatch.candidato.productoId,
+                                    );
+                                    if (!cand) return null;
+                                    const costo = Number(cand.precio_costo) || 0;
+                                    const precio = Number(cand.precio) || 0;
+                                    if (!costo && !precio) return null;
+                                    return (
+                                      <p className="text-[11px] text-sky-300/80 mt-0.5">
+                                        Hoy: costo $
+                                        {costo.toLocaleString("es-AR")} · precio $
+                                        {precio.toLocaleString("es-AR")}
+                                        {" · "}el remito trae costo $
+                                        {firstItem.precio_costo.toLocaleString(
+                                          "es-AR",
+                                        )}
+                                      </p>
+                                    );
+                                  })()}
                                 </div>
+                                {/* Con confianza baja el botón NO es la acción
+                                    principal: la pantalla pregunta en vez de
+                                    recomendar. Un botón azul y prominente sobre
+                                    una sugerencia dudosa es lo que hacía
+                                    confirmar de más. */}
                                 <Button
                                   size="sm"
-                                  className="h-8 text-xs bg-sky-600 hover:bg-sky-700 text-white shrink-0"
+                                  variant={dudosa ? "outline" : "default"}
+                                  className={
+                                    dudosa
+                                      ? "h-8 text-xs shrink-0"
+                                      : "h-8 text-xs bg-sky-600 hover:bg-sky-700 text-white shrink-0"
+                                  }
                                   onClick={() =>
                                     handleAssignProduct(
                                       rawNombre,
@@ -1560,12 +1670,14 @@ export function MergeTable({
                                     )
                                   }
                                 >
-                                  Confirmar asociación
+                                  {dudosa ? "Es el mismo" : "Confirmar asociación"}
                                 </Button>
                               </div>
-                              <details className="text-xs">
+                              <details className="text-xs" open={dudosa}>
                                 <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-                                  No es este producto — buscar otro
+                                  {dudosa
+                                    ? "Es otro producto — crearlo o buscar el correcto"
+                                    : "No es este producto — buscar otro"}
                                 </summary>
                                 <div className="mt-2 flex flex-col gap-2">
                                   {fallbackManual}
@@ -1745,7 +1857,48 @@ export function MergeTable({
                             />
                           </div>
                         </div>
-                      ) : (
+                      ) : null}
+
+                      {/* DE DÓNDE SALE ESE PRECIO. Sin esto, el número aparece
+                          solo y no se puede saber si es el del proveedor, el
+                          que había, o uno recalculado — que es exactamente la
+                          confusión que reportó Evelyn al confirmar una
+                          asociación. */}
+                      {firstItem.producto_id &&
+                        (() => {
+                          const propuesta = propuestaPrecio(
+                            firstItem,
+                            firstItem.producto_id,
+                          );
+                          const precioPuesto =
+                            Number(firstItem.precio_venta_actualizado) || 0;
+                          const margen =
+                            firstItem.precio_costo > 0 && precioPuesto > 0
+                              ? precioPuesto / firstItem.precio_costo
+                              : null;
+
+                          return (
+                            <div className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
+                              <p>{propuesta.explicacion}</p>
+                              {margen !== null && (
+                                <p
+                                  className={
+                                    propuesta.markupAnterior !== null &&
+                                    margen < propuesta.markupAnterior - 0.01
+                                      ? "font-semibold text-warning"
+                                      : ""
+                                  }
+                                >
+                                  Margen ×{margen.toFixed(2)}
+                                  {propuesta.markupAnterior !== null &&
+                                    ` (antes ×${propuesta.markupAnterior.toFixed(2)})`}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                      {!firstItem.producto_id && (
                         <span className="text-xs text-muted-foreground italic mr-2">
                           Esperando asignación...
                         </span>

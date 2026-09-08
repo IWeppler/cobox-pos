@@ -195,6 +195,7 @@ const DEFAULTS_POR_RUBRO: Record<Rubro, DefaultsFiscales> = {
   electro: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
   ferreteria: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
   quioscos: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
+  cotillon: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
   // Las dos que hay que revisar antes de facturar con ARCA. Ver arriba.
   farmacia: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
   alimentos: { unidad_medida: "UNIDAD", tratamiento_iva: "GRAVADO_21" },
