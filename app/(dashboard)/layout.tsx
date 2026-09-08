@@ -1,3 +1,4 @@
+import { RUTA_SALIR } from "@/shared/lib/salir-sesion";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -35,8 +36,13 @@ export default async function DashboardLayout({
 
   const { user, error } = await getUsuarioActual();
 
+  // A `/auth/salir` y no a `/auth`: si se llegó acá es porque el servidor de
+  // Auth ya no reconoce la sesión, pero las cookies siguen puestas y el
+  // middleware las verifica LOCAL —o sea que las sigue dando por buenas y
+  // rebota de vuelta al panel—. Hay que borrarlas, y eso solo se puede hacer
+  // desde un route handler. Ver `shared/lib/salir-sesion.ts`.
   if (error || !user) {
-    redirect("/auth");
+    redirect(RUTA_SALIR);
   }
 
   // El rol es por negocio (usuarios_negocios), el nombre es del perfil global.

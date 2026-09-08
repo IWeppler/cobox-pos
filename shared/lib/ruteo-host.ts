@@ -37,6 +37,7 @@ export const PATHS_DE_PLATAFORMA = [
   "recuperar",
   "reportes",
   "seleccionar-negocio",
+  "sesion-interrumpida",
   "stock",
   "terminos",
   "ventas",

@@ -1,3 +1,4 @@
+import { RUTA_SALIR } from "@/shared/lib/salir-sesion";
 import { PosPageClient } from "@/features/pos/ui/pos-page-client";
 import { redirect } from "next/navigation";
 import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function PosPage() {
   // Verificamos permisos
   const { user } = await getUsuarioActual();
-  if (!user) redirect("/auth");
+  if (!user) redirect(RUTA_SALIR);
 
   // No cuesta un viaje: el layout ya lo resolvió en este mismo render y
   // `puedeCobrarCuentaCorriente` está cacheada por request.

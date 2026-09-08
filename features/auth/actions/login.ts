@@ -71,7 +71,13 @@ export async function loginAction(
     if (!destino) {
       // Invitación pendiente: la sesión no le sirve para nada hasta que use el
       // link, así que se cierra igual que antes.
-      await supabase.auth.signOut();
+      //
+      // `local`, no el default `global`: lo que hay que deshacer es el login que
+      // se acaba de hacer EN ESTE navegador. Con el default, alguien que entra
+      // desde una segunda máquina mientras su invitación está pendiente cierra
+      // de paso las sesiones que tenga abiertas en otro lado. Mismo criterio
+      // que `logoutAction`.
+      await supabase.auth.signOut({ scope: "local" });
       return { error: aviso };
     }
 

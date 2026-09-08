@@ -12,6 +12,8 @@ import {
 import { decidirRuteo, RUTA_TIENDA_NO_ENCONTRADA } from "@/shared/lib/ruteo-host";
 import { resolverTienda } from "@/shared/lib/cache-tenants";
 import { MENSAJE_SESION_VENCIDA } from "@/shared/lib/sesion-vencida";
+import { RUTA_SALIR, esSalidaDeSesion } from "@/shared/lib/salir-sesion";
+import { RUTA_SESION_INTERRUMPIDA } from "@/shared/lib/sesion-interrumpida";
 import {
   COOKIE_IMPERSONATE,
   COOKIE_NEGOCIO_ACTIVO,
@@ -167,6 +169,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request: conNegocio() });
   }
 
+  // ─── SALIDA DE SESIÓN: se corta acá, sin montar el cliente de Supabase ────
+  //
+  // `/auth/salir` existe para BORRAR las cookies de auth. Si el middleware
+  // montara el cliente igual, `getClaims()` podría refrescar la sesión y
+  // escribir cookies `sb-*` nuevas en ESTA respuesta, que después se fusiona
+  // con la del route handler — el mismo nombre de cookie con un `set` y un
+  // `delete` compitiendo, y el orden no está garantizado. O sea: el borrado
+  // podría no quedar, que es exactamente lo que la ruta viene a arreglar.
+  //
+  // Nada se pierde: la ruta no necesita saber quién es el usuario, y el gate 5
+  // igual la deja pasar por `saliendoDeSesion`.
+  if (pathname === RUTA_SALIR) {
+    return NextResponse.next({ request: conNegocio() });
+  }
+
   let supabaseResponse = NextResponse.next({
     request: conNegocio(),
   });
@@ -220,6 +237,11 @@ export async function middleware(request: NextRequest) {
   const user = claims ? { id: claims.sub as string } : null;
 
   const isAuthRoute = pathname.startsWith("/auth");
+  // Salida de una sesión que el servidor ya no reconoce. Se calcula acá arriba
+  // porque el gate 5 tiene que consultarlo antes de rebotar a nadie al panel:
+  // devolver al panel a quien viene a soltar un token muerto es justamente el
+  // loop que documenta `salir-sesion.ts`.
+  const saliendoDeSesion = esSalidaDeSesion(pathname, request.nextUrl.search);
   // Las páginas legales se linkean desde el login: tienen que abrirse sin
   // sesión, o el link manda a /auth y no se lee nunca lo que se está por
   // aceptar.
@@ -268,6 +290,15 @@ export async function middleware(request: NextRequest) {
   let rolActual: string | null = null;
   let rol = null;
   let esSuperAdmin = false;
+  /**
+   * "No pude averiguarlo", que NO es lo mismo que "no tiene negocio".
+   *
+   * Sin esta distinción un fallo de la consulta se leía como un `null` y el
+   * gate 4 mandaba al selector o al onboarding; esas páginas, viendo que la
+   * persona sí tiene negocio, la devolvían a `/`, y el rebote no terminaba
+   * nunca. Ver `shared/lib/sesion-interrumpida.ts`.
+   */
+  let contextoIndeterminado = false;
 
   if (user) {
     const claim = leerClaimComerz(claims);
@@ -301,11 +332,20 @@ export async function middleware(request: NextRequest) {
         : "sin-claims-verificados";
       console.warn(`[CLAIMS] fallback a contexto_sesion: ${motivo}`);
 
-      const { data } = await supabase.rpc("contexto_sesion").maybeSingle();
+      const { data, error } = await supabase
+        .rpc("contexto_sesion")
+        .maybeSingle();
       const contexto = data as {
         rol: string | null;
         es_super_admin: boolean | null;
       } | null;
+
+      // Un error acá NO es "no tiene negocio": es que no se pudo preguntar.
+      // Tratarlos igual es lo que producía el loop contra el selector.
+      if (error) {
+        console.error("[CLAIMS] contexto_sesion falló:", error.message);
+        contextoIndeterminado = true;
+      }
 
       rolActual = contexto?.rol ?? null;
       esSuperAdmin = contexto?.es_super_admin ?? false;
@@ -314,6 +354,30 @@ export async function middleware(request: NextRequest) {
     // Si por algún motivo falla, asumimos el rol más restrictivo (VENDEDOR)
     rol = rolActual || "VENDEDOR";
   }
+
+  /**
+   * Corte cuando no se pudo resolver el contexto. NUNCA con redirect: la
+   * pantalla se sirve con rewrite, la URL no cambia y por lo tanto no hay salto
+   * que se pueda repetir en ciclo. Ver `shared/lib/sesion-interrumpida.ts`.
+   *
+   * Un server action no puede recibir HTML —el `fetch` de React lo lee como
+   * "An unexpected response was received from the server"— así que ahí va el
+   * mismo 401 en texto plano que ya usa la sesión vencida, que el boundary sabe
+   * mostrar.
+   */
+  const cortarPorContextoIndeterminado = () => {
+    if (request.headers.get("next-action")) {
+      return new NextResponse(MENSAJE_SESION_VENCIDA, {
+        status: 401,
+        headers: { "content-type": "text/plain" },
+      });
+    }
+
+    const url = request.nextUrl.clone();
+    url.pathname = RUTA_SESION_INTERRUMPIDA;
+    url.search = `?volver=${encodeURIComponent(pathname)}`;
+    return NextResponse.rewrite(url, { request: conNegocio() });
+  };
 
   // 2. Control de usuarios NO autenticados
   if (!user) {
@@ -363,6 +427,17 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
+  // 2 bis. No se pudo averiguar el contexto de la sesión.
+  //
+  // Va ANTES de los gates que redirigen, porque el problema no es a dónde
+  // mandar a esta persona sino que no se sabe: cualquier redirect elegido con
+  // información incompleta es el que después rebota. Las rutas públicas, el
+  // login y la salida siguen su camino: son las que tienen que funcionar
+  // JUSTAMENTE cuando lo demás no funciona.
+  if (contextoIndeterminado && !isPublicRoute && !isAuthRoute) {
+    return cortarPorContextoIndeterminado();
+  }
+
   // 3. Super admin de comerz: no pertenece a ningún negocio, así que queda
   // fuera de todo el control por rol y negocio activo. Su lugar es /admincomerz.
   // `esSuperAdmin` ya vino con el rol, arriba: era un segundo viaje a la base
@@ -388,10 +463,18 @@ export async function middleware(request: NextRequest) {
   // Al empleado con invitación pendiente lo separa `destinoSinNegocio` en el
   // login, que es donde está el email para buscarla.
   if (user && !rolActual && !isRutaSinNegocio && !isPublicRoute && !isAuthRoute) {
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from("usuarios_negocios")
       .select("negocio_id", { count: "exact", head: true })
       .eq("usuario_id", user.id);
+
+    // Mismo criterio que arriba: si la consulta falló, `count` viene null y
+    // "no pude contar" se leería como "no tiene ninguno" — o sea /onboarding,
+    // que al ver que sí tiene negocios devuelve a `/` y arranca el rebote.
+    if (error) {
+      console.error("[NEGOCIOS] conteo de membresías falló:", error.message);
+      return cortarPorContextoIndeterminado();
+    }
 
     const url = request.nextUrl.clone();
     url.pathname = (count ?? 0) > 0 ? "/seleccionar-negocio" : "/onboarding";
@@ -401,7 +484,13 @@ export async function middleware(request: NextRequest) {
   // 5. Control de usuarios SI autenticados yendo al Login. Solo si ya tienen
   // negocio resuelto: si no, quedarían rebotando entre /auth y el gate de
   // arriba.
-  if (user && isAuthRoute && rolActual) {
+  //
+  // `saliendoDeSesion` es el segundo freno del loop del 7/9/2026: quien viene a
+  // `/auth/salir` —o al login con `?sesion=vencida`— trae un token que este
+  // middleware puede verificar pero que el servidor de Auth ya no reconoce.
+  // Rebotarlo al panel es devolverlo al mismo 403 del que viene, en ciclo.
+  // Ver `shared/lib/salir-sesion.ts`.
+  if (user && isAuthRoute && rolActual && !saliendoDeSesion) {
     const url = request.nextUrl.clone();
     // Admin va al dashboard, vendedor va al stock
     url.pathname = rol === "ADMIN" ? "/" : "/pos";

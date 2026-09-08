@@ -1,3 +1,4 @@
+import { RUTA_SALIR } from "@/shared/lib/salir-sesion";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -91,7 +92,7 @@ export default async function BajasPage({
 
   // 1. Verificación estricta de Admin
   const { user } = await getUsuarioActual();
-  if (!user) redirect("/auth");
+  if (!user) redirect(RUTA_SALIR);
 
   const rolActual = await getRolActual();
 

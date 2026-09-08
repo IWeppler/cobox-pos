@@ -79,6 +79,10 @@ import {
   BucketDesconocido,
 } from "../lib/match-classification";
 import {
+  detectarFusiones,
+  nombresPorProductoCompartido,
+} from "../lib/fusiones-remito";
+import {
   resolverCategoriaDisplayLabel,
   type CategoriaBase,
 } from "@/shared/utils/category-tree";
@@ -549,10 +553,59 @@ export function MergeTable({
     return listaProductos.find((p) => p.id === id);
   }
 
+  /**
+   * Renglones de productos DISTINTOS que caen en la misma variante del mismo
+   * producto. Es lo que fusionaba vestidos únicos en Evens (8/9/2026): al
+   * aprobar, la RPC sumaba los dos stocks sobre una sola fila y el segundo
+   * color pisaba al primero.
+   *
+   * Se recalcula en cada cambio de vinculación para que el aviso aparezca
+   * mientras se concilia, no al final. El freno real vive en
+   * `aprobar_orden_compra`, que rechaza el remito antes de escribir nada:
+   * esto es lo que evita llegar hasta ahí.
+   */
+  const fusiones = useMemo(
+    () => detectarFusiones(items, (id) => productoReal(id)?.nombre),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, localProductos],
+  );
+
+  /** Productos que ya tienen más de un nombre del remito colgando. */
+  const productosCompartidos = useMemo(
+    () => nombresPorProductoCompartido(items),
+    [items],
+  );
+
+  /** Los nombres del remito que participan de alguna fusión, para marcarlos. */
+  const nombresEnFusion = useMemo(
+    () => new Set(fusiones.flatMap((f) => f.nombres)),
+    [fusiones],
+  );
+
   // --- Handlers Grupales ---
 
   const handleAssignProduct = (rawNombre: string, newProductId: string) => {
     const prod = productoReal(newProductId);
+
+    // Aviso al momento de vincular, que es cuando la persona todavía tiene
+    // presente qué eligió. Sin esto, mandar tres vestidos distintos al mismo
+    // producto no se notaba hasta que el stock ya estaba sumado.
+    const yaAsignadoA = items
+      .filter(
+        (item) =>
+          item.producto_id === newProductId && item.raw_nombre !== rawNombre,
+      )
+      .map((item) => item.raw_nombre);
+
+    if (yaAsignadoA.length > 0) {
+      const otros = Array.from(new Set(yaAsignadoA));
+      toast.warning(
+        `"${prod?.nombre ?? "Ese producto"}" ya está vinculado a ${otros
+          .slice(0, 2)
+          .map((n) => `"${n}"`)
+          .join(", ")}${otros.length > 2 ? ` y ${otros.length - 2} más` : ""}. Si son prendas distintas, buscá otro producto.`,
+      );
+    }
 
     setItems((prevItems) =>
       prevItems.map((item) => {
@@ -901,6 +954,20 @@ export function MergeTable({
       return;
     }
 
+    // Freno de fusión. La RPC rechaza este remito igual —y ese es el freno que
+    // cuenta— pero conviene decirlo acá con los nombres a la vista, porque el
+    // error del server llega como un texto suelto arriba de todo.
+    if (fusiones.length > 0) {
+      const ejemplo = fusiones[0];
+      toast.error(
+        `No se puede impactar: ${ejemplo.nombres.join(" y ")} caen en la misma variante de "${ejemplo.productoNombre}" (${ejemplo.variante})` +
+          (fusiones.length > 1
+            ? `, y hay ${fusiones.length - 1} caso${fusiones.length > 2 ? "s" : ""} más. Revisá las filas marcadas en rojo.`
+            : ". Vinculá una de las dos a otro producto."),
+      );
+      return;
+    }
+
     setAprobarLoading(true);
     setAprobarError(null);
 
@@ -986,14 +1053,24 @@ export function MergeTable({
             size="lg"
             className="h-10 bg-primary hover:bg-primary/90 text-white w-full sm:w-auto cursor-pointer"
             onClick={handleAprobar}
-            disabled={aprobarLoading || crearLoading || items.length === 0}
+            // Con una fusión pendiente el botón queda deshabilitado y NO por
+            // prolijidad: la RPC va a rechazar el remito entero igual, así que
+            // dejar apretar solo consigue una espera y un error críptico.
+            disabled={
+              aprobarLoading ||
+              crearLoading ||
+              items.length === 0 ||
+              fusiones.length > 0
+            }
           >
             <Save className="w-5 h-5 mr-2" />
             {aprobarLoading
               ? "Procesando..."
-              : aprobarError
-                ? "Reintentar"
-                : "Confirmar e Impactar Stock"}
+              : fusiones.length > 0
+                ? "Revisá los renglones que se combinan"
+                : aprobarError
+                  ? "Reintentar"
+                  : "Confirmar e Impactar Stock"}
           </Button>
           {aprobarError && (
             <p className="text-xs text-danger font-medium max-w-sm text-right">
@@ -1101,6 +1178,48 @@ export function MergeTable({
         </Badge>
       </div>
 
+      {/* AVISO DE FUSIÓN — el que faltaba el 28/8 en Evens.
+          Dos renglones de prendas distintas vinculados al mismo producto y con
+          la misma variante terminan sumando su stock en una sola fila. Se
+          muestra con los nombres puestos: "revisá las vinculaciones" no
+          alcanza cuando el remito tiene 43 grupos. */}
+      {fusiones.length > 0 && (
+        <div className="mx-2 rounded-xl border border-danger bg-danger/10 p-4">
+          <p className="flex items-center gap-2 font-semibold text-danger">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            {fusiones.length === 1
+              ? "Hay dos renglones que se van a combinar en un solo producto"
+              : `Hay ${fusiones.length} pares de renglones que se van a combinar`}
+          </p>
+          <p className="mt-1 text-sm text-foreground/80">
+            Si son prendas distintas, su stock se suma en la misma variante y
+            no hay forma de separarlo después. Vinculá una de las dos a otro
+            producto.
+          </p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {fusiones.slice(0, 5).map((fusion) => (
+              <li
+                key={`${fusion.productoId}-${fusion.variante}`}
+                className="text-foreground/90"
+              >
+                <span className="font-semibold">
+                  {fusion.nombres.join(" + ")}
+                </span>{" "}
+                → {fusion.productoNombre}{" "}
+                <span className="text-muted-foreground">
+                  ({fusion.variante})
+                </span>
+              </li>
+            ))}
+            {fusiones.length > 5 && (
+              <li className="text-muted-foreground">
+                y {fusiones.length - 5} más.
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+
       {/* Tabla Interactiva Agrupada */}
       <div className="bg-background rounded-xl border border-border overflow-hidden overflow-x-auto">
         <table className="w-full text-sm text-left min-w-250">
@@ -1148,8 +1267,22 @@ export function MergeTable({
                   0,
                 );
 
+                // Este grupo choca con otro en la misma variante: gana sobre
+                // cualquier otro estado, porque es lo único que impide
+                // impactar el remito.
+                const enFusion = nombresEnFusion.has(rawNombre);
+                // Comparte producto con otro grupo sin chocar todavía. No
+                // bloquea —el proveedor puede escribir el mismo artículo de
+                // dos formas— pero es la antesala de la fusión.
+                const comparteProducto = firstItem.producto_id
+                  ? (productosCompartidos.get(firstItem.producto_id) ?? [])
+                      .filter((n) => n !== rawNombre)
+                  : [];
+
                 let rowClassName = "hover:bg-muted/30";
-                if (isInflacion)
+                if (enFusion)
+                  rowClassName = "bg-danger/20 hover:bg-danger/30";
+                else if (isInflacion)
                   rowClassName = "bg-warning/10 hover:bg-warning/20";
                 else if (posibleMatch)
                   rowClassName = "bg-info/10 hover:bg-info/20";
@@ -1196,6 +1329,27 @@ export function MergeTable({
                       <p className="font-bold text-foreground uppercase tracking-wide">
                         {rawNombre}
                       </p>
+                      {enFusion ? (
+                        <p className="mt-1 flex items-start gap-1 text-[11px] font-semibold text-danger">
+                          <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                          Se combina con otro renglón en la misma variante. Su
+                          stock se sumaría en una sola fila.
+                        </p>
+                      ) : (
+                        comparteProducto.length > 0 && (
+                          <p className="mt-1 text-[11px] text-chart-5">
+                            Comparte producto con{" "}
+                            {comparteProducto
+                              .slice(0, 2)
+                              .map((n) => `"${n}"`)
+                              .join(", ")}
+                            {comparteProducto.length > 2
+                              ? ` y ${comparteProducto.length - 2} más`
+                              : ""}
+                            .
+                          </p>
+                        )
+                      )}
                       {/* Dato CRUDO tal como vino del CSV (raw_marca /
                           raw_genero) — antes de cualquier resolución, para
                           poder comparar de un vistazo contra lo que el

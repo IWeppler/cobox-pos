@@ -1,3 +1,4 @@
+import { RUTA_SALIR } from "@/shared/lib/salir-sesion";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -15,7 +16,7 @@ export default async function AdminComerzLayout({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/auth");
+  if (!user) redirect(RUTA_SALIR);
 
   // Validamos si es el super admin usando la función de base de datos
   const { data: isAdmin, error } = await supabase.rpc("is_super_admin");

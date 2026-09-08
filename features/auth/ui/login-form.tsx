@@ -8,6 +8,7 @@ import { Label } from "@/shared/ui/label";
 import { Button } from "@/shared/ui/button";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { PARAM_SESION, VALOR_SESION_VENCIDA } from "@/shared/lib/salir-sesion";
 
 const initialState: LoginState = { error: "", success: false };
 
@@ -32,10 +33,18 @@ export function LoginForm() {
   // middleware) y los enlaces de mail vencidos, que hasta ahora se descartaban
   // en silencio.
   const errorUrl = searchParams.get("error");
+  // Se llegó por una sesión que el servidor dejó de reconocer, no por haber
+  // salido a mano: sin este aviso el login aparece solo, sin explicación, y
+  // parece que la app se cerró sola. Ver `shared/lib/salir-sesion.ts`.
+  const sesionVencida =
+    searchParams.get(PARAM_SESION) === VALOR_SESION_VENCIDA;
   const mensajeUrl =
     errorUrl === "sin-negocio"
       ? "Tu cuenta no está asociada a ningún negocio. Pedile a la persona a cargo que te invite."
-      : errorUrl;
+      : (errorUrl ??
+        (sesionVencida
+          ? "Tu sesión se cerró. Volvé a entrar para seguir."
+          : null));
 
   useEffect(() => {
     if (state?.success) {

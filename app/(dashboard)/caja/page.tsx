@@ -1,3 +1,4 @@
+import { RUTA_SALIR } from "@/shared/lib/salir-sesion";
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -35,7 +36,7 @@ export default async function CajaPage() {
 
   // 1. Verificación de permisos y perfil
   const { user } = await getUsuarioActual();
-  if (!user) redirect("/auth");
+  if (!user) redirect(RUTA_SALIR);
 
   // El rol es por negocio (usuarios_negocios), el nombre es del perfil global.
   const [{ data: perfil }, rolActual] = await Promise.all([

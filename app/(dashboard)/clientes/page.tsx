@@ -1,3 +1,4 @@
+import { RUTA_SALIR } from "@/shared/lib/salir-sesion";
 import { ClientsPageClient } from "@/features/clients/ui/clients-page-client";
 import { redirect } from "next/navigation";
 import { getUsuarioActual } from "@/shared/config/supabase/usuario-actual";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function ClientesPage() {
   // Verificación de sesión
   const { user } = await getUsuarioActual();
-  if (!user) redirect("/auth");
+  if (!user) redirect(RUTA_SALIR);
 
   const rolActual = await getRolActual();
   const userRole = rolActual || "VENDEDOR";

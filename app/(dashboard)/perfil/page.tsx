@@ -1,3 +1,4 @@
+import { RUTA_SALIR } from "@/shared/lib/salir-sesion";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ProfileDashboard } from "@/features/perfil/ui/profile-dashboard";
@@ -18,7 +19,7 @@ const ProfilePage = async () => {
   const supabase = createClient(cookieStore);
 
   const { user } = await getUsuarioActual();
-  if (!user) redirect("/auth");
+  if (!user) redirect(RUTA_SALIR);
 
   // La página venía con todo en blanco (id, nombre, email y plan hardcodeados
   // en ""). Ahora sale del perfil global y del negocio activo.
