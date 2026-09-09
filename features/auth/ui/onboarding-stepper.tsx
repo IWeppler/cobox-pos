@@ -19,6 +19,7 @@ import {
 } from "@/features/auth/actions/registro";
 import { crearNegocioAction } from "@/features/auth/actions/negocios";
 import { ReenviarVerificacion } from "@/features/auth/ui/reenviar-verificacion";
+import { registrarPasoOnboardingAction } from "@/features/auth/actions/paso-onboarding";
 import { RUBROS, TAMANOS_EQUIPO } from "@/shared/lib/rubros";
 
 const estadoRegistro: RegistroState = { error: "" };
@@ -90,6 +91,21 @@ export function OnboardingStepper({
       router.refresh();
     }
   }, [negocio.success, router]);
+
+  // El escalón del embudo que no se puede deducir de `auth.users`.
+  //
+  // "Se le emitió sesión" y "vio el formulario y lo abandonó" son cosas
+  // distintas y hasta ahora se veían iguales: `last_sign_in_at` lo escribe
+  // Supabase al emitir el token del link del mail, o sea que se marca aunque
+  // la persona no haya visto nada. Sin este evento no hay forma de separarlas.
+  //
+  // Se dispara al MOSTRAR el paso 2, no al enviarlo: lo que interesa es que
+  // llegó a verlo. La RPC es idempotente por (usuario, paso) y la action nunca
+  // lanza, así que un fallo de telemetría no puede frenar un alta.
+  useEffect(() => {
+    if (paso !== 2) return;
+    registrarPasoOnboardingAction("PASO_2_NEGOCIO");
+  }, [paso]);
 
   // Confirmación por email prendida en el proyecto: no hay sesión, así que no
   // se puede seguir al paso 2. Es el camino que el alta directa viene a

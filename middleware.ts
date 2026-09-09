@@ -17,9 +17,11 @@ import { RUTA_SESION_INTERRUMPIDA } from "@/shared/lib/sesion-interrumpida";
 import {
   COOKIE_IMPERSONATE,
   COOKIE_NEGOCIO_ACTIVO,
+  COOKIE_NEGOCIO_MAX_AGE,
   HEADER_IMPERSONATE,
   HEADER_NEGOCIO_ACTIVO,
 } from "@/shared/lib/negocio-activo";
+import { negocioHabilitado } from "@/shared/lib/estado-negocio";
 import {
   leerClaimComerz,
   resolverContextoDesdeClaim,
@@ -463,17 +465,49 @@ export async function middleware(request: NextRequest) {
   // Al empleado con invitación pendiente lo separa `destinoSinNegocio` en el
   // login, que es donde está el email para buscarla.
   if (user && !rolActual && !isRutaSinNegocio && !isPublicRoute && !isAuthRoute) {
-    const { count, error } = await supabase
+    // SE PIDE EL ESTADO, no un conteo pelado, y esa es la corrección.
+    //
+    // Antes acá se contaban TODAS las membresías mientras
+    // `listarMisNegociosAction` —la que usa la página del selector— filtra por
+    // `negocioHabilitado`. Dos definiciones distintas de "tenés un negocio", y
+    // la contradicción es un callejón: con la única membresía en `cancelado`
+    // (hoy `ignacionweppler+4`), el middleware decía "tenés uno, andá a
+    // elegir" y el selector contestaba "no tenés ninguno, andá al login".
+    //
+    // Es la MISMA familia que el claim viejo de abajo: dos lugares que
+    // responden la misma pregunta con distinta información.
+    const { data: membresias, error } = await supabase
       .from("usuarios_negocios")
-      .select("negocio_id", { count: "exact", head: true })
+      .select("negocio_id, negocios(estado)")
       .eq("usuario_id", user.id);
 
-    // Mismo criterio que arriba: si la consulta falló, `count` viene null y
-    // "no pude contar" se leería como "no tiene ninguno" — o sea /onboarding,
-    // que al ver que sí tiene negocios devuelve a `/` y arranca el rebote.
+    // Si la consulta falló, `membresias` viene null y "no pude contar" se
+    // leería como "no tiene ninguno" — o sea /onboarding, que al ver que sí
+    // tiene negocios devuelve a `/` y arranca el rebote.
     if (error) {
       console.error("[NEGOCIOS] conteo de membresías falló:", error.message);
       return cortarPorContextoIndeterminado();
+    }
+
+    const habilitados = (membresias ?? []).filter((m) => {
+      // El embed de PostgREST puede venir como objeto o como array de uno.
+      const negocio = Array.isArray(m.negocios) ? m.negocios[0] : m.negocios;
+      return negocioHabilitado(
+        (negocio as { estado?: string } | null)?.estado,
+      );
+    });
+    const count = habilitados.length;
+
+    // Tiene membresías pero NINGUNA sirve: todos cancelados o suspendidos.
+    // No es "todavía no creó el suyo" —mandarlo a /onboarding le haría abrir
+    // un comercio nuevo cuando lo que quiere es el que tenía— ni es algo que
+    // pueda resolver eligiendo. Va al login con el motivo, que es lo mismo que
+    // ya contestaba la página del selector.
+    if (count === 0 && (membresias ?? []).length > 0) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth";
+      url.search = "?error=sin-negocio";
+      return NextResponse.redirect(url);
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -523,9 +557,32 @@ export async function middleware(request: NextRequest) {
         console.warn("[CLAIMS] claim desactualizado: la base sí resuelve rol");
         rolActual = contexto.rol;
         rol = contexto.rol;
+      } else if (count === 1 && negocioActivo !== habilitados[0].negocio_id) {
+        // UN solo negocio habilitado, y la base no lo resolvió sola.
+        //
+        // Pasa cuando hay OTRA membresía muerta al lado: `current_negocio_id()`
+        // cuenta membresías sin mirar el estado, ve dos y devuelve null. El
+        // selector, que sí filtra, ve una sola y hace `redirect("/")` sin
+        // dejar nada elegido — y vuelve a empezar.
+        //
+        // Se elige acá y se repite la MISMA url: la próxima pasada ya trae la
+        // cookie y resuelve por el camino normal. El `negocioActivo !== ...` es
+        // el freno: si la cookie ya apuntaba ahí y aun así no resolvió, el
+        // problema es otro y este redirect sería el loop.
+        const elegido = habilitados[0].negocio_id as string;
+        const url = request.nextUrl.clone();
+        const respuesta = NextResponse.redirect(url);
+        respuesta.cookies.set(COOKIE_NEGOCIO_ACTIVO, elegido, {
+          path: "/",
+          maxAge: COOKIE_NEGOCIO_MAX_AGE,
+          sameSite: "lax",
+          httpOnly: false,
+        });
+        return respuesta;
       } else {
         // La base coincide con el claim: tiene negocios pero ninguno resuelto
-        // —o sea más de uno y sin elegir—. Ahí el selector es lo correcto.
+        // —o sea más de uno habilitado y sin elegir—. Ahí el selector es lo
+        // correcto.
         const url = request.nextUrl.clone();
         url.pathname = "/seleccionar-negocio";
         return NextResponse.redirect(url);

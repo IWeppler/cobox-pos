@@ -34,6 +34,7 @@ export async function getEmbudoAltaAction(): Promise<FilaEmbudoAlta[]> {
       registrado: f.registrado as string,
       confirmado: (f.confirmado as string | null) ?? null,
       ultimaSesion: (f.ultima_sesion as string | null) ?? null,
+      vioFormulario: (f.vio_formulario as string | null) ?? null,
       negocioCreado: (f.negocio_creado as string | null) ?? null,
       miembroDeAlgunNegocio: Boolean(f.miembro_de_algun_negocio),
       invitacionPendiente: Boolean(f.invitacion_pendiente),

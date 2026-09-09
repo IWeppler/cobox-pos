@@ -13,6 +13,7 @@ const fila = (p: Partial<FilaEmbudoAlta> = {}): FilaEmbudoAlta => ({
   registrado: "2026-09-01T10:00:00Z",
   confirmado: null,
   ultimaSesion: null,
+  vioFormulario: null,
   negocioCreado: null,
   miembroDeAlgunNegocio: false,
   invitacionPendiente: false,
@@ -131,8 +132,10 @@ describe("resumen", () => {
     const r = resumirEmbudoAlta(escenario());
 
     expect(r.total).toBe(6);
-    expect(r.escalones.map((e) => e.llegaron)).toEqual([6, 5, 5, 2]);
-    expect(r.escalones.map((e) => e.porcentaje)).toEqual([100, 83, 83, 33]);
+    // Los tres que quedaron en SESION nunca vieron el formulario, así que el
+    // escalón VIO_FORMULARIO solo tiene a los dos que terminaron.
+    expect(r.escalones.map((e) => e.llegaron)).toEqual([6, 5, 5, 2, 2]);
+    expect(r.escalones.map((e) => e.porcentaje)).toEqual([100, 83, 83, 33, 33]);
   });
 
   it("señala el escalón donde se cae más gente", () => {
@@ -288,5 +291,58 @@ describe("cuentas de prueba", () => {
 
     expect(r.total).toBe(2);
     expect(r.pruebas).toBe(2);
+  });
+});
+
+describe("vio el formulario", () => {
+  it("separa 'se le emitió sesión' de 'vio el paso 2 y abandonó'", () => {
+    // El escalón que no se deduce de auth.users. Sin él las dos filas de abajo
+    // eran indistinguibles, y son el 60% de las pérdidas del 9/9/2026.
+    const [soloSesion, vioYAbandono] = analizarEmbudoAlta(
+      [
+        fila({
+          confirmado: "2026-09-09T10:53:32Z",
+          ultimaSesion: "2026-09-09T10:53:34Z",
+        }),
+        fila({
+          confirmado: "2026-09-09T10:53:32Z",
+          ultimaSesion: "2026-09-09T10:53:34Z",
+          vioFormulario: "2026-09-09T10:53:40Z",
+        }),
+      ],
+      { ahora: AHORA },
+    );
+
+    expect(soloSesion.etapa).toBe("SESION");
+    expect(vioYAbandono.etapa).toBe("VIO_FORMULARIO");
+  });
+
+  it("crear el negocio gana sobre haber visto el formulario", () => {
+    const [u] = analizarEmbudoAlta(
+      [
+        fila({
+          ultimaSesion: "2026-09-01T10:02:00Z",
+          vioFormulario: "2026-09-01T10:03:00Z",
+          negocioCreado: "2026-09-01T10:05:00Z",
+        }),
+      ],
+      { ahora: AHORA },
+    );
+
+    expect(u.etapa).toBe("CREO_NEGOCIO");
+  });
+
+  it("el estancamiento se cuenta desde que lo vio", () => {
+    const [u] = analizarEmbudoAlta(
+      [
+        fila({
+          ultimaSesion: "2026-09-01T10:00:00Z",
+          vioFormulario: "2026-09-05T10:00:00Z",
+        }),
+      ],
+      { ahora: AHORA },
+    );
+
+    expect(u.diasEstancado).toBe(4);
   });
 });

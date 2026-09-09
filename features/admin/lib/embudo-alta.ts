@@ -46,6 +46,14 @@ export interface FilaEmbudoAlta {
   confirmado: string | null;
   /** Última sesión iniciada. `null` = nunca entró. */
   ultimaSesion: string | null;
+  /**
+   * Cuándo vio el formulario del negocio (paso 2). `null` = nunca lo vio.
+   *
+   * Es el ÚNICO escalón que no se deduce de `auth.users`: lo escribe el
+   * propio onboarding vía `registrar_paso_onboarding` (20260909140000). Sin
+   * él, "se le emitió sesión" y "vio el formulario y abandonó" se ven iguales.
+   */
+  vioFormulario: string | null;
   /** Alta del negocio del que es owner. `null` = no creó ninguno. */
   negocioCreado: string | null;
   /** Pertenece a algún negocio, aunque no lo haya creado él. */
@@ -74,20 +82,24 @@ export interface FilaEmbudoAlta {
  *
  * Por eso la etiqueta dice "Sesión creada" y no "Entró", y por eso existe
  * `sesionSoloDelLink`: separa la sesión que emitió el mail de una vuelta real.
- * Medir de verdad "vio el paso 2" necesita un evento propio en el onboarding,
- * que todavía no existe.
+ *
+ * El escalón que SÍ dice que la persona vio algo es `VIO_FORMULARIO`, y es el
+ * único que no se deduce de `auth.users`: lo escribe el propio onboarding
+ * (`registrar_paso_onboarding`, 20260909140000).
  * ─────────────────────────────────────────────────────────────────────────
  */
 export type EtapaAlta =
   | "REGISTRADO"
   | "CONFIRMADO"
   | "SESION"
+  | "VIO_FORMULARIO"
   | "CREO_NEGOCIO";
 
 export const ETAPAS: EtapaAlta[] = [
   "REGISTRADO",
   "CONFIRMADO",
   "SESION",
+  "VIO_FORMULARIO",
   "CREO_NEGOCIO",
 ];
 
@@ -95,6 +107,7 @@ export const ETIQUETA_ETAPA: Record<EtapaAlta, string> = {
   REGISTRADO: "Creó la cuenta",
   CONFIRMADO: "Confirmó el mail",
   SESION: "Sesión creada",
+  VIO_FORMULARIO: "Vio el formulario",
   CREO_NEGOCIO: "Creó su negocio",
 };
 
@@ -173,12 +186,14 @@ function etapaDe(f: FilaEmbudoAlta): EtapaAlta {
   // nada: un empleado que aceptó su invitación está adentro del producto, que
   // es lo que el embudo mide.
   if (f.negocioCreado || f.miembroDeAlgunNegocio) return "CREO_NEGOCIO";
+  if (f.vioFormulario) return "VIO_FORMULARIO";
   if (f.ultimaSesion) return "SESION";
   if (f.confirmado) return "CONFIRMADO";
   return "REGISTRADO";
 }
 
 function momentoDeLaEtapa(f: FilaEmbudoAlta, etapa: EtapaAlta): string {
+  if (etapa === "VIO_FORMULARIO") return f.vioFormulario ?? f.registrado;
   if (etapa === "SESION") return f.ultimaSesion ?? f.registrado;
   if (etapa === "CONFIRMADO") return f.confirmado ?? f.registrado;
   return f.registrado;

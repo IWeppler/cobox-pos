@@ -1116,6 +1116,16 @@ tiene 11.
   lleva 3 de 17; el último paso se lleva 7. La mediana hasta confirmar es de
   **24 segundos**, que es el dato que cierra la discusión sobre si el problema
   es la entrega.
+  El escalón **"vio el formulario"** (`20260909140000`) es el ÚNICO que no se
+  deduce de `auth.users`: lo escribe el propio onboarding al mostrar el paso 2,
+  vía `registrar_paso_onboarding`. Esa función es SECURITY DEFINER y lo que la
+  acota es que **no recibe el usuario**: sale de `auth.uid()`, el `negocio_id`
+  va null siempre y el paso se valida contra una lista cerrada — nadie escribe
+  a nombre de otro. Idempotente por (usuario, paso): interesa cuándo lo vio la
+  primera vez, no cuántas veces recargó. Hizo falta una tabla propia porque las
+  dos que existían no servían: `eventos_uso.negocio_id` es NOT NULL y el alta
+  pasa entera antes de que haya negocio, y `eventos_comerz` solo la escribe el
+  super admin.
   **OJO con el tercer escalón: "sesión creada" NO es "entró".** Sale de
   `auth.users.last_sign_in_at`, que Supabase escribe cuando EMITE el token —
   o sea en el `POST /auth/v1/token` que dispara `/auth/callback` al canjear el
@@ -1160,6 +1170,15 @@ tiene 11.
   misma pregunta con distinta información y se la pasan para siempre. **Cada
   vez que aparece un rebote infinito en el panel, buscar las dos fuentes que se
   contradicen antes que el redirect.**
+  **Y la misma contradicción estaba en el conteo, con otro disfraz**: el gate 4
+  contaba TODAS las membresías mientras `listarMisNegociosAction` filtra por
+  `negocioHabilitado`. Con la única membresía en `cancelado` el middleware
+  decía "tenés uno, andá a elegir" y el selector contestaba "no tenés ninguno,
+  andá al login". Ahora el gate pide el estado y cuenta habilitados: cero
+  habilitados con membresías va a `/auth?error=sin-negocio`, y **uno solo lo
+  elige el middleware seteando la cookie** — porque `current_negocio_id()`
+  cuenta membresías sin mirar estado, así que con un negocio muerto al lado
+  devuelve null y el selector redirigía a `/` sin dejar nada elegido.
   Se arregló en las dos puntas, y las dos hacen falta: `crearNegocioAction` y
   `aceptarInvitacionAction` refrescan el token (son los DOS únicos momentos en
   que cambian las membresías), y el gate 4 del middleware, cuando el conteo
