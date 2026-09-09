@@ -18,6 +18,13 @@ import { GastosDelMes } from "@/features/admin/ui/gastos-del-mes";
 import { getFunnelAction } from "@/features/admin/actions/funnel-comerz";
 import { analizarFunnel, enRiesgo, resumirFunnel } from "@/features/admin/lib/funnel";
 import { FunnelPanel } from "@/features/admin/ui/funnel-panel";
+import { getEmbudoAltaAction } from "@/features/admin/actions/embudo-alta";
+import { getUsuariosPruebaAction } from "@/features/admin/actions/usuarios-prueba";
+import {
+  analizarEmbudoAlta,
+  resumirEmbudoAlta,
+} from "@/features/admin/lib/embudo-alta";
+import { EmbudoAltaPanel } from "@/features/admin/ui/embudo-alta-panel";
 import {
   gastoAplicaEnMes,
   gastosPorMes,
@@ -46,6 +53,8 @@ export default async function AdminComerzPage() {
     { data: pagos },
     gastos,
     filasFunnel,
+    filasEmbudoAlta,
+    marcadosComoPrueba,
   ] = await Promise.all([
     getPanelComerzAction(),
     getComerciosConUsoAction(),
@@ -57,6 +66,8 @@ export default async function AdminComerzPage() {
       .order("fecha_pago", { ascending: true }),
     getGastosAction(),
     getFunnelAction(),
+    getEmbudoAltaAction(),
+    getUsuariosPruebaAction(),
   ]);
 
   const serieCobrado = construirSerieMrr(
@@ -86,6 +97,23 @@ export default async function AdminComerzPage() {
   const comerciosFunnel = analizarFunnel(filasFunnel);
   const resumenFunnel = resumirFunnel(comerciosFunnel);
   const comerciosEnRiesgo = enRiesgo(comerciosFunnel);
+
+  // El embudo de ANTES del negocio. Va aparte de `funnel_comerz` porque ese
+  // arranca en "el negocio ya existe": las cuatro personas que en agosto y
+  // septiembre confirmaron el mail, entraron y nunca crearon nada no aparecen
+  // en el otro ni como fila.
+  const usuariosEmbudo = analizarEmbudoAlta(filasEmbudoAlta, {
+    marcadosComoPrueba,
+  });
+  const resumenEmbudoAlta = resumirEmbudoAlta(usuariosEmbudo);
+  // Las marcadas como prueba SIGUEN en la lista, aunque no cuenten para la
+  // tasa: si no, marcar una por error sería irreversible desde la pantalla.
+  // Los otros excluidos (super admin, invitados) no son candidatos perdidos y
+  // no tienen nada que hacer acá.
+  const altasPerdidas = usuariosEmbudo.filter(
+    (u) =>
+      u.etapa !== "CREO_NEGOCIO" && (!u.fueraDelEmbudo || u.esPrueba),
+  );
 
   // Los del mes en curso, con la MISMA regla que usa el gráfico. Repetirla
   // acá a mano sería tener dos definiciones de "gasto de este mes" y que un
@@ -200,6 +228,11 @@ export default async function AdminComerzPage() {
         gastos={gastosDelMes}
         total={costos.total}
         porComercio={costos.porComercio}
+      />
+
+      <EmbudoAltaPanel
+        resumen={resumenEmbudoAlta}
+        perdidos={altasPerdidas}
       />
 
       <FunnelPanel resumen={resumenFunnel} riesgo={comerciosEnRiesgo} />

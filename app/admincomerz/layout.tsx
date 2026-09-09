@@ -77,7 +77,7 @@ export default async function AdminComerzLayout({
       </aside>
 
       {/* Contenido Principal */}
-      <main className="max-h-screen flex-1 overflow-y-auto p-6 md:p-8">
+      <main className="max-h-screen flex-1 overflow-y-auto p-2 md:p-8">
         {children}
       </main>
     </div>

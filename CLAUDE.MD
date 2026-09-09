@@ -1105,6 +1105,99 @@ tiene 11.
   verificar cuál de las dos copias es la que se usa en la venta**. Es el mismo
   patrón que `productos_stock`, que sí está documentado como espejo — la
   diferencia era que del precio nadie había escrito que lo fuera.
+- **El funnel del panel no veía dónde se pierde la gente, porque empezaba
+  después.** `funnel_comerz` arranca en `negocios.created_at`: su primer
+  escalón es "el negocio ya existe". Las cuatro personas que confirmaron el
+  mail, entraron y nunca crearon nada no aparecían ahí **ni como fila** — para
+  entrar a esa tabla hay que haber pasado justamente el paso donde se cayeron.
+  `embudo_de_alta` (`20260909120000`) cubre el tramo de antes y termina donde
+  el otro empieza. Medido el 9/9/2026 sobre 17 altas: **100% crea la cuenta,
+  88% confirma el mail, 82% recibe sesión y 41% crea el negocio.** El mail se
+  lleva 3 de 17; el último paso se lleva 7. La mediana hasta confirmar es de
+  **24 segundos**, que es el dato que cierra la discusión sobre si el problema
+  es la entrega.
+  **OJO con el tercer escalón: "sesión creada" NO es "entró".** Sale de
+  `auth.users.last_sign_in_at`, que Supabase escribe cuando EMITE el token —
+  o sea en el `POST /auth/v1/token` que dispara `/auth/callback` al canjear el
+  link. La persona no tocó nada, y con el bug del doble canje terminaba viendo
+  "El enlace venció". Por eso existe `sesionSoloDelLink`: si la última sesión
+  está a menos de un minuto de la confirmación, no hubo ninguna posterior — la
+  emitió el mail y la persona no volvió. **6 de los 10 que quedaron sin negocio
+  están en ese estado**, o sea que la hipótesis de "vio el formulario del paso
+  2 y abandonó" casi no tiene casos: la mayoría no llegó a ver nada. Medir de
+  verdad "vio el paso 2" necesita un evento propio en el onboarding, que
+  todavía no existe.
+  Lee `auth.users`, así que es SECURITY DEFINER y **el `where
+  security.is_super_admin()` es lo único que la protege** — misma forma que
+  `funnel_comerz`, con un guard que falla si el filtro desaparece. Verificado
+  simulando a una ADMIN de negocio: 0 filas.
+  **Las cuentas de prueba propias salen del denominador**, y la mayoría se
+  deduce sin marcar nada: `ignacionweppler+4@gmail.com` es un subaddress de una
+  casilla que YA está registrada, o sea que va al mismo buzón y es de la misma
+  persona. Eran 4 de las 10 "pérdidas" del 9/9. Lo que NO se hace es adivinar
+  por el nombre del mail —nada de buscar "test" o "prueba"—: esconder un
+  cliente real del embudo es peor que contar una prueba de más. Para la prueba
+  hecha con otro mail está `usuarios_prueba` (`20260909130000`) y un botón en
+  la lista; las marcadas siguen apareciendo, para poder desmarcarlas.
+  Devuelve HECHOS, no métricas: las etapas, la tasa y a quién se excluye se
+  deciden en `features/admin/lib/embudo-alta.ts` con tests. **"Cuenta sin
+  negocio" no es una sola cosa**: el super admin no tiene negocio por diseño,
+  un empleado invitado no crea ninguno, y uno que todavía no usó su link se ve
+  idéntico a un dueño que abandonó — se separan por la invitación pendiente,
+  el mismo criterio que `destinoSinNegocio`. Contarlos juntos infla el agujero
+  con gente que está bien.
+- **El claim del token es una FOTO, y crear el primer negocio la deja vieja.**
+  El middleware no lee las membresías de la base: las lee del claim `comerz`,
+  que el custom access token hook (`20260903110000`) calculó al EMITIR el
+  token. En el alta ese token se emite en el `signUp`, cuando la persona
+  todavía no tiene ningún negocio — y treinta segundos después crea el suyo.
+  El resultado, medido el 9/9/2026 con `ignacionweppler+5` (registro 13:40:23,
+  negocio 13:41:10, cuatro pasadas por el gate en dos segundos):
+  `/` → el claim dice "ningún negocio" → `/seleccionar-negocio` → la base dice
+  "uno" → `redirect("/")` → **ERR_TOO_MANY_REDIRECTS**.
+  Es la MISMA forma del incidente de `sesion-interrumpida.ts` y del de
+  `salir-sesion.ts`, con un disparador nuevo: dos lugares que responden la
+  misma pregunta con distinta información y se la pasan para siempre. **Cada
+  vez que aparece un rebote infinito en el panel, buscar las dos fuentes que se
+  contradicen antes que el redirect.**
+  Se arregló en las dos puntas, y las dos hacen falta: `crearNegocioAction` y
+  `aceptarInvitacionAction` refrescan el token (son los DOS únicos momentos en
+  que cambian las membresías), y el gate 4 del middleware, cuando el conteo
+  desmiente al claim, le pregunta a la base en vez de rebotar. Lo primero
+  arregla el caso conocido; lo segundo, el próximo — un cambio de rol deja el
+  claim igual de viejo y nadie se va a acordar de este archivo.
+- **Un handler que canjea un token de un solo uso tiene que poder correr dos
+  veces.** `/auth/callback` se ejecuta DOS veces con el mismo `code` de PKCE.
+  Medido en producción el 9/9/2026: `POST /auth/v1/token` 200 a las 11:57:48 y
+  404 con el MISMO code a las 11:57:49. El primero crea la sesión, el segundo
+  falla siempre, y como el navegador ve la respuesta del segundo, la versión
+  vieja mandaba a `/auth?error=El enlace venció` a alguien que acababa de
+  quedar logueado.
+  Eso explica a las **4 personas que entre agosto y septiembre confirmaron el
+  mail, iniciaron sesión y nunca crearon su negocio** — están en `auth.users`
+  con `email_confirmed_at` y `last_sign_in_at` cargados y cero filas en
+  `usuarios_negocios`. No era fricción de onboarding: el sistema las autenticó
+  y acto seguido les dijo que el link no servía.
+  Por qué corre dos veces NO está identificado: no es el service worker
+  (`public/sw.js` no tiene `NavigationRoute` ni handler de `fetch`) y no es un
+  reintento del cliente (los dos POST salen con user agent `node`, o sea dos
+  ejecuciones reales del handler). Queda el prefetch del navegador o del
+  cliente de correo. El arreglo no depende de saberlo: **el callback termina
+  siempre en `destino` y nunca en una pantalla de error.** Un cartel de "el
+  enlace venció" no le cambiaba la acción a nadie — `/onboarding` es público y
+  detecta la sesión: con sesión arranca en el paso 2 y sin sesión en el paso 1,
+  que es lo que la persona tiene que hacer en cada caso.
+- **`Suspense` con `fallback={null}` alrededor de una pantalla entera es una
+  pantalla en blanco.** `/auth` envolvía todo `AuthPanel` así, cuando lo único
+  que suspende es `LoginForm` (usa `useSearchParams`). Mientras ese árbol no
+  hidratara no había NADA — y en mobile es literal, porque la marca vive
+  adentro del panel; en desktop al menos quedaba el logo de la esquina. En un
+  celular con mala señal se queda así para siempre. Es el síntoma que apareció
+  acompañando a una clienta el 7/9/2026, y venía encadenado al bug de arriba:
+  el callback la mandaba a `/auth` y `/auth` no mostraba nada.
+  La boundary va alrededor de lo que suspende, no de la pantalla, y el fallback
+  tiene que ser un esqueleto: es la diferencia entre "está cargando" y "se
+  rompió".
 - **Timeout de UI ≠ cancelación de server action.** `withTimeout` solo rechaza
   la promesa del cliente; el server sigue hasta el final. Nunca envolver en
   `withTimeout` una acción que muta stock o plata (ver comentario en

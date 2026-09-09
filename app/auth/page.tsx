@@ -2,7 +2,6 @@
 import { AuthPanel } from "@/features/auth/ui/auth-panel";
 import Link from "next/link";
 import Image from "next/image";
-import { Suspense } from "react";
 import { PanelVisualAuth } from "@/features/auth/ui/panel-visual";
 
 export default function AuthPage() {
@@ -35,12 +34,13 @@ export default function AuthPage() {
             cambia según se esté entrando o creando un comercio, y ese estado
             vive en AuthPanel. */}
 
-        {/* Contenedor del Formulario Centrado. El panel alterna entre login y
-            alta de comercio sin cambiar de ruta; el de login lee ?error= de la
-            URL, así que necesita Suspense. */}
-        <Suspense fallback={null}>
-          <AuthPanel />
-        </Suspense>
+        {/* Sin Suspense acá. La boundary vive ADENTRO de `AuthPanel`,
+            alrededor del formulario, que es lo único que lee `?error=` con
+            `useSearchParams()`. Envolviendo todo el panel con
+            `fallback={null}`, cualquier demora en hidratar dejaba la pantalla
+            vacía —en mobile, entera— en vez de mostrar la marca y un
+            esqueleto. Ver el comentario en `auth-panel.tsx`. */}
+        <AuthPanel />
 
        <div className="mt-8 text-center space-y-3">
         <p className="mx-auto max-w-xs text-xs leading-relaxed text-muted-foreground/80">

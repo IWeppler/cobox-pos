@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { LoginForm } from "./login-form";
@@ -55,8 +56,22 @@ export function AuthPanel() {
         </p>
       </div>
 
+      {/* El Suspense va acá y no envolviendo el panel entero.
+          `LoginForm` es lo único que usa `useSearchParams()`, o sea lo único
+          que suspende — pero la boundary estaba en la página, alrededor de
+          TODO esto y con `fallback={null}`. Resultado: mientras ese árbol no
+          hidratara no había nada en pantalla, y en mobile nada es literal,
+          porque la marca vive acá adentro (en desktop al menos quedaba el logo
+          de la esquina). Es la pantalla en blanco que apareció el 7/9/2026
+          acompañando a una clienta que se estaba registrando, y en un celular
+          con mala señal se queda así para siempre en vez de mostrar el
+          formulario.
+          Con la boundary alrededor del form, la marca, el título y "Crear
+          cuenta" se pintan siempre. */}
       <div className="mt-8">
-        <LoginForm />
+        <Suspense fallback={<LoginFormEsqueleto />}>
+          <LoginForm />
+        </Suspense>
       </div>
 
       {/* Pregunta y acción van en un mismo párrafo: como flex se partían en
@@ -72,6 +87,24 @@ export function AuthPanel() {
           </Link>
         </p>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Lo que se ve mientras el formulario hidrata. Tiene la MISMA altura que el
+ * form real (dos campos, el link de recuperar y el botón) para que la
+ * pantalla no salte cuando aparece.
+ *
+ * No es decoración: es la diferencia entre "está cargando" y "se rompió".
+ */
+function LoginFormEsqueleto() {
+  return (
+    <div className="space-y-4" aria-hidden>
+      <div className="h-11 w-full animate-pulse rounded-lg bg-muted" />
+      <div className="h-11 w-full animate-pulse rounded-lg bg-muted" />
+      <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+      <div className="h-11 w-full animate-pulse rounded-lg bg-muted" />
     </div>
   );
 }

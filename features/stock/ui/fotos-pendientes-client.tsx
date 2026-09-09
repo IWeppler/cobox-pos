@@ -102,7 +102,7 @@ export function FotosPendientesClient({
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-2 md:p-4">
+    <div className="mx-auto space-y-4 p-2 md:p-4">
       <div className="flex items-center gap-3 border-b border-border pb-3">
         <Link
           href="/stock"

@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Código VENDORIZADO: entra tal cual desde el registry de bklit
+    // (`npx shadcn add @bklit/funnel-chart`) y se actualiza volviéndolo a
+    // bajar. Cae en dos reglas de react-hooks que este repo tiene prendidas
+    // —`set-state-in-effect` y `refs`— y arreglarlas a mano sería perder el
+    // parche en la próxima actualización. No lo mantenemos nosotros.
+    "components/charts/**",
   ]),
 ]);
 

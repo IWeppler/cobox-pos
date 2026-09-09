@@ -476,9 +476,65 @@ export async function middleware(request: NextRequest) {
       return cortarPorContextoIndeterminado();
     }
 
-    const url = request.nextUrl.clone();
-    url.pathname = (count ?? 0) > 0 ? "/seleccionar-negocio" : "/onboarding";
-    return NextResponse.redirect(url);
+    // ────────────────────────────────────────────────────────────────────
+    // EL CLAIM PUEDE ESTAR VIEJO, Y ACÁ SE NOTA.
+    //
+    // `rolActual` sale del claim `comerz`, que la base calculó AL EMITIR EL
+    // TOKEN. Si las membresías cambiaron después, el token sigue diciendo lo
+    // de antes hasta que se refresque — hasta una hora.
+    //
+    // Pasa siempre en el alta: el token se emite en el `signUp`, cuando la
+    // persona todavía no tiene ningún negocio, y treinta segundos después crea
+    // el suyo. Medido el 9/9/2026 con `ignacionweppler+5`: registro 13:40:23,
+    // negocio creado 13:41:10, y a partir de ahí cuatro pasadas por este gate
+    // en dos segundos —el claim decía "ninguno" y la base decía "uno"—:
+    //
+    //   /                     → claim sin negocios → /seleccionar-negocio
+    //   /seleccionar-negocio  → la base dice 1     → redirect /
+    //   ...                   → ERR_TOO_MANY_REDIRECTS
+    //
+    // Es la MISMA forma del incidente de `sesion-interrumpida.ts` con otro
+    // disparador: dos lugares que responden la misma pregunta con distinta
+    // información y se la pasan para siempre. Y no alcanza con que el alta
+    // refresque el token (lo hace, ver `crearNegocioAction`): eso arregla el
+    // caso conocido, no el próximo — una invitación aceptada o un cambio de
+    // rol dejan el claim igual de viejo.
+    //
+    // Si el conteo desmiente al claim, la fuente que manda es la BASE.
+    if ((count ?? 0) > 0) {
+      const { data, error: errorContexto } = await supabase
+        .rpc("contexto_sesion")
+        .maybeSingle();
+
+      if (errorContexto) {
+        console.error(
+          "[CLAIMS] claim viejo y contexto_sesion falló:",
+          errorContexto.message,
+        );
+        return cortarPorContextoIndeterminado();
+      }
+
+      const contexto = data as { rol: string | null } | null;
+
+      if (contexto?.rol) {
+        // El token está atrasado pero la persona SÍ tiene dónde entrar. Se
+        // sigue con el rol real; el token se pone al día solo en el próximo
+        // refresh.
+        console.warn("[CLAIMS] claim desactualizado: la base sí resuelve rol");
+        rolActual = contexto.rol;
+        rol = contexto.rol;
+      } else {
+        // La base coincide con el claim: tiene negocios pero ninguno resuelto
+        // —o sea más de uno y sin elegir—. Ahí el selector es lo correcto.
+        const url = request.nextUrl.clone();
+        url.pathname = "/seleccionar-negocio";
+        return NextResponse.redirect(url);
+      }
+    } else {
+      const url = request.nextUrl.clone();
+      url.pathname = "/onboarding";
+      return NextResponse.redirect(url);
+    }
   }
 
   // 5. Control de usuarios SI autenticados yendo al Login. Solo si ya tienen
