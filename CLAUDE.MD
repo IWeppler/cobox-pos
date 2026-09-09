@@ -1156,6 +1156,18 @@ tiene 11.
   idéntico a un dueño que abandonó — se separan por la invitación pendiente,
   el mismo criterio que `destinoSinNegocio`. Contarlos juntos infla el agujero
   con gente que está bien.
+- **Continuar con Google + "Confirm email" apagado abren un agujero JUNTOS.**
+  Supabase vincula identidades cuando el mail coincide y viene verificado del
+  proveedor; Google siempre lo verifica. Pero con la confirmación apagada
+  (9/9/2026) cualquiera puede registrarse con un mail ajeno y esa cuenta queda
+  con `email_confirmed_at` puesto sin que nadie lo haya probado. Si después el
+  dueño real entra con Google, cae en ESA cuenta — y el que la creó tiene la
+  contraseña. Las dos decisiones por separado son razonables; juntas, no.
+  Está escrito en `shared/lib/auth-google.ts` con las dos salidas posibles, y
+  **hay que elegir una antes de prender el flag en producción**. Por eso
+  `GOOGLE_AUTH_HABILITADO` es una env var con default apagado y solo el
+  literal `"on"` la prende: el orden es configurar OAuth en el dashboard,
+  decidir esto, y recién ahí prender.
 - **El claim del token es una FOTO, y crear el primer negocio la deja vieja.**
   El middleware no lee las membresías de la base: las lee del claim `comerz`,
   que el custom access token hook (`20260903110000`) calculó al EMITIR el

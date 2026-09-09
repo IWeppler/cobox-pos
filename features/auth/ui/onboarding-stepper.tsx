@@ -20,6 +20,7 @@ import {
 import { crearNegocioAction } from "@/features/auth/actions/negocios";
 import { ReenviarVerificacion } from "@/features/auth/ui/reenviar-verificacion";
 import { registrarPasoOnboardingAction } from "@/features/auth/actions/paso-onboarding";
+import { BotonGoogle, SeparadorAuth } from "@/features/auth/ui/boton-google";
 import { RUBROS, TAMANOS_EQUIPO } from "@/shared/lib/rubros";
 
 const estadoRegistro: RegistroState = { error: "" };
@@ -141,28 +142,63 @@ export function OnboardingStepper({
       <Progreso paso={paso} />
 
       {paso === 1 && (
-        <form action={accionRegistro} className="space-y-4" aria-busy={registrando}>
+        <div className="space-y-4">
           <Encabezado
             titulo="Creá tu cuenta"
             detalle="Con esto entrás vos. Después configuramos el comercio."
           />
-          <Campo id="nombre" label="Tu nombre" autoComplete="name" required disabled={registrando} />
-          <Campo id="email" label="Email" type="email" autoComplete="email" required disabled={registrando} />
-          <Campo
-            id="password"
-            label="Contraseña"
-            type="password"
-            autoComplete="new-password"
-            required
-            minLength={6}
-            disabled={registrando}
-            ayuda="Mínimo 6 caracteres."
-          />
-          <Error mensaje={registro.error} />
-          <Button type="submit" disabled={registrando} className="h-11 w-full">
-            {registrando ? <Loader2 className="size-4 animate-spin" /> : "Continuar"}
-          </Button>
-        </form>
+
+          {/* Con Google el alta termina acá: no hay mail que abrir ni link
+              que clickear, así que desaparece el salto de dispositivo donde
+              se perdieron 6 de las 10 cuentas medidas el 9/9/2026. Va antes
+              del formulario porque es el camino más corto. */}
+          <BotonGoogle next="/onboarding" etiqueta="Registrarme con Google" />
+          <SeparadorAuth />
+
+          <form
+            action={accionRegistro}
+            className="space-y-4"
+            aria-busy={registrando}
+          >
+            <Campo
+              id="nombre"
+              label="Tu nombre"
+              autoComplete="name"
+              required
+              disabled={registrando}
+            />
+            <Campo
+              id="email"
+              label="Email"
+              type="email"
+              autoComplete="email"
+              required
+              disabled={registrando}
+            />
+            <Campo
+              id="password"
+              label="Contraseña"
+              type="password"
+              autoComplete="new-password"
+              required
+              minLength={6}
+              disabled={registrando}
+              ayuda="Mínimo 6 caracteres."
+            />
+            <Error mensaje={registro.error} />
+            <Button
+              type="submit"
+              disabled={registrando}
+              className="h-11 w-full"
+            >
+              {registrando ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                "Continuar"
+              )}
+            </Button>
+          </form>
+        </div>
       )}
 
       {paso === 2 && (
@@ -217,7 +253,10 @@ export function OnboardingStepper({
 
           <fieldset className="space-y-2">
             <legend className="mb-2 text-sm font-medium">
-              ¿Cuánta gente trabaja ahí? <span className="font-normal text-muted-foreground">(opcional)</span>
+              ¿Cuánta gente trabaja ahí?{" "}
+              <span className="font-normal text-muted-foreground">
+                (opcional)
+              </span>
             </legend>
             <div className="grid grid-cols-2 gap-2">
               {TAMANOS_EQUIPO.map((t) => {
@@ -246,7 +285,9 @@ export function OnboardingStepper({
           <div className="space-y-2">
             <Label htmlFor="whatsapp">
               WhatsApp de contacto{" "}
-              <span className="font-normal text-muted-foreground">(opcional)</span>
+              <span className="font-normal text-muted-foreground">
+                (opcional)
+              </span>
             </Label>
             <Input
               id="whatsapp"
@@ -294,7 +335,6 @@ export function OnboardingStepper({
           </p>
         </form>
       )}
-
 
       {paso > (yaAutenticado ? 2 : 1) && !cargando && (
         <button
@@ -364,7 +404,12 @@ function Campo({
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <Input id={id} name={id} className="h-11 bg-background shadow-none" {...props} />
+      <Input
+        id={id}
+        name={id}
+        className="h-11 bg-background shadow-none"
+        {...props}
+      />
       {ayuda ? <p className="text-xs text-muted-foreground">{ayuda}</p> : null}
     </div>
   );

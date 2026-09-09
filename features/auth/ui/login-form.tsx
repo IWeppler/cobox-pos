@@ -7,6 +7,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Button } from "@/shared/ui/button";
 import { useRouter, useSearchParams } from "next/navigation";
+import { BotonGoogle, SeparadorAuth } from "./boton-google";
 import Link from "next/link";
 import { PARAM_SESION, VALOR_SESION_VENCIDA } from "@/shared/lib/salir-sesion";
 
@@ -36,8 +37,7 @@ export function LoginForm() {
   // Se llegó por una sesión que el servidor dejó de reconocer, no por haber
   // salido a mano: sin este aviso el login aparece solo, sin explicación, y
   // parece que la app se cerró sola. Ver `shared/lib/salir-sesion.ts`.
-  const sesionVencida =
-    searchParams.get(PARAM_SESION) === VALOR_SESION_VENCIDA;
+  const sesionVencida = searchParams.get(PARAM_SESION) === VALOR_SESION_VENCIDA;
   const mensajeUrl =
     errorUrl === "sin-negocio"
       ? "Tu cuenta no está asociada a ningún negocio. Pedile a la persona a cargo que te invite."
@@ -59,88 +59,96 @@ export function LoginForm() {
   const isLoading = isPending || isRedirecting;
 
   return (
-    <form action={formAction} className="space-y-6" aria-busy={isLoading}>
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="email">Correo Electrónico</Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            inputMode="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={isLoading}
-            placeholder="correo@ejemplo.com"
-            className="h-12 sm:h-11 shadow-none bg-background"
-          />
-        </div>
+    <div className="space-y-5">
+      {/* Google va ARRIBA del formulario, no abajo: es el camino que menos
+          pasos tiene y el que se quiere ofrecer primero. Si el flag está
+          apagado, ni el botón ni el separador se montan. */}
+      <BotonGoogle next="/" etiqueta="Continuar con Google" />
+      <SeparadorAuth />
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Contraseña</Label>
-            <Link
-              href="/recuperar"
-              className="text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
-            >
-              ¿Olvidaste tu contraseña?
-            </Link>
-          </div>
-          <div className="relative">
+      <form action={formAction} className="space-y-6" aria-busy={isLoading}>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">Correo Electrónico</Label>
             <Input
-              id="password"
-              name="password"
-              type={showPassword ? "text" : "password"}
+              id="email"
+              name="email"
+              type="email"
               required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="email"
+              inputMode="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               disabled={isLoading}
-              placeholder="••••••••"
-              className="h-12 sm:h-11 shadow-none bg-background pr-11"
+              placeholder="correo@ejemplo.com"
+              className="h-12 sm:h-11 shadow-none bg-background"
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              disabled={isLoading}
-              aria-label={
-                showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
-              }
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
-              tabIndex={-1}
-            >
-              {showPassword ? (
-                <EyeOff className="w-4 h-4" />
-              ) : (
-                <Eye className="w-4 h-4" />
-              )}
-            </button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Contraseña</Label>
+              <Link
+                href="/recuperar"
+                className="text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
+            <div className="relative">
+              <Input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
+                placeholder="••••••••"
+                className="h-12 sm:h-11 shadow-none bg-background pr-11"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                disabled={isLoading}
+                aria-label={
+                  showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                }
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-50"
+                tabIndex={-1}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      {(state?.error || mensajeUrl) && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-sm font-medium text-destructive"
-        >
-          {state?.error || mensajeUrl}
-        </div>
-      )}
-
-      <Button type="submit" disabled={isLoading} className="w-full h-12">
-        {isLoading ? (
-          <>
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            {isRedirecting ? "Redirigiendo..." : "Ingresando..."}
-          </>
-        ) : (
-          "Ingresar"
+        {(state?.error || mensajeUrl) && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-sm font-medium text-destructive"
+          >
+            {state?.error || mensajeUrl}
+          </div>
         )}
-      </Button>
-    </form>
+
+        <Button type="submit" disabled={isLoading} className="w-full h-12">
+          {isLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              {isRedirecting ? "Redirigiendo..." : "Ingresando..."}
+            </>
+          ) : (
+            "Ingresar"
+          )}
+        </Button>
+      </form>
+    </div>
   );
 }
