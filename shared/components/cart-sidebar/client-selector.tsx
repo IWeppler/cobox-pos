@@ -18,6 +18,9 @@ export interface ClienteBasico {
   nombre: string;
   telefono?: string | null;
   exceptuado_entrega_minima?: boolean;
+  /** Lista de precios sugerida. El POS la propone al elegir al cliente; no
+   * la aplica solo si el ticket ya tiene renglones. Ver `cart-panel-admin`. */
+  lista_precio_id?: string | null;
 }
 
 interface ClientSelectorProps {
@@ -81,7 +84,7 @@ export function ClientSelector({
       const supabase = createClient();
       const { data, error } = await supabase
         .from("clientes")
-        .select("id, nombre, telefono, exceptuado_entrega_minima")
+        .select("id, nombre, telefono, exceptuado_entrega_minima, lista_precio_id")
         .eq("activo", true)
         .order("nombre");
 

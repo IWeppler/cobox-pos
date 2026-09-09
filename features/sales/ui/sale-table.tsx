@@ -500,6 +500,9 @@ export function VentasTable({
       // no del % que el método tenga HOY.
       recargoMetodoMonto: recargoMetodoMonto || undefined,
       recargoMetodoEtiqueta: recargoMetodoEtiqueta || undefined,
+      // El nombre CONGELADO en la venta, no el de la lista tal como se llama
+      // hoy: reimprimir un ticket tiene que dar el mismo papel que salió.
+      listaPrecioNombre: venta.lista_precio_nombre ?? null,
       comisionMonto: comisionMontoTotal,
       montoNeto: pagos.length > 0 ? montoNetoTotal : venta.total,
       acreditacionDias: acreditacionDiasMax,
@@ -518,6 +521,10 @@ export function VentasTable({
         ticket={ticketAbierto}
         config={branding || ({} as ConfiguracionPOS)}
         onClose={() => setTicketAbierto(null)}
+        // Reimpresión desde el historial, no el cierre de la venta. La
+        // distinción es toda la gracia de la telemetría: dice si el
+        // comprobante se entrega en el mostrador o se busca después.
+        origen="HISTORIAL"
       />
 
       {/* Los tres diálogos se montan UNA vez para toda la tabla, no uno por
@@ -719,6 +726,16 @@ export function VentasTable({
                             <p className="text-[10px] uppercase font-semibold text-muted-foreground">
                               {metodoPago}
                             </p>
+                            {/* Con qué lista se cobró. Solo aparece cuando NO
+                                fue el precio base: es la respuesta a "¿por qué
+                                esta venta salió más barata?", que es la
+                                pregunta que trae a alguien a esta tabla. El
+                                nombre es el CONGELADO en la venta. */}
+                            {venta.lista_precio_nombre && (
+                              <p className="mt-1 text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-400">
+                                {venta.lista_precio_nombre}
+                              </p>
+                            )}
                           </TableCell>
 
                           <TableCell className="text-right">

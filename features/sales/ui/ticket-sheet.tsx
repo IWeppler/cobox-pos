@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Sheet,
   SheetContent,
@@ -20,6 +20,7 @@ import {
   Hash,
   Package,
   Tag,
+  Printer,
   Wallet,
 } from "lucide-react";
 import { TicketData } from "@/entities/ventas/types";
@@ -32,19 +33,43 @@ import {
   getTicketSubtotal,
 } from "./ticket-utils";
 import { toast } from "sonner";
+import {
+  cssImpresionTicket,
+  normalizarAnchoTicket,
+} from "@/shared/lib/ancho-ticket";
+import {
+  registrarEntregaComprobanteAction,
+  type OrigenEntregaComprobante,
+} from "../actions/registrar-uso";
 
 interface TicketSheetProps {
   ticket: TicketData | null;
   config: ConfiguracionPOS | null;
   onClose: () => void;
+  /**
+   * Desde dónde se abrió este ticket. Solo lo usa la telemetría, y sirve
+   * para la pregunta que sigue a "¿usan el PDF?": si se descarga al cerrar la
+   * venta o recién después, buscándola en el historial.
+   */
+  origen?: OrigenEntregaComprobante;
 }
 
 export function TicketSheet({
   ticket,
   config,
   onClose,
+  origen = "POS",
 }: Readonly<TicketSheetProps>) {
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // El ancho del papel del comercio. Sin configurar son 80mm, que es lo que
+  // se imprimía antes de que esto existiera.
+  const anchoTicket = normalizarAnchoTicket(config?.ancho_ticket_mm);
+
+  /** Se registra y se sigue: la telemetría nunca bloquea la entrega. */
+  const registrarUso = (metodo: "PDF" | "WHATSAPP" | "IMPRESION") => {
+    void registrarEntregaComprobanteAction(metodo, origen);
+  };
   const subtotalCarrito = getTicketSubtotal(ticket);
   const { esFiado, montoCobrado, montoPendiente } =
     getTicketFinancialSummary(ticket);
@@ -70,6 +95,21 @@ export function TicketSheet({
     const mensaje = buildWhatsappMessage(ticket, config, subtotalCarrito);
     const url = `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
     window.open(url, "_blank");
+    registrarUso("WHATSAPP");
+  };
+
+  /**
+   * Imprimir es el diálogo del sistema sobre el template de 58/80mm.
+   *
+   * Se cuenta ANTES de abrirlo: `window.print()` bloquea el hilo hasta que la
+   * persona cierra el diálogo, y no devuelve si imprimió o canceló. O sea que
+   * este evento significa "abrió el diálogo", no "salió el papel" — y así hay
+   * que leerlo.
+   */
+  const imprimirTicket = () => {
+    if (!ticket) return;
+    registrarUso("IMPRESION");
+    window.print();
   };
 
   /**
@@ -92,9 +132,8 @@ export function TicketSheet({
     if (!ticket) return;
 
     setIsDownloading(true);
-    const { downloadSaleReceiptPdf } = await import(
-      "./download-sale-receipt-pdf"
-    );
+    const { downloadSaleReceiptPdf } =
+      await import("./download-sale-receipt-pdf");
     const success = await downloadSaleReceiptPdf(ticket, config);
     setIsDownloading(false);
 
@@ -103,54 +142,49 @@ export function TicketSheet({
     // visible y hay que decir por qué.
     if (!success) {
       toast.error("Ocurrió un error al generar el PDF");
+      return;
     }
+
+    // Solo cuando el archivo se generó de verdad: contar el intento fallido
+    // como uso inflaría justo el número que hay que decidir.
+    registrarUso("PDF");
   };
+
+  /**
+   * P para imprimir, con el ticket abierto.
+   *
+   * Mismo criterio que los atajos del carrito: la mano ya está en el teclado
+   * y el ticket es la pantalla donde se sabe qué se quiere. Se ignora si el
+   * foco está en un input —no hay ninguno en este sheet hoy, pero el día que
+   * lo haya, tipear "p" no puede mandar a la impresora— y con Ctrl/Cmd
+   * apretado, que es el atajo de imprimir del navegador y hace lo mismo.
+   */
+  useEffect(() => {
+    if (!ticket) return;
+
+    const alTeclado = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "p") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const foco = document.activeElement;
+      const editando =
+        foco instanceof HTMLElement &&
+        (foco.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(foco.tagName));
+      if (editando) return;
+
+      e.preventDefault();
+      imprimirTicket();
+    };
+
+    window.addEventListener("keydown", alTeclado);
+    return () => window.removeEventListener("keydown", alTeclado);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket]);
 
   return (
     <>
-      <style>{`
-        @media print {
-          @page {
-            size: 80mm auto;
-            margin: 0;
-          }
-
-          html,
-          body {
-            width: 80mm;
-            height: auto;
-            margin: 0;
-            padding: 0;
-            background: white;
-          }
-
-          .ticket-screen-only {
-            display: none !important;
-          }
-
-          .ticket-sheet-print-scope {
-            position: static !important;
-            width: 80mm !important;
-            max-width: 80mm !important;
-            height: auto !important;
-            min-height: 0 !important;
-            overflow: visible !important;
-            transform: none !important;
-            border: 0 !important;
-            box-shadow: none !important;
-          }
-
-          #ticket-print-wrapper {
-            display: block !important;
-            width: 80mm;
-            min-height: 0;
-            margin: 0;
-            padding: 0;
-            background: white;
-            color: black;
-          }
-        }
-      `}</style>
+      <style>{cssImpresionTicket(anchoTicket)}</style>
 
       <Sheet
         open={ticket !== null}
@@ -349,6 +383,17 @@ export function TicketSheet({
                         </div>
                       )}
 
+                      {/* Con qué lista se cobró. Solo si no fue el precio
+                          base: en una venta normal no hay nada que aclarar. */}
+                      {ticket?.listaPrecioNombre ? (
+                        <div className="flex justify-between font-mono text-xs font-bold text-warning">
+                          <span className="uppercase">Lista</span>
+                          <span className="uppercase">
+                            {ticket.listaPrecioNombre}
+                          </span>
+                        </div>
+                      ) : null}
+
                       {(ticket?.recargoMetodoMonto ?? 0) > 0 ? (
                         <div className="flex justify-between font-mono text-xs text-warning font-bold">
                           <span className="uppercase">
@@ -386,7 +431,7 @@ export function TicketSheet({
                   ) : (
                     <Download className="w-4 h-4" />
                   )}
-                  Descargar Comprobante
+                  Descargar
                 </Button>
                 <Button
                   className="flex-1 gap-2 h-11 text-sm font-semibold bg-[#25D366] hover:bg-[#1ebe5d] text-white border-0"
@@ -394,6 +439,23 @@ export function TicketSheet({
                 >
                   <Share2 className="w-4 h-4" />
                   WhatsApp
+                </Button>
+
+                {/* IMPRIMIR: ícono chico, sin texto y sin robarle ancho a los
+                    otros dos. La impresora es de la vendedora que ya sabe que
+                    la tiene; el PDF y WhatsApp son las acciones que se
+                    descubren leyendo. El atajo va en el `title` porque un
+                    <kbd> acá sería más ruido que el botón entero. */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0"
+                  onClick={imprimirTicket}
+                  disabled={!ticket}
+                  title="Imprimir ticket (P)"
+                  aria-label="Imprimir ticket"
+                >
+                  <Printer className="h-4 w-4" />
                 </Button>
               </div>
             </div>

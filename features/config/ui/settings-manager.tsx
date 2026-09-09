@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Lock, Sparkles } from "lucide-react";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { useTieneFeature } from "@/features/planes/ui/plan-provider";
@@ -19,6 +20,7 @@ import {
   CreditCard,
   Settings,
   FileSliders,
+  Tags,
   UserCog,
   Calculator,
 } from "lucide-react";
@@ -31,6 +33,8 @@ import {
 } from "@/shared/ui/select";
 import { ConfigForm } from "./config-form";
 import { PromotionsPanel } from "@/features/promotions/ui/promotions-panel";
+import { ListasPreciosPanel } from "@/features/precios/ui/listas-precios-panel";
+import type { ListaPrecio } from "@/entities/precios/types";
 import { PreferencesPanel } from "@/features/preferences/ui/preferences-panel";
 import { PaymentsPanel } from "@/features/payments/ui/payments-panel";
 import { CatalogPanel } from "@/features/catalog/ui/catalog-panel";
@@ -66,6 +70,18 @@ const SECTIONS = [
     label: "Categorías",
     icon: FileSliders,
     description: "Categorías y organización del catálogo",
+  },
+  // Listas ANTES que Promociones, y son dos secciones distintas a propósito:
+  // una lista es el PRECIO que le corresponde a un tipo de cliente
+  // (permanente, por unidad, nunca sale al catálogo público) y una promoción
+  // es un DESCUENTO bajo una condición (temporal, por ticket, se publica). Si
+  // compartieran pantalla, en seis meses habría una lista llamada "20% OFF
+  // verano".
+  {
+    id: "listasPrecios",
+    label: "Listas de Precios",
+    icon: Tags,
+    description: "Precios mayoristas y por tipo de cliente",
   },
   {
     id: "promociones",
@@ -108,6 +124,8 @@ const SECTIONS = [
 interface SettingsManagerProps {
   config: ConfiguracionPOS;
   promociones: any[];
+  /** Vacío para quien no es admin: la página no las consulta siquiera. */
+  listasPrecios?: ListaPrecio[];
   pagos: any[];
   categorias?: any[];
   isAdmin: boolean;
@@ -123,6 +141,7 @@ interface SettingsManagerProps {
 export function SettingsManager({
   config,
   promociones,
+  listasPrecios = [],
   pagos,
   categorias,
   isAdmin,
@@ -133,13 +152,37 @@ export function SettingsManager({
   uso,
   invitaciones = [],
 }: Readonly<SettingsManagerProps>) {
-  const [activeSection, setActiveSection] = useState("comercio");
+  /**
+   * La sección que se abre, con `?seccion=` como puerta de entrada.
+   *
+   * Configuración es UNA ruta con once paneles adentro, así que sin esto no
+   * había forma de linkear a ninguno: ni desde la paleta (Ctrl+K), ni desde
+   * un aviso, ni pasándole el link a alguien. La única forma de llegar a
+   * "Listas de precios" era acordarse de que vivía acá adentro.
+   *
+   * Solo se lee al montar: a partir de ahí manda el menú lateral. Seguir la
+   * URL en cada render obligaría a reescribirla en cada click, y el botón
+   * "atrás" del navegador pasaría a recorrer secciones en vez de volver a
+   * la pantalla anterior.
+   *
+   * Una sección desconocida cae en "comercio" en vez de dejar la pantalla en
+   * blanco: un link viejo tiene que seguir abriendo algo.
+   */
+  const seccionPedida = useSearchParams().get("seccion");
+  const [activeSection, setActiveSection] = useState(() =>
+    SECTIONS.some((s) => s.id === seccionPedida) ? seccionPedida! : "comercio",
+  );
 
   // Ocultamos el tab de Empleados y Permisos para no-admins en vez de
   // solo bloquear su contenido — evita el "click y me topo con acceso
   // restringido" cuando ni siquiera debería aparecer en el menú.
+  // Mismo criterio para Listas de Precios que para Empleados: la RLS exige
+  // ADMIN para escribirlas, así que mostrarle la sección a un ENCARGADO sería
+  // ofrecerle botones que no funcionan. Además la página ni las consulta.
+  const soloAdmin = new Set(["empleados", "listasPrecios"]);
   const visibleSections = useMemo(
-    () => SECTIONS.filter((s) => s.id !== "empleados" || isAdmin),
+    () => SECTIONS.filter((s) => !soloAdmin.has(s.id) || isAdmin),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [isAdmin],
   );
 
@@ -160,6 +203,8 @@ export function SettingsManager({
         return <CajaConfigPanel config={config} />;
       case "categoria":
         return <CategoriesPanel categorias={categorias || []} />;
+      case "listasPrecios":
+        return <ListasPreciosPanel listas={listasPrecios} />;
       case "promociones":
         return <PromotionsPanel promociones={promociones} />;
       case "pagos":

@@ -216,7 +216,13 @@ function QuickAddModalContent({
             tipo: producto.tipo || "",
             variante: stockDeVariante.variante,
             varianteId: stockDeVariante.varianteId,
+            // El precio de siempre. Si hay una lista activa, el ticket
+            // re-precia esta línea en cuanto entra (ver el guard de
+            // `cart-panel-admin`); `precioBase` es lo que le permite hacerlo
+            // sin tomar un precio ya descontado como base.
             precio: stockDeVariante.precio ?? producto.precio,
+            precioBase: stockDeVariante.precio ?? producto.precio,
+            costoBase: stockDeVariante.costo ?? producto.precio_costo ?? null,
             cantidad: 1,
             unidadMedida: producto.unidad_medida,
             imagenUrl: resolverImagenPrincipal(producto),

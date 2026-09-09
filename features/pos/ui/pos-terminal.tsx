@@ -42,6 +42,8 @@ import {
 import type { ProductoCargado } from "@/features/carga-rapida/types";
 import { useCobroCcStore } from "@/shared/store/cobro-cc-store";
 import { useAtajosTeclado } from "@/shared/hooks/use-atajos-teclado";
+import { useListasPrecios } from "@/shared/hooks/use-listas-precios";
+import { precioBaseDeVariante } from "@/shared/lib/precio-de-lista";
 
 /** Con menos resultados que esto, la grilla ofrece cargar lo que se buscó:
  * no hay que esperar a que la búsqueda quede en cero para poder crearlo. */
@@ -164,6 +166,10 @@ export function PosTerminal({
     return porProducto;
   }, [itemsCarrito]);
   const setIsOpenCart = useCartStore((state) => state.setIsOpen);
+  // La lista con la que se está armando el ticket. La elige el carrito, que es
+  // un componente hermano: por eso vive en el store y no en un prop.
+  const listaPrecioId = useCartStore((state) => state.listaPrecioId);
+  const { resolver: resolverPrecio } = useListasPrecios();
 
   const {
     arbolCategorias,
@@ -298,13 +304,32 @@ export function PosTerminal({
     producto: Producto,
     variante: VarianteVendible,
   ) => {
+    // El precio de siempre, con la cascada compartida (`variante ?? producto`).
+    const precioBase = precioBaseDeVariante(producto, {
+      precio: variante.precio,
+    });
+    // Y encima, la lista con la que se está armando el ticket. Sin lista
+    // elegida esto devuelve el mismo `precioBase` y no cambia nada.
+    const { precio } = resolverPrecio({
+      listaPrecioId,
+      productoId: producto.id,
+      precioBase,
+      precioCosto: producto.precio_costo,
+    });
+
     addItem({
       productoId: producto.id,
       nombre: producto.nombre || "Sin nombre",
       tipo: producto.tipo || "",
       variante: variante.variante,
       varianteId: variante.varianteId,
-      precio: variante.precio ?? producto.precio,
+      precio,
+      // El base y el costo viajan en la línea para que cambiar de lista pueda
+      // re-preciar el ticket sin volver a mirar el catálogo: el carrito se
+      // dibuja en otro componente que a propósito no recibe los ~2 MB de
+      // productos.
+      precioBase,
+      costoBase: producto.precio_costo ?? null,
       cantidad: 1,
       unidadMedida: producto.unidad_medida,
       imagenUrl: resolverImagenPrincipal(producto),

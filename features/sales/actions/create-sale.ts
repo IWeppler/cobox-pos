@@ -16,6 +16,14 @@ import {
   resolverDescuento,
   type MotivoSinDescuento,
 } from "@/shared/lib/descuento-promocion";
+import {
+  admitePromociones,
+  esPrecioVendible,
+  precioBaseDeVariante,
+  precioDeLista,
+  type ListaDePrecios,
+} from "@/shared/lib/precio-de-lista";
+import { mensajeSinStock } from "../lib/mensaje-sin-stock";
 import { emitirComprobante } from "../lib/emitir-comprobante";
 import { ARCA_EMISION_DISPONIBLE } from "@/shared/lib/facturacion";
 
@@ -26,6 +34,10 @@ export async function registrarVentaAction(
   const cartData = formData.get("cart_items") as string;
   const promocionId = formData.get("promocion_id") as string | null;
   const descuentoMonto = Number(formData.get("descuento_monto") || 0);
+  // Con qué lista de precios se está vendiendo. Vacío = precio base, que es el
+  // camino de siempre. Es un ID y nada más: el precio lo resuelve el server.
+  const listaPrecioId =
+    (formData.get("lista_precio_id") as string | null)?.trim() || null;
   const pagosRaw = formData.get("pagos") as string;
 
   // REGLAS DE NEGOCIO CRM Y CC
@@ -189,12 +201,57 @@ export async function registrarVentaAction(
     };
   };
 
+  /**
+   * La lista de precios de esta venta y los precios fijos que tenga cargados
+   * para los productos del carrito.
+   *
+   * Las dos consultas son chicas y van en paralelo: la lista es UNA fila y los
+   * overrides son solo excepciones, filtrados además por los productos que
+   * están en el ticket. Entran al mismo `Promise.all` que el resto, así que
+   * esto NO agrega ningún round-trip a la venta.
+   *
+   * Sin `lista_precio_id` no consulta nada: el camino de siempre es
+   * literalmente el mismo código sin dos consultas.
+   */
+  const cargarLista = async () => {
+    const vacio = {
+      listaData: null as ListaDePrecios | null,
+      overridePorProducto: new Map<string, number>(),
+    };
+    if (!listaPrecioId) return vacio;
+
+    const [{ data: lista }, { data: overrides }] = await Promise.all([
+      supabase
+        .from("listas_precios")
+        .select("id, nombre, tipo_regla, valor, admite_promociones, activa")
+        .eq("id", listaPrecioId)
+        .maybeSingle(),
+      supabase
+        .from("producto_precios")
+        .select("producto_id, precio")
+        .eq("lista_id", listaPrecioId)
+        .in("producto_id", productoIds),
+    ]);
+
+    // Una lista de otro negocio no vuelve (la RLS la filtra) y el precio cae
+    // al base. Lo mismo una que no existe. No hace falta un chequeo aparte.
+    if (!lista) return vacio;
+
+    return {
+      listaData: lista as ListaDePrecios,
+      overridePorProducto: new Map(
+        (overrides ?? []).map((o) => [o.producto_id as string, Number(o.precio)]),
+      ),
+    };
+  };
+
   const [
     { turnoId: turnoAbiertoId, requiereCajaAbierta: requiereCaja },
     { data: metodosDb },
     { promoData, categoriasPromo, metodosPromo },
     { data: stockFilas },
     { data: variantesFilas },
+    { listaData, overridePorProducto },
   ] = await Promise.all([
     resolverTurnoActivo(supabase, user.id, configVenta),
     // Columnas explícitas y no `*`: es la fila que arma cada pago del ticket,
@@ -216,13 +273,14 @@ export async function registrarVentaAction(
         // carrito por el mismo motivo que el precio: el `tipo` que manda el
         // cliente es texto libre en un request, y con él se podría hacer
         // entrar cualquier renglón a una promo que no le corresponde.
-        "cantidad, id, producto_id, variante, producto:productos(precio, precio_costo, unidad_medida, tipo)",
+        "cantidad, id, producto_id, variante, producto:productos(nombre, precio, precio_costo, unidad_medida, tipo)",
       )
       .in("producto_id", productoIds),
     supabase
       .from("producto_variantes")
       .select("id, precio, costo, producto_id, nombre_display")
       .in("producto_id", productoIds),
+    cargarLista(),
   ]);
 
   // BLOQUEO Y ASIGNACIÓN DE CAJA (MODO DINÁMICO)
@@ -314,12 +372,48 @@ export async function registrarVentaAction(
       });
     }
 
-    const precioServer =
-      varianteData?.precio != null
-        ? Number(varianteData.precio)
-        : precioProducto;
     const costoServer =
       varianteData?.costo != null ? Number(varianteData.costo) : costoProducto;
+
+    // El precio de siempre: la cascada de toda la vida, ahora en un solo
+    // lugar compartido con el POS y la ficha pública.
+    const precioBaseServer = precioBaseDeVariante(
+      { precio: precioProducto },
+      varianteData ? { precio: varianteData.precio as number | null } : null,
+    );
+
+    // Y encima, la lista con la que se está vendiendo. Sin lista —el caso de
+    // 7 de los 8 negocios— `precioDeLista` devuelve el base y esto es
+    // exactamente el comportamiento anterior.
+    //
+    // La lista ya viene validada por la RLS: si el id es de otro negocio,
+    // `listaData` es null y el precio cae al base. Fail-closed sin chequeo
+    // extra, igual que el resto de las lecturas de esta action.
+    const resueltoPorLista = precioDeLista({
+      precioBase: precioBaseServer,
+      precioCosto: costoServer,
+      lista: listaData,
+      override: overridePorProducto.get(productoIdReal) ?? null,
+    });
+
+    // Un producto en $0 no es gratis: está sin cargar. Hasta acá se cobraba
+    // $0 sin decir nada (hoy no hay ninguno en los 8 negocios, y el freno es
+    // para que siga siendo así). Con lista el riesgo crece, porque cualquier
+    // regla sobre cero también da cero y propagaría el error en silencio.
+    if (!esPrecioVendible(resueltoPorLista)) {
+      console.error("[VENTA PRECIO EN CERO]", {
+        vendedorId: user.id,
+        productoId: productoIdReal,
+        variante: item.variante,
+        motivo: resueltoPorLista.motivo,
+      });
+      return {
+        error: `"${item.variante}" no tiene precio cargado: no se puede vender.`,
+        success: false,
+      };
+    }
+
+    const precioServer = resueltoPorLista.precio;
 
     const precioCliente = Number(item.precioUnitario ?? item.precio ?? 0);
     if (Math.abs(precioCliente - precioServer) > 0.01) {
@@ -386,6 +480,9 @@ export async function registrarVentaAction(
       // La categoría VIGENTE en la base; el `tipo` del carrito queda de
       // respaldo por si el producto no tiene ninguna cargada.
       tipo: (productoData?.tipo as string | null) ?? item.tipo,
+      // Solo para poder NOMBRAR el producto en un error. Sale de la misma
+      // fila que el precio, así que no cuesta una consulta.
+      nombreProducto: (productoData?.nombre as string | null) ?? item.nombre,
       cantidad: cantidadValidada,
       stockActual,
       precioServer: precioUsado,
@@ -507,6 +604,19 @@ export async function registrarVentaAction(
     .filter((p) => Number(p.montoAsignado) > 0)
     .map((p) => metodosMap[p.metodoPagoId]?.tipo);
 
+  // Una lista de precios YA ES el descuento. Salvo que el comercio lo haya
+  // decidido explícitamente (`admite_promociones`), una promo no se suma
+  // encima: sobre un producto al doble del costo, una lista de −20% más una
+  // promo de 5% baja el margen de 50% a 34,2%. El default es no acumular, así
+  // que esto se rechaza en vez de corregirse en silencio — el ticket ya se
+  // leyó en voz alta.
+  if (!admitePromociones(listaData) && descuentoMonto > 0) {
+    return {
+      error: `Los precios de "${listaData?.nombre ?? "esta lista"}" no admiten promociones encima. Sacá la promoción para cobrar.`,
+      success: false,
+    };
+  }
+
   const descuentoServer = promoData
     ? resolverDescuento({
         promo: promoData,
@@ -594,6 +704,9 @@ export async function registrarVentaAction(
     itemsProcesados.push({
       productoId: productoIdReal,
       variante: item.variante,
+      // Viaja hasta acá solo para poder nombrar el producto si falta stock.
+      // No se persiste: `ventas_items` ya llega al nombre por `producto_id`.
+      nombreProducto: item.nombreProducto,
       varianteId,
       cantidad: cantidadFinal,
       stockId: stockActual.id,
@@ -880,20 +993,21 @@ export async function registrarVentaAction(
     stockDescontado = false;
   };
 
-  /** Los nombres que la RPC no puede saber: la excepción viaja con los ids de
-   * las variantes que no llegaron, y acá se traducen a lo que la vendedora ve
-   * escrito en el ticket. */
-  const nombresSinStock = (detalle: string | null | undefined): string[] => {
+  /** Los renglones que la RPC no puede nombrar: la excepción viaja con los
+   * ids de las variantes que no llegaron, y acá se traducen al producto y la
+   * variante que la vendedora tiene que ir a buscar al perchero. */
+  const renglonesSinStock = (detalle: string | null | undefined) => {
     if (!detalle) return [];
     try {
       const ids = JSON.parse(detalle);
       if (!Array.isArray(ids)) return [];
       return ids
-        .map(
-          (id) =>
-            itemsConVariante.find((item) => item.varianteId === id)?.variante,
-        )
-        .filter((nombre): nombre is string => Boolean(nombre));
+        .map((id) => itemsConVariante.find((item) => item.varianteId === id))
+        .filter((item) => Boolean(item))
+        .map((item) => ({
+          producto: item!.nombreProducto,
+          variante: item!.variante,
+        }));
     } catch {
       return [];
     }
@@ -925,11 +1039,8 @@ export async function registrarVentaAction(
       await liberarUnidades();
 
       if (descuentoError.message?.includes("STOCK_INSUFICIENTE")) {
-        const faltantes = nombresSinStock(descuentoError.details);
         return {
-          error: faltantes.length
-            ? `Sin stock suficiente para la variante "${faltantes.join('", "')}".`
-            : "Sin stock suficiente para completar la venta.",
+          error: mensajeSinStock(renglonesSinStock(descuentoError.details)),
           success: false,
         };
       }
@@ -1050,6 +1161,17 @@ export async function registrarVentaAction(
     // Redondeado al peso: es un número para mirar, no para cuadrar contra
     // otro. Null en las ventas online, donde la pregunta no aplica.
     desfasaje_precio: esVentaOffline ? Math.round(desfasajePrecioVenta) : null,
+    // CON QUÉ LISTA SE COBRÓ, congelado. El nombre va al lado del id porque la
+    // lista se puede renombrar o borrar y el ticket de ayer tiene que seguir
+    // diciendo lo que decía — mismo criterio que el recargo en `venta_pagos` y
+    // los datos del receptor en `comprobantes`.
+    //
+    // Sale de `listaData`, o sea de la BASE, no del id que mandó el cliente:
+    // si ese id era de otro negocio o no existe, acá va null y el precio ya se
+    // cobró al base. Nunca queda una venta diciendo que se cobró con una lista
+    // que no se aplicó.
+    lista_precio_id: listaData ? listaPrecioId : null,
+    lista_precio_nombre: listaData?.nombre ?? null,
   };
 
   // --- 4. ESCRIBIR LA VENTA ENTERA, EN UNA TRANSACCIÓN ---

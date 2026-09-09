@@ -61,6 +61,9 @@ export interface ConfiguracionPOS {
   whatsapp: string;
   direccion: string;
   mensaje_ticket?: string;
+  /** Ancho del papel de la impresora térmica: 58 u 80 mm. Ver
+   * `shared/lib/ancho-ticket.ts`. Ausente = 80, que es lo de siempre. */
+  ancho_ticket_mm?: number | null;
 
   // Catálogo y E-commerce
   catalogo_activo?: boolean;

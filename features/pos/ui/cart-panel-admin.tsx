@@ -6,11 +6,14 @@ import { useShallow } from "zustand/react/shallow";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   useTransition,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/shared/lib/query-keys";
 import { toast } from "sonner";
 import { registrarVentaAction } from "@/features/sales/actions/create-sale";
 import { encolarVenta } from "@/features/sales/lib/outbox-ventas";
@@ -38,6 +41,10 @@ import { Sheet, SheetContent } from "@/shared/ui/sheet";
 import { Drawer, DrawerContent } from "@/shared/ui/drawer";
 import { MobileCartBar } from "../../../shared/components/cart-sidebar/mobile-cart-bar";
 import { PromocionDB } from "../../../shared/components/cart-sidebar/types";
+import { useListasPrecios } from "@/shared/hooks/use-listas-precios";
+import { admitePromociones } from "@/shared/lib/precio-de-lista";
+import { SelectorListaPrecio } from "./selector-lista-precio";
+import { decidirSugerenciaDeLista } from "../lib/sugerencia-lista-cliente";
 import {
   generarLinkWhatsApp,
   getDescuentoDetalle,
@@ -94,6 +101,7 @@ export function CartPanelAdmin({
   );
 
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   // Negocio activo, resuelto por el layout en el server desde la membresía —
   // no desde la cookie leída acá. Todo lo que este panel consulta (config,
@@ -264,6 +272,146 @@ export function CartPanelAdmin({
     [promosCargadas, negocioId],
   );
   const [promocionId, setPromocionId] = useState("ninguna");
+
+  // ── LISTA DE PRECIOS ─────────────────────────────────────────────────
+  const { listas, listaPorId, resolver: resolverPrecio } = useListasPrecios();
+  const listaPrecioId = useCartStore((state) => state.listaPrecioId);
+  const setListaPrecio = useCartStore((state) => state.setListaPrecio);
+
+  /**
+   * La lista efectiva: la elegida, SOLO si sigue existiendo y activa.
+   *
+   * El id vive en localStorage, así que sobrevive a que la dueña apague o
+   * borre la lista desde Configuración. Sin este corte, el ticket seguiría
+   * diciendo "Precios de Mayorista" contra una lista que el server ya no
+   * aplica, y la venta se caería recién al confirmar.
+   */
+  const listaActiva = listaPrecioId
+    ? (listaPorId.get(listaPrecioId) ?? null)
+    : null;
+
+  /**
+   * Cambia la lista y RE-PRECIA el ticket en la misma escritura.
+   *
+   * Los precios salen de `precioDeLista`, la misma función que revalida el
+   * server: lo que se muestra acá es lo que se va a cobrar. Se re-precia
+   * desde `precioBase` de cada línea y no desde su precio actual, que ya
+   * podría venir de otra lista — aplicar un descuento sobre un descuento es
+   * el error que este cálculo tiene que hacer imposible.
+   */
+  const preciosPara = (nuevaListaId: string | null) => {
+    const precios: Record<string, { precio: number; precioBase: number }> = {};
+    let algunoCambia = false;
+
+    for (const item of items) {
+      // Una línea que entró desde otra pantalla (Inventario, la ficha de un
+      // producto) no trae `precioBase`: ahí el precio con el que entró ES el
+      // base, porque esas pantallas no conocen la lista.
+      const precioBase = item.precioBase ?? item.precio;
+      const { precio } = resolverPrecio({
+        listaPrecioId: nuevaListaId,
+        productoId: item.productoId,
+        precioBase,
+        precioCosto: item.costoBase,
+      });
+
+      precios[`${item.productoId}|${item.variante}`] = { precio, precioBase };
+      if (precio !== item.precio || item.precioBase == null) algunoCambia = true;
+    }
+
+    return { precios, algunoCambia };
+  };
+
+  /** Lo que saldría el ticket con otra lista, para poder mostrar los DOS
+   *  números antes de cambiar nada. */
+  const totalConLista = (listaId: string | null) =>
+    items.reduce((acc, item) => {
+      const base = item.precioBase ?? item.precio;
+      const { precio } = resolverPrecio({
+        listaPrecioId: listaId,
+        productoId: item.productoId,
+        precioBase: base,
+        precioCosto: item.costoBase,
+      });
+      return acc + precio * item.cantidad;
+    }, 0);
+
+  const cambiarListaPrecio = (nuevaListaId: string | null) => {
+    setListaPrecio(nuevaListaId, preciosPara(nuevaListaId).precios);
+  };
+
+  /**
+   * La vendedora tocó el selector a mano. Desde ahí, su elección gana: el
+   * cliente no vuelve a proponer nada.
+   */
+  const listaElegidaAMano = useRef(false);
+  const cambiarListaDesdeElChip = (nuevaListaId: string | null) => {
+    listaElegidaAMano.current = true;
+    cambiarListaPrecio(nuevaListaId);
+  };
+
+  /** Al vaciar el ticket también se vacía la decisión: el próximo cliente
+   *  vuelve a poder proponer su lista. */
+  const olvidarEleccionDeLista = () => {
+    listaElegidaAMano.current = false;
+  };
+
+
+  /**
+   * Una lista que ya no está no puede quedar elegida.
+   *
+   * Va en un efecto —y no durante el render, que escribiría en el store
+   * mientras otro componente se pinta— porque es sincronización con estado
+   * EXTERNO: la lista se apagó desde Configuración, quizás en otra máquina.
+   *
+   * Sin esto el ticket se queda con los precios de la lista vieja y el chip
+   * diciendo "Base". El server no cobra de menos (resuelve al precio base y la
+   * venta rebota porque el pago no cubre el total), pero el mensaje que se ve
+   * es "El pago no cubre el total del ticket", que no explica nada.
+   */
+  useEffect(() => {
+    if (listaPrecioId && listas.length > 0 && !listaActiva) {
+      cambiarListaPrecio(null);
+      toast.warning(
+        "La lista de precios ya no está disponible: volvimos a los precios de siempre.",
+      );
+    }
+    // `cambiarListaPrecio` se rearma en cada render (depende de `items`);
+    // incluirla dispararía el efecto en cada cambio del carrito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listaPrecioId, listaActiva, listas.length]);
+
+  /**
+   * TODA línea del ticket queda al precio de la lista activa, entró por donde
+   * entró.
+   *
+   * Un producto puede llegar al carrito desde la grilla del POS, desde el
+   * modal de variantes, desde Inventario o desde la ficha de un producto. Solo
+   * las dos primeras conocen la lista; las otras agregan al precio base. Sin
+   * este guard, un ticket en Mayorista podía tener una línea a precio de
+   * mostrador — y el server, que aplica la lista a TODAS, devolvería "Los
+   * cobros asignados superan el total del ticket", que no explica nada.
+   *
+   * Es el mismo criterio que el trigger de `movimientos_stock`: un guard que
+   * cubre todos los caminos, incluido el que todavía no existe, en vez de
+   * acordarse de tocar cada punto de entrada.
+   *
+   * No se cicla: después de escribir, los precios ya coinciden y `algunoCambia`
+   * da false.
+   */
+  useEffect(() => {
+    if (!listaActiva) return;
+    const { precios, algunoCambia } = preciosPara(listaActiva.id);
+    if (algunoCambia) setListaPrecio(listaActiva.id, precios);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, listaActiva]);
+
+  /**
+   * Una lista de precios YA ES el descuento: salvo que el comercio lo haya
+   * decidido, una promoción no se suma encima. El server lo rechaza; acá se
+   * apaga antes para que no llegue a ofrecerse.
+   */
+  const promocionesPermitidas = admitePromociones(listaActiva);
   const [ventaExitosa, setVentaExitosa] = useState<TicketData | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("CART");
   const [clienteSeleccionado, setClienteSeleccionado] =
@@ -416,6 +564,7 @@ export function CartPanelAdmin({
   }, [negocioId]);
 
   const promocionesElegibles = useMemo(() => {
+    if (!promocionesPermitidas) return [];
     return getPromocionesElegibles({
       promociones: promocionesDB,
       pagos,
@@ -423,7 +572,7 @@ export function CartPanelAdmin({
       metodosPago: metodosPagoDB,
       canal: "POS",
     });
-  }, [promocionesDB, pagos, items, metodosPagoDB]);
+  }, [promocionesDB, pagos, items, metodosPagoDB, promocionesPermitidas]);
 
   const promocionActivaId = useMemo(() => {
     return getPromocionActivaId(promocionId, promocionesElegibles);
@@ -450,6 +599,72 @@ export function CartPanelAdmin({
   const totalFinal = subtotalConDescuento + recargoCuentaCorriente;
   const clienteExceptuadoEntregaMinima =
     clienteSeleccionado?.exceptuado_entrega_minima ?? false;
+
+  /**
+   * LA LISTA DEL CLIENTE SE SUGIERE, NO SE IMPONE.
+   *
+   * El cliente se elige en el paso de PAGO (ver el atajo F7), o sea después
+   * de que la clienta ya vio el ticket armado. Re-preciar en silencio ahí es
+   * cambiarle todos los números delante, así que:
+   *
+   *   - con el ticket VACÍO se aplica sola: no hay nada que cambiar de atrás
+   *     para adelante, y es el camino normal cuando se elige al cliente
+   *     primero.
+   *   - con renglones cargados se PREGUNTA, mostrando los dos totales. Sin el
+   *     número de antes y el de después no hay forma de decidir.
+   *
+   * Camino real esperado: al mayorista se lo reconoce al entrar y la
+   * vendedora toca el chip antes de cargar. Este aviso es para el olvido.
+   */
+  const clienteYaOfrecido = useRef<string | null>(null);
+  useEffect(() => {
+    if (!clienteSeleccionado) return;
+    const listaDelCliente = clienteSeleccionado.lista_precio_id ?? null;
+    const clave = `${clienteSeleccionado.id}|${listaDelCliente}`;
+
+    // La decisión vive en `sugerencia-lista-cliente.ts`, que es pura y tiene
+    // sus cinco ramas probadas. Acá solo se la ejecuta.
+    const decision = decidirSugerenciaDeLista({
+      listaDelCliente,
+      listaActivaId: listaPrecioId,
+      listaExiste: Boolean(listaDelCliente && listaPorId.has(listaDelCliente)),
+      elegidaAMano: listaElegidaAMano.current,
+      ticketVacio: items.length === 0,
+      yaOfrecida: clienteYaOfrecido.current === clave,
+    });
+
+    if (decision.accion === "NADA") return;
+    clienteYaOfrecido.current = clave;
+
+    const nombreLista =
+      listaPorId.get(decision.listaId)?.nombre ?? "otra lista";
+
+    if (decision.accion === "APLICAR") {
+      cambiarListaPrecio(decision.listaId);
+      toast.info(
+        `Precios de ${nombreLista} para ${clienteSeleccionado.nombre}.`,
+      );
+      return;
+    }
+
+    const antes = totalConLista(listaPrecioId);
+    const despues = totalConLista(decision.listaId);
+    // Sin diferencia en pesos no hay nada que preguntar.
+    if (Math.round(antes) === Math.round(despues)) return;
+
+    toast(`${clienteSeleccionado.nombre} tiene precios de ${nombreLista}.`, {
+      description: `El ticket pasa de ${Math.round(antes).toLocaleString("es-AR")} a ${Math.round(despues).toLocaleString("es-AR")}.`,
+      duration: Infinity,
+      action: {
+        label: "Aplicar",
+        onClick: () => cambiarListaPrecio(decision.listaId),
+      },
+      cancel: { label: "Dejar así", onClick: () => {} },
+    });
+    // Las funciones se rearman en cada render (dependen de `items`);
+    // incluirlas dispararía el aviso con cada cambio del carrito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteSeleccionado, listaPrecioId, listaPorId, items.length]);
   const anticipoMinimo =
     isCuentaCorriente && !clienteExceptuadoEntregaMinima
       ? (totalFinal * (branding?.cc_anticipo_default || 0)) / 100
@@ -519,6 +734,11 @@ export function CartPanelAdmin({
   const clearCartAndResetStep = () => {
     clearCart();
     setCheckoutStep("CART");
+    // Vaciar el ticket vacía también la decisión de lista: el próximo cliente
+    // vuelve a poder proponer la suya. Sin esto, un "Dejar así" de hace tres
+    // ventas seguiría silenciando el aviso toda la tarde.
+    olvidarEleccionDeLista();
+    cambiarListaPrecio(null);
   };
 
   const handleCuentaCorrienteChange = (value: boolean) => {
@@ -723,6 +943,13 @@ export function CartPanelAdmin({
           formData.append("reserva_ids", JSON.stringify(reservaIds));
         }
 
+        // Solo el ID: el precio lo resuelve el server contra la base, igual
+        // que el de cada renglón. Un id de otro negocio no lo devuelve ni la
+        // RLS, así que la venta cae al precio base en vez de fallar.
+        if (listaActiva) {
+          formData.append("lista_precio_id", listaActiva.id);
+        }
+
         if (promocionActivaId !== "ninguna" && descuentoDetalle.monto > 0) {
           formData.append("promocion_id", promocionActivaId);
           formData.append("descuento_monto", descuentoDetalle.monto.toString());
@@ -875,6 +1102,8 @@ export function CartPanelAdmin({
             recargoSubmit.pagos,
             metodosPagoDB,
           ),
+          // Null sin lista, que es cuando el ticket no lo imprime.
+          listaPrecioNombre: listaActiva?.nombre ?? null,
           vendedor: vendedorNombre || "Tú",
           clienteNombre: clienteSeleccionado?.nombre || "Consumidor final",
           estadoPago: estadoVenta,
@@ -883,9 +1112,37 @@ export function CartPanelAdmin({
           esFiadoDirecto: isCuentaCorriente,
         });
 
+        /**
+         * EL CATÁLOGO ACABA DE QUEDAR VIEJO: la venta descontó stock.
+         *
+         * Sin esto, la grilla sigue mostrando el stock de ANTES de la venta y
+         * no se corrige sola: `useCatalogoPanel` tiene `staleTime` de 3
+         * minutos y el provider va con `refetchOnWindowFocus: false`, así que
+         * mientras /pos siga montado —o sea, toda la jornada— nada dispara un
+         * refetch. La única invalidación que existía en el POS era la de Carga
+         * rápida (`pos-terminal.tsx:373`).
+         *
+         * El síntoma es feo y confunde: se vende la última unidad, la tarjeta
+         * sigue diciendo "1 disponible", alguien la vuelve a cargar y el server
+         * la rechaza con "Sin stock suficiente para la variante X". La venta
+         * anterior estaba perfecta; lo que mentía era la pantalla.
+         *
+         * Es barato: la query resincroniza por DELTA, así que trae solo los
+         * productos que cambiaron —los de este ticket— y no los ~2 MB del
+         * catálogo.
+         */
+        queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
+
         clearCart();
         setCheckoutStep("CART");
         setPromocionId("ninguna");
+        // La lista vuelve a Base después de cada venta, igual que la
+        // promoción. Es fail-closed y a propósito: dejarla puesta arriesga
+        // cobrarle mayorista a la clienta siguiente, que es un error del que
+        // nadie se entera hasta el arqueo. Volver a tocar el chip cuesta un
+        // click.
+        cambiarListaPrecio(null);
+        olvidarEleccionDeLista();
         setModoMixto(false);
         setIsCuentaCorriente(false);
         setCcSinRecargo(false);
@@ -987,6 +1244,14 @@ export function CartPanelAdmin({
           // Mismo criterio que la grilla: en kiosco y almacén el ticket va sin
           // miniaturas para que entren más renglones en pantalla.
           mostrarImagenes={!rubro || !posSinImagenes(rubro)}
+          encabezado={
+            <SelectorListaPrecio
+              listas={listas}
+              listaPrecioId={listaActiva?.id ?? null}
+              onCambiar={cambiarListaDesdeElChip}
+              deshabilitado={isPending}
+            />
+          }
         />
       ) : (
         <CartStepCheckout

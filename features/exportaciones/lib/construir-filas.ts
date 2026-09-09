@@ -58,6 +58,10 @@ export interface VentaExport {
   estado_operacion?: string | null;
   estado_pago?: string | null;
   metodo_pago?: string | null;
+  /** Con qué lista de precios se cobró. Vacío = precio base. El nombre está
+   * congelado en la venta: el contador tiene que ver el que rigió ese día,
+   * no el que la lista tenga hoy. */
+  lista_precio_nombre?: string | null;
   total?: number | null;
   recargo_metodo_total?: number | null;
   precio_costo?: number | null;
@@ -112,6 +116,11 @@ export function filasVentas(ventas: readonly VentaExport[]): Fila[] {
       Cliente: v.clientes?.nombre ?? "Consumidor final",
       Vendedor: v.perfiles?.nombre ?? "",
       "Medio de pago": v.metodo_pago ?? "",
+      // Vacío —y no "Minorista"— cuando se vendió al precio base: no hay
+      // ninguna lista llamada así, y ponerle nombre a la ausencia haría
+      // que las 1.072 ventas anteriores a esta feature parecieran
+      // clasificadas cuando nadie las clasificó.
+      "Lista de precios": v.lista_precio_nombre ?? "",
       Unidades: num(v.cantidad),
       // El recargo por método no es venta de mercadería: se muestra aparte y
       // se resta, mismo criterio que los reportes.

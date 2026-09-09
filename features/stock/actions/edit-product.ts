@@ -52,6 +52,16 @@ export type VariantesResult = {
 export type EditarProductoResult = {
   imagenes: ImagenesResult;
   variantes: VariantesResult;
+  /**
+   * Qué pasó con los precios fijos por lista: `null` si salió bien o si el
+   * formulario ni los traía, el mensaje a mostrar si no se pudieron guardar.
+   *
+   * Es una TERCERA preocupación independiente, por el mismo criterio que
+   * separa fotos de variantes: que no se puedan escribir los precios por lista
+   * —lo pide ADMIN por RLS— no tiene que voltear una edición de producto que
+   * ya se guardó bien, pero tampoco puede pasar en silencio.
+   */
+  preciosLista?: string | null;
 };
 
 // Fotos y variantes son preocupaciones independientes: el guard de
@@ -186,11 +196,110 @@ export async function editarProductoAction(
     userId: user?.id ?? null,
   });
 
+  // (c) Precios fijos por lista. Va DESPUÉS y aparte, por el mismo criterio
+  // que (b): su resultado no revierte ni condiciona lo que la cabecera ya
+  // guardó. Un comercio sin listas no ejecuta ni una consulta acá.
+  const preciosLista = await guardarPreciosPorLista(supabase, {
+    id,
+    negocioId,
+    formData,
+  });
+
   revalidatePath("/stock");
   revalidatePath("/store", "layout");
   invalidarCatalogo(negocioId);
 
-  return { imagenes, variantes };
+  return { imagenes, variantes, preciosLista };
+}
+
+/**
+ * Los precios FIJOS de un producto en cada lista: la excepción a la regla.
+ *
+ * Solo corre si el formulario trae el centinela `precios_lista_editables`,
+ * o sea si la sección estuvo ABIERTA. Cerrada no monta sus inputs, así que
+ * corregir el precio de un producto desde la edición rápida no puede
+ * borrarle sus precios fijos — mismo mecanismo que protege el tratamiento de
+ * IVA.
+ *
+ * Un campo vacío significa "seguí la regla de la lista", y por eso BORRA la
+ * fila en vez de guardar un cero. Cero no es un precio: `producto_precios`
+ * tiene un CHECK que lo rechaza, y con razón.
+ *
+ * Escribir `producto_precios` pide ADMIN por RLS, mientras que editar un
+ * producto lo puede hacer también un ENCARGADO. Esa diferencia es a
+ * propósito, así que un fallo acá NO voltea el guardado: la cabecera del
+ * producto ya se guardó bien y hacer fallar la edición entera sería peor.
+ *
+ * Pero tampoco se calla: devuelve el error para que la pantalla lo diga.
+ * Escribir un precio, ver "Producto actualizado" y que el precio no esté es
+ * el mismo éxito silencioso que costó 35 fotos el 5/9/2026. Y acá la RLS ni
+ * siquiera devuelve error —un upsert filtrado escribe 0 filas y sale bien—,
+ * así que se cuenta lo que volvió.
+ */
+async function guardarPreciosPorLista(
+  supabase: SupabaseServerClient,
+  { id, negocioId, formData }: { id: string; negocioId: string; formData: FormData },
+): Promise<string | null> {
+  if (!formData.has("precios_lista_editables")) return null;
+
+  const aGuardar: { negocio_id: string; lista_id: string; producto_id: string; precio: number }[] = [];
+  const aBorrar: string[] = [];
+
+  for (const [clave, valor] of formData.entries()) {
+    if (!clave.startsWith("precio_lista_")) continue;
+    const listaId = clave.slice("precio_lista_".length);
+    if (!listaId) continue;
+
+    const precio = Number(String(valor).replace(",", "."));
+
+    if (!Number.isFinite(precio) || precio <= 0) {
+      aBorrar.push(listaId);
+    } else {
+      aGuardar.push({
+        negocio_id: negocioId,
+        lista_id: listaId,
+        producto_id: id,
+        precio: Math.round(precio),
+      });
+    }
+  }
+
+  if (aGuardar.length > 0) {
+    // Upsert por la PK (lista_id, producto_id): corregir un precio fijo es
+    // el caso normal y no tiene por qué ser un borrado más un alta.
+    const { data, error } = await supabase
+      .from("producto_precios")
+      .upsert(aGuardar, { onConflict: "lista_id,producto_id" })
+      .select("lista_id");
+
+    if (error) {
+      console.error("[EDIT PRODUCT] precios por lista:", error);
+      return "No se pudieron guardar los precios por lista.";
+    }
+    if (!data || data.length < aGuardar.length) {
+      console.error("[EDIT PRODUCT] precios por lista filtrados por RLS", {
+        id,
+        pedidos: aGuardar.length,
+        escritos: data?.length ?? 0,
+      });
+      return "Solo un administrador puede cambiar los precios por lista.";
+    }
+  }
+
+  if (aBorrar.length > 0) {
+    const { error } = await supabase
+      .from("producto_precios")
+      .delete()
+      .eq("producto_id", id)
+      .in("lista_id", aBorrar);
+
+    if (error) {
+      console.error("[EDIT PRODUCT] borrando precios por lista:", error);
+      return "No se pudieron borrar los precios por lista.";
+    }
+  }
+
+  return null;
 }
 
 async function actualizarImagenesYCabecera(

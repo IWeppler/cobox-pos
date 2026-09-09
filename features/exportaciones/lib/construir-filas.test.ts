@@ -93,6 +93,21 @@ describe("filasVentas", () => {
     expect(f.Cliente).toBe("Consumidor final");
   });
 
+  it("la lista de precios va vacía cuando se vendió al precio base", () => {
+    // Y NO "Minorista": no existe ninguna lista con ese nombre. Ponerle
+    // nombre a la ausencia haría que las 1.072 ventas anteriores a la
+    // feature parecieran clasificadas cuando nadie las clasificó.
+    const [f] = filasVentas([venta]);
+    expect(f["Lista de precios"]).toBe("");
+  });
+
+  it("y con el NOMBRE congelado en la venta cuando se usó una lista", () => {
+    const [f] = filasVentas([
+      { ...venta, lista_precio_nombre: "Mayorista" },
+    ]);
+    expect(f["Lista de precios"]).toBe("Mayorista");
+  });
+
   it("una venta ANULADA aparece y se ve que lo está", () => {
     // Sacarla dejaría huecos sin explicación en la numeración.
     const [f] = filasVentas([{ ...venta, estado_operacion: "ANULADA" }]);

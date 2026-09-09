@@ -39,6 +39,11 @@ export function buildWhatsappMessage(
   }
 
   mensaje += `--------------------------------\n`;
+  // Con qué lista se cobró. Va ANTES del total porque es lo que lo explica;
+  // en una venta a precio base no se escribe nada.
+  if (ticket.listaPrecioNombre) {
+    mensaje += `Lista: ${ticket.listaPrecioNombre}\n`;
+  }
   mensaje += `*TOTAL COMPROBANTE: ${formatTicketMoney(ticket.total)}*\n`;
 
   if (esFiado) {

@@ -26,6 +26,12 @@ interface CartStepItemsProps {
    * miniaturas: son 96px de alto por renglón que se usan mejor mostrando un
    * ítem más. Default true. */
   mostrarImagenes?: boolean;
+  /**
+   * Franja fija arriba de las líneas. Hoy la usa el selector de lista de
+   * precios del POS, que tiene que estar VISIBLE mientras se carga el ticket
+   * —no escondido en el paso de pago— porque cambia el precio de cada renglón.
+   */
+  encabezado?: React.ReactNode;
 }
 
 /**
@@ -48,9 +54,11 @@ export function CartStepItems({
   imeiPorVariante,
   onElegirUnidad,
   mostrarImagenes = true,
+  encabezado,
 }: Readonly<CartStepItemsProps>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
+      {encabezado}
       <div className="flex-1 overflow-y-auto p-2">
         {items.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">

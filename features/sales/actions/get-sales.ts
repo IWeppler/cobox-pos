@@ -69,6 +69,8 @@ export async function getVentasAction(opts?: {
         monto_devuelto,
         base_devuelta,
         estado_pago,
+        lista_precio_id,
+        lista_precio_nombre,
         cliente_id,
         clientes(nombre),
         perfiles(nombre),

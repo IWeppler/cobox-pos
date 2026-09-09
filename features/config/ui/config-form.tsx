@@ -23,11 +23,17 @@ import {
   Store,
   Phone,
   MapPin,
+  Printer,
   ReceiptText,
   Building2,
   Briefcase,
   Calendar,
 } from "lucide-react";
+import {
+  ANCHOS_TICKET,
+  ETIQUETA_ANCHO_TICKET,
+  normalizarAnchoTicket,
+} from "@/shared/lib/ancho-ticket";
 import {
   Card,
   CardContent,
@@ -335,6 +341,39 @@ export function ConfigForm({ config }: Readonly<{ config: ConfiguracionPOS }>) {
                 placeholder="¡Gracias por elegirnos! Vuelva pronto."
                 className="resize-y"
               />
+            </div>
+
+            {/* El ancho del papel de la impresora. Va acá, al lado del
+                mensaje del ticket, y no en "Ticket de Venta": esa sección es
+                fiscal y está detrás del permiso `configuracion.facturacion`.
+                Elegir 58 u 80 no es una decisión fiscal, es qué impresora
+                compró el comercio. */}
+            <div className="space-y-2 pt-2">
+              <Label
+                htmlFor="ancho_ticket_mm"
+                className="flex items-center gap-2"
+              >
+                <Printer className="w-4 h-4 text-muted-foreground" />
+                Ancho del ticket impreso
+              </Label>
+              <select
+                id="ancho_ticket_mm"
+                name="ancho_ticket_mm"
+                defaultValue={String(
+                  normalizarAnchoTicket(config.ancho_ticket_mm),
+                )}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-none outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                {ANCHOS_TICKET.map((ancho) => (
+                  <option key={ancho} value={ancho}>
+                    {ETIQUETA_ANCHO_TICKET[ancho]}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-muted-foreground">
+                Solo afecta la impresión térmica. Si no sabés cuál tenés,
+                dejá 80: es la medida más común y la que se venía usando.
+              </p>
             </div>
           </div>
 

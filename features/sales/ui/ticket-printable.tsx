@@ -131,6 +131,16 @@ export function TicketPrintable({
             <span>{formatTicketMoney(ticket?.total)}</span>
           </div>
 
+          {/* Con qué lista se cobró. Solo cuando NO es el precio base: es el
+              papel que el cliente presenta si después reclama por el precio,
+              y en una venta normal no hay nada que aclarar. */}
+          {ticket?.listaPrecioNombre && (
+            <div className="flex justify-between items-center text-gray-700">
+              <span>Lista</span>
+              <span className="font-medium">{ticket.listaPrecioNombre}</span>
+            </div>
+          )}
+
           <div className="pt-2 mt-2">
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
               {esFiado ? "Cuenta corriente" : "Medios de pago"}

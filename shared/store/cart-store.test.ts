@@ -76,3 +76,96 @@ describe("sincronizarNegocio", () => {
     expect(useCartStore.getState().items).toHaveLength(1);
   });
 });
+
+describe("setListaPrecio", () => {
+  beforeEach(() => {
+    useCartStore.setState({
+      items: [],
+      negocioId: EVENS,
+      listaPrecioId: null,
+      isOpen: false,
+    });
+  });
+
+  const MAYORISTA = "lista-mayorista";
+
+  it("cambia la lista y los precios en la MISMA escritura", () => {
+    // Con dos escrituras habría un render con la lista nueva y los precios
+    // viejos, que es justo el instante en el que alguien confirma la venta.
+    useCartStore.setState({ items: [item("a")] });
+
+    useCartStore.getState().setListaPrecio(MAYORISTA, {
+      "a|M": { precio: 9600, precioBase: 12000 },
+    });
+
+    const estado = useCartStore.getState();
+    expect(estado.listaPrecioId).toBe(MAYORISTA);
+    expect(estado.items[0].precio).toBe(9600);
+    expect(estado.items[0].precioBase).toBe(12000);
+  });
+
+  it("sella `precioBase`, y por eso re-preciar dos veces NO descuenta dos veces", () => {
+    // El bug que este sello evita: una línea que entró desde Inventario no
+    // trae base, así que la segunda pasada tomaría el precio YA descontado
+    // como base y le volvería a aplicar la lista.
+    useCartStore.setState({ items: [item("a")] });
+
+    const aplicar = () => {
+      const linea = useCartStore.getState().items[0];
+      const base = linea.precioBase ?? linea.precio;
+      useCartStore.getState().setListaPrecio(MAYORISTA, {
+        "a|M": { precio: Math.round(base * 0.8), precioBase: base },
+      });
+    };
+
+    aplicar();
+    aplicar();
+
+    expect(useCartStore.getState().items[0].precio).toBe(9600);
+    expect(useCartStore.getState().items[0].precioBase).toBe(12000);
+  });
+
+  it("volver a Base devuelve el precio de siempre", () => {
+    useCartStore.setState({
+      items: [{ ...item("a"), precio: 9600, precioBase: 12000 }],
+      listaPrecioId: MAYORISTA,
+    });
+
+    useCartStore.getState().setListaPrecio(null, {
+      "a|M": { precio: 12000, precioBase: 12000 },
+    });
+
+    expect(useCartStore.getState().listaPrecioId).toBeNull();
+    expect(useCartStore.getState().items[0].precio).toBe(12000);
+  });
+
+  it("una línea sin entrada en el mapa queda como está", () => {
+    useCartStore.setState({ items: [item("a"), item("b")] });
+
+    useCartStore.getState().setListaPrecio(MAYORISTA, {
+      "a|M": { precio: 9600, precioBase: 12000 },
+    });
+
+    expect(useCartStore.getState().items[1].precio).toBe(12000);
+    expect(useCartStore.getState().items[1].precioBase).toBeUndefined();
+  });
+
+  it("cambiar de negocio descarta la lista, aunque el carrito esté vacío", () => {
+    // `listas_precios` es por negocio: un id de otro comercio no lo devuelve
+    // ni la RLS.
+    useCartStore.setState({ items: [], listaPrecioId: MAYORISTA });
+
+    useCartStore.getState().sincronizarNegocio(CLICKTOSTADO);
+
+    expect(useCartStore.getState().listaPrecioId).toBeNull();
+  });
+
+  it("y también cuando el carrito tenía mercadería", () => {
+    useCartStore.setState({ items: [item("a")], listaPrecioId: MAYORISTA });
+
+    useCartStore.getState().sincronizarNegocio(CLICKTOSTADO);
+
+    expect(useCartStore.getState().items).toEqual([]);
+    expect(useCartStore.getState().listaPrecioId).toBeNull();
+  });
+});

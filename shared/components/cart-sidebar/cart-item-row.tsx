@@ -128,6 +128,16 @@ export function CartItemRow({
                 {ABREVIATURA_UNIDAD[normalizarUnidadMedida(item.unidadMedida)]}
               </p>
             )}
+            {/* El precio de siempre, tachado, cuando una lista de precios lo
+                cambió. Es la señal por renglón de que el ticket no está a los
+                precios de todos los días; la franja de arriba lo dice para el
+                ticket entero. Sin lista, `precioBase` es igual a `precio` y
+                acá no se dibuja nada. */}
+            {item.precioBase != null && item.precioBase !== item.precio && (
+              <p className="font-mono text-[10px] text-muted-foreground line-through">
+                ${(item.precioBase * item.cantidad).toLocaleString("es-AR")}
+              </p>
+            )}
             <p className="font-mono text-sm font-medium text-foreground">
               ${lineSubtotal.toLocaleString("es-AR")}
             </p>

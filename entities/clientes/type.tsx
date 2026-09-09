@@ -34,6 +34,14 @@ export interface Cliente {
   reglas_credito: Record<string, any>;
   exceptuado_entrega_minima: boolean;
   fecha_vencimiento_deuda?: string | null;
+  /**
+   * Lista de precios SUGERIDA para este cliente. `null` = precio base.
+   *
+   * Es una sugerencia y no una orden, mismo criterio que `comprobante_defecto`:
+   * el POS la propone al elegirlo y la vendedora puede cambiarla. Quien manda
+   * en lo que se cobró es `ventas.lista_precio_id`, que queda congelado.
+   */
+  lista_precio_id?: string | null;
   creado_en: string;
 }
 

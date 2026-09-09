@@ -94,6 +94,7 @@ export interface ClienteCreado {
   nombre: string;
   telefono: string | null;
   exceptuado_entrega_minima: boolean;
+  lista_precio_id?: string | null;
 }
 
 export interface CrearClienteState extends ClientActionState {
@@ -536,7 +537,7 @@ export async function crearClienteAction(
     })
     // El POS necesita el cliente recién creado para dejarlo seleccionado en el
     // ticket sin volver a consultar la lista entera.
-    .select("id, nombre, telefono, exceptuado_entrega_minima")
+    .select("id, nombre, telefono, exceptuado_entrega_minima, lista_precio_id")
     .single();
 
   if (error || !cliente) {
@@ -575,6 +576,11 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
     (formData.get("fecha_vencimiento_deuda") as string) || null;
   const exceptuadoEditable =
     formData.get("exceptuado_entrega_minima_editable") === "1";
+  // Mismo patrón centinela que `exceptuado_entrega_minima` y que el bloque
+  // fiscal: el campo solo viaja desde la pantalla que lo dibuja. Sin esto,
+  // guardar el cliente desde un formulario que no tiene el selector le
+  // borraría la lista asignada sin avisar.
+  const listaEditable = formData.get("lista_precio_editable") === "1";
 
   if (!nombre || !clienteId) {
     return { error: "El nombre es obligatorio.", success: false };
@@ -604,10 +610,23 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
       formData.get("exceptuado_entrega_minima") === "on";
   }
 
-  const { error } = await supabase
+  if (listaEditable) {
+    // "" es la opción "Precio base", que en la base es NULL. No existe una
+    // fila "Minorista" a la que apuntar.
+    const listaPrecioId =
+      ((formData.get("lista_precio_id") as string | null) ?? "").trim() || null;
+    updatePayload.lista_precio_id = listaPrecioId;
+  }
+
+  const { data: actualizados, error } = await supabase
     .from("clientes")
     .update(updatePayload)
-    .eq("id", clienteId);
+    .eq("id", clienteId)
+    // Sin `.select()` no se distingue "guardado" de "la RLS lo filtró":
+    // PostgREST devuelve 0 filas y `error: null`, y la pantalla diría
+    // "Cliente actualizado" sin haber escrito nada. Es lo que costó las 35
+    // fotos del 5/9/2026.
+    .select("id");
 
   if (error) {
     console.error("Error actualizando cliente:", error);
@@ -621,6 +640,13 @@ export async function editClienteAction(clienteId: string, formData: FormData) {
       };
     }
     return { error: "Error al actualizar el cliente.", success: false };
+  }
+
+  if (!actualizados || actualizados.length === 0) {
+    return {
+      error: "No se guardó: ese cliente no existe o no lo podés editar.",
+      success: false,
+    };
   }
 
   revalidatePath("/clientes");

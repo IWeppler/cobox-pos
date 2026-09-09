@@ -8,6 +8,15 @@ interface CartState {
   isOpen: boolean;
   /** Negocio al que pertenece el carrito guardado. Ver `sincronizarNegocio`. */
   negocioId: string | null;
+  /**
+   * Lista de precios con la que se está armando este ticket. `null` = precio
+   * base, que es el comportamiento de siempre y el de 7 de los 8 negocios.
+   *
+   * Vive en el store y no en un componente porque la eligen y la leen DOS
+   * pantallas hermanas: la grilla la necesita para poner el precio al agregar
+   * y el ticket para mostrarla, re-preciar y mandarla con la venta.
+   */
+  listaPrecioId: string | null;
 
   addItem: (item: CartItemStore) => void;
   removeItem: (productoId: string, variante: string) => void;
@@ -18,6 +27,10 @@ interface CartState {
   ) => void;
   clearCart: () => void;
   sincronizarNegocio: (negocioId: string | null) => void;
+  setListaPrecio: (
+    listaPrecioId: string | null,
+    preciosPorLinea: Record<string, { precio: number; precioBase: number }>,
+  ) => void;
 
   toggleCart: () => void;
   setIsOpen: (isOpen: boolean) => void;
@@ -32,6 +45,7 @@ export const useCartStore = create<CartState>()(
       items: [],
       isOpen: false,
       negocioId: null,
+      listaPrecioId: null,
 
       addItem: (newItem) => {
         set((state) => {
@@ -108,6 +122,37 @@ export const useCartStore = create<CartState>()(
       clearCart: () => set({ items: [] }),
 
       /**
+       * Cambia la lista Y los precios de las líneas EN LA MISMA ESCRITURA.
+       *
+       * El store no sabe calcular un precio y no tiene por qué: recibe el mapa
+       * ya resuelto por `precioDeLista`, la misma función que usa el server.
+       * Lo que sí garantiza es que las dos cosas cambien juntas — con dos
+       * escrituras habría un render con la lista nueva y los precios viejos, y
+       * ese es justo el instante en el que alguien confirma la venta.
+       *
+       * La clave del mapa es `productoId|variante`, que es la misma con la que
+       * el carrito identifica una línea. Una línea sin entrada en el mapa
+       * queda como está.
+       *
+       * Se escribe TAMBIÉN `precioBase`, y eso no es un extra: una línea que
+       * entró al carrito desde otra pantalla (Inventario, la ficha de un
+       * producto) no lo trae, y sin sellarlo la próxima re-tarifación tomaría
+       * el precio YA descontado como base y volvería a descontarle. Un
+       * descuento sobre un descuento, cada vez que se toca el selector.
+       */
+      setListaPrecio: (listaPrecioId, preciosPorLinea) => {
+        set((state) => ({
+          listaPrecioId,
+          items: state.items.map((item) => {
+            const nuevo = preciosPorLinea[`${item.productoId}|${item.variante}`];
+            return nuevo === undefined
+              ? item
+              : { ...item, precio: nuevo.precio, precioBase: nuevo.precioBase };
+          }),
+        }));
+      },
+
+      /**
        * Deja el carrito atado al negocio activo, y lo vacía si venía de otro.
        *
        * El carrito se persiste en localStorage y el cambio de negocio es una
@@ -128,8 +173,12 @@ export const useCartStore = create<CartState>()(
           // cambio de comercio. Borrar el sello acá haría que la próxima
           // sincronización vaciara un carrito que estaba bien.
           if (!negocioId) return {};
-          if (state.items.length === 0) return { negocioId };
-          return { negocioId, items: [] };
+          // La lista se descarta SIEMPRE al cambiar de comercio, aunque el
+          // carrito esté vacío: `listas_precios` es por negocio, y un id de
+          // otro comercio no lo devuelve ni la RLS.
+          if (state.items.length === 0)
+            return { negocioId, listaPrecioId: null };
+          return { negocioId, items: [], listaPrecioId: null };
         });
       },
 
@@ -153,6 +202,7 @@ export const useCartStore = create<CartState>()(
       partialize: (state) => ({
         items: state.items,
         negocioId: state.negocioId,
+        listaPrecioId: state.listaPrecioId,
       }),
     },
   ),

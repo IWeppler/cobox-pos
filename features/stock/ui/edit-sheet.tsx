@@ -65,6 +65,7 @@ import { ProductMediaSection } from "./create-product/product-media-section";
 import { ProductPriceSection } from "./create-product/product-price-section";
 import { ProductVariantsSection } from "./create-product/product-variants-section";
 import { ProductFiscalSection } from "./create-product/product-fiscal-section";
+import { ProductListasSection } from "./create-product/product-listas-section";
 import { ShareButton } from "@/shared/components/share-button";
 import {
   armarMensajeProducto,
@@ -389,10 +390,21 @@ function EditProductForm({
           );
         }
         queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
+        // Los precios fijos por lista viven en otra entrada del cache: sin
+        // esto el POS seguiría cobrando el anterior hasta que venza el
+        // staleTime, y el que lo acaba de cambiar es el que menos lo esperaría.
+        queryClient.invalidateQueries({ queryKey: queryKeys.listasPrecios });
         queryClient.invalidateQueries({
           queryKey: queryKeys.stock.detalle(producto.id),
         });
         router.refresh();
+      }
+
+      // Los precios por lista son una tercera preocupación y avisan aparte:
+      // que no se hayan podido escribir —los pide ADMIN— no cambia que el
+      // producto sí se guardó, pero tampoco puede pasar en silencio.
+      if (result.preciosLista) {
+        toast.warning(result.preciosLista);
       }
 
       if (result.imagenes.success && result.variantes.success) {
@@ -861,6 +873,15 @@ function EditProductForm({
             pivotSelections={variantSelection.pivotSelections}
             onPivotChange={variantSelection.handlePivotChange}
             atributosExistentes={variantSelection.atributosExistentes}
+          />
+
+          {/* Los precios fijos por lista: la excepción a la regla. No se
+              dibuja si el comercio no tiene listas. Colapsada, con el mismo
+              mecanismo de `has()` que el bloque fiscal. */}
+          <ProductListasSection
+            productoId={producto.id}
+            precioVenta={precioVenta}
+            precioCosto={precioCosto}
           />
 
           {/* Colapsada. Mientras esté cerrada NO monta sus inputs, y la

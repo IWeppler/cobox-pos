@@ -124,6 +124,17 @@ export interface Venta {
   /** De `monto_devuelto`, cuánto es mercadería. Lo que sobra es el recargo
    * prorrateado. Los reportes restan cada parte de donde la habían sumado. */
   base_devuelta?: number;
+  /**
+   * Con qué lista de precios se cobró. `null` = precio base, o venta
+   * anterior a que existieran las listas — son dos cosas distintas y la
+   * base no puede distinguirlas hacia atrás, así que no se inventa.
+   *
+   * El NOMBRE va congelado en la venta y no por join: la lista se puede
+   * renombrar o borrar, y el historial tiene que seguir diciendo lo que
+   * decía. Mismo criterio que los datos del receptor en `comprobantes`.
+   */
+  lista_precio_id?: string | null;
+  lista_precio_nombre?: string | null;
 }
 
 export interface TicketItemData {
@@ -154,6 +165,14 @@ export interface TicketData {
   recargoMetodoMonto?: number;
   /** Ej. "Recargo Tarjeta (15%)". */
   recargoMetodoEtiqueta?: string;
+  /**
+   * Lista de precios con la que se cobró, si no fue el precio base.
+   *
+   * Ausente en el 100% de los tickets de hoy y en toda venta a precio de
+   * siempre: imprimir "Minorista" en 1.072 tickets es ruido, mismo criterio
+   * que `sufijoPrecioPorUnidad`, que tampoco escribe "/u." en una remera.
+   */
+  listaPrecioNombre?: string | null;
   comisionMonto?: number;
   montoNeto?: number;
   acreditacionDias?: number;

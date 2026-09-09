@@ -119,7 +119,7 @@ async function construirFilas(
           // que no se puede sacar de la cabecera, porque `ventas` guarda
           // cuánta plata volvió pero no cuánto costaba esa mercadería. Ver
           // `filasVentas`.
-          "id, fecha_venta, estado_operacion, estado_pago, metodo_pago, total, recargo_metodo_total, precio_costo, comision_total, total_neto, monto_cobrado, monto_pendiente, monto_devuelto, base_devuelta, cantidad, clientes(nombre), perfiles(nombre), comprobantes(tipo, punto_venta, numero), ventas_items(precio_costo, cantidad_devuelta)",
+          "id, fecha_venta, estado_operacion, estado_pago, metodo_pago, lista_precio_nombre, total, recargo_metodo_total, precio_costo, comision_total, total_neto, monto_cobrado, monto_pendiente, monto_devuelto, base_devuelta, cantidad, clientes(nombre), perfiles(nombre), comprobantes(tipo, punto_venta, numero), ventas_items(precio_costo, cantidad_devuelta)",
         )
         .gte("fecha_venta", desde)
         .lte("fecha_venta", hasta)

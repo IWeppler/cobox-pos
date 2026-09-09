@@ -14,6 +14,7 @@ import {
   type UsoDelPlan,
 } from "@/features/planes/actions/uso-del-plan";
 import { bloquearVendedor } from "@/shared/config/supabase/guard-rol";
+import type { ListaPrecio } from "@/entities/precios/types";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,35 @@ export default async function ConfiguracionPage() {
     });
   }
 
+  // Listas de precios. Solo para admin, igual que Empleados: la RLS ya impide
+  // escribirlas sin ser ADMIN, y un ENCARGADO no tiene nada que hacer con una
+  // sección que no puede tocar.
+  //
+  // Los precios fijos se cuentan aparte y NO se traen: son la excepción a la
+  // regla de la lista, y lo único que la pantalla necesita saber es cuántos
+  // hay. Traerlos enteros sería bajarse un pedazo del catálogo para mostrar un
+  // número.
+  let listasPrecios: ListaPrecio[] = [];
+  if (isAdmin) {
+    const [{ data: listas }, { data: overrides }] = await Promise.all([
+      supabase
+        .from("listas_precios")
+        .select("id, nombre, tipo_regla, valor, admite_promociones, activa, creado_en")
+        .order("creado_en", { ascending: true }),
+      supabase.from("producto_precios").select("lista_id"),
+    ]);
+
+    const porLista = new Map<string, number>();
+    for (const fila of overrides ?? []) {
+      porLista.set(fila.lista_id, (porLista.get(fila.lista_id) ?? 0) + 1);
+    }
+
+    listasPrecios = (listas ?? []).map((lista) => ({
+      ...lista,
+      overrides: porLista.get(lista.id) ?? 0,
+    })) as ListaPrecio[];
+  }
+
   const { data: promociones } = await supabase
     .from("promociones")
     .select(
@@ -132,6 +162,7 @@ export default async function ConfiguracionPage() {
         <SettingsManager
           config={config}
           promociones={promociones || []}
+          listasPrecios={listasPrecios}
           pagos={pagos || []}
           categorias={categorias || []}
           isAdmin={isAdmin}

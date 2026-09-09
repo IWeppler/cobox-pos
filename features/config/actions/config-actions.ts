@@ -3,6 +3,7 @@
 import { createClient } from "@/shared/config/supabase/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { normalizarAnchoTicket } from "@/shared/lib/ancho-ticket";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { errorDeCuit, normalizarCuit } from "@/shared/lib/cuit";
 
@@ -61,6 +62,13 @@ export async function updateConfiguracionAction(
   const whatsapp = ((formData.get("whatsapp") as string) ?? "").trim();
   const direccion = textoOpcional("direccion");
   const mensaje_ticket = textoOpcional("mensaje_ticket");
+  // Fail-closed: un valor que no sea 58 u 80 cae en 80, que es lo que se
+  // imprimía antes de que este campo existiera. El CHECK de la base es el
+  // freno real; esto evita que un form raro lo haga rebotar como violación
+  // de constraint.
+  const ancho_ticket_mm = normalizarAnchoTicket(
+    formData.get("ancho_ticket_mm"),
+  );
   const logoFile = formData.get("logo") as File | null;
 
   // El id sale de un input hidden: si falta no es que el usuario olvidó algo,
@@ -140,6 +148,7 @@ export async function updateConfiguracionAction(
     provincia,
     localidad,
     mensaje_ticket,
+    ancho_ticket_mm,
     updated_at: new Date().toISOString(),
   };
 
@@ -149,14 +158,28 @@ export async function updateConfiguracionAction(
   }
 
   // 3. Impactamos en la BD
-  const { error } = await supabase
+  //
+  // Con `.select("id")` y chequeo de filas: desde `20260905120000` escribir
+  // `configuracion_pos` pide ADMIN, y un UPDATE filtrado por RLS devuelve 0
+  // filas con `error: null`. Sin esto, un ENCARGADO veía "Configuración
+  // guardada" y no se había guardado nada — el mismo éxito silencioso que
+  // costó 35 fotos el 5/9/2026.
+  const { data: filasTocadas, error } = await supabase
     .from("configuracion_pos")
     .update(updateData)
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
 
   if (error) {
     console.error("Error al actualizar configuración:", error);
     return { error: "No se pudo guardar la configuración.", success: false };
+  }
+
+  if (!filasTocadas || filasTocadas.length === 0) {
+    return {
+      error: "Solo un administrador puede cambiar la configuración del comercio.",
+      success: false,
+    };
   }
 
   revalidatePath("/", "layout");

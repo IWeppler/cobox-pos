@@ -16,6 +16,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
 import { Switch } from "@/shared/ui/switch";
+import { SelectorListaCliente } from "./selector-lista-cliente";
 import {
   Select,
   SelectContent,
@@ -278,6 +279,8 @@ export function EditClientModal({
                   defaultValue={cliente.fecha_vencimiento_deuda}
                 />
               </div>
+
+              <SelectorListaCliente listaPrecioId={cliente.lista_precio_id} />
 
               <div className="space-y-2">
                 <Label htmlFor="edit-notas" className="text-sm font-medium">

@@ -4,14 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BarChart3,
+  Calculator,
+  CreditCard,
+  FileSliders,
+  Globe,
   HandCoins,
   Keyboard,
   LayoutDashboard,
   Loader2,
   Package,
+  Receipt,
   ScanBarcode,
+  Settings,
   ShoppingCart,
   Store,
+  Tag,
+  Tags,
   Users,
   Wallet,
 } from "lucide-react";
@@ -80,6 +88,80 @@ const DESTINOS: Destino[] = [
     href: "/reportes",
     Icono: BarChart3,
     soloAdmin: true,
+  },
+  {
+    clave: "configuracion",
+    etiqueta: "Configuración",
+    href: "/configuracion",
+    Icono: Settings,
+  },
+];
+
+/**
+ * Las secciones de Configuración, para poder llegar directo.
+ *
+ * POR QUÉ ESTÁN ACÁ: Configuración es UNA ruta con once paneles adentro, y
+ * hasta ahora la paleta solo conocía rutas. O sea que buscar "listas de
+ * precios", "promociones" o "métodos de pago" no encontraba nada, y la única
+ * forma de llegar era acordarse de que vivían adentro de Configuración y
+ * bajar por el menú lateral. Buscar por el nombre de lo que se quiere hacer
+ * es exactamente para lo que existe esta paleta.
+ *
+ * Cada una linkea con `?seccion=`, que `SettingsManager` lee para abrir
+ * directo el panel correcto. Las claves son las mismas que las de SECTIONS
+ * en ese archivo: si una cambia allá y no acá, el link cae en "Comercio" en
+ * vez de romperse.
+ */
+const SECCIONES_CONFIG: Destino[] = [
+  {
+    clave: "listas-precios",
+    etiqueta: "Listas de precios (mayorista)",
+    href: "/configuracion?seccion=listasPrecios",
+    Icono: Tags,
+    soloAdmin: true,
+  },
+  {
+    clave: "promociones",
+    etiqueta: "Promociones y descuentos",
+    href: "/configuracion?seccion=promociones",
+    Icono: Tag,
+  },
+  {
+    clave: "metodos-pago",
+    etiqueta: "Métodos de pago",
+    href: "/configuracion?seccion=pagos",
+    Icono: CreditCard,
+  },
+  {
+    clave: "categorias",
+    etiqueta: "Categorías",
+    href: "/configuracion?seccion=categoria",
+    Icono: FileSliders,
+  },
+  {
+    clave: "empleados",
+    etiqueta: "Empleados y permisos",
+    href: "/configuracion?seccion=empleados",
+    Icono: Users,
+    soloAdmin: true,
+  },
+  {
+    clave: "catalogo-online",
+    etiqueta: "Catálogo online",
+    href: "/configuracion?seccion=catalogo",
+    Icono: Globe,
+  },
+  {
+    clave: "caja-turnos",
+    etiqueta: "Caja y turnos",
+    href: "/configuracion?seccion=caja",
+    Icono: Calculator,
+  },
+  {
+    clave: "ticket-config",
+    etiqueta: "Ticket de venta",
+    href: "/configuracion?seccion=ticketConfig",
+    Icono: Receipt,
   },
 ];
 
@@ -274,9 +356,9 @@ export function PaletaComandos({
 
   const destinos = useMemo(
     () =>
-      DESTINOS.filter((d) => (d.soloAdmin ? esAdmin : true)).filter((d) =>
-        coincide(d.etiqueta),
-      ),
+      [...DESTINOS, ...SECCIONES_CONFIG]
+        .filter((d) => (d.soloAdmin ? esAdmin : true))
+        .filter((d) => coincide(d.etiqueta)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [esAdmin, patronNormalizado],
   );

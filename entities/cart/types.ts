@@ -17,8 +17,23 @@ export interface CartItemStore {
   /** producto_variantes.id real, cuando la variante existe como fila propia. */
   varianteId?: string;
   /** Precio por UNIDAD DE MEDIDA: por kilo si `unidadMedida` es KG, por pieza
-   * si es UNIDAD. El subtotal de la línea es siempre `precio * cantidad`. */
+   * si es UNIDAD. El subtotal de la línea es siempre `precio * cantidad`.
+   * Con una lista de precios activa, este ya es el precio DE LA LISTA. */
   precio: number;
+  /**
+   * El precio de siempre, sin ninguna lista aplicada.
+   *
+   * Se guarda en la línea para que cambiar de lista pueda RE-PRECIAR el
+   * carrito sin volver a mirar el catálogo: el ticket vive en otro componente
+   * que a propósito no recibe los 2 MB de productos. También es lo que se
+   * dibuja tachado al lado del precio de lista.
+   *
+   * Opcional: un carrito guardado en localStorage antes de esto no lo tiene, y
+   * ahí se trata como igual a `precio` — sin lista, son lo mismo.
+   */
+  precioBase?: number;
+  /** El costo, solo para las listas con regla por MARKUP. Mismo motivo. */
+  costoBase?: number | null;
   cantidad: number;
   /**
    * Unidad en la que se vende el producto (`productos.unidad_medida`). Decide

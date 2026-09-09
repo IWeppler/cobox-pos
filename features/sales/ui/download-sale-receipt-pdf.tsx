@@ -11,6 +11,7 @@ import {
   pdf,
 } from "@react-pdf/renderer";
 import { esFraccionable, formatearCantidad } from "@/shared/lib/unidad-venta";
+import { getTicketFinancialSummary, getTicketSubtotal } from "./ticket-utils";
 
 // Estilos específicos para el PDF
 const styles = StyleSheet.create({
@@ -120,13 +121,19 @@ const ReceiptDocument = ({
   ticket: TicketData;
   config: ConfiguracionPOS | null;
 }) => {
-  const isFiado =
-    ticket.estadoPago === "PARCIAL" ||
-    (ticket.montoPendiente && ticket.montoPendiente > 0);
-  const subtotal = ticket.items.reduce(
-    (acc, i) => acc + (i.precioUnitario || i.precio || 0) * i.cantidad,
-    0,
-  );
+  /**
+   * El subtotal y el resumen financiero salen de `ticket-utils`, igual que en
+   * el ticket impreso y en el texto de WhatsApp.
+   *
+   * Hasta el 8/9/2026 este archivo los calculaba por su cuenta —el subtotal a
+   * mano y un `isFiado` con su propia condición— así que era el ÚNICO de los
+   * tres comprobantes que podía decir algo distinto de los otros dos sobre la
+   * misma venta. Tres formas de responder "¿cuánto quedó debiendo?" terminan
+   * en tres respuestas.
+   */
+  const subtotal = getTicketSubtotal(ticket);
+  const { esFiado: isFiado, montoCobrado, montoPendiente, pagosDesglosados } =
+    getTicketFinancialSummary(ticket);
 
   return (
     <Document>
@@ -237,6 +244,15 @@ const ReceiptDocument = ({
             </View>
           )}
 
+          {ticket.listaPrecioNombre && (
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Lista:</Text>
+              <Text style={styles.totalValue}>
+                {ticket.listaPrecioNombre}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.totalRowFinal}>
             <Text style={styles.totalLabelBig}>TOTAL:</Text>
             <Text style={styles.totalValueBig}>
@@ -244,12 +260,44 @@ const ReceiptDocument = ({
             </Text>
           </View>
 
+          {/* CON QUÉ SE PAGÓ. Faltaba entero: el PDF mostraba el total y nada
+              más, así que una venta mixta era indistinguible de una en
+              efectivo. El ticket impreso y el texto de WhatsApp ya los
+              listaban; este era el que quedaba. */}
+          {!isFiado && pagosDesglosados.length > 0 && (
+            <View style={{ marginTop: 10 }}>
+              {pagosDesglosados.map((pago, idx) => (
+                <View style={styles.totalRow} key={`${pago.nombre}-${idx}`}>
+                  <Text style={styles.totalLabel}>{pago.nombre}:</Text>
+                  <Text style={styles.totalValue}>
+                    ${Math.round(pago.monto).toLocaleString("es-AR")}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
           {isFiado && (
             <>
+              {/* En el fiado, CON QUÉ se pagó el anticipo. Sin esto el
+                  comprobante dice cuánto entregó y no de qué forma, que es
+                  justo lo que se discute cuando el cliente vuelve. */}
+              {pagosDesglosados.length > 0 && (
+                <View style={{ marginTop: 10 }}>
+                  {pagosDesglosados.map((pago, idx) => (
+                    <View style={styles.totalRow} key={`${pago.nombre}-${idx}`}>
+                      <Text style={styles.totalLabel}>{pago.nombre}:</Text>
+                      <Text style={styles.totalValue}>
+                        ${Math.round(pago.monto).toLocaleString("es-AR")}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
               <View style={[styles.totalRow, { marginTop: 10 }]}>
                 <Text style={styles.totalLabel}>Anticipo Pagado:</Text>
                 <Text style={styles.totalValue}>
-                  ${(ticket.montoCobrado || 0).toLocaleString("es-AR")}
+                  ${Math.round(montoCobrado).toLocaleString("es-AR")}
                 </Text>
               </View>
               <View style={styles.totalRow}>
@@ -267,7 +315,7 @@ const ReceiptDocument = ({
                     { color: "#b45309", fontWeight: "bold" },
                   ]}
                 >
-                  ${(ticket.montoPendiente || 0).toLocaleString("es-AR")}
+                  ${Math.round(montoPendiente).toLocaleString("es-AR")}
                 </Text>
               </View>
             </>

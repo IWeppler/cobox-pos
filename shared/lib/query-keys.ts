@@ -30,6 +30,16 @@ export const queryKeys = {
    * juntas eran una a la que alguien se iba a olvidar.
    */
   catalogo: ["catalogo", "panel"] as const,
+  /**
+   * Las listas de precios del negocio y sus precios fijos.
+   *
+   * Entrada propia y no parte del catálogo: son dos filas y unas pocas
+   * excepciones contra los ~2 MB de productos, cambian por otro motivo
+   * (Configuración, no una venta) y las leen DOS componentes hermanos del POS
+   * —la grilla y el ticket— que necesitan ver exactamente lo mismo. Con dos
+   * consultas separadas, una podría traer una lista que la otra ya no tiene.
+   */
+  listasPrecios: ["listas-precios"] as const,
   stock: {
     detalle: (productoId: string) => ["stock", "detalle", productoId] as const,
   },
