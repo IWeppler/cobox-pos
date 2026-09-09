@@ -103,6 +103,13 @@ export async function getDatosCobroCuentaCorrienteAction(): Promise<DatosCobroCu
       (v) => [v.cliente_id, Number(v.vencido ?? 0)],
     ),
   );
+  // Recargos anteriores impagos: se sacan de la base del próximo recargo, para
+  // que la mora no se calcule sobre mora.
+  const moraPreviaPorCliente = new Map<string, number>(
+    (
+      (vencidos ?? []) as { cliente_id: string; mora_viva: number | null }[]
+    ).map((v) => [v.cliente_id, Number(v.mora_viva ?? 0)]),
+  );
 
   const conDeuda: ClienteConDeuda[] = (clientes ?? []).map((c) => {
     const { saldoBase, montoRecargo } = calcularSaldoConRecargo(
@@ -110,6 +117,7 @@ export async function getDatosCobroCuentaCorrienteAction(): Promise<DatosCobroCu
         monto_pendiente: c.saldo_pendiente,
         fecha_vencimiento: c.fecha_vencimiento_deuda,
         monto_vencido: vencidoPorCliente.get(c.id) ?? 0,
+        mora_previa: moraPreviaPorCliente.get(c.id) ?? 0,
       },
       recargoConfig,
     );

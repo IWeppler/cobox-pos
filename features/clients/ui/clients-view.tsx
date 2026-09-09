@@ -80,6 +80,9 @@ interface ClientsViewProps {
   /** Porción VENCIDA por cliente (FIFO), base del recargo por mora. Sale de
    * `deuda_cc_vencida`; un cliente ausente no tiene deuda viva. */
   vencidoPorCliente: Record<string, number>;
+  /** Recargos anteriores impagos por cliente. Salen de la base del próximo
+   * recargo: la mora no se calcula sobre mora. */
+  moraPreviaPorCliente: Record<string, number>;
   isAdmin?: boolean;
 }
 
@@ -89,6 +92,7 @@ export function ClientsView({
   entregaMinimaActiva = false,
   recargoMoraConfig,
   vencidoPorCliente,
+  moraPreviaPorCliente,
   isAdmin = false,
 }: Readonly<ClientsViewProps>) {
   // El "ahora" se congela en el primer render: si saliera de `new Date()`
@@ -148,6 +152,7 @@ export function ClientsView({
           monto_pendiente: cliente.saldo_pendiente,
           fecha_vencimiento: cliente.fecha_vencimiento_deuda,
           monto_vencido: vencidoPorCliente[cliente.id] ?? 0,
+          mora_previa: moraPreviaPorCliente[cliente.id] ?? 0,
         },
         recargoMoraConfig,
       );
@@ -168,6 +173,7 @@ export function ClientsView({
     clientes,
     recargoMoraConfig,
     vencidoPorCliente,
+    moraPreviaPorCliente,
     referenciaScoring,
     ahora,
   ]);
@@ -619,6 +625,9 @@ export function ClientsView({
         recargoMoraConfig={recargoMoraConfig}
         montoVencido={
           selectedClient ? (vencidoPorCliente[selectedClient.id] ?? 0) : 0
+        }
+        moraPrevia={
+          selectedClient ? (moraPreviaPorCliente[selectedClient.id] ?? 0) : 0
         }
         isAdmin={isAdmin}
         onClose={() => setSelectedClientId(null)}

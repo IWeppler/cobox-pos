@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { construirPesos, evaluarCandidato, tokenizarNombre } from "./afinidad-nombre";
+import {
+  construirPesos,
+  evaluarCandidato,
+  hayEmpate,
+  tokenizarNombre,
+} from "./afinidad-nombre";
 
 /**
  * Catálogo de prueba con la forma del real: una familia larga de vestidos de
@@ -177,5 +182,38 @@ describe("comportamiento en los bordes", () => {
     // están cubiertas. El orden importa para el aviso de la pantalla.
     expect(r.faltantes).toHaveLength(2);
     expect(r.cobertura).toBeLessThan(0.5);
+  });
+});
+
+describe("hayEmpate", () => {
+  it("un solo candidato nunca empata", () => {
+    expect(hayEmpate([0.53])).toBe(false);
+    expect(hayEmpate([])).toBe(false);
+  });
+
+  it("dos de la misma familia empatan: el orden lo puso el trigrama", () => {
+    // "VESTIDO EGRESADA LUNA" contra ALANA y contra LUCI: las dos comparten
+    // las dos palabras comunes y ninguna tiene la que identifica.
+    expect(hayEmpate([0.53, 0.53])).toBe(true);
+  });
+
+  it("una palabra rara que sí coincide rompe el empate", () => {
+    // Cobertura 1 contra 0,53 — que es el caso "buzo frisado negro" contra
+    // "BUZO FRISADO NEGRO" al lado de un vecino de familia.
+    expect(hayEmpate([1, 0.53])).toBe(false);
+  });
+
+  it("no depende del orden en que vengan", () => {
+    expect(hayEmpate([0.53, 1])).toBe(false);
+  });
+
+  it("el margen es 0,05 y el borde no empata", () => {
+    expect(hayEmpate([0.8, 0.75])).toBe(false);
+    expect(hayEmpate([0.8, 0.76])).toBe(true);
+  });
+
+  it("mira los DOS mejores, no el peor de la lista", () => {
+    expect(hayEmpate([0.9, 0.88, 0.2])).toBe(true);
+    expect(hayEmpate([0.9, 0.6, 0.59])).toBe(false);
   });
 });

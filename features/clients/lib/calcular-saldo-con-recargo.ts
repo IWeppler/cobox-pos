@@ -19,12 +19,33 @@ export interface TicketConVencimiento {
    * `calcularSaldoConRecargo`.
    */
   monto_vencido?: number | string | null;
+  /**
+   * Cuánto del saldo son RECARGOS ANTERIORES y no mercadería. Sale de
+   * `mora_viva` en `deuda_cc_vencida`.
+   *
+   * La base del recargo es el capital: `monto_pendiente - mora_previa`. Sin
+   * esto, el segundo recargo de una clienta se calcularía sobre un saldo que
+   * ya contiene el primero — interés compuesto, contra lo que promete la
+   * pantalla de Configuración > Clientes ("se suma una única vez ... no se
+   * acumula día a día").
+   *
+   * El default 0 no es "no se sabe", es un HECHO para casi toda la base: el
+   * 9/9/2026 las 39 filas de mora del SaaS son primeros recargos, así que
+   * ninguna clienta tiene mora previa. Omitirlo dice "esta cuenta no tiene
+   * recargos sin pagar", que es la verdad en el caso normal.
+   */
+  mora_previa?: number | string | null;
 }
 
 export interface SaldoConRecargo {
   saldoBase: number;
-  /** Lo que se usó como base del recargo, ya acotado al saldo. */
+  /** La porción vencida por FIFO. Se informa; NO es la base del recargo desde
+   * el 5/9/2026. */
   montoVencido: number;
+  /** Sobre qué se calculó el recargo: el capital adeudado, sin los recargos
+   * anteriores. Se devuelve para poder mostrarlo y para que un test pueda
+   * afirmar que la mora no entró en su propia base. */
+  baseRecargo: number;
   montoRecargo: number;
   saldoConRecargo: number;
   estaVencido: boolean;
@@ -56,10 +77,14 @@ export interface SaldoConRecargo {
  * Está aceptado a sabiendas; si algún día se quiere volver atrás, la base es
  * `montoVencido`, que se sigue calculando y devolviendo.
  *
- * SIGUE SIENDO ÚNICO, no compuesto: se calcula siempre sobre
- * `monto_pendiente`, que es capital, así que recalcularlo dos veces da lo
- * mismo. La pantalla de Configuración > Clientes lo promete con todas las
- * letras ("se suma una única vez ... no se acumula día a día").
+ * SIGUE SIENDO ÚNICO, no compuesto, y desde el 9/9/2026 eso hay que sostenerlo
+ * a mano. Antes lo cumplía la aritmética sola: `monto_pendiente` era capital.
+ * Dejó de serlo cuando el recargo pasó a materializarse como un DEBITO propio
+ * —un débito entra al saldo—, así que un segundo recargo se calcularía sobre
+ * un saldo que ya contiene el primero. Por eso existe `mora_previa`: la base
+ * es `monto_pendiente - mora_previa`, o sea capital. La pantalla de
+ * Configuración > Clientes lo promete con todas las letras ("se suma una única
+ * vez ... no se acumula día a día") y esto es lo que lo hace verdad.
  */
 export function calcularSaldoConRecargo(
   ticket: TicketConVencimiento,
@@ -70,6 +95,14 @@ export function calcularSaldoConRecargo(
     saldoBase,
     Math.max(0, Number(ticket.monto_vencido) || 0),
   );
+  // La base del recargo: capital, sin los recargos que ya se cobraron y siguen
+  // impagos. Acotada al saldo por si el libro viniera descuadrado — misma
+  // defensa que `montoVencido`.
+  const moraPrevia = Math.min(
+    saldoBase,
+    Math.max(0, Number(ticket.mora_previa) || 0),
+  );
+  const baseRecargo = Math.max(0, saldoBase - moraPrevia);
   const diasVencido = calcularDiasVencido(ticket.fecha_vencimiento);
   // Vencido = hay saldo y la fecha pasó. NO se exige `montoVencido > 0`: con
   // el vencimiento anclado al ciclo de deuda (ver `recalcular_vencimiento_cc`),
@@ -81,6 +114,7 @@ export function calcularSaldoConRecargo(
     return {
       saldoBase,
       montoVencido,
+      baseRecargo,
       montoRecargo: 0,
       saldoConRecargo: saldoBase,
       estaVencido: false,
@@ -92,14 +126,17 @@ export function calcularSaldoConRecargo(
     montoRecargo = Math.max(0, Number(config.recargo_mora_valor) || 0);
   } else if (config.recargo_mora_tipo === "PORCENTAJE") {
     const pct = Math.max(0, Number(config.recargo_mora_valor) || 0);
-    // Sobre el SALDO COMPLETO. Es una cláusula de aceleración: si la clienta se
+    // Sobre todo el CAPITAL. Es una cláusula de aceleración: si la clienta se
     // atrasó, toda su cuenta entra en mora, no solo el tramo con fecha pasada.
-    montoRecargo = (saldoBase * pct) / 100;
+    // Pero capital: un recargo anterior impago no puede generar recargo (ver
+    // `mora_previa`).
+    montoRecargo = (baseRecargo * pct) / 100;
   }
 
   return {
     saldoBase,
     montoVencido,
+    baseRecargo,
     montoRecargo,
     saldoConRecargo: saldoBase + montoRecargo,
     estaVencido: true,

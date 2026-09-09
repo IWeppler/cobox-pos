@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clasificarDesconocido,
+  construirMapaSimilares,
   type CandidatoSimilar,
 } from "./match-classification";
 import type { CategoriaReal } from "./resolve-import-categoria";
@@ -21,7 +22,7 @@ const CATEGORIAS: CategoriaReal[] = [
   { id: "juguetes", nombre: "JUGUETES", slug: "juguetes", parent_id: null },
 ];
 
-const SIN_SIMILARES = new Map<string, CandidatoSimilar>();
+const SIN_SIMILARES = new Map<string, CandidatoSimilar[]>();
 
 describe("clasificarDesconocido con categoría del archivo", () => {
   it("usa la categoría que el import ya resolvió", () => {
@@ -89,16 +90,18 @@ describe("clasificarDesconocido con categoría del archivo", () => {
   });
 
   it("un producto existente parecido sigue ganando sobre la categoría del archivo", () => {
-    const similares = new Map<string, CandidatoSimilar>([
+    const similares = new Map<string, CandidatoSimilar[]>([
       [
         "REMERA LISA",
-        {
-          productoId: "p1",
-          nombre: "REMERA LISA BLANCA",
-          categoriaId: "mujer-remeras",
-          marca: null,
-          score: 0.9,
-        },
+        [
+          {
+            productoId: "p1",
+            nombre: "REMERA LISA BLANCA",
+            categoriaId: "mujer-remeras",
+            marca: null,
+            score: 0.9,
+          },
+        ],
       ],
     ]);
 
@@ -112,5 +115,58 @@ describe("clasificarDesconocido con categoría del archivo", () => {
     );
 
     expect(bucket.tipo).toBe("POSIBLE_MATCH");
+  });
+});
+
+describe("construirMapaSimilares", () => {
+  const sug = (raw: string, id: string, nombre: string, score: number) => ({
+    raw_nombre: raw,
+    producto_id: id,
+    producto_nombre: nombre,
+    categoria_id: null,
+    marca: null,
+    score,
+  });
+
+  it("conserva TODOS los candidatos, no solo el mejor", () => {
+    const mapa = construirMapaSimilares([
+      sug("VESTIDO EGRESADA LUNA", "p2", "VESTIDO EGRESADA LUCI", 0.74),
+      sug("VESTIDO EGRESADA LUNA", "p1", "VESTIDO EGRESADA ALANA", 0.77),
+      sug("VESTIDO EGRESADA LUNA", "p3", "VESTIDO EGRESADA AMBAR", 0.64),
+    ]);
+
+    expect(mapa.get("VESTIDO EGRESADA LUNA")).toHaveLength(3);
+  });
+
+  it("los ordena de mejor a peor sin confiar en el orden de entrada", () => {
+    const mapa = construirMapaSimilares([
+      sug("REMERA", "p2", "REMERA LISA", 0.62),
+      sug("REMERA", "p1", "REMERA BLANCA", 0.91),
+    ]);
+
+    expect(mapa.get("REMERA")?.map((c) => c.productoId)).toEqual(["p1", "p2"]);
+  });
+
+  it("no repite el mismo producto: dos botones iguales no son una elección", () => {
+    const mapa = construirMapaSimilares([
+      sug("REMERA", "p1", "REMERA BLANCA", 0.91),
+      sug("REMERA", "p1", "REMERA BLANCA", 0.91),
+    ]);
+
+    expect(mapa.get("REMERA")).toHaveLength(1);
+  });
+
+  it("clasificarDesconocido ofrece el mejor y arrastra el resto", () => {
+    const mapa = construirMapaSimilares([
+      sug("VESTIDO EGRESADA LUNA", "p1", "VESTIDO EGRESADA ALANA", 0.77),
+      sug("VESTIDO EGRESADA LUNA", "p2", "VESTIDO EGRESADA LUCI", 0.74),
+    ]);
+
+    const bucket = clasificarDesconocido("VESTIDO EGRESADA LUNA", mapa);
+
+    expect(bucket).toMatchObject({ tipo: "POSIBLE_MATCH" });
+    if (bucket.tipo !== "POSIBLE_MATCH") return;
+    expect(bucket.candidato.productoId).toBe("p1");
+    expect(bucket.candidatos).toHaveLength(2);
   });
 });

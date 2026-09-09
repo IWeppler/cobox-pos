@@ -72,6 +72,8 @@ interface ClientDetailSheetProps {
   recargoMoraConfig: RecargoMoraConfig;
   /** Porción vencida por FIFO, base del recargo. Ver `deuda_cc_vencida`. */
   montoVencido: number;
+  /** Recargos anteriores impagos. Se restan de la base del recargo nuevo. */
+  moraPrevia: number;
   isAdmin?: boolean;
   onClose: () => void;
 }
@@ -82,6 +84,7 @@ export function ClientDetailSheet({
   entregaMinimaActiva = false,
   recargoMoraConfig,
   montoVencido,
+  moraPrevia,
   isAdmin = false,
   onClose,
 }: Readonly<ClientDetailSheetProps>) {
@@ -143,6 +146,7 @@ export function ClientDetailSheet({
       monto_pendiente: cliente.saldo_pendiente,
       fecha_vencimiento: cliente.fecha_vencimiento_deuda,
       monto_vencido: montoVencido,
+      mora_previa: moraPrevia,
     },
     recargoMoraConfig,
   );

@@ -48,6 +48,7 @@ export function ClientsPageClient({ isAdmin }: { isAdmin: boolean }) {
           }
         }
         vencidoPorCliente={data?.data?.vencidoPorCliente ?? {}}
+        moraPreviaPorCliente={data?.data?.moraPreviaPorCliente ?? {}}
         isAdmin={isAdmin}
       />
     </div>

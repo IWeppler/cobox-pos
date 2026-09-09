@@ -134,3 +134,31 @@ export function evaluarCandidato(
     sobrantes: [...delCandidato].filter((t) => !delRemito.includes(t)),
   };
 }
+
+/**
+ * Diferencia de cobertura por debajo de la cual dos candidatos no se pueden
+ * separar. Con 0,05 alcanza: lo que distingue a dos prendas de una familia es
+ * UNA palabra, y una palabra rara pesa mucho más que eso — "ALANA" contra
+ * "ALINA" da 0,53 y 1,00, no 0,53 y 0,55. Los que quedan adentro del margen
+ * son los que difieren en nada que el peso pueda ver.
+ */
+const MARGEN_DESEMPATE = 0.05;
+
+/**
+ * Si los dos mejores candidatos están tan cerca que elegir al primero es tirar
+ * una moneda.
+ *
+ * Existe porque `sugerir_productos_similares` ordena por trigrama y el
+ * trigrama es justo lo que no distingue a una familia de nombre largo. Con
+ * empate, la pantalla no puede presentar una recomendación: tiene que mostrar
+ * las opciones y dejar que la persona elija. Es la misma regla que ya aplica
+ * `COBERTURA_CONFIABLE` para un candidato solo, con dos.
+ *
+ * Recibe las coberturas ya calculadas —no los nombres— para que la pantalla
+ * evalúe cada candidato una sola vez.
+ */
+export function hayEmpate(coberturas: number[]): boolean {
+  if (coberturas.length < 2) return false;
+  const [primera, segunda] = [...coberturas].sort((a, b) => b - a);
+  return primera - segunda < MARGEN_DESEMPATE;
+}

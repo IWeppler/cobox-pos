@@ -15,7 +15,15 @@ export interface CandidatoSimilar {
 }
 
 export type BucketDesconocido =
-  | { tipo: "POSIBLE_MATCH"; candidato: CandidatoSimilar }
+  | {
+      tipo: "POSIBLE_MATCH";
+      /** El mejor por score. Se mantiene como campo propio porque es el que
+       * la pantalla ofrece primero. */
+      candidato: CandidatoSimilar;
+      /** TODOS los candidatos que sobrevivieron el filtro, de mejor a peor,
+       * incluido el de arriba. Ver `construirMapaSimilares`. */
+      candidatos: CandidatoSimilar[];
+    }
   | {
       tipo: "NUEVO_SUGERIDO";
       categoriaSugerida: SugerenciaCategoria;
@@ -28,24 +36,42 @@ export type BucketDesconocido =
 
 /**
  * La RPC `sugerir_productos_similares` devuelve hasta 3 candidatos por
- * `raw_nombre`, ya ordenados por score. Esto arma un mapa 1:1 raw_nombre ->
- * mejor candidato, sin asumir el orden de la lista de entrada.
+ * `raw_nombre`, ya ordenados por score. Esto los agrupa por nombre, de mejor
+ * a peor, sin asumir el orden de la lista de entrada.
+ *
+ * ANTES SE QUEDABA CON UNO SOLO, y esa era la mitad escondida del problema
+ * que arregló `afinidad-nombre.ts`. Evens tiene 25 productos que empiezan con
+ * "VESTIDO EGRESADA": cuando entra el 26, el trigrama pone a los 25 arriba
+ * del umbral de 0,60 y la pantalla mostraba UNO, elegido por diferencias de
+ * centésimas entre nombres que se distinguen en dos letras. Medido sobre una
+ * muestra de 200 nombres de remito de Evens, 78 tienen 2 o más candidatos y
+ * 14 tienen 5 o más.
+ *
+ * Elegir el mejor no está mal; presentarlo como si no hubiera otros, sí. Con
+ * la lista completa la pantalla puede decir "¿es este, este o este?", que es
+ * la pregunta verdadera.
  */
 export function construirMapaSimilares(
   sugerencias: SugerenciaSimilitud[],
-): Map<string, CandidatoSimilar> {
-  const mapa = new Map<string, CandidatoSimilar>();
+): Map<string, CandidatoSimilar[]> {
+  const mapa = new Map<string, CandidatoSimilar[]>();
   for (const s of sugerencias) {
-    const actual = mapa.get(s.raw_nombre);
-    if (!actual || s.score > actual.score) {
-      mapa.set(s.raw_nombre, {
-        productoId: s.producto_id,
-        nombre: s.producto_nombre,
-        categoriaId: s.categoria_id,
-        marca: s.marca,
-        score: s.score,
-      });
-    }
+    const lista = mapa.get(s.raw_nombre) ?? [];
+    // La RPC puede repetir un producto si el mismo nombre entra dos veces en
+    // el array de entrada. Dos botones para el mismo producto no son una
+    // elección.
+    if (lista.some((c) => c.productoId === s.producto_id)) continue;
+    lista.push({
+      productoId: s.producto_id,
+      nombre: s.producto_nombre,
+      categoriaId: s.categoria_id,
+      marca: s.marca,
+      score: s.score,
+    });
+    mapa.set(s.raw_nombre, lista);
+  }
+  for (const lista of mapa.values()) {
+    lista.sort((a, b) => b.score - a.score);
   }
   return mapa;
 }
@@ -64,7 +90,7 @@ export function construirMapaSimilares(
  */
 export function clasificarDesconocido(
   rawNombre: string,
-  similares: Map<string, CandidatoSimilar>,
+  similares: Map<string, CandidatoSimilar[]>,
   rawGenero?: string | null,
   categoriasReales?: CategoriaReal[],
   /** Columna Categoría del CSV, tal cual vino. */
@@ -72,8 +98,10 @@ export function clasificarDesconocido(
   /** Categoría que el import YA resolvió contra el árbol real. */
   rawCategoriaId?: string | null,
 ): BucketDesconocido {
-  const candidato = similares.get(rawNombre);
-  if (candidato) return { tipo: "POSIBLE_MATCH", candidato };
+  const candidatos = similares.get(rawNombre);
+  if (candidatos && candidatos.length > 0) {
+    return { tipo: "POSIBLE_MATCH", candidato: candidatos[0], candidatos };
+  }
 
   if (categoriasReales && categoriasReales.length > 0) {
     // La categoría ya resuelta en el import gana sobre cualquier

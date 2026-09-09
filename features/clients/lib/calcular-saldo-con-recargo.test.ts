@@ -263,3 +263,121 @@ describe("calcularSaldoConRecargo", () => {
     expect(r.montoRecargo).toBe(15000);
   });
 });
+
+describe("la mora nunca se calcula sobre mora", () => {
+  it("resta los recargos anteriores impagos de la base", () => {
+    // Saldo de 115.000 del que 15.000 son un recargo ya cobrado y todavía
+    // impago. La base tiene que ser el capital: 100.000.
+    const r = calcularSaldoConRecargo(
+      {
+        monto_pendiente: 115000,
+        fecha_vencimiento: haceDias(40),
+        monto_vencido: 115000,
+        mora_previa: 15000,
+      },
+      PORCENTAJE,
+    );
+    expect(r.baseRecargo).toBe(100000);
+    expect(r.montoRecargo).toBe(15000);
+    // Y lo que debe sigue siendo el saldo entero más el recargo nuevo.
+    expect(r.saldoConRecargo).toBe(130000);
+  });
+
+  it("sin el campo, la base es el saldo entero — el caso normal", () => {
+    // 39 de 39 recargos del SaaS son primeros, así que omitirlo dice la verdad.
+    const r = calcularSaldoConRecargo(
+      {
+        monto_pendiente: 100000,
+        fecha_vencimiento: haceDias(40),
+        monto_vencido: 100000,
+      },
+      PORCENTAJE,
+    );
+    expect(r.baseRecargo).toBe(100000);
+    expect(r.montoRecargo).toBe(15000);
+  });
+
+  it("no compone: dos recargos seguidos dan el mismo monto", () => {
+    // Es la promesa de Configuración > Clientes: "se suma una única vez ... no
+    // se acumula día a día". El segundo recargo se calcula sobre el mismo
+    // capital que el primero, no sobre capital + primer recargo.
+    const capital = 100000;
+    const primera = calcularSaldoConRecargo(
+      {
+        monto_pendiente: capital,
+        fecha_vencimiento: haceDias(40),
+        monto_vencido: capital,
+      },
+      PORCENTAJE,
+    );
+    const segunda = calcularSaldoConRecargo(
+      {
+        monto_pendiente: capital + primera.montoRecargo,
+        fecha_vencimiento: haceDias(80),
+        monto_vencido: capital + primera.montoRecargo,
+        mora_previa: primera.montoRecargo,
+      },
+      PORCENTAJE,
+    );
+    expect(segunda.montoRecargo).toBe(primera.montoRecargo);
+  });
+
+  it("una cuenta que solo debe recargo no genera recargo nuevo", () => {
+    // Pagó todo el capital y le quedan los 15.000 de mora: no hay capital
+    // sobre el cual cobrar, así que el recargo es 0. Que la cuenta siga
+    // vencida es otra cosa, y la decide el vencimiento.
+    const r = calcularSaldoConRecargo(
+      {
+        monto_pendiente: 15000,
+        fecha_vencimiento: haceDias(40),
+        monto_vencido: 15000,
+        mora_previa: 15000,
+      },
+      PORCENTAJE,
+    );
+    expect(r.baseRecargo).toBe(0);
+    expect(r.montoRecargo).toBe(0);
+    expect(r.estaVencido).toBe(true);
+  });
+
+  it("el monto FIJO no depende de la base y no cambia", () => {
+    const r = calcularSaldoConRecargo(
+      {
+        monto_pendiente: 15000,
+        fecha_vencimiento: haceDias(40),
+        monto_vencido: 15000,
+        mora_previa: 15000,
+      },
+      FIJO,
+    );
+    expect(r.montoRecargo).toBe(5000);
+  });
+
+  it("una mora previa mayor al saldo no vuelve negativa la base", () => {
+    // Defensa contra libro descuadrado, misma que `montoVencido`.
+    const r = calcularSaldoConRecargo(
+      {
+        monto_pendiente: 10000,
+        fecha_vencimiento: haceDias(40),
+        monto_vencido: 10000,
+        mora_previa: 999999,
+      },
+      PORCENTAJE,
+    );
+    expect(r.baseRecargo).toBe(0);
+    expect(r.montoRecargo).toBe(0);
+  });
+
+  it("acepta la mora previa como string, que es como llega de numeric", () => {
+    const r = calcularSaldoConRecargo(
+      {
+        monto_pendiente: "115000.00",
+        fecha_vencimiento: haceDias(40),
+        monto_vencido: "115000.00",
+        mora_previa: "15000.00",
+      },
+      PORCENTAJE,
+    );
+    expect(r.montoRecargo).toBe(15000);
+  });
+});

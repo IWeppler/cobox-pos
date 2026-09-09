@@ -192,6 +192,27 @@ tiene 11.
   nadie: `bajas` está VACÍA en los 4 negocios y `createBajaAction` inserta
   siempre en estado PENDIENTE, sin ningún camino que apruebe ni descuente —
   `get-movimientos-stock.ts` lee bajas con `estado = 'APROBADA'` que nada crea.
+  **Borrar un producto también mueve stock, y desde `20260909150000` lo dice**
+  (origen `BAJA_PRODUCTO`). El DELETE cascadea a las variantes y el trigger ya
+  lo registraba, pero sin origen: quedaba DESCONOCIDO. Como el origen es
+  transaction-local, no alcanza con declararlo desde Node — por eso el borrado
+  pasa por `eliminar_productos(uuid[])`, que lo declara y borra en la misma
+  transacción. SECURITY INVOKER a propósito: quién puede borrar lo sigue
+  decidiendo la RLS (`stock.eliminar_producto`), y una DEFINER ahí sería una
+  puerta de atrás a ese permiso. Devuelve el conteo de filas borradas porque un
+  DELETE filtrado por RLS vuelve con 0 filas y `error: null` — el mismo éxito
+  silencioso que costó 35 fotos el 5/9.
+  `BAJA_PRODUCTO` es un origen APARTE de `BAJA`: ese es el de la tabla `bajas`
+  (merma, rotura), y meter las dos en el mismo cajón deja "¿cuánta mercadería
+  se perdió?" sin respuesta.
+  Por qué importaba: `ordenes_items.producto_id` es ON DELETE SET NULL, así que
+  borrar un producto blanquea las líneas de remito que lo alimentaron. Eran 109
+  líneas en la base, y sin origen no se podía distinguir —salvo abriendo
+  movimientos_stock a mano— entre "esta mercadería nunca entró" y "entró y
+  después alguien borró el producto". Las dos lecturas llevan a acciones
+  opuestas. Ojo que `movimientos_stock` todavía no se muestra en ninguna
+  pantalla: `get-movimientos-stock.ts` reconstruye el historial desde
+  `ordenes_compra`, `ventas` y `bajas`, y nunca lee la tabla.
 - El espejo legacy `productos_stock` se mueve con `ajustar_stock_legacy`
   (delta en un statement), nunca leyendo y escribiendo después.
 - Dos columnas de `ventas` que se leyeron mal durante mucho tiempo:
@@ -396,22 +417,54 @@ tiene 11.
   queda congelado en la fila del pago. La comisión se calcula sobre el bruto
   (es lo que pasa por el posnet). anon lee `recargo_porcentaje` para el
   catálogo público vía policy + GRANT por columna: `comision` NO se expone.
-- **La MORA es del ciclo de deuda, no del renglón** (`20260905190000`). Una vez
-  que la cuenta entró en mora sigue en mora hasta saldarse por completo: un pago
-  parcial no la limpia ni corre la fecha. El vencimiento lo fija el débito más
-  viejo POSTERIOR al último saldo cero, y ese ancla no se mueve hasta que el
-  saldo vuelve a cero y abre ciclo nuevo.
-  Lo pidió la dueña con un caso concreto: Vero duarte (Estilo Bonito) debía
-  $62.000, se le cobró $1.500 de mora, pagó $32.000 y el sistema la mostró AL
-  DÍA hasta el 06/10. Dos cosas la sacaban de mora a la vez — el FIFO dejaba
-  viva una compra más nueva, y `recalcular_vencimiento_cc` tenía un "piso por
-  mora cobrada" (`greatest(deuda_vieja + plazo, última_mora + plazo)`) que hacía
-  que LA PROPIA FILA DE MORA corriera el vencimiento 31 días. Cobrarle el
-  recargo le regalaba un mes. El piso se cayó; ya no hace falta, porque el
-  recargo se calcula sobre capital y recalcularlo dos veces da lo mismo.
-  Al aplicarlo, **12 clientas pasaron de "al día" a vencidas**, $467.072. La
-  peor era MIRTA GARCIA (Evens): deuda viva desde febrero, mostrada al día
-  hasta octubre, 176 días de mora escondida.
+- **La unidad de deuda es el TICKET CON SU RECARGO ADENTRO, y los pagos se
+  imputan FIFO sobre esas unidades** (`20260909190000`). Cuando una clienta
+  paga, paga su compra más vieja COMPLETA, con el recargo que esa compra
+  generó incluido; recién ahí esa deuda queda saldada, el recargo se va con
+  ella y el vencimiento pasa a la compra siguiente.
+  El vínculo lo da `cuenta_corriente_movimientos.debito_origen_id`
+  (`20260909180000`), porque el recargo se guarda como un DEBITO propio y hasta
+  entonces no apuntaba a ninguna compra.
+  Tres consecuencias que no son obvias y que hay que tener presentes antes de
+  tocar esto:
+  * Un ticket con recargo impago **sigue vivo y viejo** aunque su capital esté
+    pagado. Por eso NO hace falta ninguna regla extra de "mora viva = vencida":
+    la unidad se sostiene sola. (Hubo una versión intermedia con esa regla; se
+    tiró al reemplazarla por la unidad.)
+  * Un pago parcial no salda nada ni corre ninguna fecha. Sobre un ticket de
+    $13.000 ($10.000 de compra + $3.000 de recargo), pagar $12.999 lo deja vivo
+    con su fecha original.
+  * Un recargo que entra DESPUÉS de que el capital se pagó **revive** ese
+    ticket, con su fecha vieja. No está saldado hasta que se pague todo.
+  El recargo huérfano (`debito_origen_id` null) es el único caso con regla
+  aparte: devuelve su propia fecha SIN sumarle el plazo, porque ese día la
+  cuenta ya estaba vencida. Hoy son cero y los nuevos nacen con el vínculo
+  declarado, pero la puerta queda cerrada.
+  **ESTO REEMPLAZA la regla del ciclo de deuda de `20260905190000`** —"el
+  vencimiento lo fija el débito más viejo posterior al último saldo cero"— sin
+  deshacer lo que esa regla vino a arreglar. El ancla por ciclo tenía un
+  agujero propio: como el saldo de una clienta que compra seguido nunca toca
+  cero, el ancla quedaba clavada en el primer fiado de su vida para siempre.
+  Lo destapó Angi Levis (Estilo Bonito, 9/9/2026): debía $50.000 del 17/08 y
+  $122.000 del 05/09, pagó $109.500 entre el 05 y el 07 —o sea saldó la compra
+  de agosto entera y antes de su vencimiento— y el sistema le seguía mostrando
+  el 17/09 en vez del 06/10.
+  Al aplicarlo, **8 clientas cambiaron de fecha y 5 pasaron de vencidas a al
+  día** ($191.556): Magui araya, CELESTE SCHOFER, IVANA JEREZ, MICAELA ACOSTA y
+  Remisería La Estrella. Ninguna entró en mora. Confirmado con la dueña,
+  incluido el caso de CELESTE, que sale por $26,25 de recargo ya saldado dentro
+  de su ticket viejo.
+  **Vero duarte —el caso que fijó el criterio del 5/9— sigue vencida** (08/09),
+  y ese es el control que hay que repetir si alguien vuelve a tocar la regla:
+  un pago parcial no puede sacarla de mora. Lo mismo MIRTA GARCIA, cuya deuda
+  viva desde febrero fue el peor caso del cambio anterior (176 días de mora
+  escondida).
+  El saldo reconcilia al peso con `clientes.saldo_pendiente` en las 8: la
+  imputación cambia QUÉ está vivo, nunca CUÁNTO se debe.
+  El espejo en TypeScript es `features/clients/lib/imputar-pagos-fifo.ts`
+  (41 tests, con las cuentas reales de Angi y de Vero) y los dos tienen que
+  decir lo mismo, mismo criterio que `temporada-categoria.ts` contra
+  `categoria_en_temporada`.
 - **La base del recargo por mora es el SALDO COMPLETO, no la porción vencida**
   (5/9/2026). Es una cláusula de aceleración —si se atrasó, toda la cuenta entra
   en mora— y **revierte a propósito** el arreglo del 30/8, que había hecho lo
@@ -423,16 +476,35 @@ tiene 11.
   `montoVencido` se sigue calculando y devolviendo —lo usan la antigüedad y el
   Advisor— pero ya no manda en el cobro.
   Consecuencia que hay que tener presente: `estaVencido` dejó de exigir
-  `montoVencido > 0`. Con el ancla por ciclo, una clienta puede estar en mora
-  con el FIFO diciendo cero, y tiene que cobrar igual (eran 5 el día del
-  cambio). El único caso que apaga el recargo es saldo cero.
+  `montoVencido > 0`. Con la imputación por unidad, una clienta puede estar en
+  mora con el FIFO por renglón diciendo cero, y tiene que cobrar igual. El
+  único caso que apaga el recargo es saldo cero.
+  **PERO capital: el saldo completo NO incluye los recargos anteriores**
+  (`20260909170000`). Cuando el recargo pasó a materializarse como un DEBITO
+  propio, entró al saldo — y como la base es el saldo entero, el segundo
+  recargo de una clienta se habría calculado sobre uno que ya contenía al
+  primero. Interés compuesto, contra lo que promete la pantalla de
+  Configuración > Clientes con todas las letras ("se suma una única vez ... no
+  se acumula día a día"). No llegó a pasar —los 39 recargos del SaaS son todos
+  primeros— pero alcanzaba con que una pagara parcial y se volviera a atrasar.
+  La base es `monto_pendiente - mora_previa`, y `mora_previa` sale de
+  `mora_viva` en `deuda_cc_vencida`. Lo que se evitó, medido: $10.525,88 sobre
+  9 clientas con recargo impago, la peor GIULIANA PEREZ con $3.447.
+  El default de `mora_previa` es 0 y eso NO es "no se sabe": es un hecho para
+  casi toda la base. Los cuatro consumidores de `calcularSaldoConRecargo`
+  (el cobro, `datos-cobro-cc`, la tabla y el detalle del cliente) lo pasan, y
+  tienen que seguir pasándolo o la caja y la pantalla dicen números distintos.
 - **La mora NO se aplica sola al día 31: se materializa cuando la clienta
   paga.** No hay cron ni proceso agendado (no está instalado `pg_cron` ni hay
   `crons` en `vercel.json`), y no hace falta: la pantalla la calcula al vuelo
   con `calcularSaldoConRecargo` para mostrarla, y `registrarPagoDeudaAction`
-  inserta el DEBITO real justo antes del cobro. Por eso un cambio de criterio
-  como el de `20260905190000` no necesita backfill: a las clientas afectadas el
-  recargo les entra solo en su próximo pago, por el camino de siempre.
+  inserta el DEBITO real justo antes del cobro, declarando en `debito_origen_id`
+  a qué ticket pertenece. Por eso un cambio de criterio de RECARGO no necesita
+  backfill: a las clientas afectadas les entra solo en su próximo pago, por el
+  camino de siempre. Ojo que eso NO vale para el VENCIMIENTO: ese vive
+  cacheado en `clientes.fecha_vencimiento_deuda`, así que toda migración que
+  cambie `recalcular_vencimiento_cc` tiene que rebackfillearlo — si no, la
+  fecha vieja sigue disparando el recargo hasta el próximo movimiento.
   Lo configurable vive en Configuración > Clientes (`clients-panel.tsx`):
   `cc_plazo_mora` (días) y `recargo_mora_tipo` / `recargo_mora_valor`
   (NINGUNO | MONTO_FIJO | PORCENTAJE). NO existe un toggle de "se reaplica":
@@ -591,9 +663,14 @@ tiene 11.
 - Lo que NO se construyó del roadmap de Insights, y qué le falta a cada uno
   para poder construirse. Está acá para no volver a proponerlo sin resolver
   primero el bloqueo:
-  * **Días REALES hasta cobrar** y **imputación de pagos de CC** — la base no
-    sabe qué ticket saldó cada pago. Es un cambio de schema (imputación), no
-    una consulta.
+  * **Días REALES hasta cobrar** y **imputación de pagos de CC** — la base
+    sigue sin saber qué ticket saldó cada pago: un CREDITO no apunta a nada.
+    Lo que SÍ existe desde `20260909190000` es la imputación FIFO calculada, y
+    es la que manda en el vencimiento; pero es un SUPUESTO reconstruido, no el
+    dato. Para "días reales hasta cobrar" hace falta el dato, y eso es un
+    cambio de schema (imputación declarada en el pago), no una consulta.
+    Ojo con la excepción: el RECARGO sí sabe de qué ticket es
+    (`debito_origen_id`), porque se declara al cobrarlo. Los pagos no.
   * **Costo del dinero en el tiempo** — cálculo barato, pero necesita una TASA.
     Un default inventado diría con precisión falsa si conviene fiar. Tiene que
     salir de configuración del comercio o del contador.
@@ -791,7 +868,19 @@ tiene 11.
   catálogo. El modo CARGA INICIAL da vuelta el default —toda fila arranca como
   producto nuevo, en una tabla editable, sin combobox y sin modales— y abre
   cuando el catálogo tiene menos de 20 productos publicados o cuando menos del
-  40% de los GRUPOS del remito ya existen.
+  **70%** de los GRUPOS del remito ya existen.
+  **El umbral pasó de 40% a 70% el 9/9/2026, y el motivo es un dato nuevo.**
+  El 40% se fijó midiendo la ENTRADA (cuántos grupos matchean al abrir).
+  Después se pudo medir la SALIDA —qué termina siendo cada grupo que cae en la
+  pantalla— y dice otra cosa: de los 2.053 grupos que pasaron por conciliación
+  en los 115 remitos aprobados, **solo 23 (1,1%) terminaron asociados a un
+  producto que ya existía**. El resto fue alta nueva. O sea que el porcentaje
+  de auto-match NO predice el destino: incluso un remito que matchea 30%
+  termina dando de alta casi todo lo que cae.
+  Es un cambio chico —4 remitos de 146 cambian de modo, 25 grupos, y esos 25
+  terminaron en alta nueva 25 de 25— y va en la dirección que los datos
+  señalan. Lo que de verdad mueve el volumen es qué acción ofrece el modo
+  CONCILIACIÓN, no cuándo abre.
   **El umbral no es una intuición: la premisa de la pantalla vieja era falsa.**
   Medido sobre los 142 remitos reales de los 4 negocios, Evens matchea el
   17,9% de los grupos y Estilo Bonito el 27,8%, con 1.226 y 572 productos en
@@ -808,6 +897,40 @@ tiene 11.
   Lo que el modo NO cambia: las filas que el import sí reconoció siguen
   vinculadas y solo suman stock. El modo cambia el default y el trabajo, no lo
   que el remito puede hacer.
+- **En el modo CONCILIACIÓN la acción principal es dar de alta en lote, no
+  vincular** (9/9/2026), por el mismo dato: el 98,9% de lo que cae en esa
+  pantalla termina siendo producto nuevo. "Crear los N" salió de la barra gris
+  de acciones rápidas —donde vivía al lado del recargo global— a un bloque
+  propio arriba de la tabla, en primario.
+  El lote incluye los grupos AMBIGUO **a los que ya se les eligió categoría a
+  mano**: un ambiguo con categoría no está ambiguo, y antes quedaba afuera —el
+  toast decía "ahora podés usar Crear en cada una", o sea 30 clicks para
+  ejecutar una decisión ya tomada. El conteo va desglosado ("creo 34, te quedan
+  12 para revisar") porque prometer "todos" y dejar filas rojas es peor que
+  prometer menos y cumplirlo.
+  **Los grupos con candidato (POSIBLE_MATCH) quedan afuera del lote a
+  propósito**, aunque casi todos terminen siendo alta nueva: crear en lote
+  pisando un candidato sin mirarlo es exactamente cómo se fabrica el catálogo
+  duplicado que la pantalla existe para evitar.
+- **La pantalla muestra TODOS los candidatos, no el mejor.**
+  `construirMapaSimilares` se quedaba con uno solo y tiraba los otros dos que
+  devuelve la RPC. Con familias de nombre largo eso convierte una elección en
+  una afirmación: Evens tiene 25 productos "VESTIDO EGRESADA …", y sobre una
+  muestra de 200 nombres de remito, 78 tienen 2 o más candidatos sobre el
+  umbral y 14 tienen 5 o más.
+  `hayEmpate` (en `afinidad-nombre.ts`, margen 0,05 de cobertura) detecta
+  cuándo los dos mejores no se pueden separar; ahí la pantalla NO recomienda
+  —el orden lo puso el trigrama, que es justo lo que no distingue esos
+  nombres— y muestra las opciones con su diferencia ("le falta 'alana'").
+- Las dos tablas de conciliación **se apilan en mobile** (`max-md:block` en
+  merge-table, `max-md:grid-cols-1` en carga-inicial). Tenían un ancho mínimo
+  fijo de 1.000 y 1.110 px dentro de un `overflow-x-auto`: en un teléfono de
+  390 px se veía menos de la mitad de un renglón y había que arrastrar de
+  costado para llegar al botón. La cabecera se esconde —apilada no ordena
+  nada— y el rótulo de cada columna viaja en `data-label`, porque sin el thead
+  un número suelto no dice si es el costo o el precio. Ojo: `before:content`
+  no funciona sobre un `<input>`, así que los inputs sueltos de carga-inicial
+  van envueltos en una celda que sí lo puede mostrar.
 - En carga inicial la fila se agrupa por nombre + MARCA + GÉNERO, no solo por
   `raw_nombre` como en el modo viejo. Con la clave vieja, "babucha rustica" de
   dos marcas distintas —o "bermuda chino" de nene y de hombre— se funden en un
@@ -1229,6 +1352,29 @@ tiene 11.
   La boundary va alrededor de lo que suspende, no de la pantalla, y el fallback
   tiene que ser un esqueleto: es la diferencia entre "está cargando" y "se
   rompió".
+- **Un `.filter()` que descarta filas antes de escribir es pérdida de datos en
+  silencio.** `aprobarOrdenAction` armaba el payload del remito con
+  `itemsResueltos.filter((item) => item.producto_id)`: las líneas sin vincular
+  desaparecían, la RPC nunca se enteraba y la orden quedaba APROBADA. El único
+  freno era `handleAprobar` en el cliente, que mira el estado de React y no las
+  filas de la base — si un grupo no llegaba a ese estado (borrador restaurado a
+  medias, fila fuera de `items`), no lo veía.
+  **Costó 213 líneas / 416 unidades / ~$2,81 M de costo** entre julio y agosto
+  de 2026: mercadería que entró por un remito aprobado y nunca tocó el stock,
+  sin un solo error. 196 líneas en julio, 17 en agosto, 0 desde que
+  `20260908130000` puso el guard `REMITO_LINEAS_SIN_PRODUCTO` en la RPC, que
+  compara contra `ordenes_items` real.
+  Las dos reglas: **la validación que cuenta es la que mira la BASE, no el
+  estado del cliente** (un server action es un endpoint), y **descartar filas
+  en silencio antes de un INSERT no es filtrar, es perder**. Si sobran filas,
+  se falla con los nombres puestos.
+  Ojo con el diagnóstico, que también tiene trampa: de las 322 líneas de
+  remitos aprobados con `producto_id` en null, **109 no son pérdida** — se
+  impactaron bien y quedaron huérfanas después porque `ordenes_items.producto_id`
+  es ON DELETE SET NULL y alguien borró el producto. El discriminador es
+  `variante_match`: la RPC lo escribe junto con `producto_id` al impactar, así
+  que lleno + `producto_id` null significa "entró y después se borró el
+  producto", no "nunca entró".
 - **Timeout de UI ≠ cancelación de server action.** `withTimeout` solo rechaza
   la promesa del cliente; el server sigue hasta el final. Nunca envolver en
   `withTimeout` una acción que muta stock o plata (ver comentario en

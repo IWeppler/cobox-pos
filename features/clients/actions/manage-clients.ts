@@ -160,11 +160,17 @@ export async function getClientesPageDataAction() {
   // MISMO recargo que va a cobrar el server. Un cliente que no aparece no
   // tiene deuda viva, y ahí el vencido es 0.
   const vencidoPorCliente: Record<string, number> = {};
+  // Y cuánto de ese saldo son recargos anteriores impagos, que NO son base del
+  // próximo recargo. Sale de la misma fila que el vencido, y va junto a
+  // propósito: separarlos invita a que una pantalla pase uno y olvide el otro.
+  const moraPreviaPorCliente: Record<string, number> = {};
   for (const fila of (vencidoRes.data ?? []) as {
     cliente_id: string;
     vencido: number | string | null;
+    mora_viva: number | string | null;
   }[]) {
     vencidoPorCliente[fila.cliente_id] = Number(fila.vencido ?? 0);
+    moraPreviaPorCliente[fila.cliente_id] = Number(fila.mora_viva ?? 0);
   }
 
   return {
@@ -174,6 +180,7 @@ export async function getClientesPageDataAction() {
       entregaMinimaActiva: (configRes.data?.cc_anticipo_default ?? 0) > 0,
       recargoMoraConfig,
       vencidoPorCliente,
+      moraPreviaPorCliente,
     },
     error: null,
   };
@@ -334,6 +341,12 @@ export async function registrarPagoDeudaAction(
       // generados de Supabase, igual que `contexto_sesion` en su momento.
       monto_vencido: (deudaVencida as { vencido: number | null } | null)
         ?.vencido,
+      // Los recargos anteriores impagos NO son base del próximo: sin esto el
+      // segundo recargo se calcula sobre un saldo que ya contiene el primero,
+      // que es interés compuesto y contradice lo que promete la pantalla de
+      // Configuración. Ver `mora_previa`.
+      mora_previa: (deudaVencida as { mora_viva: number | null } | null)
+        ?.mora_viva,
     },
     recargoConfig,
   );
@@ -392,6 +405,16 @@ export async function registrarPagoDeudaAction(
         monto: montoRecargo,
         descripcion: `Recargo por mora (${detalleMora})`,
         creado_por: user.id,
+        // De qué deuda es este recargo. Capital y mora del mismo ticket se
+        // imputan como una unidad: la clienta paga su compra más vieja
+        // completa, recargo incluido. Se DECLARA acá —no se deduce después—
+        // porque este es el único momento en que se sabe con certeza cuál era
+        // la deuda más vieja viva. Los 39 recargos anteriores a esto se
+        // reconstruyeron desde el ledger y quedaron marcados como tales.
+        debito_origen_id:
+          (deudaVencida as { debito_capital_mas_antiguo_id: string | null } | null)
+            ?.debito_capital_mas_antiguo_id ?? null,
+        origen_reconstruido: false,
       });
 
     if (moraError) {

@@ -83,7 +83,11 @@ import {
   nombresPorProductoCompartido,
 } from "../lib/fusiones-remito";
 import { precioAlAsociar } from "../lib/precio-al-asociar";
-import { construirPesos, evaluarCandidato } from "../lib/afinidad-nombre";
+import {
+  construirPesos,
+  evaluarCandidato,
+  hayEmpate,
+} from "../lib/afinidad-nombre";
 import {
   resolverCategoriaDisplayLabel,
   type CategoriaBase,
@@ -251,6 +255,24 @@ function SearchableSelect({
     </div>
   );
 }
+
+/**
+ * Cómo se comporta una celda de la tabla en un celular.
+ *
+ * Debajo de md la tabla deja de ser tabla: cada `<tr>` es una tarjeta y cada
+ * `<td>` una fila de ancho completo. Antes la tabla tenía `min-w-250` —1.000
+ * píxeles fijos— adentro de un `overflow-x-auto`, así que en un teléfono de
+ * 390 px se veía menos de la mitad de un renglón y había que arrastrar de
+ * costado para llegar al botón. La cabecera se esconde (apilada no ordena
+ * nada) y el rótulo de cada columna viaja en `data-label`, porque sin el
+ * thead un número suelto no dice si es el costo o el precio.
+ */
+const CELDA_APILADA =
+  "max-md:block max-md:w-full max-md:px-4 max-md:py-1.5 " +
+  "max-md:before:mb-0.5 max-md:before:block max-md:before:text-[10px] " +
+  "max-md:before:font-semibold max-md:before:uppercase " +
+  "max-md:before:tracking-wide max-md:before:text-muted-foreground " +
+  "max-md:before:content-[attr(data-label)]";
 
 export function MergeTable({
   orden,
@@ -1359,9 +1381,9 @@ export function MergeTable({
       )}
 
       {/* Tabla Interactiva Agrupada */}
-      <div className="bg-background rounded-xl border border-border overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm text-left min-w-250">
-          <thead className="bg-muted/50 text-foreground/80 text-xs uppercase font-semibold tracking-wide border-b border-border">
+      <div className="bg-background rounded-xl border border-border overflow-hidden md:overflow-x-auto">
+        <table className="w-full text-sm text-left max-md:block md:min-w-250">
+          <thead className="bg-muted/50 text-foreground/80 text-xs uppercase font-semibold tracking-wide border-b border-border max-md:hidden">
             <tr>
               <th className="px-6 py-3 w-16 text-center">Estado</th>
               <th className="px-6 py-3 w-1/3">Productos del Remito</th>
@@ -1371,12 +1393,12 @@ export function MergeTable({
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody className="divide-y divide-border max-md:block">
             {groupedItems.length === 0 ? (
               <tr>
                 <td
                   colSpan={6}
-                  className="text-center py-12 text-muted-foreground"
+                  className="text-center py-12 text-muted-foreground max-md:block max-md:w-full"
                 >
                   No hay ítems para conciliar.
                 </td>
@@ -1432,10 +1454,13 @@ export function MergeTable({
                 return (
                   <tr
                     key={rawNombre}
-                    className={`transition-colors ${rowClassName}`}
+                    className={`transition-colors ${rowClassName} max-md:block max-md:py-2`}
                   >
                     {/* STATUS */}
-                    <td className="px-6 py-4 text-center align-top pt-5">
+                    <td
+                      data-label="Estado"
+                      className={`px-6 py-4 text-center align-top pt-5 max-md:text-left ${CELDA_APILADA}`}
+                    >
                       {isAmbiguo && (
                         <input
                           type="checkbox"
@@ -1463,7 +1488,10 @@ export function MergeTable({
                     </td>
 
                     {/* PRODUCTO DEL PROVEEDOR (Desglose de variantes) */}
-                    <td className="px-6 py-4 align-top">
+                    <td
+                      data-label="Productos del remito"
+                      className={`px-6 py-4 align-top ${CELDA_APILADA}`}
+                    >
                       <p className="font-bold text-foreground uppercase tracking-wide">
                         {rawNombre}
                       </p>
@@ -1578,7 +1606,10 @@ export function MergeTable({
                     </td>
 
                     {/* VINCULACIÓN EN SISTEMA */}
-                    <td className="px-6 py-4 align-top pt-5">
+                    <td
+                      data-label="Vinculación en sistema"
+                      className={`px-6 py-4 align-top pt-5 ${CELDA_APILADA}`}
+                    >
                       {(() => {
                         const abrirModalManual = () => {
                           setGroupToCreateName(rawNombre);
@@ -1669,7 +1700,30 @@ export function MergeTable({
                             pesosCatalogo,
                             localProductos.length,
                           );
-                          const dudosa = afinidad.confianza === "baja";
+                          // Los OTROS candidatos que la RPC devolvió y que
+                          // hasta ahora se tiraban. Con una familia de nombre
+                          // largo ("VESTIDO EGRESADA …") pueden ser 5, y
+                          // mostrar uno solo convierte una elección en una
+                          // afirmación.
+                          const otros = posibleMatch.candidatos
+                            .slice(1)
+                            .map((c) => ({
+                              candidato: c,
+                              afinidad: evaluarCandidato(
+                                rawNombre,
+                                c.nombre,
+                                pesosCatalogo,
+                                localProductos.length,
+                              ),
+                            }));
+                          const empatan = hayEmpate([
+                            afinidad.cobertura,
+                            ...otros.map((o) => o.afinidad.cobertura),
+                          ]);
+                          // Con empate no hay recomendación posible: el orden
+                          // lo puso el trigrama, que es justo lo que no
+                          // distingue a estos nombres.
+                          const dudosa = afinidad.confianza === "baja" || empatan;
                           return (
                             <div className="flex flex-col gap-2">
                               <div
@@ -1771,6 +1825,61 @@ export function MergeTable({
                                   {dudosa ? "Es el mismo" : "Confirmar asociación"}
                                 </Button>
                               </div>
+
+                              {/* Los demás candidatos. Se muestran SIEMPRE que
+                                  existan, no solo con empate: que el segundo
+                                  esté más lejos no lo vuelve inexistente, y el
+                                  costo de verlo es una línea. Con empate,
+                                  además, arriba ya no hay recomendación. */}
+                              {otros.length > 0 && (
+                                <div className="rounded-md border border-border p-2">
+                                  <p className="text-[11px] font-medium text-muted-foreground">
+                                    {empatan
+                                      ? "Se parecen todos lo mismo — elegí cuál es:"
+                                      : `También se parece a ${otros.length === 1 ? "este" : "estos"}:`}
+                                  </p>
+                                  <ul className="mt-1 flex flex-col gap-1">
+                                    {otros.map(
+                                      ({ candidato, afinidad: otraAfinidad }) => (
+                                        <li
+                                          key={candidato.productoId}
+                                          className="flex items-center justify-between gap-2"
+                                        >
+                                          <div className="min-w-0">
+                                            <p className="truncate text-xs text-foreground/90">
+                                              {candidato.nombre}
+                                            </p>
+                                            {otraAfinidad.faltantes.length >
+                                              0 && (
+                                              <p className="text-[11px] text-muted-foreground">
+                                                le falta &quot;
+                                                {otraAfinidad.faltantes.join(
+                                                  ", ",
+                                                )}
+                                                &quot;
+                                              </p>
+                                            )}
+                                          </div>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 shrink-0 text-xs"
+                                            onClick={() =>
+                                              handleAssignProduct(
+                                                rawNombre,
+                                                candidato.productoId,
+                                              )
+                                            }
+                                          >
+                                            Es este
+                                          </Button>
+                                        </li>
+                                      ),
+                                    )}
+                                  </ul>
+                                </div>
+                              )}
+
                               <details className="text-xs" open={dudosa}>
                                 <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
                                   {dudosa
@@ -1913,7 +2022,10 @@ export function MergeTable({
                     </td>
 
                     {/* COSTO UNITARIO */}
-                    <td className="px-6 py-4 text-right align-top pt-5">
+                    <td
+                      data-label="Costo unitario"
+                      className={`px-6 py-4 text-right align-top pt-5 max-md:text-left ${CELDA_APILADA}`}
+                    >
                       <p className="font-semibold text-foreground">
                         $
                         {Number(firstItem.precio_costo).toLocaleString("es-AR")}
@@ -1930,7 +2042,10 @@ export function MergeTable({
                     </td>
 
                     {/* PRECIO PÚBLICO (Unificado para todo el grupo) */}
-                    <td className="px-6 py-4 text-right align-top pt-5">
+                    <td
+                      data-label="Precio público"
+                      className={`px-6 py-4 text-right align-top pt-5 max-md:text-left ${CELDA_APILADA}`}
+                    >
                       {firstItem.producto_id ? (
                         <div className="flex justify-end">
                           <div className="relative w-28">
@@ -2009,7 +2124,7 @@ export function MergeTable({
                     </td>
 
                     {/* DESCARTAR GRUPO */}
-                    <td className="px-4 py-4 text-center align-top pt-5">
+                    <td className="px-4 py-4 text-center align-top pt-5 max-md:block max-md:w-full max-md:px-4 max-md:py-1 max-md:text-right">
                       <Button
                         variant="ghost"
                         size="icon"

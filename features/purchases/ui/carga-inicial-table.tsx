@@ -62,7 +62,18 @@ const RECARGO_DEFAULT = 100;
 // Niña".
 const COLUMNAS =
   "grid-cols-[32px_minmax(200px,1.4fr)_minmax(190px,1.1fr)_minmax(120px,0.8fr)_104px_104px_minmax(150px,1fr)_40px]";
-const ANCHO_MINIMO = "min-w-[1110px]";
+// El ancho mínimo vale de md para arriba. Debajo, la grilla se apila: 1.110
+// píxeles fijos en un teléfono de 390 px eran tres cuartos de fila invisibles
+// y scroll horizontal para llegar a cada campo.
+const ANCHO_MINIMO = "md:min-w-[1110px]";
+
+/** Cada celda pasa a ser una fila de ancho completo en mobile, con el rótulo
+ * que en desktop pone la cabecera. */
+const CELDA_APILADA =
+  "max-md:before:mb-0.5 max-md:before:block max-md:before:text-[10px] " +
+  "max-md:before:font-semibold max-md:before:uppercase " +
+  "max-md:before:tracking-wide max-md:before:text-muted-foreground " +
+  "max-md:before:content-[attr(data-label)]";
 
 type BorradorCargaInicial = {
   version: 1;
@@ -553,7 +564,7 @@ export function CargaInicialTable({
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
         <div className={ANCHO_MINIMO}>
           <div
-            className={`grid ${COLUMNAS} gap-2 border-b border-border bg-muted/30 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground`}
+            className={`grid ${COLUMNAS} gap-2 border-b border-border bg-muted/30 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground max-md:hidden`}
           >
             <input
               type="checkbox"
@@ -575,7 +586,7 @@ export function CargaInicialTable({
             {nuevas.map((fila) => (
               <div
                 key={fila.key}
-                className={`grid ${COLUMNAS} items-start gap-2 px-3 py-2 ${
+                className={`grid ${COLUMNAS} items-start gap-2 px-3 py-2 max-md:grid-cols-1 max-md:border-b max-md:border-border max-md:py-3 ${
                   seleccion.has(fila.key) ? "bg-primary/5" : ""
                 }`}
               >
@@ -641,58 +652,64 @@ export function CargaInicialTable({
                   )}
                 </div>
 
-                <Input
-                  value={fila.marca}
-                  aria-label="Marca"
-                  placeholder="—"
-                  onChange={(e) =>
-                    editarFila(fila.key, { marca: e.target.value })
-                  }
-                  className="h-9 w-full"
-                />
+                <div data-label="Marca" className={CELDA_APILADA}>
+                  <Input
+                    value={fila.marca}
+                    aria-label="Marca"
+                    placeholder="—"
+                    onChange={(e) =>
+                      editarFila(fila.key, { marca: e.target.value })
+                    }
+                    className="h-9 w-full"
+                  />
+                </div>
 
-                <Input
-                  type="number"
-                  min={0}
-                  aria-label="Costo"
-                  value={fila.costo > 0 ? fila.costo : ""}
-                  placeholder="0"
-                  onChange={(e) => {
-                    const costo = Number.parseFloat(e.target.value);
-                    const nuevoCosto = Number.isNaN(costo) ? 0 : costo;
-                    editarFila(fila.key, {
-                      costo: nuevoCosto,
-                      // El precio sigue al costo mientras nadie lo haya
-                      // tocado a mano: si no, corregir un costo dejaba el
-                      // precio viejo, que es peor que no tener ninguno.
-                      precio: precioSugerido(
-                        nuevoCosto,
-                        null,
-                        recargo === "" ? RECARGO_DEFAULT : recargo,
-                      ),
-                    });
-                  }}
-                  className="h-9 w-full text-center"
-                />
+                <div data-label="Costo" className={CELDA_APILADA}>
+                  <Input
+                    type="number"
+                    min={0}
+                    aria-label="Costo"
+                    value={fila.costo > 0 ? fila.costo : ""}
+                    placeholder="0"
+                    onChange={(e) => {
+                      const costo = Number.parseFloat(e.target.value);
+                      const nuevoCosto = Number.isNaN(costo) ? 0 : costo;
+                      editarFila(fila.key, {
+                        costo: nuevoCosto,
+                        // El precio sigue al costo mientras nadie lo haya
+                        // tocado a mano: si no, corregir un costo dejaba el
+                        // precio viejo, que es peor que no tener ninguno.
+                        precio: precioSugerido(
+                          nuevoCosto,
+                          null,
+                          recargo === "" ? RECARGO_DEFAULT : recargo,
+                        ),
+                      });
+                    }}
+                    className="h-9 w-full text-center"
+                  />
+                </div>
 
-                <Input
-                  type="number"
-                  min={0}
-                  aria-label="Precio de venta"
-                  value={fila.precio > 0 ? fila.precio : ""}
-                  placeholder="0"
-                  onChange={(e) => {
-                    const precio = Number.parseFloat(e.target.value);
-                    editarFila(fila.key, {
-                      precio: Number.isNaN(precio) ? 0 : precio,
-                    });
-                  }}
-                  className={`h-9 w-full text-center ${
-                    fila.precio > 0
-                      ? ""
-                      : "border-destructive focus-visible:ring-destructive"
-                  }`}
-                />
+                <div data-label="Precio de venta" className={CELDA_APILADA}>
+                  <Input
+                    type="number"
+                    min={0}
+                    aria-label="Precio de venta"
+                    value={fila.precio > 0 ? fila.precio : ""}
+                    placeholder="0"
+                    onChange={(e) => {
+                      const precio = Number.parseFloat(e.target.value);
+                      editarFila(fila.key, {
+                        precio: Number.isNaN(precio) ? 0 : precio,
+                      });
+                    }}
+                    className={`h-9 w-full text-center ${
+                      fila.precio > 0
+                        ? ""
+                        : "border-destructive focus-visible:ring-destructive"
+                    }`}
+                  />
+                </div>
 
                 <div className="flex flex-wrap gap-1">
                   {fila.lineas.map((linea) => (
