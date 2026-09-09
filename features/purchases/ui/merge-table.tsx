@@ -436,17 +436,50 @@ export function MergeTable({
     return mapa;
   }, [groupedItems, similaresMap, categoriasDB]);
 
-  // Cuántos grupos están en el bucket "nuevo sugerido" — usado para
-  // habilitar/mostrar el botón de creación masiva.
-  const gruposNuevoSugerido = useMemo(
+  /**
+   * Los grupos que se pueden crear de una sola vez, que es lo único que hace
+   * falta para poder crear un producto: un nombre y una categoría.
+   *
+   * Son dos bucket, no uno. El obvio es NUEVO_SUGERIDO, que ya trae categoría
+   * inferida. El otro es AMBIGUO al que la persona YA le eligió categoría a
+   * mano con la barra de selección múltiple: en ese momento deja de estar
+   * ambiguo: lo único que le faltaba era eso. Antes quedaba afuera del lote y
+   * el toast lo decía sin disimulo —"ahora podés usar Crear en cada una"—, o
+   * sea que después de resolver 30 grupos de un saque había que dar 30 clicks
+   * más para ejecutar la decisión ya tomada.
+   *
+   * Los que tienen candidato (POSIBLE_MATCH) se quedan afuera A PROPÓSITO,
+   * aunque el 98,9% de los grupos que pasan por esta pantalla terminen siendo
+   * alta nueva: crear en lote sobre un candidato sin mirarlo es exactamente
+   * cómo se fabrica el catálogo duplicado que esta pantalla existe para
+   * evitar. Ahí la decisión sigue siendo de a una.
+   */
+  const gruposCreablesEnLote = useMemo(
     () =>
       groupedItems
-        .filter(
-          ([rawNombre]) =>
-            clasificacionPorGrupo.get(rawNombre)?.tipo === "NUEVO_SUGERIDO",
-        )
+        .filter(([rawNombre, group]) => {
+          if (group[0].producto_id) return false;
+          const bucket = clasificacionPorGrupo.get(rawNombre);
+          if (bucket?.tipo === "NUEVO_SUGERIDO") return true;
+          return (
+            bucket?.tipo === "AMBIGUO" && Boolean(categoriaIdPorGrupo[rawNombre])
+          );
+        })
         .map(([rawNombre]) => rawNombre),
-    [groupedItems, clasificacionPorGrupo],
+    [groupedItems, clasificacionPorGrupo, categoriaIdPorGrupo],
+  );
+
+  /** Los que la pantalla NO puede resolver sola y siguen siendo trabajo
+   * manual. Se cuentan para poder decirlo al lado del botón: "creo 34 y te
+   * quedan 12" es una promesa que se cumple; "creo todos" no. */
+  const gruposQueQuedanAMano = useMemo(
+    () =>
+      groupedItems.filter(([rawNombre, group]) => {
+        if (group[0].producto_id) return false;
+        if (group[0].estado_match !== "DESCONOCIDO") return false;
+        return !gruposCreablesEnLote.includes(rawNombre);
+      }).length,
+    [groupedItems, gruposCreablesEnLote],
   );
 
   // Grupo activo del modal "Crear Producto Múltiple" y si tiene costos
@@ -945,24 +978,24 @@ export function MergeTable({
 
     const nombreElegido = nombrePorIdCategoria(categoriaIdParaSeleccion) ?? "";
     toast.success(
-      `Categoría "${nombreElegido}" asignada a ${gruposSeleccionados.size} agrupaciones. Ahora podés usar "Crear" en cada una.`,
+      `Categoría "${nombreElegido}" asignada a ${gruposSeleccionados.size} agrupaciones. Ya entran en "Crear", arriba de la tabla.`,
     );
     setGruposSeleccionados(new Set());
     setCategoriaIdParaSeleccion("");
   };
 
   const handleCrearTodosSugeridos = async () => {
-    if (gruposNuevoSugerido.length === 0 || bulkCrearLoading) return;
+    if (gruposCreablesEnLote.length === 0 || bulkCrearLoading) return;
 
     setBulkCrearLoading(true);
-    setBulkProgreso({ hechos: 0, total: gruposNuevoSugerido.length });
+    setBulkProgreso({ hechos: 0, total: gruposCreablesEnLote.length });
     setLoadingPorGrupo((prev) => {
       const next = { ...prev };
-      for (const rawNombre of gruposNuevoSugerido) next[rawNombre] = true;
+      for (const rawNombre of gruposCreablesEnLote) next[rawNombre] = true;
       return next;
     });
 
-    const tareas = gruposNuevoSugerido.map((rawNombre) => async () => {
+    const tareas = gruposCreablesEnLote.map((rawNombre) => async () => {
       const bucket = clasificacionPorGrupo.get(rawNombre);
       const categoriaIdSugerida =
         bucket?.tipo === "NUEVO_SUGERIDO"
@@ -1187,21 +1220,45 @@ export function MergeTable({
           </Button>
         </div>
 
-        {gruposNuevoSugerido.length > 0 && (
+      </div>
+
+      {/* CREAR EN LOTE — la acción principal de esta pantalla, y por eso está
+          acá arriba y en primario, no gris al lado del recargo global.
+          Medido sobre los 115 remitos aprobados: de los 2.053 grupos que
+          pasaron por conciliación, 23 (1,1%) terminaron asociados a un
+          producto que ya existía y el resto fue alta nueva. La pregunta que
+          la pantalla hacía primero —"¿esto ya lo tenías?"— casi nunca aplica,
+          así que dar de alta tiene que ser lo primero que se ofrece.
+          El conteo va desglosado a propósito: prometer "todos" y dejar 12
+          filas rojas es peor que prometer 34 y cumplirlo. */}
+      {gruposCreablesEnLote.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-xl border border-chart-3 bg-chart-3/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="font-semibold text-chart-3">
+              {gruposCreablesEnLote.length === 1
+                ? "Hay 1 producto nuevo listo para crear"
+                : `Hay ${gruposCreablesEnLote.length} productos nuevos listos para crear`}
+            </p>
+            <p className="mt-0.5 text-sm text-foreground/80">
+              Ya tienen nombre, categoría y precio.{" "}
+              {gruposQueQuedanAMano > 0
+                ? `Los otros ${gruposQueQuedanAMano} hay que revisarlos de a uno: tienen un producto parecido en el catálogo o les falta la categoría.`
+                : "Después de esto no queda nada por resolver a mano."}
+            </p>
+          </div>
           <Button
-            variant="secondary"
-            size="sm"
-            className="bg-chart-3/10 text-chart-3 hover:bg-chart-3/20 w-full sm:w-auto"
+            size="lg"
+            className="h-10 w-full shrink-0 cursor-pointer sm:w-auto"
             onClick={handleCrearTodosSugeridos}
             disabled={bulkCrearLoading}
           >
-            <Sparkles className="w-4 h-4 mr-2" />
+            <Sparkles className="mr-2 h-4 w-4" />
             {bulkCrearLoading
               ? "Creando..."
-              : `Crear todos los sugeridos (${gruposNuevoSugerido.length})`}
+              : `Crear los ${gruposCreablesEnLote.length}`}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Barra de selección múltiple (solo Ambiguo) */}
       {gruposSeleccionados.size > 0 && (

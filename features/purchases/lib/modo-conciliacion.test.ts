@@ -53,19 +53,28 @@ describe("decidirModoConciliacion", () => {
     expect(decision.motivo).toBe("POCO_MATCH");
   });
 
-  it("un remito de reposición (50% de match) abre en conciliación", () => {
-    const decision = decidirModoConciliacion(remito(10, 10), 1226);
+  it("un remito de reposición (80% de match) abre en conciliación", () => {
+    const decision = decidirModoConciliacion(remito(2, 8), 1226);
     expect(decision.modo).toBe("CONCILIACION");
     expect(decision.motivo).toBe("MAYORIA_MATCHEA");
   });
 
-  it("el umbral es 40% e incluye el borde", () => {
-    expect(decidirModoConciliacion(remito(6, 4), 500).modo).toBe(
+  it("el umbral es 70% e incluye el borde", () => {
+    expect(decidirModoConciliacion(remito(3, 7), 500).modo).toBe(
       "CONCILIACION",
     );
-    expect(decidirModoConciliacion(remito(61, 39), 500).modo).toBe(
+    expect(decidirModoConciliacion(remito(31, 69), 500).modo).toBe(
       "CARGA_INICIAL",
     );
+  });
+
+  // Los 4 remitos reales que el cambio de 0,40 a 0,70 mueve de modo: los que
+  // matchean en esa banda. Aportaban 25 grupos a la conciliación y los 25
+  // terminaron en alta nueva, cero actualizaciones.
+  it("un remito que matchea la mitad ahora abre en carga inicial", () => {
+    const decision = decidirModoConciliacion(remito(10, 10), 1226);
+    expect(decision.modo).toBe("CARGA_INICIAL");
+    expect(decision.motivo).toBe("POCO_MATCH");
   });
 
   it("un remito sin filas no rompe ni divide por cero", () => {

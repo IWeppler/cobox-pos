@@ -19,9 +19,25 @@
  *
  * Y la distribución POR REMITO es bimodal, que es lo que hace que el corte no
  * sea arbitrario: 117 remitos matchean menos del 20%, 21 matchean más del
- * 40%, y solo 3 caen en el medio. El umbral se planta en 40% justamente
- * porque ahí no hay casi nada: mover el número entre 20% y 40% cambia de modo
- * 3 remitos de 142.
+ * 40%, y solo 3 caen en el medio. Cualquier número en ese hueco cambia de modo
+ * un puñado de remitos: la bimodalidad es lo que hace que el umbral no sea
+ * delicado.
+ *
+ * POR QUÉ SUBIÓ DE 0,40 A 0,70 (9/9/2026). El 0,40 se fijó midiendo la
+ * ENTRADA: cuántos grupos ya matchean al abrir. Después se pudo medir la
+ * SALIDA —qué termina siendo cada grupo que cae en la pantalla— y dice otra
+ * cosa: de los 2.053 grupos que pasaron por conciliación en los 115 remitos
+ * aprobados, solo 23 (1,1%) terminaron asociados a un producto que ya existía.
+ * El resto fue alta nueva. O sea que el porcentaje de auto-match NO predice el
+ * destino: incluso un remito que matchea 30% termina dando de alta casi todo
+ * lo que cae.
+ *
+ * El corte se mueve al otro extremo del mismo hueco. Sobre los 146 remitos de
+ * la base son 4 los que cambian de modo (los que matchean entre 40% y 70%),
+ * que aportan 25 grupos a la pantalla — y esos 25 terminaron en alta nueva
+ * 25 de 25, cero actualizaciones. Es un cambio chico y en la dirección que
+ * los datos señalan; lo que de verdad mueve el volumen es qué acción ofrece
+ * el modo CONCILIACIÓN, no cuándo abre.
  *
  * El otro disparador es el catálogo vacío, y va aparte porque no es un caso
  * borde del porcentaje sino otra pregunta: con 12 productos cargados, "0% de
@@ -40,8 +56,8 @@ export type ModoConciliacion = "CONCILIACION" | "CARGA_INICIAL";
 export const CATALOGO_MINIMO = 20;
 
 /** Proporción de grupos ya reconocidos por debajo de la cual conviene el modo
- * carga inicial. Ver arriba por qué 0,40 y no 0,50. */
-export const UMBRAL_MATCH = 0.4;
+ * carga inicial. Ver arriba por qué 0,70 y no 0,40. */
+export const UMBRAL_MATCH = 0.7;
 
 export type DecisionModo = {
   modo: ModoConciliacion;
