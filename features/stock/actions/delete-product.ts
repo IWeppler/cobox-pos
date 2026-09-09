@@ -49,7 +49,16 @@ export async function eliminarProductoAction(id: string) {
     // siempre.
     const paths = await recolectarPathsDeImagenes(supabase, [id]);
 
-    const { error } = await supabase.from("productos").delete().eq("id", id);
+    // Vía RPC y no `.delete()` por dos motivos, los dos de la misma familia.
+    // Uno: el borrado cascadea a las variantes y esa baja de stock queda en
+    // `movimientos_stock`, pero el origen viaja en un GUC transaction-local —
+    // desde acá no hay forma de declararlo, así que quedaba DESCONOCIDO. La
+    // función lo declara y borra en la misma transacción. Dos: un DELETE que
+    // la RLS filtra devuelve 0 filas con `error: null`, o sea "no tenías
+    // permiso" indistinguible de "borrado". La RPC devuelve el conteo.
+    const { data: borrados, error } = await supabase.rpc("eliminar_productos", {
+      p_producto_ids: [id],
+    });
 
     if (error) {
       console.error(error);
@@ -57,6 +66,14 @@ export async function eliminarProductoAction(id: string) {
         error:
           mensajeDeBorrado(error) ??
           "No se pudo eliminar el producto de la base de datos.",
+        success: false,
+      };
+    }
+
+    if (Number(borrados) === 0) {
+      return {
+        error:
+          "No se eliminó el producto: no tenés permiso para borrarlo o ya no existe.",
         success: false,
       };
     }
@@ -95,11 +112,11 @@ export async function bulkDeleteProductsAction(productIds: string[]) {
   // archivos se borran después de que la base confirmó.
   const paths = await recolectarPathsDeImagenes(supabase, productIds);
 
-  // Se eliminan por borrado en cascada (Supabase borrará las variantes y el stock)
-  const { error } = await supabase
-    .from("productos")
-    .delete()
-    .in("id", productIds);
+  // Misma RPC que el borrado individual: el lote es un array de varios. Ver
+  // el comentario de `eliminarProductoAction` por qué no es un `.delete()`.
+  const { data: borrados, error } = await supabase.rpc("eliminar_productos", {
+    p_producto_ids: productIds,
+  });
 
   if (error) {
     console.error("Error en bulkDelete:", error);
@@ -111,6 +128,30 @@ export async function bulkDeleteProductsAction(productIds: string[]) {
       error: porImei
         ? "No se eliminó ninguno: alguno de los seleccionados tiene unidades con IMEI registradas, que se conservan para la garantía. Sacalo de la selección y volvé a intentar."
         : "Ocurrió un error al eliminar los productos.",
+      success: false,
+    };
+  }
+
+  // Borrado parcial: la RLS puede haber filtrado algunos de los
+  // seleccionados. Decir "listo" sobre una selección de la que sobrevivió la
+  // mitad es el mismo éxito silencioso que este cambio vino a sacar.
+  if (Number(borrados) < productIds.length) {
+    if (Number(borrados) === 0) {
+      return {
+        error:
+          "No se eliminó ninguno: no tenés permiso para borrar productos.",
+        success: false,
+      };
+    }
+    // Las fotos NO se tocan en un borrado parcial: `paths` es de la selección
+    // entera y no se sabe cuáles sobrevivieron, así que borrarlas dejaría
+    // productos vivos con la imagen rota. Un archivo huérfano se limpia; una
+    // foto que ya no existe no vuelve.
+    revalidatePath("/stock");
+    revalidatePath("/store", "layout");
+    await invalidarCatalogoDeSesion(supabase);
+    return {
+      error: `Se eliminaron ${borrados} de ${productIds.length}. Los demás no se pudieron borrar.`,
       success: false,
     };
   }

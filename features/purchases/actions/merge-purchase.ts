@@ -486,6 +486,28 @@ export async function aprobarOrdenAction(
     // La canonicalización de atributos se queda acá a propósito: es la misma
     // que usa la creación manual de productos, y no se duplica en SQL. La
     // RPC recibe `atributos` ya canonicalizado.
+    // El filtro de abajo descarta las líneas sin producto, y hacerlo en
+    // silencio es lo que perdió 213 líneas / 416 unidades entre julio y agosto
+    // de 2026: la orden quedaba APROBADA, la RPC nunca veía esas líneas y esa
+    // mercadería no existía en el sistema — sin un solo error. Desde
+    // `20260908130000` la RPC lo rechaza mirando `ordenes_items` (que es el
+    // freno que cuenta, porque un server action es un endpoint), pero eso
+    // llega como una excepción de Postgres arriba de todo. Acá se corta antes
+    // y con los nombres puestos.
+    const sinProducto = itemsResueltos.filter((item) => !item.producto_id);
+    if (sinProducto.length > 0) {
+      const nombres = Array.from(
+        new Set(sinProducto.map((item) => item.raw_nombre)),
+      );
+      const muestra = nombres.slice(0, 3).join(", ");
+      return {
+        error:
+          `No se puede impactar: ${sinProducto.length} renglón(es) no están vinculados a ningún producto ` +
+          `(${muestra}${nombres.length > 3 ? ` y ${nombres.length - 3} más` : ""}). ` +
+          "Esa mercadería no entraría al stock. Vinculalos o creá el producto antes de aprobar.",
+      };
+    }
+
     const itemsPayload = itemsResueltos
       .filter((item) => item.producto_id)
       .map((item) => {
