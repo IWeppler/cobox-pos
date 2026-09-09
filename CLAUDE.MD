@@ -284,6 +284,107 @@ tiene 11.
   aprobaciones concurrentes y devuelve `{ya_aprobada: true}` como resultado
   normal, no como excepción. La canonicalización de atributos se queda en
   Node a propósito; la RPC recibe `atributos` ya canonicalizado.
+- **Un producto tiene DOS precios y en la venta gana la variante.**
+  `productos.precio` es el de cabecera —lo que muestra /stock— y
+  `producto_variantes.precio` es el de cada variante; `precioBaseDeVariante`
+  resuelve `variante.precio ?? producto.precio`, y lo mismo hace el catálogo
+  público. Cuando difieren, /stock miente y nadie se entera hasta el
+  mostrador.
+  Lo producía el remito: `aprobar_orden_compra_impl` escribía la cabecera pero
+  sobre una variante que YA existe solo hacía `stock = stock + cantidad`, así
+  que aprobar cambiaba el precio que se MUESTRA y no el que se COBRA. (La
+  actualización masiva de `update-prices.ts` sí escribe los dos, por eso la
+  divergencia venía siempre del mismo lado.) Lo reportó Evelyn el 8/9/2026
+  sobre "Pantalon sastrero HHP": $52.000 en el listado, $20.000 en la caja.
+  Quedaron 16 productos en Evens, 12 en Estilo Bonito y 2 en Kiosco Demo.
+  Desde `20260908190000` la RPC baja el precio nuevo a la variante cuyo precio
+  propio **era una copia del vigente** —eso no es un precio especial, es el
+  mismo número guardado dos veces— y respeta a la que decía otra cosa, pero la
+  CUENTA y devuelve `variantes_conservadas` para que la pantalla lo avise. La
+  comparación va contra el precio EFECTIVO viejo, no contra el de cabecera:
+  contra la cabecera, los 30 ya desalineados no matchearían nunca y se
+  quedarían así para siempre.
+  Ese "precio efectivo" es la vista `productos_precio_efectivo`
+  (`20260908180000`), que la conciliación lee en lugar de `productos`: hasta
+  entonces calculaba el markup anterior con la cabecera, o sea que
+  "conservaba" un margen sacado de un precio que nadie cobra. Solo hay precio
+  efectivo cuando TODAS las variantes tienen el suyo y todas dicen lo mismo;
+  si no, `precios_dispares` y se muestra el aviso. **No se promedia ni se
+  toma el mínimo**: inventar un precio que nadie fijó es el mismo error al
+  revés. Y dispar no siempre es bug — "Maní con Sal" de Kiosco Demo a $1.800 /
+  $3.900 / $7.200 son pesos distintos, y por eso los 30 no los arregla una
+  migración.
+- **La fábrica de ese desacople era la actualización masiva de precios**, y se
+  apagó en `20260908200000` + `update-prices.ts`. `aplicarPreciosAction`
+  escribía el producto y después COPIABA el precio a TODAS sus variantes,
+  convirtiendo herederas (`precio` null = "seguime al producto") en copias con
+  el número encima. Medido: Estilo Bonito corrió 5 lotes en julio (3.605 filas
+  de variante) y tenía 1.142 copias sobre 1.514 variantes, el 75%; Evens corrió
+  5 pero anteriores a que esa función escribiera variantes y tenía 108; Ninja
+  Camisetas y ClickTostado, que nunca corrieron uno, tenían CERO en 687. Los
+  tres caminos de alta/edición y el remito ya escribían null cuando el precio
+  coincide con el del padre: la fuga era una sola.
+  Ahora el ajuste masivo toca solo las variantes con valor PROPIO, y columna
+  por columna (una variante puede tener precio propio y costo heredado).
+  La normalización nuleó las 1.252 copias y **no cambió un solo precio** — la
+  migración lo prueba, no lo promete: guarda el precio efectivo de las 5.926
+  variantes antes de tocar nada y aborta si alguno difiere después. Quedaron
+  **5.835 heredando y 69 con precio propio real en todo el SaaS, el 1,2%**. Ese
+  es el tamaño verdadero de la feature "precio por variante", y no se toca:
+  incluye casos legítimos como el Maní con Sal por peso.
+  Efecto medible: los productos con problema pasaron de 30 a 22, y los que de
+  verdad muestran un precio y cobran otro, a 8.
+  **La regla que queda: null es un valor con significado.** Si una variante
+  hereda, se deja heredar — escribirle el mismo número "por las dudas" no es
+  redundancia inofensiva, es fabricar una copia que se va a desincronizar. Por
+  eso `actualizaciones_precio_items` pasó a aceptar null (`20260908210000`):
+  con las columnas NOT NULL, "heredaba" y "valía cero" se guardaban igual, y
+  deshacer un ajuste sobre una variante que heredaba le escribía 0 — que
+  `variante.precio ?? producto.precio` devuelve tal cual, dejando el producto a
+  $0 sin que nadie toque un precio.
+  Y por eso también se sacó el fallback de `revertirPreciosAction` ("si el
+  producto no tiene fila de variante, revertí todas"): volvía a fabricar
+  copias, y encima cambiaba variantes que la pantalla de confirmación no
+  mostraba, porque la preview lista solo las filas del lote.
+- **/stock muestra el precio de las VARIANTES, no el de la cabecera**
+  (`features/stock/lib/precio-efectivo-producto.ts`, con tests). La tabla ya
+  calculaba un rango cuando las variantes NO eran uniformes, pero cuando
+  coincidían entre sí caía a `producto.precio` — y ese era justo el caso de
+  HHP: las 7 en $20.000, la cabecera en $52.000. **Uniforme no quiere decir
+  igual al producto.** Con una sola variante fallaba por otro lado: el rango
+  pedía más de una. Es la contraparte en TS de la vista
+  `productos_precio_efectivo` y las dos tienen que decir lo mismo.
+  El badge "precio por variante" sale SOLO cuando se muestra un número y ese
+  número no es el de la cabecera (8 productos hoy): con rango no hace falta,
+  porque dos extremos ya dicen que no hay un precio único. El mensaje de
+  compartir por WhatsApp también usa el efectivo — mandarle a una clienta un
+  precio que la caja no va a cobrar es peor que mostrarlo mal en una tabla.
+  Y el campo "Precio Venta" de la ficha avisa, pegado al input, cuáles
+  variantes tienen el suyo y no se van a enterar. El aviso sale del estado VIVO
+  de la grilla, no de la base: si le borran el precio a una variante,
+  desaparece en el acto, porque a partir de ahí sí hereda.
+  Al lado del aviso está **"Usar este precio en todas"**
+  (`precio-en-todas-las-variantes.ts`, con tests), que es la acción que la
+  dueña quería y no existía — antes había que ir fila por fila en la tabla de
+  variantes, que es justo donde no mira. **VACÍA el precio propio, no lo
+  copia**, y esa es toda la regla: copiarlo se vería idéntico el mismo día y
+  volvería a fabricar el desacople en el próximo cambio de precio. No toca la
+  base hasta guardar y tiene Deshacer con el snapshot previo, tomado ANTES de
+  vaciar y FUERA del updater de setState — adentro se lee tarde, y en
+  StrictMode corre dos veces.
+- **Un cambio de precio hecho por un remito no dejaba NINGÚN rastro.**
+  `actualizaciones_precio(_items)` la escribía solo la actualización masiva, y
+  `productos.updated_at` lo pisa cualquier guardado posterior: al auditar el
+  caso de Evelyn no se pudo fechar cuándo había cambiado el precio. Plata que
+  se mueve sin registro. Desde `20260908190000` el remito abre su propio lote
+  (`tipo_operacion = 'REMITO'`), PEREZOSO —un remito que no mueve precios no
+  ensucia el historial— con una fila por producto y una por variante alineada.
+  Va en el formato que ya existía a propósito: así "Deshacer" del historial de
+  precios funciona sobre un remito sin una línea más (devuelve los precios, no
+  la mercadería). Ojo con el fallback legacy de `revertirPreciosAction` —"si el
+  producto no tiene fila de variante, revertí todas"—: sobre un lote REMITO le
+  pisaría a las variantes su precio especial, porque ahí la ausencia de fila
+  significa "no la moví", no "no la registré". Queda apagado para REMITO.
 - Métodos de pago, dos porcentajes que NO son lo mismo: `comision` es lo que
   el comercio le paga al procesador (se resta, interno) y `recargo_porcentaje`
   es lo que le cobra al cliente (se suma, se muestra). El cálculo vive en
@@ -995,6 +1096,15 @@ tiene 11.
   una tabla, buscar quién la escribe siguiendo el CÓDIGO, no lo que la UI
   parece esconder — un botón adentro de un sheet no aparece en el grep de
   `isAdmin`; (2) el permiso que falta tiene que doler donde falta.
+- **Un dato duplicado en dos tablas se desincroniza, y el que manda no es el
+  que se ve.** El precio vive en `productos` y en `producto_variantes`; el
+  remito escribía uno solo y la caja cobra el otro. Estuvo así desde julio y lo
+  descubrió la dueña, no el sistema: nada comparaba los dos números. Las dos
+  reglas que quedan: **el que escribe un dato espejado escribe los DOS lados o
+  ninguno**, y **antes de calcular sobre un precio (o un stock, o un saldo),
+  verificar cuál de las dos copias es la que se usa en la venta**. Es el mismo
+  patrón que `productos_stock`, que sí está documentado como espejo — la
+  diferencia era que del precio nadie había escrito que lo fuera.
 - **Timeout de UI ≠ cancelación de server action.** `withTimeout` solo rechaza
   la promesa del cliente; el server sigue hasta el final. Nunca envolver en
   `withTimeout` una acción que muta stock o plata (ver comentario en

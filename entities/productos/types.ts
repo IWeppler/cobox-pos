@@ -106,6 +106,26 @@ export interface Producto {
   atributos_globales?: Record<string, string>;
   stock?: ProductoStock[];
   producto_variantes?: ProductoVariante[];
+  /**
+   * El precio que REALMENTE se cobra: el de las variantes cuando todas
+   * coinciden, el de cabecera si no. `precio` y `precio_efectivo` son números
+   * distintos en 30 productos de los cuatro negocios, y el que gana en la
+   * venta es este (`variante.precio ?? producto.precio`).
+   *
+   * Solo lo traen las consultas que leen la vista `productos_precio_efectivo`
+   * (hoy: la conciliación de remitos). Opcional a propósito: quien no lo pida
+   * no puede leerlo por accidente creyendo que siempre está.
+   */
+  precio_efectivo?: number;
+  /** El costo efectivo, por el mismo criterio que `precio_efectivo`. */
+  costo_efectivo?: number;
+  /**
+   * Las variantes no se ponen de acuerdo entre ellas (o algunas tienen precio
+   * propio y otras no): no hay UN precio del producto. Con esto en true,
+   * `precio_efectivo` cae al de cabecera y no se puede prometer que sea el que
+   * se cobra — hay que avisarlo, no promediarlo.
+   */
+  precios_dispares?: boolean;
 }
 
 /**

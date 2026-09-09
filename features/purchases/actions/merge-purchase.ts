@@ -77,10 +77,18 @@ export async function getOrdenParaMergeAction(ordenId: string) {
     // Paginado: es el catálogo contra el que se sugieren los matches del
     // remito. Truncado al tope de PostgREST, lo que quedó afuera se ofrece como
     // "producto nuevo" y termina duplicado.
+    // Se lee la VISTA y no la tabla: `productos.precio` es el de cabecera, y
+    // en 30 productos de los cuatro negocios no es el que se cobra — gana el
+    // de la variante. Calcular el markup anterior contra la cabecera hacía
+    // "conservar" un margen sacado de un precio que no existe. Ver
+    // 20260908180000. Mismas columnas más tres; misma cantidad de filas.
     traerTodo("merge: productos", (desde, hasta) =>
       supabase
-        .from("productos")
-        .select("id, nombre, precio, precio_costo, tipo", { count: "exact" })
+        .from("productos_precio_efectivo")
+        .select(
+          "id, nombre, precio, precio_costo, tipo, precio_efectivo, costo_efectivo, precios_dispares",
+          { count: "exact" },
+        )
         .eq("publicado", true)
         .range(desde, hasta),
     ),
@@ -523,13 +531,25 @@ export async function aprobarOrdenAction(
     // segunda aprobación (doble click, pestaña vieja, reintento después de
     // un timeout que en realidad había impactado). El cliente lo usa para
     // no ofrecer "Reintentar" sobre algo que ya está hecho.
-    const yaAprobada =
-      (resultado as { ya_aprobada?: boolean } | null)?.ya_aprobada === true;
+    const impacto = resultado as {
+      ya_aprobada?: boolean;
+      variantes_conservadas?: number;
+    } | null;
+
+    const yaAprobada = impacto?.ya_aprobada === true;
+
+    // Cuántas variantes se quedaron con SU precio en vez de tomar el del
+    // remito. Desde 20260908190000 la RPC baja el precio nuevo a las variantes
+    // cuyo precio propio era una copia del vigente; la que decía otra cosa se
+    // respeta, y eso hay que decirlo. Sin este número, el producto queda con
+    // un precio en /stock y otro en la caja y nadie se entera hasta la venta
+    // —que es exactamente lo que reportó Evelyn el 8/9/2026—.
+    const variantesConservadas = Number(impacto?.variantes_conservadas) || 0;
 
     revalidatePath("/stock");
     revalidatePath("/compras");
 
-    return { success: true, yaAprobada };
+    return { success: true, yaAprobada, variantesConservadas };
   } catch (error) {
     console.error("Error al aprobar orden:", error);
     return {

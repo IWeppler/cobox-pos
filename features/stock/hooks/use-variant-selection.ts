@@ -16,6 +16,11 @@ import type {
 } from "../types";
 import { slugify } from "@/shared/utils/slugify";
 import {
+  restaurarCampo,
+  vaciarCampo,
+  type ValoresPorVariante,
+} from "../lib/precio-en-todas-las-variantes";
+import {
   getAtributoValorSuggestionsAction,
   getAtributosExistentesAction,
   getAtributosRequeridosPorCategoriaAction,
@@ -132,9 +137,7 @@ export function useVariantSelection({
   // ofrecerlos en el dropdown de Propiedad además de Talle/Color. Se pide
   // una sola vez por sesión de formulario — la lista de atributos no
   // cambia mientras el usuario está cargando un producto.
-  const [atributosExistentes, setAtributosExistentes] = useState<string[]>(
-    [],
-  );
+  const [atributosExistentes, setAtributosExistentes] = useState<string[]>([]);
 
   useEffect(() => {
     getAtributosExistentesAction().then(setAtributosExistentes);
@@ -204,7 +207,8 @@ export function useVariantSelection({
   );
 
   const opcionesValidasCount = useMemo(
-    () => opciones.filter((o) => o.nombre.trim() && o.valores.length > 0).length,
+    () =>
+      opciones.filter((o) => o.nombre.trim() && o.valores.length > 0).length,
     [opciones],
   );
 
@@ -215,9 +219,7 @@ export function useVariantSelection({
   // ya existían en la base (edición) o vacío (creación).
   const variantes: VarianteInput[] = useMemo(() => {
     return baseVariants
-      .filter(
-        (b) => selectedCombinations[b.key] ?? opcionesValidasCount === 1,
-      )
+      .filter((b) => selectedCombinations[b.key] ?? opcionesValidasCount === 1)
       .map((b) => ({
         key: b.key,
         valores: b.valores,
@@ -239,7 +241,8 @@ export function useVariantSelection({
   );
 
   const missingRequiredAttributes = useMemo(
-    () => findMissingRequiredAttributeValues(opciones, atributosRequeridosNombres),
+    () =>
+      findMissingRequiredAttributeValues(opciones, atributosRequeridosNombres),
     [opciones, atributosRequeridosNombres],
   );
 
@@ -311,6 +314,37 @@ export function useVariantSelection({
     [],
   );
 
+  /**
+   * Deja SIN valor propio ese campo en todas las variantes, o sea que vuelven
+   * a heredar del producto.
+   *
+   * Es lo que hace "Usar este precio en todas", y el cómo importa: NO copia el
+   * número del producto a cada fila. Copiarlo se vería igual en pantalla hoy y
+   * volvería a fabricar el bug — una copia que se queda con el precio viejo la
+   * próxima vez que cambie el del producto, y que en la venta le gana a la
+   * cabecera (ver `precio-efectivo-producto.ts`). Vaciar el campo es lo único
+   * que deja el producto con UN precio de verdad.
+   *
+   * No devuelve lo que había: el snapshot para deshacer lo arma el que llama,
+   * desde `variantes`, ANTES de llamar. Recolectarlo acá adentro del updater
+   * sería leerlo tarde —`setVariantData` es asíncrono— y además el updater
+   * corre dos veces en StrictMode.
+   */
+  const limpiarCampoDeVariantes = useCallback(
+    (field: keyof VariantDataState) => {
+      setVariantData((prev) => vaciarCampo(prev, field));
+    },
+    [],
+  );
+
+  /** El deshacer de `limpiarCampoDeVariantes`, con el snapshot previo. */
+  const restaurarCampoDeVariantes = useCallback(
+    (field: keyof VariantDataState, previos: ValoresPorVariante) => {
+      setVariantData((prev) => restaurarCampo(prev, field, previos));
+    },
+    [],
+  );
+
   const handleVarChange = useCallback(
     (key: string, field: keyof VariantDataState, value: string) => {
       setVariantData((prev) => ({
@@ -339,15 +373,18 @@ export function useVariantSelection({
     [opcionesValidasCount],
   );
 
-  const handleBulkSetSelection = useCallback((keys: string[], value: boolean) => {
-    setSelectedCombinations((prev) => {
-      const next = { ...prev };
-      keys.forEach((key) => {
-        next[key] = value;
+  const handleBulkSetSelection = useCallback(
+    (keys: string[], value: boolean) => {
+      setSelectedCombinations((prev) => {
+        const next = { ...prev };
+        keys.forEach((key) => {
+          next[key] = value;
+        });
+        return next;
       });
-      return next;
-    });
-  }, []);
+    },
+    [],
+  );
 
   const handleInvertSelection = useCallback(
     (keys: string[]) => {
@@ -433,6 +470,8 @@ export function useVariantSelection({
     handleAddOptionValue,
     handleRemoveOptionValue,
     handleVarChange,
+    limpiarCampoDeVariantes,
+    restaurarCampoDeVariantes,
     handleToggleCombination,
     handleBulkSetSelection,
     handleInvertSelection,

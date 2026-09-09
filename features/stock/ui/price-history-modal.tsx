@@ -22,6 +22,7 @@ import {
   AjustePrecioHistorialItem,
   RevertirPreviewItem,
   OperacionPrecio,
+  AlcancePrecio,
 } from "../actions/update-prices";
 import { formatearMoneda, formatearFechaHora } from "@/shared/utils/formatters";
 
@@ -29,7 +30,39 @@ const LABEL_OPERACION: Record<OperacionPrecio, string> = {
   AUMENTAR_PORCENTAJE: "Aumentar precio actual",
   REDUCIR_PORCENTAJE: "Reducir precio actual",
   FIJAR_MARGEN: "Fijar Recargo",
+  REMITO: "Ingreso de mercadería",
 };
+
+const LABEL_ALCANCE: Record<AlcancePrecio, string> = {
+  TODOS: "Todos los productos",
+  CATEGORIA: "Categoría",
+  SELECCION: "Productos seleccionados",
+  REMITO: "Los del remito",
+};
+
+/**
+ * El título de un lote.
+ *
+ * Un ajuste masivo se describe con su operación y su porcentaje. Un lote de
+ * remito no tiene porcentaje —cada producto trae su precio— así que mostrarlo
+ * como "... — 0%" sería decir algo falso: se muestra el nombre, que ya trae el
+ * proveedor. Ver 20260908190000.
+ */
+/**
+ * `null` no es cero: es "esta variante no tiene precio propio, sigue al del
+ * producto". Mostrarlo como "$0" le prometería a la persona que confirma que
+ * va a quedar un precio en cero, que es lo contrario de lo que pasa.
+ */
+function precioODerivado(valor: number | null): string {
+  return valor === null ? "Hereda del producto" : formatearMoneda(valor);
+}
+
+function tituloLote(lote: AjustePrecioHistorialItem): string {
+  if (lote.tipo_operacion === "REMITO") {
+    return lote.nombre || LABEL_OPERACION.REMITO;
+  }
+  return `${LABEL_OPERACION[lote.tipo_operacion] ?? lote.tipo_operacion} — ${lote.valor}%`;
+}
 
 export function PriceHistoryModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -151,14 +184,12 @@ export function PriceHistoryModal() {
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <p className="font-semibold text-sm">
-                                {LABEL_OPERACION[lote.tipo_operacion]} —{" "}
-                                {lote.valor}%
+                                {tituloLote(lote)}
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {formatearFechaHora(lote.creado_en)} ·{" "}
-                                {lote.tipo_alcance === "TODOS"
-                                  ? "Todos los productos"
-                                  : "Categoría"}{" "}
+                                {LABEL_ALCANCE[lote.tipo_alcance] ??
+                                  lote.tipo_alcance}{" "}
                                 · {lote.campo_objetivo}
                               </p>
                             </div>
@@ -250,10 +281,10 @@ export function PriceHistoryModal() {
                               {item.nombre}
                             </td>
                             <td className="px-3 py-2 text-right">
-                              {formatearMoneda(item.precio_actual)}
+                              {precioODerivado(item.precio_actual)}
                             </td>
                             <td className="px-3 py-2 text-right font-bold">
-                              {formatearMoneda(item.precio_al_revertir)}
+                              {precioODerivado(item.precio_al_revertir)}
                             </td>
                           </tr>
                         ))}

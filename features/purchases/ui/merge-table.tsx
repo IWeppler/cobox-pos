@@ -125,6 +125,30 @@ type ItemResueltoConCategoria = ItemResuelto & {
 // stock inflado en silencio).
 const ACTION_TIMEOUT_MS = 100_000;
 
+/**
+ * El precio y el costo que este producto tiene HOY EN LA CAJA.
+ *
+ * `productos.precio` es el de cabecera y `producto_variantes.precio` el de
+ * cada variante; en la venta gana la variante. Los dos números difieren en 30
+ * productos de los cuatro negocios, y esta pantalla los usaba para calcular el
+ * margen anterior — o sea que "conservaba" un margen sacado de un precio que
+ * nadie cobra. La vista `productos_precio_efectivo` resuelve cuál es cuál y la
+ * conciliación la lee desde 20260908180000.
+ *
+ * El `??` cubre a los productos creados al vuelo en esta misma pantalla, que
+ * se inyectan en `localProductos` sin pasar por la vista: recién creados, no
+ * tienen variante con precio propio, así que la cabecera ES el efectivo.
+ */
+function precioVigente(producto: Producto | undefined): number {
+  if (!producto) return 0;
+  return Number(producto.precio_efectivo ?? producto.precio) || 0;
+}
+
+function costoVigente(producto: Producto | undefined): number {
+  if (!producto) return 0;
+  return Number(producto.costo_efectivo ?? producto.precio_costo) || 0;
+}
+
 // --- Combobox de Búsqueda Personalizado ---
 function SearchableSelect({
   productos,
@@ -358,7 +382,7 @@ export function MergeTable({
       precio_venta_actualizado:
         Number(item.precio_venta_sugerido) > 0
           ? Number(item.precio_venta_sugerido)
-          : productoReal(item.producto_id, productos)?.precio || 0,
+          : precioVigente(productoReal(item.producto_id, productos)),
     })),
   );
 
@@ -610,8 +634,9 @@ export function MergeTable({
       costoRemito: item.precio_costo,
       precioSugeridoRemito: item.precio_venta_sugerido,
       precioEnLaFila: item.precio_venta_actualizado,
-      costoActualProducto: prod?.precio_costo,
-      precioActualProducto: prod?.precio,
+      costoActualProducto: costoVigente(prod),
+      precioActualProducto: precioVigente(prod),
+      preciosDispares: prod?.precios_dispares === true,
     });
   };
 
@@ -654,8 +679,9 @@ export function MergeTable({
               costoRemito: item.precio_costo,
               precioSugeridoRemito: item.precio_venta_sugerido,
               precioEnLaFila: item.precio_venta_actualizado,
-              costoActualProducto: prod?.precio_costo,
-              precioActualProducto: prod?.precio,
+              costoActualProducto: costoVigente(prod),
+              precioActualProducto: precioVigente(prod),
+              preciosDispares: prod?.precios_dispares === true,
             }).precio,
             estado_match:
               item.estado_match === "DESCONOCIDO"
@@ -1029,6 +1055,21 @@ export function MergeTable({
           );
         } else {
           toast.success("¡Orden conciliada! Stock actualizado.");
+
+          // El precio nuevo no llegó a estas variantes porque tenían uno
+          // propio distinto, y esas son las que va a cobrar la caja. Va como
+          // aviso y no como error: la mercadería ya entró, y elegir qué precio
+          // gana es del comercio.
+          if (res.variantesConservadas > 0) {
+            toast.warning(
+              `${res.variantesConservadas} variante${res.variantesConservadas === 1 ? "" : "s"} mantuvo su precio propio`,
+              {
+                description:
+                  "El precio nuevo quedó en el producto, pero esas variantes se venden al suyo. Revisalas en Inventario.",
+                duration: 10_000,
+              },
+            );
+          }
         }
         queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
         // Guardado real confirmado contra el server: el borrador local ya
@@ -1880,6 +1921,11 @@ export function MergeTable({
                           return (
                             <div className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
                               <p>{propuesta.explicacion}</p>
+                              {propuesta.advertencia && (
+                                <p className="font-semibold text-warning">
+                                  {propuesta.advertencia}
+                                </p>
+                              )}
                               {margen !== null && (
                                 <p
                                   className={

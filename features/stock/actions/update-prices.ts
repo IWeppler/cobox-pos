@@ -8,9 +8,20 @@ import { invalidarCatalogoDeSesion } from "@/shared/lib/cache-catalogo";
 /** SELECCION = los ids que el usuario marcó en la tabla/grilla de stock.
  * `actualizaciones_precio.tipo_alcance` es `text` sin CHECK, así que el valor
  * nuevo entra al historial sin migración. */
-export type AlcancePrecio = "TODOS" | "CATEGORIA" | "SELECCION";
+export type AlcancePrecio = "TODOS" | "CATEGORIA" | "SELECCION" | "REMITO";
+/**
+ * REMITO no lo produce este módulo: lo escribe `aprobar_orden_compra_impl`
+ * desde 20260908190000, cuando aprobar un ingreso de mercadería cambia un
+ * precio. Hasta entonces un cambio de precio hecho por un remito no dejaba
+ * ninguna fila, y por eso no se pudo fechar el caso que reportó Evelyn.
+ *
+ * Está en el mismo lote y con el mismo formato que un ajuste masivo a
+ * propósito: así "Deshacer" del historial de precios funciona sobre un remito
+ * sin una línea de código más. Lo que NO deshace es el stock, que ya entró —
+ * revertir un lote REMITO devuelve los precios, no la mercadería.
+ */
 export type OperacionPrecio =
-  "AUMENTAR_PORCENTAJE" | "REDUCIR_PORCENTAJE" | "FIJAR_MARGEN";
+  "AUMENTAR_PORCENTAJE" | "REDUCIR_PORCENTAJE" | "FIJAR_MARGEN" | "REMITO";
 export type CampoObjetivo = "PRECIO" | "COSTO" | "AMBOS";
 export type TipoRedondeo = "SIN_REDONDEO" | "10" | "50" | "100" | "90" | "99";
 
@@ -52,10 +63,16 @@ export interface RevertirPreviewItem {
   producto_id: string;
   variante_id: string | null;
   nombre: string;
-  precio_actual: number;
-  precio_al_revertir: number;
-  costo_actual: number;
-  costo_al_revertir: number;
+  /**
+   * `null` en una fila de variante = no tenía valor propio, hereda del
+   * producto. Distinto de 0, que es un precio de cero. Ver
+   * 20260908210000: mostrar los dos como "$0" era prometer que revertir le
+   * pone precio cero a algo que en realidad va a quedar siguiendo al producto.
+   */
+  precio_actual: number | null;
+  precio_al_revertir: number | null;
+  costo_actual: number | null;
+  costo_al_revertir: number | null;
   cambia: boolean;
 }
 
@@ -282,14 +299,24 @@ export async function aplicarPreciosAction(
     if (loteError || !lote)
       throw new Error("Error creando el registro de actualización.");
 
+    // `null` significa "no tenía valor propio", y desde 20260908210000 la
+    // base lo puede guardar. NO es lo mismo que 0: revertir un 0 le escribe
+    // cero al precio de la variante y `variante.precio ?? producto.precio`
+    // devuelve ese cero, o sea que el producto pasa a venderse a $0.
+    // Qué columnas pidió tocar el usuario. La cabecera se escribe entera
+    // igual (la preview ya deja `nuevo = viejo` en la que no se toca), pero en
+    // las variantes sí importa: escribir un costo que nadie pidió cambiar
+    // convertiría un costo heredado en propio.
+    const campoObjetivo = config.campo as CampoObjetivo;
+
     const itemsHistorial: {
       lote_id: string;
       producto_id: string;
       variante_id: string | null;
-      costo_anterior: number;
-      costo_nuevo: number;
-      precio_anterior: number;
-      precio_nuevo: number;
+      costo_anterior: number | null;
+      costo_nuevo: number | null;
+      precio_anterior: number | null;
+      precio_nuevo: number | null;
     }[] = [];
 
     for (const item of previewData) {
@@ -317,43 +344,101 @@ export async function aplicarPreciosAction(
           updateError,
         );
 
-      // Leemos el valor previo REAL de cada variante antes de sobreescribirlo,
-      // para poder auditarlo y revertirlo puntualmente si hace falta.
+      // ------------------------------------------------------------------
+      // LAS VARIANTES QUE HEREDAN NO SE TOCAN, y esto es lo que producía el
+      // bug que reportó Evelyn el 8/9/2026.
+      //
+      // Hasta hoy este bloque le COPIABA el precio nuevo a todas las
+      // variantes del producto, convirtiendo herederas (`precio` null, que
+      // significa "seguime al producto") en copias con el número escrito
+      // encima. Después el remito cambiaba el precio del producto, la copia
+      // se quedaba con el viejo, y como en la venta gana la variante, /stock
+      // mostraba un precio y la caja cobraba otro.
+      //
+      // Medido antes de normalizar: Estilo Bonito corrió 5 ajustes masivos en
+      // julio y tenía 1.142 copias sobre 1.514 variantes (75%); Ninja
+      // Camisetas y ClickTostado, que nunca corrieron uno, tenían cero en 687.
+      // La normalización (20260908200000) limpió las 1.252; esto es lo que
+      // evita que vuelvan.
+      //
+      // Una variante que hereda YA queda actualizada por el UPDATE del
+      // producto de arriba: no hay nada que escribirle. Solo se tocan las que
+      // tienen valor PROPIO, y columna por columna — una variante puede tener
+      // precio propio y costo heredado.
+      // ------------------------------------------------------------------
       const { data: variantesPrevias } = await supabase
         .from("producto_variantes")
         .select("id, precio, costo")
         .eq("producto_id", item.producto_id);
 
+      const tocaPrecio = campoObjetivo === "PRECIO" || campoObjetivo === "AMBOS";
+      const tocaCosto = campoObjetivo === "COSTO" || campoObjetivo === "AMBOS";
+
       for (const variante of variantesPrevias || []) {
+        const precioPropio = variante.precio !== null;
+        const costoPropio = variante.costo !== null;
+
+        // Sin valor propio en ninguna de las dos columnas no hay fila de
+        // auditoría: no se la va a tocar, y una fila que dice "de null a
+        // null" solo ensucia el "Deshacer".
+        if (!(precioPropio && tocaPrecio) && !(costoPropio && tocaCosto)) {
+          continue;
+        }
+
         itemsHistorial.push({
           lote_id: lote.id,
           producto_id: item.producto_id,
           variante_id: variante.id,
-          costo_anterior: Number(variante.costo) || 0,
-          costo_nuevo: item.costo_nuevo,
-          precio_anterior: Number(variante.precio) || 0,
-          precio_nuevo: item.precio_nuevo,
+          costo_anterior: costoPropio ? Number(variante.costo) : null,
+          costo_nuevo:
+            costoPropio && tocaCosto
+              ? item.costo_nuevo
+              : costoPropio
+                ? Number(variante.costo)
+                : null,
+          precio_anterior: precioPropio ? Number(variante.precio) : null,
+          precio_nuevo:
+            precioPropio && tocaPrecio
+              ? item.precio_nuevo
+              : precioPropio
+                ? Number(variante.precio)
+                : null,
         });
       }
 
-      // `updated_at` va explícito: la columna no tiene trigger, así que solo
-      // se mueve si el que escribe la escribe. Un cambio de precio que no la
-      // toca es un cambio que ninguna sincronización incremental puede ver.
-      // Mismo criterio que `ajustar_stock_variante` desde 20260902160000.
-      const { error: variantesUpdateError } = await supabase
-        .from("producto_variantes")
-        .update({
-          costo: item.costo_nuevo,
-          precio: item.precio_nuevo,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("producto_id", item.producto_id);
+      // Dos UPDATE filtrados en vez de uno sin filtro: cada columna se escribe
+      // solo donde había valor propio. `updated_at` va explícito por el mismo
+      // motivo de siempre — sin moverlo, la sincronización incremental del
+      // catálogo no se entera del cambio.
+      const ahora = new Date().toISOString();
 
-      if (variantesUpdateError)
-        console.error(
-          `Error actualizando variantes del producto ${item.producto_id}`,
-          variantesUpdateError,
-        );
+      if (tocaPrecio) {
+        const { error } = await supabase
+          .from("producto_variantes")
+          .update({ precio: item.precio_nuevo, updated_at: ahora })
+          .eq("producto_id", item.producto_id)
+          .not("precio", "is", null);
+
+        if (error)
+          console.error(
+            `Error actualizando precios de variantes de ${item.producto_id}`,
+            error,
+          );
+      }
+
+      if (tocaCosto) {
+        const { error } = await supabase
+          .from("producto_variantes")
+          .update({ costo: item.costo_nuevo, updated_at: ahora })
+          .eq("producto_id", item.producto_id)
+          .not("costo", "is", null);
+
+        if (error)
+          console.error(
+            `Error actualizando costos de variantes de ${item.producto_id}`,
+            error,
+          );
+      }
     }
 
     await supabase.from("actualizaciones_precio_items").insert(itemsHistorial);
@@ -482,15 +567,21 @@ export async function previsualizarRevertirPreciosAction(
   const productosMap = new Map((productos || []).map((p) => [p.id, p]));
   const variantesMap = new Map((variantes || []).map((v) => [v.id, v]));
 
+  // `null` se conserva como null en toda la cadena: es "hereda del producto",
+  // y aplastarlo contra 0 le haría prometer a la pantalla de confirmación que
+  // el precio va a quedar en cero.
+  const aNumero = (valor: unknown): number | null =>
+    valor === null || valor === undefined ? null : Number(valor);
+
   const preview: RevertirPreviewItem[] = items.map((item) => {
     const producto = productosMap.get(item.producto_id);
-    const precioAlRevertir = Number(item.precio_anterior) || 0;
-    const costoAlRevertir = Number(item.costo_anterior) || 0;
+    const precioAlRevertir = aNumero(item.precio_anterior);
+    const costoAlRevertir = aNumero(item.costo_anterior);
 
     if (item.variante_id) {
       const variante = variantesMap.get(item.variante_id);
-      const precioActual = Number(variante?.precio) || 0;
-      const costoActual = Number(variante?.costo) || 0;
+      const precioActual = aNumero(variante?.precio);
+      const costoActual = aNumero(variante?.costo);
       return {
         producto_id: item.producto_id,
         variante_id: item.variante_id,
@@ -504,6 +595,7 @@ export async function previsualizarRevertirPreciosAction(
       };
     }
 
+    // Un PRODUCTO siempre tiene precio propio: acá el 0 sí es un 0.
     const precioActual = Number(producto?.precio) || 0;
     const costoActual = Number(producto?.precio_costo) || 0;
     return {
@@ -551,13 +643,27 @@ export async function revertirPreciosAction(loteId: string) {
   if (fetchError || !items)
     return { error: "No se encontraron los datos para revertir." };
 
-  // Lotes creados antes de que se registrara variante_id no tienen ninguna
-  // fila a nivel variante: para esos, mantenemos el comportamiento anterior
-  // (revertir todas las variantes del producto al valor del producto), ya
-  // que no hay valor por-variante que restaurar.
-  const productosConFilaDeVariante = new Set(
-    items.filter((i) => i.variante_id).map((i) => i.producto_id),
-  );
+  // ------------------------------------------------------------------------
+  // ACÁ HABÍA UN FALLBACK Y SE SACÓ. Decía: "si este producto no tiene fila de
+  // variante en el lote, revertí TODAS sus variantes al valor del producto".
+  // Tenía sentido cuando toda variante llevaba una copia del precio y los
+  // lotes viejos no la registraban. Hoy hace daño por tres motivos:
+  //
+  //   1. Vuelve a fabricar copias. Escribirle el precio del producto a una
+  //      variante que heredaba es exactamente lo que 20260908200000 limpió de
+  //      1.252 filas, y lo que hace que /stock y la caja digan cosas distintas.
+  //   2. Miente sobre lo que va a hacer. `previsualizarRevertirPreciosAction`
+  //      lista SOLO las filas del lote, así que este bloque cambiaba variantes
+  //      que la pantalla de confirmación no mostraba.
+  //   3. Sobre un lote de remito pisaría el precio especial de una variante,
+  //      porque ahí la ausencia de fila significa "no la moví", no "no la
+  //      registré" (ver 20260908190000).
+  //
+  // Sin el fallback, revertir un lote sobre variantes que heredan sigue siendo
+  // COMPLETO: devolver el precio del producto las devuelve a todas. Lo único
+  // que ya no cubre son las variantes que tenían copia en un lote de julio de
+  // 2026 y no quedaron auditadas — 108 filas en Evens, hoy ya normalizadas.
+  // ------------------------------------------------------------------------
 
   for (const item of items) {
     if (item.variante_id) {
@@ -590,19 +696,6 @@ export async function revertirPreciosAction(loteId: string) {
           precio: item.precio_anterior,
         })
         .eq("id", item.producto_id);
-
-      // Fallback para lotes históricos sin filas de variante: revertir en
-      // bloque, igual que antes de esta migración.
-      if (!productosConFilaDeVariante.has(item.producto_id)) {
-        await supabase
-          .from("producto_variantes")
-          .update({
-            costo: item.costo_anterior,
-            precio: item.precio_anterior,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("producto_id", item.producto_id);
-      }
     }
   }
 

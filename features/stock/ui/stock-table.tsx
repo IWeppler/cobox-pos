@@ -59,6 +59,7 @@ import {
   type CategoriaBase,
 } from "@/shared/utils/category-tree";
 import { badgesIdentidad } from "../lib/identidad-por-rubro";
+import { precioMostrable } from "../lib/precio-efectivo-producto";
 import type { Rubro } from "@/entities/config/types";
 import type { SeleccionProductos } from "../hooks/use-seleccion-productos";
 
@@ -140,12 +141,6 @@ function precioEfectivoVariante(
   return valor === null || valor === undefined || valor === ""
     ? fallback
     : Number(valor);
-}
-
-function calcularRango(valores: number[]) {
-  const min = Math.min(...valores);
-  const max = Math.max(...valores);
-  return { min, max, esUniforme: min === max };
 }
 
 export function StockTable({
@@ -329,30 +324,33 @@ export function StockTable({
               // Cálculos de Recargo (sobre costo, no sobre precio de venta)
               const costo = producto.precio_costo || 0;
               const precio = producto.precio || 0;
-              const gananciaNeta = precio - costo;
-              const recargoPorcentaje =
-                costo > 0 ? Math.round((gananciaNeta / costo) * 100) : 100;
 
-              // Rango de costo/precio cuando las variantes no son uniformes:
-              // cada variante hereda el precio/costo del producto salvo que
-              // tenga su propio override en producto_variantes.
-              const rangoCosto = hasVariantes
-                ? calcularRango(
-                    variantesVisibles.map((v: StockTableVariant) =>
-                      precioEfectivoVariante(v, "costo", costo),
-                    ),
-                  )
-                : null;
-              const rangoPrecio = hasVariantes
-                ? calcularRango(
-                    variantesVisibles.map((v: StockTableVariant) =>
-                      precioEfectivoVariante(v, "precio", precio),
-                    ),
-                  )
-                : null;
-              const preciosVarian = rangoCosto
-                ? !rangoCosto.esUniforme || !rangoPrecio!.esUniforme
-                : false;
+              // EL PRECIO QUE SE MUESTRA SALE DE LAS VARIANTES, no de la
+              // cabecera. Antes se calculaba un rango solo cuando las
+              // variantes NO eran uniformes y, cuando coincidían entre sí, se
+              // caía a `producto.precio` — que es otro número. Uniforme no
+              // quiere decir igual al producto: "Pantalon sastrero HHP" tenía
+              // las 7 variantes en $20.000 y la cabecera en $52.000, y la
+              // tabla mostraba $52.000. Ver `precio-efectivo-producto.ts`.
+              const mostrableCosto = precioMostrable(
+                costo,
+                variantesVisibles.map((v: StockTableVariant) => v.costo),
+              );
+              const mostrablePrecio = precioMostrable(
+                precio,
+                variantesVisibles.map((v: StockTableVariant) => v.precio),
+              );
+              // El costo y el precio que de verdad tiene este producto: los que
+              // usa el badge de recargo y el mensaje de compartir.
+              const costoEfectivo = mostrableCosto.valor;
+              const precioEfectivo = mostrablePrecio.valor;
+              const gananciaEfectiva = precioEfectivo - costoEfectivo;
+              const recargoEfectivo =
+                costoEfectivo > 0
+                  ? Math.round((gananciaEfectiva / costoEfectivo) * 100)
+                  : 100;
+              const preciosVarian =
+                !mostrableCosto.uniforme || !mostrablePrecio.uniforme;
 
               // 3. Status Dot (Puntito) para el stock
               let dotColor = "bg-success"; // Normal
@@ -536,13 +534,13 @@ export function StockTable({
                     {/* COSTO */}
                     {isAdmin && (
                       <TableCell className="text-right font-mono text-muted-foreground hidden md:table-cell py-2.5">
-                        {rangoCosto && !rangoCosto.esUniforme ? (
+                        {!mostrableCosto.uniforme ? (
                           <span title="Las variantes tienen costos distintos">
-                            {formatearMoneda(rangoCosto.min)} -{" "}
-                            {formatearMoneda(rangoCosto.max)}
+                            {formatearMoneda(mostrableCosto.min)} -{" "}
+                            {formatearMoneda(mostrableCosto.max)}
                           </span>
                         ) : (
-                          formatearMoneda(costo)
+                          formatearMoneda(mostrableCosto.valor)
                         )}
                       </TableCell>
                     )}
@@ -552,20 +550,34 @@ export function StockTable({
                         el costo por diferencia, y Costo ya es columna admin. */}
                     <TableCell className="text-right font-mono font-medium text-xs sm:text-sm px-1 sm:px-0 py-1 whitespace-nowrap tabular-nums">
                       <div className="flex flex-col items-end gap-0.5">
-                        {rangoPrecio && !rangoPrecio.esUniforme ? (
+                        {!mostrablePrecio.uniforme ? (
                           <span title="Las variantes tienen precios distintos">
-                            {formatearMoneda(rangoPrecio.min)} -{" "}
-                            {formatearMoneda(rangoPrecio.max)}
+                            {formatearMoneda(mostrablePrecio.min)} -{" "}
+                            {formatearMoneda(mostrablePrecio.max)}
                           </span>
                         ) : (
-                          <span>{formatearMoneda(precio)}</span>
+                          <span>{formatearMoneda(mostrablePrecio.valor)}</span>
                         )}
-                        {isAdmin && !preciosVarian && costo > 0 && (
+                        {/* Solo cuando la tabla muestra UN número y ese número
+                            no es el que tiene cargado el producto: ahí es
+                            donde engaña. Con rango no hace falta — que haya
+                            dos extremos ya dice que no hay un precio único, y
+                            la ficha avisa igual al abrirla. */}
+                        {mostrablePrecio.uniforme &&
+                          mostrablePrecio.difiereDeCabecera && (
+                            <span
+                              title={`El producto tiene cargado ${formatearMoneda(precio)}, pero se vende al precio de sus variantes. Corregilo en cada variante, dentro de la ficha del producto.`}
+                              className="text-[9px] sm:text-[10px] font-sans font-medium leading-none px-1.5 py-0.5 rounded border bg-warning/10 text-warning border-warning/20"
+                            >
+                              precio por variante
+                            </span>
+                          )}
+                        {isAdmin && !preciosVarian && costoEfectivo > 0 && (
                           <span
-                            title={`Recargo sobre el costo: +${formatearMoneda(gananciaNeta)}`}
+                            title={`Recargo sobre el costo: +${formatearMoneda(gananciaEfectiva)}`}
                             className="text-[9px] sm:text-[10px] font-sans font-medium leading-none px-1.5 py-0.5 rounded border bg-success/10 text-success border-success/20"
                           >
-                            +{recargoPorcentaje}%
+                            +{recargoEfectivo}%
                           </span>
                         )}
                       </div>
@@ -582,7 +594,12 @@ export function StockTable({
                           title={`${producto.nombre} | ${nombreComercio}`}
                           text={armarMensajeProducto(
                             producto.nombre,
-                            formatearMoneda(producto.precio),
+                            // El precio efectivo, no el de cabecera: mandarle a
+                            // una clienta por WhatsApp un precio que la caja no
+                            // va a cobrar es peor que mostrarlo mal en la tabla.
+                            mostrablePrecio.uniforme
+                              ? formatearMoneda(mostrablePrecio.valor)
+                              : `${formatearMoneda(mostrablePrecio.min)} - ${formatearMoneda(mostrablePrecio.max)}`,
                           )}
                           disabled={compartirDeshabilitado}
                           disabledReason={motivoCompartirDeshabilitado}

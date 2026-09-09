@@ -43,6 +43,15 @@ export interface PropuestaPrecio {
   markupNuevo: number | null;
   /** El costo del remito difiere del que tiene hoy el producto. */
   costoCambio: boolean;
+  /**
+   * Lo que la pantalla tiene que avisar además del número, o null.
+   *
+   * Hoy hay un solo caso: las variantes del producto no tienen todas el mismo
+   * precio, así que el precio que se aprueba acá va a la cabecera y NO baja a
+   * las que tienen el suyo. Es un aviso y no un bloqueo: el ingreso de
+   * mercadería tiene que poder cerrarse igual.
+   */
+  advertencia: string | null;
 }
 
 export interface EntradaPrecio {
@@ -52,9 +61,24 @@ export interface EntradaPrecio {
   precioSugeridoRemito?: number | null;
   /** Lo que ya se calculó para esta fila (recargo global o edición manual). */
   precioEnLaFila?: number | null;
-  /** Lo que hoy tiene el producto al que se está asociando. */
+  /**
+   * Lo que hoy tiene el producto al que se está asociando, y OJO: tiene que
+   * ser el precio EFECTIVO, no el de cabecera.
+   *
+   * `productos.precio` y `producto_variantes.precio` pueden decir cosas
+   * distintas, y en la venta gana la variante. Calcular el markup anterior
+   * contra la cabecera, como se hacía hasta el 8/9/2026, "conservaba" un
+   * margen sacado de un precio que nadie cobra. La vista
+   * `productos_precio_efectivo` resuelve cuál es cuál.
+   */
   costoActualProducto?: number | null;
   precioActualProducto?: number | null;
+  /**
+   * Las variantes no coinciden entre ellas: no hay un precio del producto.
+   * Ver `Producto.precios_dispares`. No cambia el número que se propone
+   * —seguiría siendo el mejor disponible— pero sí lo que hay que avisar.
+   */
+  preciosDispares?: boolean;
 }
 
 const pesos = (valor: number) => `$${Math.round(valor).toLocaleString("es-AR")}`;
@@ -80,12 +104,17 @@ export function precioAlAsociar({
   precioEnLaFila,
   costoActualProducto,
   precioActualProducto,
+  preciosDispares,
 }: EntradaPrecio): PropuestaPrecio {
   const costoNuevo = Number(costoRemito) || 0;
   const costoViejo = Number(costoActualProducto) || 0;
   const precioViejo = Number(precioActualProducto) || 0;
   const markupAnterior = markup(precioViejo, costoViejo);
   const costoCambio = costoNuevo > 0 && costoViejo > 0 && costoNuevo !== costoViejo;
+
+  const advertencia = preciosDispares
+    ? "Este producto tiene variantes con precio propio distinto: el precio nuevo va al producto, y esas variantes lo conservan."
+    : null;
 
   const conMarkup = (precio: number, origen: OrigenPrecio, explicacion: string) => ({
     precio,
@@ -94,6 +123,7 @@ export function precioAlAsociar({
     markupAnterior,
     markupNuevo: markup(precio, costoNuevo),
     costoCambio,
+    advertencia,
   });
 
   // 1. Lo que la persona ya decidió para esta fila manda sobre todo lo demás.

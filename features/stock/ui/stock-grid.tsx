@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useSlugNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import type { ProductoIndice } from "@/entities/productos/types";
 import { Check, Image as ImageIcon, Star } from "lucide-react";
-import { formatearMoneda } from "@/shared/utils/formatters";
 import {
   getTotalStock,
   obtenerPrimeraImagen,
@@ -21,6 +20,7 @@ import {
   type CategoriaBase,
 } from "@/shared/utils/category-tree";
 import { badgesIdentidad } from "../lib/identidad-por-rubro";
+import { textoPrecioProducto } from "../lib/precio-efectivo-producto";
 import type { Rubro } from "@/entities/config/types";
 import type { SeleccionProductos } from "../hooks/use-seleccion-productos";
 
@@ -146,7 +146,9 @@ export function StockGrid({
                   press) para no tapar la foto. */}
               <label
                 className={`absolute top-2 left-2 z-10 hidden sm:flex h-6 w-6 items-center justify-center rounded-md bg-background/90 backdrop-blur-sm shadow-sm transition-opacity ${
-                  isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  isSelected
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100"
                 }`}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -219,7 +221,8 @@ export function StockGrid({
                 title={`${producto.nombre} | ${nombreComercio}`}
                 text={armarMensajeProducto(
                   producto.nombre,
-                  formatearMoneda(producto.precio),
+                  // El precio efectivo, no el de cabecera: ver stock-table.
+                  textoPrecioProducto(producto),
                 )}
                 disabled={compartirDeshabilitado}
                 disabledReason={motivoCompartirDeshabilitado}
@@ -265,7 +268,7 @@ export function StockGrid({
                 {categoriaLabel}
               </p>
               <p className="font-bold text-sm mt-1 text-foreground">
-                {formatearMoneda(producto.precio)}
+                {textoPrecioProducto(producto)}
               </p>
             </div>
           </div>

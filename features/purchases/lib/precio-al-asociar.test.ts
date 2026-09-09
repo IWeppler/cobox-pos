@@ -102,3 +102,40 @@ describe("precio al asociar una fila del remito a un producto existente", () => 
     expect(r.markupNuevo).toBe(2);
   });
 });
+
+describe("variantes con precio propio distinto", () => {
+  it("avisa, pero no cambia el número que propone", () => {
+    // El aviso existe porque el precio aprobado acá va a la CABECERA, y en la
+    // caja gana la variante: sin decirlo, el producto queda con un precio en
+    // /stock y otro en el mostrador. Es exactamente lo que reportó Evelyn el
+    // 8/9/2026 sobre "Pantalon sastrero HHP".
+    const base = {
+      costoRemito: 26000,
+      costoActualProducto: 10000,
+      precioActualProducto: 20000,
+    };
+
+    const sinAviso = precioAlAsociar(base);
+    const conAviso = precioAlAsociar({ ...base, preciosDispares: true });
+
+    expect(sinAviso.advertencia).toBeNull();
+    expect(conAviso.advertencia).toContain("variantes con precio propio");
+    expect(conAviso.precio).toBe(sinAviso.precio);
+    expect(conAviso.origen).toBe(sinAviso.origen);
+  });
+
+  it("el margen anterior sale del precio EFECTIVO, no del de cabecera", () => {
+    // Pantalon sastrero HHP, 8/9/2026: cabecera $52.000 / costo $26.000, pero
+    // las 7 variantes se venden a $20.000 con costo $10.000. Calcular contra la
+    // cabecera daba markup ×2 sobre un costo que tampoco era el vigente.
+    const conEfectivo = precioAlAsociar({
+      costoRemito: 30000,
+      costoActualProducto: 10000,
+      precioActualProducto: 20000,
+    });
+
+    expect(conEfectivo.markupAnterior).toBe(2);
+    expect(conEfectivo.precio).toBe(60000);
+    expect(conEfectivo.explicacion).toContain("$10.000");
+  });
+});

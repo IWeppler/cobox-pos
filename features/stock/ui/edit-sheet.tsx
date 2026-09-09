@@ -72,8 +72,9 @@ import {
   construirUrlProducto,
   esVisibleEnCatalogo,
 } from "@/shared/utils/compartir-catalogo";
-import { formatearMoneda } from "@/shared/utils/formatters";
 import { getTotalStock } from "../lib/stock-product-utils";
+import { snapshotCampo } from "../lib/precio-en-todas-las-variantes";
+import { textoPrecioProducto } from "../lib/precio-efectivo-producto";
 
 type ProductEditDetailSheetProps = {
   producto: ProductoIndice;
@@ -131,9 +132,7 @@ export function ProductEditDetailSheet({
   } = useQuery({
     queryKey: queryKeys.stock.detalle(producto.id),
     queryFn: async () => {
-      const { data, error } = await getStockDetalleProductoAction(
-        producto.id,
-      );
+      const { data, error } = await getStockDetalleProductoAction(producto.id);
       if (error || !data) throw new Error(error || "Producto no encontrado.");
       return data;
     },
@@ -186,7 +185,8 @@ export function ProductEditDetailSheet({
             title={`${producto.nombre} | ${nombreComercio}`}
             text={armarMensajeProducto(
               producto.nombre,
-              formatearMoneda(producto.precio),
+              // El precio efectivo, no el de cabecera: ver stock-table.
+              textoPrecioProducto(producto),
             )}
             disabled={compartirDeshabilitado}
             disabledReason={motivoCompartirDeshabilitado}
@@ -282,9 +282,7 @@ function EditProductForm({
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [diffFilas, setDiffFilas] = useState<VarianteDiffRow[]>([]);
-  const [pendingFormData, setPendingFormData] = useState<FormData | null>(
-    null,
-  );
+  const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
   const [categorias, setCategorias] = useState<CategoriaOption[]>([]);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(
     producto.categoria_id || "",
@@ -311,6 +309,46 @@ function EditProductForm({
     initialVariantes: parsedProducto.variantes,
     categoriaId: categoriaSeleccionada,
   });
+
+  // Las que NO se enteran de lo que se escriba en "Precio Venta". Sale del
+  // estado VIVO de la grilla, no de lo que trajo la base: si la persona le
+  // borra el precio a una variante, el aviso tiene que desaparecer en el acto
+  // —porque a partir de ahí sí va a heredar—.
+  const variantesConPrecioPropio = variantSelection.variantes
+    .filter(
+      (v) => v.precio !== "" && v.precio !== null && v.precio !== undefined,
+    )
+    .map((v) => ({
+      nombre: Object.values(v.valores).join(" / "),
+      precio: Number(v.precio),
+    }))
+    .filter((v) => Number.isFinite(v.precio));
+
+  // Lo que había antes de "Usar este precio en todas", para poder deshacer.
+  // `null` = no se aplicó nada todavía. Vive acá y no en el hook porque el
+  // snapshot hay que tomarlo ANTES de limpiar, leyendo el estado actual — no
+  // adentro del updater de setState, que corre después (y dos veces en
+  // StrictMode).
+  const [preciosAntesDeAplicar, setPreciosAntesDeAplicar] = useState<Record<
+    string,
+    string
+  > | null>(null);
+
+  const usarPrecioDelProductoEnTodas = () => {
+    setPreciosAntesDeAplicar(
+      snapshotCampo(variantSelection.variantes, "precio"),
+    );
+    // Vacía el precio propio: las variantes vuelven a HEREDAR. No se les copia
+    // el número — copiarlo se vería igual hoy y volvería a fabricar el
+    // desacople la próxima vez que cambie el precio del producto.
+    variantSelection.limpiarCampoDeVariantes("precio");
+  };
+
+  const deshacerPrecioEnTodas = () => {
+    if (!preciosAntesDeAplicar) return;
+    variantSelection.restaurarCampoDeVariantes("precio", preciosAntesDeAplicar);
+    setPreciosAntesDeAplicar(null);
+  };
 
   useEffect(() => {
     const fetchCats = async () => {
@@ -417,7 +455,9 @@ function EditProductForm({
         if (result.imagenes.success) {
           toast.success("Fotos guardadas.");
         } else if (result.imagenes.error) {
-          toast.error(`No se pudieron guardar las fotos: ${result.imagenes.error}`);
+          toast.error(
+            `No se pudieron guardar las fotos: ${result.imagenes.error}`,
+          );
         }
         if (!result.variantes.success && result.variantes.error) {
           toast.error(result.variantes.error);
@@ -470,7 +510,6 @@ function EditProductForm({
     // se eligieron (ver subirFotosAhora). Este formulario guarda nombre,
     // precio, categoría y variantes.
 
-
     if (showVariants) {
       await abrirConfirmacionVariantes(formData);
     } else {
@@ -506,7 +545,9 @@ function EditProductForm({
     });
 
     try {
-      const optimizadas = await optimizarImagenesProducto(nuevos.slice(0, cupo));
+      const optimizadas = await optimizarImagenesProducto(
+        nuevos.slice(0, cupo),
+      );
       const urls = await subirImagenesProductoDesdeCliente(
         negocioId,
         optimizadas,
@@ -532,7 +573,9 @@ function EditProductForm({
       // base y no de una lista del cliente.
       if (res.imagenes) setImagenesActuales(res.imagenes);
       queryClient.invalidateQueries({ queryKey: queryKeys.catalogo });
-      toast.success(urls.mains.length === 1 ? "Foto guardada" : "Fotos guardadas");
+      toast.success(
+        urls.mains.length === 1 ? "Foto guardada" : "Fotos guardadas",
+      );
     } catch (error) {
       if (esErrorDeRed(error)) {
         toast.error(mensajeErrorDeRed("subir las fotos"));
@@ -828,6 +871,11 @@ function EditProductForm({
             onPrecioVentaChange={setPrecioVenta}
             gananciaNeta={gananciaNeta}
             recargoPorcentaje={recargoPorcentaje}
+            variantesConPrecioPropio={variantesConPrecioPropio}
+            onUsarPrecioEnTodas={usarPrecioDelProductoEnTodas}
+            onDeshacerPrecioEnTodas={
+              preciosAntesDeAplicar ? deshacerPrecioEnTodas : undefined
+            }
           />
 
           <ProductInventorySection
@@ -855,13 +903,9 @@ function EditProductForm({
             handleRemoveOption={variantSelection.handleRemoveOption}
             handleUpdateOptionName={variantSelection.handleUpdateOptionName}
             handleAddOptionValue={variantSelection.handleAddOptionValue}
-            handleRemoveOptionValue={
-              variantSelection.handleRemoveOptionValue
-            }
+            handleRemoveOptionValue={variantSelection.handleRemoveOptionValue}
             handleVarChange={variantSelection.handleVarChange}
-            ensureSuggestionsLoaded={
-              variantSelection.ensureSuggestionsLoaded
-            }
+            ensureSuggestionsLoaded={variantSelection.ensureSuggestionsLoaded}
             isLoadingSuggestions={variantSelection.isLoadingSuggestions}
             getFilteredSuggestions={variantSelection.getFilteredSuggestions}
             showAdvancedColumns
