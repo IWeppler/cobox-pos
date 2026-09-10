@@ -1,4 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import { Input } from "@/shared/ui/input";
+import { AvisoProductoDuplicado } from "../aviso-producto-duplicado";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
 import { MarcaCombobox } from "./marca-combobox";
@@ -16,6 +20,15 @@ type ProductBasicInfoSectionProps = {
   defaultMarca?: string | null;
   mostrarSku?: boolean;
   defaultSku?: string | null;
+  /**
+   * Con esto, el campo avisa si ya existe un producto así. Se pasa la
+   * categoría porque un duplicado no es "mismo nombre" sino "mismo nombre,
+   * misma categoría y misma marca" — sin ella, el aviso saltaría en las 31
+   * coincidencias legítimas del SaaS y se aprendería a ignorarlo.
+   */
+  categoriaId?: string | null;
+  /** Al editar: para no avisar que el producto choca consigo mismo. */
+  productoId?: string;
 };
 
 export function ProductBasicInfoSection({
@@ -28,7 +41,16 @@ export function ProductBasicInfoSection({
   defaultMarca,
   mostrarSku = false,
   defaultSku,
+  categoriaId,
+  productoId,
 }: ProductBasicInfoSectionProps) {
+  // El input sigue siendo no controlado (lo lee el FormData del submit); esto
+  // es solo para el aviso de duplicado, que necesita el texto mientras se
+  // escribe. Cambiarlo a controlado tocaría el guardado de todos los formularios
+  // que usan esta sección.
+  const [nombre, setNombre] = useState(defaultNombre ?? "");
+  const [marca, setMarca] = useState(defaultMarca ?? "");
+
   return (
     <>
       <div className="space-y-2">
@@ -43,8 +65,16 @@ export function ProductBasicInfoSection({
           name="nombre"
           placeholder="Ingresa el nombre del producto"
           defaultValue={defaultNombre}
+          onChange={(e) => setNombre(e.target.value)}
           required
           className="h-11 px-3 bg-sidebar"
+        />
+
+        <AvisoProductoDuplicado
+          nombre={nombre}
+          categoriaId={categoriaId}
+          marca={marca}
+          productoId={productoId}
         />
       </div>
 
@@ -73,6 +103,7 @@ export function ProductBasicInfoSection({
             <MarcaCombobox
               etiqueta={`${rubro ? etiquetaMarca(rubro) : "Marca"}`}
               valorInicial={defaultMarca}
+              onValorChange={setMarca}
             />
           )}
         </div>

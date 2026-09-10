@@ -854,6 +854,10 @@ function EditProductForm({
             mostrarSku={!showVariants}
             defaultSku={skuVarianteUnica}
             rubro={rubro}
+            categoriaId={categoriaSeleccionada}
+            // Sin esto, renombrar un producto para que coincida con otro no
+            // avisaría, y editar el propio nombre avisaría contra sí mismo.
+            productoId={producto.id}
           />
 
           <ProductCategorySection

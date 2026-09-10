@@ -13,6 +13,9 @@ type MarcaComboboxProps = {
   valorInicial?: string | null;
   /** El `name` del input oculto que leen las actions. */
   name?: string;
+  /** Para que el aviso de duplicado sepa la marca: un duplicado es nombre +
+   *  categoria + marca, no solo el nombre. */
+  onValorChange?: (valor: string) => void;
 };
 
 /**
@@ -38,8 +41,16 @@ export function MarcaCombobox({
   etiqueta,
   valorInicial,
   name = "marca",
+  onValorChange,
 }: MarcaComboboxProps) {
-  const [valor, setValor] = useState(valorInicial ?? "");
+  const [valor, setValorInterno] = useState(valorInicial ?? "");
+
+  // Un solo lugar que escribe el valor, para que el aviso de duplicado no se
+  // pierda ninguno de los tres caminos (tipear, elegir sugerencia, limpiar).
+  const setValor = (v: string) => {
+    setValorInterno(v);
+    onValorChange?.(v);
+  };
   const [sugerencias, setSugerencias] = useState<SugerenciaValorAtributo[]>([]);
   const [cargando, setCargando] = useState(false);
   const [abierto, setAbierto] = useState(false);

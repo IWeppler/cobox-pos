@@ -24,6 +24,7 @@ import {
   MinusCircle,
   MoreVertical,
   Trash2,
+  Merge,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -40,6 +41,7 @@ import {
 } from "@/shared/utils/compartir-catalogo";
 import { ProductEditDetailSheet } from "./edit-sheet";
 import { EliminarProductoModal } from "./delete-modal";
+import { FusionarProductoModal } from "./fusionar-modal";
 import { BajaModal } from "@/features/baja/ui/baja-modal";
 import {
   DropdownMenu,
@@ -641,6 +643,23 @@ export function StockTable({
                                     Registrar baja
                                   </Button>
                                 </BajaModal>
+
+                                {/* Combinar va ANTES de Eliminar y separado de
+                                    él: es lo que hay que hacer con un
+                                    duplicado, y borrarlo —que es lo que se
+                                    hacía hasta hoy— se lleva puesto su stock. */}
+                                <FusionarProductoModal
+                                  id={producto.id}
+                                  nombre={producto.nombre}
+                                >
+                                  <Button
+                                    variant="ghost"
+                                    className="w-full justify-start h-9 px-2 text-sm font-medium cursor-pointer rounded-lg transition-colors"
+                                  >
+                                    <Merge className="w-4 h-4 mr-2.5 text-muted-foreground" />
+                                    Combinar con otro
+                                  </Button>
+                                </FusionarProductoModal>
 
                                 <DropdownMenuSeparator className="my-1 bg-border/60" />
 

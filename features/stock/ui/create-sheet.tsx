@@ -101,6 +101,7 @@ export function CrearProductoSheet({
                 mostrarMarca
                 mostrarSku={!form.showVariants}
                 rubro={rubro}
+                categoriaId={form.categoriaSeleccionada}
               />
 
               <ProductCategorySection
