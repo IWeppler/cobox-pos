@@ -20,6 +20,12 @@ import { analizarFunnel, enRiesgo, resumirFunnel } from "@/features/admin/lib/fu
 import { FunnelPanel } from "@/features/admin/ui/funnel-panel";
 import { getEmbudoAltaAction } from "@/features/admin/actions/embudo-alta";
 import { getUsuariosPruebaAction } from "@/features/admin/actions/usuarios-prueba";
+import { getEstadoMailsAction } from "@/features/admin/actions/mails-de-etapa";
+import {
+  getCicloNegociosAction,
+  hayLinkDePagoAction,
+} from "@/features/admin/actions/ciclo-negocios";
+import { CicloVidaPanel } from "@/features/admin/ui/ciclo-vida-panel";
 import {
   analizarEmbudoAlta,
   resumirEmbudoAlta,
@@ -55,6 +61,10 @@ export default async function AdminComerzPage() {
     filasFunnel,
     filasEmbudoAlta,
     marcadosComoPrueba,
+    estadoMails,
+    negociosEnCiclo,
+    hayLinkDePago,
+    { data: sesion },
   ] = await Promise.all([
     getPanelComerzAction(),
     getComerciosConUsoAction(),
@@ -68,6 +78,10 @@ export default async function AdminComerzPage() {
     getFunnelAction(),
     getEmbudoAltaAction(),
     getUsuariosPruebaAction(),
+    getEstadoMailsAction(),
+    getCicloNegociosAction(),
+    hayLinkDePagoAction(),
+    supabase.auth.getUser(),
   ]);
 
   const serieCobrado = construirSerieMrr(
@@ -233,6 +247,25 @@ export default async function AdminComerzPage() {
       <EmbudoAltaPanel
         resumen={resumenEmbudoAlta}
         perdidos={altasPerdidas}
+        estadoMails={estadoMails}
+      />
+
+      {/* El ciclo de DESPUÉS del negocio. Va pegado al embudo de alta porque
+          son el mismo recorrido con el negocio creado en el medio: alta,
+          activación, conversión, cobro y retención.
+
+          El `Map` no cruza a un client component, así que se pasa como objeto
+          plano. */}
+      <CicloVidaPanel
+        negocios={negociosEnCiclo}
+        yaEnviadas={Object.fromEntries(
+          [...estadoMails.enviadasPorUsuario].map(([id, claves]) => [
+            id,
+            [...claves],
+          ]),
+        )}
+        hayLinkDePago={hayLinkDePago}
+        emailPropio={sesion.user?.email ?? ""}
       />
 
       <FunnelPanel resumen={resumenFunnel} riesgo={comerciosEnRiesgo} />

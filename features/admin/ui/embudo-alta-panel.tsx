@@ -5,7 +5,10 @@ import type {
   UsuarioEnEmbudo,
 } from "@/features/admin/lib/embudo-alta";
 import { ETIQUETA_ETAPA } from "@/features/admin/lib/embudo-alta";
+import { motivoParaNoEnviar } from "@/features/admin/lib/campanas-email";
+import type { EstadoMailsUsuario } from "@/features/admin/actions/mails-de-etapa";
 import { MarcarPruebaBoton } from "./marcar-prueba-boton";
+import { MandarMailBoton } from "./mandar-mail-boton";
 
 /**
  * El embudo de ANTES del negocio: registro → confirmación → sesión → negocio.
@@ -22,7 +25,13 @@ import { MarcarPruebaBoton } from "./marcar-prueba-boton";
 export function EmbudoAltaPanel({
   resumen,
   perdidos,
-}: Readonly<{ resumen: ResumenEmbudoAlta; perdidos: UsuarioEnEmbudo[] }>) {
+  estadoMails,
+}: Readonly<{
+  resumen: ResumenEmbudoAlta;
+  perdidos: UsuarioEnEmbudo[];
+  /** Qué campaña ya recibió cada uno y quién pidió la baja. */
+  estadoMails: EstadoMailsUsuario;
+}>) {
   // El gráfico necesita `value`; el porcentaje lo calcula solo contra el
   // primer escalón, que es justo lo que significa acá (todos arrancan en
   // "creó la cuenta").
@@ -125,6 +134,21 @@ export function EmbudoAltaPanel({
                       usuarioId={u.id}
                       esPrueba={u.esPrueba}
                       deducida={u.pruebaDeducida}
+                    />
+                    <MandarMailBoton
+                      usuarioId={u.id}
+                      email={u.email}
+                      etapa={u.etapa}
+                      motivoNoEnviar={motivoParaNoEnviar({
+                        etapa: u.etapa,
+                        esPrueba: u.esPrueba,
+                        dadoDeBaja: estadoMails.dadosDeBaja.has(
+                          u.email.toLowerCase(),
+                        ),
+                        campanasYaEnviadas:
+                          estadoMails.enviadasPorUsuario.get(u.id) ??
+                          new Set<string>(),
+                      })}
                     />
                     <span className="min-w-0 flex-1 truncate text-white/70">
                       {u.email}
