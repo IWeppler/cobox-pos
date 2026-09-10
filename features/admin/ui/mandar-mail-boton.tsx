@@ -4,6 +4,10 @@ import { useState, useTransition } from "react";
 import { Mail, MailCheck, MailX, Eye } from "lucide-react";
 import { toast } from "sonner";
 import {
+  esAccionDeVersionVieja,
+  MENSAJE_VERSION_VIEJA,
+} from "@/shared/lib/accion-de-version-vieja";
+import {
   enviarMailDeEtapaAction,
   previsualizarMailDeEtapaAction,
 } from "@/features/admin/actions/mails-de-etapa";
@@ -76,8 +80,16 @@ export function MandarMailBoton({
           title="Ver el mail que saldría"
           onClick={() => {
             startTransition(async () => {
-              const m = await previsualizarMailDeEtapaAction(etapa);
-              if (m) setPreview({ asunto: m.asunto, html: m.html });
+              try {
+                const m = await previsualizarMailDeEtapaAction(etapa);
+                if (m) setPreview({ asunto: m.asunto, html: m.html });
+              } catch (e) {
+                toast.error(
+                  esAccionDeVersionVieja(e)
+                    ? MENSAJE_VERSION_VIEJA
+                    : "No se pudo armar la preview.",
+                );
+              }
             });
           }}
           className="rounded p-0.5 text-white/20 transition-colors hover:text-white/60"
@@ -95,20 +107,32 @@ export function MandarMailBoton({
           }
           onClick={() => {
             startTransition(async () => {
-              const res = await enviarMailDeEtapaAction(
-                usuarioId,
-                email,
-                etapa,
-              );
+              // Ver el comentario de `accion-de-version-vieja.ts`: una pestaña
+              // abierta desde antes del último deploy llama a un Server Action
+              // que ya no existe, y sin este catch eso termina en pantalla
+              // negra en vez de en un aviso.
+              try {
+                const res = await enviarMailDeEtapaAction(
+                  usuarioId,
+                  email,
+                  etapa,
+                );
 
-              if (res.ok) {
-                setEnviado(true);
-                toast.success(`Mail enviado a ${email}`);
-              } else {
-                // Si el motivo es que ya se le mandó, el botón tiene que
-                // quedar apagado igual: el estado del panel estaba viejo.
-                if (res.error?.startsWith("Ya se le mandó")) setEnviado(true);
-                toast.error(res.error ?? "No se pudo mandar.");
+                if (res.ok) {
+                  setEnviado(true);
+                  toast.success(`Mail enviado a ${email}`);
+                } else {
+                  // Si el motivo es que ya se le mandó, el botón tiene que
+                  // quedar apagado igual: el estado del panel estaba viejo.
+                  if (res.error?.startsWith("Ya se le mandó")) setEnviado(true);
+                  toast.error(res.error ?? "No se pudo mandar.");
+                }
+              } catch (e) {
+                toast.error(
+                  esAccionDeVersionVieja(e)
+                    ? MENSAJE_VERSION_VIEJA
+                    : "No se pudo mandar. Probá de nuevo.",
+                );
               }
             });
           }}

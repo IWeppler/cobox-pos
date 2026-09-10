@@ -234,11 +234,19 @@ export async function enviarMailDeNegocioAction(
   }
 
   if (envio.proveedorId) {
-    const { error: errorId } = await supabase
+    // `.select()` porque un UPDATE filtrado por RLS vuelve con 0 filas y
+    // `error: null`: sin esto, "no se guardó el id" se ve igual que "se
+    // guardó", y ese id es lo que se busca en Resend cuando alguien dice que
+    // no le llegó.
+    const { data: actualizadas, error: errorId } = await supabase
       .from("envios_email")
       .update({ proveedor_id: envio.proveedorId })
-      .eq("id", envioId);
-    if (errorId) console.error("[CICLO NEGOCIOS] proveedor_id", errorId);
+      .eq("id", envioId)
+      .select("id");
+
+    if (errorId || !actualizadas || actualizadas.length === 0) {
+      console.error("[CICLO NEGOCIOS] proveedor_id", { envioId, errorId });
+    }
   }
 
   revalidatePath("/admincomerz");

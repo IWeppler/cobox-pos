@@ -4,6 +4,10 @@ import { useState, useTransition } from "react";
 import { Send } from "lucide-react";
 import { toast } from "sonner";
 import {
+  esAccionDeVersionVieja,
+  MENSAJE_VERSION_VIEJA,
+} from "@/shared/lib/accion-de-version-vieja";
+import {
   enviarMailDePruebaAction,
   type ClaveDeMail,
 } from "@/features/admin/actions/mail-de-prueba";
@@ -84,12 +88,25 @@ export function MailsDePrueba({
           disabled={pendiente}
           onClick={() => {
             startTransition(async () => {
-              const res = await enviarMailDePruebaAction(clave, destino);
-              if (res.ok) {
-                toast.success(`Mail de prueba enviado a ${destino}`);
-                if (res.aviso) toast.warning(res.aviso);
-              } else {
-                toast.error(res.error ?? "No se pudo mandar.");
+              // El try/catch NO es de rutina: una pestaña abierta desde antes
+              // del último deploy manda un ID de Server Action que ya no
+              // existe, y ese error no lo puede devolver el action —ocurre
+              // antes de que corra. Sin esto sube al error boundary y la
+              // pantalla se pone negra por algo que se arregla recargando.
+              try {
+                const res = await enviarMailDePruebaAction(clave, destino);
+                if (res.ok) {
+                  toast.success(`Mail de prueba enviado a ${destino}`);
+                  if (res.aviso) toast.warning(res.aviso);
+                } else {
+                  toast.error(res.error ?? "No se pudo mandar.");
+                }
+              } catch (e) {
+                toast.error(
+                  esAccionDeVersionVieja(e)
+                    ? MENSAJE_VERSION_VIEJA
+                    : "No se pudo mandar. Probá de nuevo.",
+                );
               }
             });
           }}

@@ -4,6 +4,10 @@ import { useState, useTransition } from "react";
 import { Eye, Mail, MailCheck, MailX } from "lucide-react";
 import { toast } from "sonner";
 import {
+  esAccionDeVersionVieja,
+  MENSAJE_VERSION_VIEJA,
+} from "@/shared/lib/accion-de-version-vieja";
+import {
   enviarMailDeNegocioAction,
   previsualizarMailDeNegocioAction,
 } from "@/features/admin/actions/ciclo-negocios";
@@ -163,12 +167,20 @@ function FilaNegocio({
                   title="Ver el mail"
                   onClick={() => {
                     startTransition(async () => {
-                      const m = await previsualizarMailDeNegocioAction(
-                        negocio.negocioId,
-                        clave,
-                      );
-                      if (m) setPreview({ asunto: m.asunto, html: m.html });
-                      else toast.error("No se pudo armar la preview.");
+                      try {
+                        const m = await previsualizarMailDeNegocioAction(
+                          negocio.negocioId,
+                          clave,
+                        );
+                        if (m) setPreview({ asunto: m.asunto, html: m.html });
+                        else toast.error("No se pudo armar la preview.");
+                      } catch (e) {
+                        toast.error(
+                          esAccionDeVersionVieja(e)
+                            ? MENSAJE_VERSION_VIEJA
+                            : "No se pudo armar la preview.",
+                        );
+                      }
                     });
                   }}
                   className="shrink-0 rounded p-0.5 text-white/20 hover:text-white/60"
@@ -182,18 +194,28 @@ function FilaNegocio({
                   title={enviado ? "Ya se le mandó" : "Mandar este mail"}
                   onClick={() => {
                     startTransition(async () => {
-                      const res = await enviarMailDeNegocioAction(
-                        negocio.negocioId,
-                        clave,
-                      );
-                      if (res.ok) {
-                        setEnviado(true);
-                        toast.success(`Mail enviado a ${negocio.duenioEmail}`);
-                      } else {
-                        if (res.error?.startsWith("Ya se le mandó")) {
+                      // Ver `accion-de-version-vieja.ts`: sin este catch, una
+                      // pestaña vieja termina en pantalla negra.
+                      try {
+                        const res = await enviarMailDeNegocioAction(
+                          negocio.negocioId,
+                          clave,
+                        );
+                        if (res.ok) {
                           setEnviado(true);
+                          toast.success(`Mail enviado a ${negocio.duenioEmail}`);
+                        } else {
+                          if (res.error?.startsWith("Ya se le mandó")) {
+                            setEnviado(true);
+                          }
+                          toast.error(res.error ?? "No se pudo mandar.");
                         }
-                        toast.error(res.error ?? "No se pudo mandar.");
+                      } catch (e) {
+                        toast.error(
+                          esAccionDeVersionVieja(e)
+                            ? MENSAJE_VERSION_VIEJA
+                            : "No se pudo mandar. Probá de nuevo.",
+                        );
                       }
                     });
                   }}

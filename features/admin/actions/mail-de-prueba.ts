@@ -75,6 +75,7 @@ const DIA = 86_400_000;
 function negocioParaProbar(
   clave: ClaveCampanaNegocio,
   ahora: Date,
+  linkDelPlan: string | null,
 ): NegocioEnCiclo {
   const enDias = (d: number) =>
     new Date(ahora.getTime() + d * DIA).toISOString();
@@ -100,7 +101,7 @@ function negocioParaProbar(
         ...NEGOCIO_DE_EJEMPLO,
         estado: "activo",
         planVencimiento: enDias(2),
-        planLink: LINK_DE_PAGO ?? LINK_DE_MENTIRA,
+        planLink: linkDelPlan ?? LINK_DE_MENTIRA,
         pagos: 1,
       };
     case "recordatorio_cobro":
@@ -108,7 +109,7 @@ function negocioParaProbar(
         ...NEGOCIO_DE_EJEMPLO,
         estado: "activo",
         planVencimiento: enDias(-6),
-        planLink: LINK_DE_PAGO ?? LINK_DE_MENTIRA,
+        planLink: linkDelPlan ?? LINK_DE_MENTIRA,
         pagos: 1,
       };
     case "inactividad":
@@ -151,6 +152,7 @@ export interface ResultadoPrueba {
 function campanaDeClave(
   clave: ClaveDeMail,
   ahora: Date,
+  linkDelPlan: string | null,
 ): { campana: Campana | null; usoLinkFalso: boolean } {
   if ((ETAPAS as readonly string[]).includes(clave)) {
     return { campana: campanaDeEtapa(clave as EtapaAlta), usoLinkFalso: false };
@@ -159,14 +161,18 @@ function campanaDeClave(
   const claveNegocio = clave as ClaveCampanaNegocio;
   const esDeCobro =
     claveNegocio === "aviso_cobro" || claveNegocio === "recordatorio_cobro";
+  const link = linkDelPlan ?? LINK_DE_PAGO;
 
   return {
     campana: construirCampanaNegocio(
       claveNegocio,
-      negocioParaProbar(claveNegocio, ahora),
+      negocioParaProbar(claveNegocio, ahora, link),
       { ahora, linkDePago: LINK_DE_PAGO, alias: ALIAS_MP },
     ),
-    usoLinkFalso: esDeCobro && LINK_DE_PAGO === null,
+    // Solo cuando NO hay ningún link real: ahí el botón apunta a la home de
+    // Mercado Pago y hay que decirlo, o la prueba parece más completa de lo
+    // que es.
+    usoLinkFalso: esDeCobro && link === null,
   };
 }
 
@@ -197,7 +203,23 @@ export async function enviarMailDePruebaAction(
   if (!user) return { ok: false, error: "Sesión vencida." };
 
   const ahora = new Date();
-  const { campana, usoLinkFalso } = campanaDeClave(clave, ahora);
+
+  // El link REAL de una campaña de cobro es el del plan, no el de la variable
+  // de entorno. Sin esto, la prueba mostraba el link de respaldo (o uno de
+  // mentira) y con él el texto de "pagá ahora" — o sea, un mail distinto del
+  // que va a recibir el cliente, que es exactamente lo que una prueba no
+  // puede hacer. Se toma el de Gestión por ser el plan del medio.
+  const { data: plan } = await supabase
+    .from("planes")
+    .select("link_suscripcion")
+    .eq("nombre", "Gestión")
+    .maybeSingle();
+
+  const { campana, usoLinkFalso } = campanaDeClave(
+    clave,
+    ahora,
+    (plan?.link_suscripcion as string | null) ?? null,
+  );
   if (!campana) return { ok: false, error: "Esa campaña no existe." };
 
   const { data: filas, error: errorInsert } = await supabase
@@ -237,6 +259,27 @@ export async function enviarMailDePruebaAction(
   if (!envio.ok) {
     await supabase.from("envios_email").delete().eq("id", envioId);
     return { ok: false, error: envio.error };
+  }
+
+  // El id del proveedor es JUSTO lo que hace falta en una prueba: cuando el
+  // mail no aparece en la bandeja, es lo que se busca en el panel de Resend
+  // para saber si salió, rebotó o cayó en spam. Faltaba, y se vio en los datos
+  // (`proveedor_id` en null en los tres envíos del 10/9).
+  //
+  // Con `.select()` porque un UPDATE filtrado por RLS vuelve con 0 filas y
+  // `error: null` — el éxito silencioso de siempre.
+  if (envio.proveedorId) {
+    const { data: actualizadas, error: errorId } = await supabase
+      .from("envios_email")
+      .update({ proveedor_id: envio.proveedorId })
+      .eq("id", envioId)
+      .select("id");
+
+    if (errorId || !actualizadas || actualizadas.length === 0) {
+      // No hace fallar el envío: el mail ya salió. Se loguea con el id puesto
+      // para poder atarlo a mano.
+      console.error("[MAIL PRUEBA] proveedor_id", { envioId, errorId });
+    }
   }
 
   return {

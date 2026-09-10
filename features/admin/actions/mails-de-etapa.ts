@@ -152,12 +152,17 @@ export async function enviarMailDeEtapaAction(
   // Va después y no bloquea: el mail ya salió. Si esto falla, lo único que se
   // pierde es poder rastrearlo en el panel de Resend.
   if (envio.proveedorId) {
-    const { error: errorId } = await supabase
+    // `.select()` porque un UPDATE filtrado por RLS vuelve con 0 filas y
+    // `error: null`: sin esto, "no se guardo el id" se ve igual que "se guardo".
+    const { data: actualizadas, error: errorId } = await supabase
       .from("envios_email")
       .update({ proveedor_id: envio.proveedorId })
-      .eq("id", envioId);
+      .eq("id", envioId)
+      .select("id");
 
-    if (errorId) console.error("[MAIL ETAPA] proveedor_id", errorId);
+    if (errorId || !actualizadas || actualizadas.length === 0) {
+      console.error("[MAIL ETAPA] proveedor_id", { envioId, errorId });
+    }
   }
 
   revalidatePath("/admincomerz");
