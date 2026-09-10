@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clasificarProductosCompartidos,
   detectarFusiones,
   identidadDeVariante,
   nombresPorProductoCompartido,
@@ -197,5 +198,127 @@ describe("productos compartidos por varios nombres", () => {
       "VESTIDO EGRESADA ALANA",
       "VESTIDO EGRESADA GEORGINA",
     ]);
+  });
+});
+
+describe("clasificar productos compartidos: error o grafía", () => {
+  const linea = (raw: string, producto: string, variante: string) => ({
+    raw_nombre: raw,
+    variante_match: variante,
+    producto_id: producto,
+  });
+  const nombreDe = (id: string) =>
+    ({
+      "prod-more": "VESTIDO EGRESADA MORE",
+      "prod-vera": "VESTIDO VERA",
+      "prod-conjunto": "CONJUNTO IMPERAMBLE ATURE CON PIEL",
+      "prod-camisa": "CAMISA CON BRODERIE",
+    })[id];
+
+  it("el caso MORE: cinco vestidos distintos, ningún color repetido", () => {
+    // El que `detectarFusiones` NO puede ver, porque no hay dos nombres en la
+    // misma variante. Es el que se aprobó el 28/8 sin una sola queja.
+    const compartidos = clasificarProductosCompartidos(
+      [
+        linea("VESTIDO EGRESADA 11", "prod-more", "Talle: U / Color: BORDO"),
+        linea("VESTIDO EGRESADA 212", "prod-more", "Talle: U"),
+        linea("VESTIDO EGRESADA CARLA", "prod-more", "Talle: U / Color: CHOCOLATE"),
+        linea("VESTIDO EGRESADA MIKA", "prod-more", "Talle: U / Color: ROJO"),
+        linea("VESTIDO EGRESADA RUBY", "prod-more", "Talle: U / Color: BORDO 2"),
+      ],
+      nombreDe,
+    );
+
+    expect(compartidos).toHaveLength(1);
+    expect(compartidos[0].nombres).toHaveLength(5);
+    expect(compartidos[0].esMismaPrenda).toBe(false);
+  });
+
+  it("CAMISA CON BRODERIE: siete códigos de artículo distintos", () => {
+    const compartidos = clasificarProductosCompartidos(
+      [
+        linea("CAMISA BRODERIE 1049", "prod-camisa", "Talle: U"),
+        linea("CAMISA BRODERIE 1093", "prod-camisa", "Talle: 2"),
+        linea("CAMISA BRODERIE 849", "prod-camisa", "Talle: 3"),
+      ],
+      nombreDe,
+    );
+
+    expect(compartidos[0].esMismaPrenda).toBe(false);
+  });
+
+  it("un typo del proveedor NO es un error: VESTIOD / VESTIDO VERA", () => {
+    // Caso real del remito del 4/8. Avisar acá sería enseñar a ignorar avisos.
+    //
+    // El remito lleva otras líneas a propósito: lo que delata al typo es que
+    // "VESTIDO" está en todas y "VESTIOD" en una sola. Con dos líneas sueltas
+    // las dos palabras son igual de raras y no hay forma de distinguirlo — que
+    // es exactamente lo que separa este caso de ALANA/ALINA.
+    const compartidos = clasificarProductosCompartidos(
+      [
+        linea("VESTIDO VERA", "prod-vera", "Talle: U / Color: NEGRO"),
+        linea("VESTIOD VERA", "prod-vera", "Talle: U / Color: ROJO"),
+        linea("VESTIDO LARGO", "prod-otro", "Talle: U"),
+        linea("VESTIDO CORTO", "prod-otro2", "Talle: U"),
+      ],
+      nombreDe,
+    );
+
+    const vera = compartidos.find((c) => c.productoId === "prod-vera")!;
+    expect(vera.esMismaPrenda).toBe(true);
+  });
+
+  it("y sigue viendo ALANA / ALINA como prendas distintas en el mismo remito", () => {
+    // El control de la regla de arriba: los dos pares están a una edición de
+    // distancia. Lo que los separa es que "VESTIDO" se repite en el remito y
+    // "ALANA" no.
+    const compartidos = clasificarProductosCompartidos(
+      [
+        linea("VESTIDO EGRESADA ALANA", "prod-more", "Talle: U / Color: BORDO"),
+        linea("VESTIDO EGRESADA ALINA", "prod-more", "Talle: U / Color: ROJO"),
+        linea("VESTIDO EGRESADA CARLA", "prod-otro", "Talle: U"),
+        linea("VESTIDO EGRESADA RUBY", "prod-otro2", "Talle: U"),
+      ],
+      nombreDe,
+    );
+
+    const more = compartidos.find((c) => c.productoId === "prod-more")!;
+    expect(more.esMismaPrenda).toBe(false);
+  });
+
+  it("una palabra de más tampoco: el mismo conjunto con y sin ATURE", () => {
+    const compartidos = clasificarProductosCompartidos(
+      [
+        linea("CONJUNTO IMPERAMBLE ATURE CON PIEL", "prod-conjunto", "Talle: 1"),
+        linea("CONJUNTO IMPERAMBLE CON PIEL", "prod-conjunto", "Talle: 2"),
+      ],
+      nombreDe,
+    );
+
+    expect(compartidos[0].esMismaPrenda).toBe(true);
+  });
+
+  it("un solo nombre por producto no es compartir nada", () => {
+    const compartidos = clasificarProductosCompartidos(
+      [
+        linea("VESTIDO EGRESADA MORE", "prod-more", "Talle: U"),
+        linea("VESTIDO VERA", "prod-vera", "Talle: U"),
+      ],
+      nombreDe,
+    );
+
+    expect(compartidos).toHaveLength(0);
+  });
+
+  it("dos renglones del MISMO nombre no son compartir: el remito lo trajo dos veces", () => {
+    const compartidos = clasificarProductosCompartidos(
+      [
+        linea("VESTIDO VERA", "prod-vera", "Talle: U / Color: NEGRO"),
+        linea("VESTIDO VERA", "prod-vera", "Talle: U / Color: ROJO"),
+      ],
+      nombreDe,
+    );
+
+    expect(compartidos).toHaveLength(0);
   });
 });

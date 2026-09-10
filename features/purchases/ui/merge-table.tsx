@@ -79,8 +79,8 @@ import {
   BucketDesconocido,
 } from "../lib/match-classification";
 import {
+  clasificarProductosCompartidos,
   detectarFusiones,
-  nombresPorProductoCompartido,
 } from "../lib/fusiones-remito";
 import { precioAlAsociar } from "../lib/precio-al-asociar";
 import {
@@ -289,6 +289,14 @@ export function MergeTable({
   const [crearLoading, setCrearLoading] = useState(false);
   const [crearError, setCrearError] = useState<string | null>(null);
   const [aprobarLoading, setAprobarLoading] = useState(false);
+  /**
+   * Ya se avisó de los productos compartidos y la persona decidió seguir.
+   *
+   * No se resetea al cambiar las vinculaciones a propósito: si después de ver
+   * el aviso mueve una fila, ya entendió de qué se trata, y volver a frenarla
+   * en cada cambio convierte una advertencia en un obstáculo.
+   */
+  const [compartidosConfirmados, setCompartidosConfirmados] = useState(false);
   const [aprobarError, setAprobarError] = useState<string | null>(null);
 
   // Loading/error por fila para las acciones de 1-click y masivas — separado
@@ -651,10 +659,42 @@ export function MergeTable({
     [items, localProductos],
   );
 
-  /** Productos que ya tienen más de un nombre del remito colgando. */
+  /**
+   * Productos que ya tienen más de un nombre del remito colgando, separados
+   * entre error y grafía.
+   *
+   * ESTO ES LO QUE FALTABA EL 28/8. `fusiones` solo ve el choque cuando dos
+   * nombres caen en la MISMA variante, y los cinco vestidos que terminaron
+   * dentro de "VESTIDO EGRESADA MORE" venían en cinco colores distintos: no
+   * hubo una sola fusión que detectar y el remito se aprobó sin una queja.
+   *
+   * `esMismaPrenda` separa el error real del typo del proveedor
+   * ("VESTIOD VERA"), que compartir producto es lo correcto. Sin esa
+   * distinción el aviso saldría en casos buenos y se aprende a ignorarlo.
+   */
+  const compartidos = useMemo(
+    () => clasificarProductosCompartidos(items, (id) => productoReal(id)?.nombre),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, localProductos],
+  );
+
+  /** Los que de verdad hay que mirar: nombres distintos en un mismo producto. */
+  const compartidosSospechosos = useMemo(
+    () => compartidos.filter((c) => !c.esMismaPrenda),
+    [compartidos],
+  );
+
+  /**
+   * El mismo dato indexado por producto, para el aviso al pie de cada fila.
+   *
+   * Ese aviso ya existía y salía para TODO producto compartido, incluido el
+   * typo del proveedor. Ahora sale solo para los sospechosos: un cartel que
+   * también aparece cuando está todo bien es un cartel que se deja de leer.
+   */
   const productosCompartidos = useMemo(
-    () => nombresPorProductoCompartido(items),
-    [items],
+    () =>
+      new Map(compartidosSospechosos.map((c) => [c.productoId, c.nombres])),
+    [compartidosSospechosos],
   );
 
   /** Los nombres del remito que participan de alguna fusión, para marcarlos. */
@@ -1089,6 +1129,25 @@ export function MergeTable({
       return;
     }
 
+    // Producto compartido: NO frena, pregunta. Es la diferencia con la
+    // fusión de arriba — aquello suma stock en una fila y no se puede
+    // deshacer; esto puede ser correcto (el proveedor escribió el mismo
+    // artículo de dos formas) y el que sabe cuál de las dos es está del otro
+    // lado de la pantalla. Se pregunta UNA vez y con los nombres puestos.
+    if (compartidosSospechosos.length > 0 && !compartidosConfirmados) {
+      setCompartidosConfirmados(true);
+      const c = compartidosSospechosos[0];
+      toast.warning(
+        `${c.nombres.join(" + ")} van a entrar todos como "${c.productoNombre}"` +
+          (compartidosSospechosos.length > 1
+            ? `, y hay ${compartidosSospechosos.length - 1} producto${compartidosSospechosos.length > 2 ? "s" : ""} más en la misma situación. `
+            : ". ") +
+          "Si son artículos distintos, vinculalos a productos distintos. Si está bien, tocá Impactar de nuevo.",
+        { duration: 12000 },
+      );
+      return;
+    }
+
     setAprobarLoading(true);
     setAprobarError(null);
 
@@ -1374,6 +1433,45 @@ export function MergeTable({
             {fusiones.length > 5 && (
               <li className="text-muted-foreground">
                 y {fusiones.length - 5} más.
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+
+      {/* AVISO DE PRODUCTO COMPARTIDO — el hueco que dejó el de fusión.
+          Aquel solo dispara cuando dos nombres chocan en la MISMA variante;
+          este ve el caso que se aprobó sin una queja el 28/8: cinco vestidos
+          distintos, cinco colores distintos, un solo producto.
+
+          En ámbar y no en rojo, y sin frenar: compartir producto a veces es
+          correcto —el proveedor escribió el mismo artículo de dos formas— y
+          eso ya lo filtra `esMismaPrenda`. Lo que queda acá es una pregunta
+          que solo el comercio puede contestar. Frenarlo sería frenar remitos
+          buenos; no mostrarlo fue perder cinco prendas adentro de una. */}
+      {compartidosSospechosos.length > 0 && (
+        <div className="mx-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <p className="flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            {compartidosSospechosos.length === 1
+              ? "Hay un producto que va a recibir varios artículos del remito"
+              : `Hay ${compartidosSospechosos.length} productos que van a recibir varios artículos del remito`}
+          </p>
+          <p className="mt-1 text-sm text-foreground/80">
+            Son nombres distintos del proveedor cayendo en el mismo producto. Si
+            de verdad son prendas distintas, van a quedar como variantes de una
+            sola y el catálogo va a decir que son lo mismo.
+          </p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {compartidosSospechosos.slice(0, 5).map((c) => (
+              <li key={c.productoId} className="text-foreground/90">
+                <span className="font-semibold">{c.nombres.join(" + ")}</span>{" "}
+                → {c.productoNombre}
+              </li>
+            ))}
+            {compartidosSospechosos.length > 5 && (
+              <li className="text-muted-foreground">
+                y {compartidosSospechosos.length - 5} más.
               </li>
             )}
           </ul>
