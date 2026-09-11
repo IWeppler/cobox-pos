@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
 import { BannerManager } from "./banner-manager";
+import { DireccionTienda } from "./direccion-tienda";
 import { FaFacebook, FaInstagram, FaWhatsapp } from "react-icons/fa";
 
 interface CatalogPanelProps {
@@ -96,6 +97,10 @@ export function CatalogPanel({ config }: Readonly<CatalogPanelProps>) {
         </Button>
       </div>
 
+      {/* Arriba de todo: es lo primero que un comercio nuevo busca acá, y el
+          único dato de esta pantalla que no es una preferencia sino la URL
+          que ya está circulando. */}
+      <DireccionTienda />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* COLUMNA IZQUIERDA: Visibilidad y Funcionamiento */}
         <div className="space-y-6">

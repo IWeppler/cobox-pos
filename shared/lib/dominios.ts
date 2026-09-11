@@ -67,6 +67,31 @@ export function urlDeCatalogo(slugNegocio: string, slugProducto?: string) {
 }
 
 /**
+ * La URL del catálogo partida en lo que el comercio PUEDE cambiar (el slug) y
+ * lo que no (el dominio o la ruta interna).
+ *
+ * Existe para que la pantalla de Configuración muestre el link entero pero deje
+ * editar solo la parte que es suya. Sale de `urlDeCatalogo` —no la recalcula—
+ * para que el link que se ve y el que se copia sean el mismo: dos lugares
+ * armando la URL terminan en dos URLs distintas, que es justo el error que
+ * `rutaCatalogoEnModo` ya documenta.
+ */
+export function partesDeUrlDeCatalogo(slugNegocio: string) {
+  const url = urlDeCatalogo(slugNegocio);
+  const corte = url.lastIndexOf(slugNegocio);
+
+  // Defensivo: si el slug no aparece en la URL (no debería), no se ofrece
+  // edición partida y se muestra el link entero.
+  if (corte === -1) return { prefijo: url, sufijo: "", url };
+
+  return {
+    prefijo: url.slice(0, corte),
+    sufijo: url.slice(corte + slugNegocio.length),
+    url,
+  };
+}
+
+/**
  * URL pública del resumen de cuenta corriente de un cliente.
  *
  * Va SIEMPRE sobre el dominio del sitio, nunca sobre el subdominio del

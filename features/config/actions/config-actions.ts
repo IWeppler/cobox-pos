@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { normalizarAnchoTicket } from "@/shared/lib/ancho-ticket";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { errorDeCuit, normalizarCuit } from "@/shared/lib/cuit";
+import { validarSlugNegocio } from "@/shared/lib/slug-negocio";
 
 export async function getConfiguracionAction(): Promise<{
   data: ConfiguracionPOS | null;
@@ -185,4 +186,69 @@ export async function updateConfiguracionAction(
   revalidatePath("/", "layout");
 
   return { error: null, success: true };
+}
+
+/**
+ * Cambia la dirección web de la tienda (el slug del negocio activo).
+ *
+ * La escritura la hace `cambiar_slug_negocio`, que es SECURITY DEFINER y NO
+ * recibe el negocio: lo resuelve de la sesión. Acá no se puede escribir
+ * `negocios` a mano — la única policy de UPDATE de esa tabla es la del super
+ * admin, y abrirla para el dueño le daría también `estado` y `plan_id`, porque
+ * la RLS es por fila y no por columna.
+ *
+ * La validación de formato se hace primero en TS (mensaje entendible y sin
+ * viaje a la base) y otra vez adentro de la función: un server action es un
+ * endpoint, y el freno de verdad son los CHECK de `negocios`.
+ */
+export async function cambiarSlugTiendaAction(slugCrudo: string): Promise<{
+  error: string | null;
+  slug: string | null;
+}> {
+  const validacion = validarSlugNegocio(slugCrudo ?? "");
+  if (!validacion.valido) return { error: validacion.error, slug: null };
+
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const { data, error } = await supabase.rpc("cambiar_slug_negocio", {
+    p_slug: validacion.slug,
+  });
+
+  if (error) {
+    console.error("[CAMBIAR SLUG ERROR]", error);
+    const mensaje = error.message ?? "";
+
+    if (mensaje.includes("SLUG_OCUPADO")) {
+      return {
+        error: `"${validacion.slug}" ya es la dirección de otro comercio. Probá con otra.`,
+        slug: null,
+      };
+    }
+    if (mensaje.includes("SLUG_RESERVADO")) {
+      return {
+        error: `"${validacion.slug}" está reservado por la plataforma. Elegí otra dirección.`,
+        slug: null,
+      };
+    }
+    if (mensaje.includes("SOLO_ADMIN")) {
+      return {
+        error: "Solo un administrador puede cambiar la dirección de la tienda.",
+        slug: null,
+      };
+    }
+    if (mensaje.includes("SIN_NEGOCIO_ACTIVO")) {
+      return { error: "No hay un negocio activo en esta sesión.", slug: null };
+    }
+
+    return { error: "No se pudo cambiar la dirección de la tienda.", slug: null };
+  }
+
+  // El slug viaja en el layout (NegocioActivo) y es la clave con la que la RLS
+  // resuelve el catálogo público, así que se revalida todo: el panel para que
+  // los links nuevos salgan bien, y /store porque la ruta vieja dejó de existir.
+  revalidatePath("/", "layout");
+  revalidatePath("/store", "layout");
+
+  return { error: null, slug: (data as string) ?? validacion.slug };
 }

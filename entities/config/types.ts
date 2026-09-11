@@ -86,6 +86,8 @@ export interface ConfiguracionPOS {
   // Banner Promocional
   banner_activo?: boolean;
   banner_imagen?: string;
+  /** Opcional. Vacío = se usa `banner_imagen` también en desktop. */
+  banner_imagen_desktop?: string | null;
   banner_titulo?: string;
   banner_subtitulo?: string;
   banner_boton_texto?: string;

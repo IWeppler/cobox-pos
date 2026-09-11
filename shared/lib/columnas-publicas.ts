@@ -61,7 +61,7 @@ export const COLUMNAS_CATEGORIA_PUBLICA =
 
 /** Branding y contacto. Sin identidad fiscal ni política de crédito. */
 export const COLUMNAS_CONFIG_PUBLICA =
-  "id, negocio_id, posName, posLogo, rubro, catalogo_activo, mostrar_precios, mostrar_sin_stock, permitir_venta_sin_stock, banner_activo, banner_titulo, banner_subtitulo, banner_imagen, banner_link, banner_boton_texto, marquee_activo, marquee_texto, whatsapp, pedidos_whatsapp, instagram, facebook, horario_texto, horario_visible, direccion, direccion_visible, localidad, localidad_negocio, provincia, envio_costo_local, envio_mensaje_lejos, entrega_minima_bloqueante";
+  "id, negocio_id, posName, posLogo, rubro, catalogo_activo, mostrar_precios, mostrar_sin_stock, permitir_venta_sin_stock, banner_activo, banner_titulo, banner_subtitulo, banner_imagen, banner_imagen_desktop, banner_link, banner_boton_texto, marquee_activo, marquee_texto, whatsapp, pedidos_whatsapp, instagram, facebook, horario_texto, horario_visible, direccion, direccion_visible, localidad, localidad_negocio, provincia, envio_costo_local, envio_mensaje_lejos, entrega_minima_bloqueante";
 
 export const COLUMNAS_PROMOCION_PUBLICA =
   "id, negocio_id, nombre, descripcion, activa, acumulable, tipo_descuento, valor_descuento, tipo_regla, monto_minimo, mostrar_en_catalogo, prioridad, fecha_inicio, fecha_fin";

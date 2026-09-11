@@ -20,14 +20,15 @@
  * facturadas sobre ~1.800 imágenes de origen que ya están optimizadas.
  *
  * Las transformaciones de Storage se facturan por imagen de origen. Hoy hay UN
- * banner cargado en todo el sistema; como techo, uno por negocio.
+ * banner cargado en todo el sistema; como techo, DOS por negocio (mobile y,
+ * opcional, desktop).
  */
 
 const RUTA_PUBLICA = "/storage/v1/object/public/";
 const RUTA_RENDER = "/storage/v1/render/image/public/";
 
 /**
- * UN ancho, sin `srcset`, y es a propósito.
+ * UN ancho por variante, sin `srcset`, y es a propósito.
  *
  * React preloadea solo todo `<img>` que se renderiza en un Server Component, y
  * ese preload automático lleva `href` pelado, sin `imageSrcSet`. Con `srcset`
@@ -36,15 +37,23 @@ const RUTA_RENDER = "/storage/v1/render/image/public/";
  * 1280px— o sea el banner bajado dos veces, justo en el elemento LCP. Un solo
  * ancho hace que el preload apunte exactamente a lo que se va a usar.
  *
- * 1080 es el punto medio medido sobre el banner de Evens: 62 kB a 828px,
+ * MOBILE, 1080: el punto medio medido sobre el banner de Evens: 62 kB a 828px,
  * 98 kB a 1080px, 137 kB a 1280px, contra 1.321 kB del original. Alcanza para
- * un celular con DPR alto y se escala bien en desktop, donde además el banner
- * va detrás de un velo oscuro con texto encima.
+ * un celular con DPR alto.
+ *
+ * DESKTOP, 1920: el hero ocupa 90dvh de alto y el ancho entero de la pantalla,
+ * así que 1080 se estira y se ve blando. No hay variante intermedia porque
+ * agregarla es volver al `srcset` que causaba la doble descarga.
  *
  * El formato lo negocia Supabase por el header `Accept`, así que webp/avif
  * salen solos sin pedirlo.
  */
-const ANCHO = 1080;
+const ANCHO: Record<VarianteBanner, number> = {
+  mobile: 1080,
+  desktop: 1920,
+};
+
+export type VarianteBanner = "mobile" | "desktop";
 
 /** 75 es el default de `next/image`; sobre una foto de vidriera no se nota. */
 const CALIDAD = 75;
@@ -54,9 +63,12 @@ const CALIDAD = 75;
  * apuntando afuera— para que el llamador sirva el original tal cual en vez de
  * armar una URL de transformación que iba a devolver 400.
  */
-export function optimizarBanner(src: string | null | undefined): string | null {
+export function optimizarBanner(
+  src: string | null | undefined,
+  variante: VarianteBanner = "mobile",
+): string | null {
   if (!src || !src.includes(RUTA_PUBLICA)) return null;
 
   const base = src.split("?")[0].replace(RUTA_PUBLICA, RUTA_RENDER);
-  return `${base}?width=${ANCHO}&quality=${CALIDAD}&resize=contain`;
+  return `${base}?width=${ANCHO[variante]}&quality=${CALIDAD}&resize=contain`;
 }
