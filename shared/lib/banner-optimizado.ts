@@ -55,8 +55,30 @@ const ANCHO: Record<VarianteBanner, number> = {
 
 export type VarianteBanner = "mobile" | "desktop";
 
-/** 75 es el default de `next/image`; sobre una foto de vidriera no se nota. */
-const CALIDAD = 75;
+/**
+ * La calidad del re-encode. 85, no 75, y hay medición atrás.
+ *
+ * 75 es el default de `next/image`, pensado para una miniatura de producto.
+ * Acá la imagen es un hero a pantalla completa, y desde que ocupa 90dvh el
+ * banding se ve. Peor: el archivo que sube el comercio HOY ya suele venir en
+ * webp, así que 75 es una SEGUNDA pasada con pérdida sobre una imagen que ya
+ * la tuvo. Medido sobre el banner real de Tienda Demo (2276x1280, 72 kB webp),
+ * a 1080px: q75 da 22 kB —tira el 70% del archivo original— y q85 da 34 kB.
+ * A 1920px, q75 da 49 kB y q85 73 kB. El techo sigue siendo chico para el
+ * elemento LCP y la diferencia se ve.
+ *
+ * OJO con la premisa vieja de este archivo: decía que el banner de Evens pesa
+ * 1.321 kB. Hoy pesa 87 kB y mide 736x540 — lo reemplazaron. O sea que el caso
+ * que justificaba apretar fuerte ya no existe, y apretar igual solo rompe los
+ * banners buenos.
+ *
+ * `resize=contain` NO agranda: con ese banner de 736px de ancho, pedir 1080 o
+ * 1920 devuelve exactamente los mismos bytes. Por eso pedir el ancho grande en
+ * desktop no castiga a quien subió una imagen chica — pero tampoco la mejora,
+ * y eso se arregla subiendo una más grande, que es lo que dice la ayuda del
+ * cargador.
+ */
+const CALIDAD = 85;
 
 /**
  * Devuelve `null` cuando la URL no es de Storage —un banner puesto a mano,

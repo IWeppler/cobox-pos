@@ -55,20 +55,36 @@ export function CatalogPanel({ config }: Readonly<CatalogPanelProps>) {
     setIsSaving(true);
     const supabase = createClient();
 
-    const { error } = await supabase
+    // `.select("id")` no es decorativo: un UPDATE filtrado por RLS vuelve con
+    // CERO filas y `error: null`, o sea indistinguible de haber guardado. Es el
+    // incidente de las 35 fotos del 5/9. Acá el camino que lo dispara es el
+    // negocio activo sin resolver —`security.current_negocio_id()` en NULL, que
+    // es lo que pasa cuando el Modo Dios se quedó sin su cookie— y el síntoma
+    // era exactamente este: apagar y prender "Catálogo Activo", ver el cartel
+    // verde, y que la tienda siguiera cerrada.
+    const { data: filasTocadas, error } = await supabase
       .from("configuracion_pos")
       .update(formData)
-      .eq("id", config.id);
+      .eq("id", config.id)
+      .select("id");
 
     setIsSaving(false);
 
     if (error) {
       toast.error("Error al guardar la configuración del catálogo.");
       console.error(error);
-    } else {
-      toast.success("Catálogo actualizado correctamente.");
-      router.refresh(); // 🚀 FIX: Forzamos a Next.js a recargar el Layout y el Navbar para mostrar los nuevos datos
+      return;
     }
+
+    if (!filasTocadas || filasTocadas.length === 0) {
+      toast.error(
+        "No se guardó: no tenés permiso sobre este comercio, o se venció la sesión del negocio activo.",
+      );
+      return;
+    }
+
+    toast.success("Catálogo actualizado correctamente.");
+    router.refresh(); // 🚀 FIX: Forzamos a Next.js a recargar el Layout y el Navbar para mostrar los nuevos datos
   };
 
   return (

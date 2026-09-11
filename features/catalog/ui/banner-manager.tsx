@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
 import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
+import { FORMATOS_IMAGEN_ACEPTADOS } from "@/shared/lib/formatos-imagen";
 
 interface BannerManagerProps {
   config: ConfiguracionPOS;
@@ -237,7 +238,7 @@ export function BannerManager({ config }: Readonly<BannerManagerProps>) {
                     <Input
                       id={`upload-${campo}`}
                       type="file"
-                      accept="image/png, image/jpeg, image/webp"
+                      accept={FORMATOS_IMAGEN_ACEPTADOS}
                       className="hidden"
                       onChange={(e) => handleImageUpload(e, campo)}
                       disabled={subiendo !== null}
