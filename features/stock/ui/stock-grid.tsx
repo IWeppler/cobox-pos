@@ -11,7 +11,6 @@ import {
 import { ProductEditDetailSheet } from "./edit-sheet";
 import { ShareButton } from "@/shared/components/share-button";
 import {
-  armarMensajeProducto,
   construirUrlProducto,
   esVisibleEnCatalogo,
 } from "@/shared/utils/compartir-catalogo";
@@ -218,12 +217,6 @@ export function StockGrid({
 
               <ShareButton
                 url={urlProducto ?? ""}
-                title={`${producto.nombre} | ${nombreComercio}`}
-                text={armarMensajeProducto(
-                  producto.nombre,
-                  // El precio efectivo, no el de cabecera: ver stock-table.
-                  textoPrecioProducto(producto),
-                )}
                 disabled={compartirDeshabilitado}
                 disabledReason={motivoCompartirDeshabilitado}
                 variant="secondary"

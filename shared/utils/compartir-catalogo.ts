@@ -91,8 +91,6 @@ export function puedeCompartirNativo(): boolean {
 }
 
 export interface DatosCompartir {
-  title: string;
-  text: string;
   url: string;
 }
 
@@ -114,24 +112,8 @@ export async function compartirNativo(datos: DatosCompartir): Promise<boolean> {
   }
 }
 
-export function armarMensajeProducto(
-  nombre: string,
-  precioFormateado: string,
-): string {
-  return `${nombre} — ${precioFormateado}`;
-}
-
-export function armarMensajeSeleccion(
-  cantidad: number,
-  nombreComercio: string,
-): string {
-  return `${cantidad} producto${cantidad === 1 ? "" : "s"} de ${nombreComercio}`;
-}
-
-export function armarMensajeCategoria(nombreCategoria: string): string {
-  return nombreCategoria;
-}
-
-export function construirLinkWhatsApp(mensaje: string, url: string): string {
-  return `https://wa.me/?text=${encodeURIComponent(`${mensaje} ${url}`)}`;
+// Solo el link: el preview (og:title / og:image) ya dice qué es y cuánto
+// vale, y un texto adelante quedaba duplicado y viejo si el precio cambiaba.
+export function construirLinkWhatsApp(url: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(url)}`;
 }

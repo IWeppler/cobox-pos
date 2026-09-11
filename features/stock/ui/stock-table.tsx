@@ -35,7 +35,6 @@ import {
 } from "lucide-react";
 import { ShareButton } from "@/shared/components/share-button";
 import {
-  armarMensajeProducto,
   construirUrlProducto,
   esVisibleEnCatalogo,
 } from "@/shared/utils/compartir-catalogo";
@@ -593,16 +592,6 @@ export function StockTable({
                       >
                         <ShareButton
                           url={urlProducto ?? ""}
-                          title={`${producto.nombre} | ${nombreComercio}`}
-                          text={armarMensajeProducto(
-                            producto.nombre,
-                            // El precio efectivo, no el de cabecera: mandarle a
-                            // una clienta por WhatsApp un precio que la caja no
-                            // va a cobrar es peor que mostrarlo mal en la tabla.
-                            mostrablePrecio.uniforme
-                              ? formatearMoneda(mostrablePrecio.valor)
-                              : `${formatearMoneda(mostrablePrecio.min)} - ${formatearMoneda(mostrablePrecio.max)}`,
-                          )}
                           disabled={compartirDeshabilitado}
                           disabledReason={motivoCompartirDeshabilitado}
                           variant="ghost"

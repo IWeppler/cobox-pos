@@ -40,7 +40,6 @@ import {
   type CategoriaBase,
 } from "@/shared/utils/category-tree";
 import {
-  armarMensajeSeleccion,
   compartirNativo,
   construirLinkWhatsApp,
   construirUrlSeleccion,
@@ -307,7 +306,6 @@ function ModalCompartir({
   const visibles = idsCompartibles(ctx);
   const capeados = Math.min(visibles.length, MAX_PRODUCTOS_COMPARTIDOS);
   const url = construirUrlSeleccion(ctx.slugNegocio, visibles);
-  const mensaje = armarMensajeSeleccion(capeados, ctx.nombreComercio);
   const ocultos = ctx.ids.length - visibles.length;
 
   const handleCopiar = async () => {
@@ -317,16 +315,12 @@ function ModalCompartir({
   };
 
   const handleWhatsApp = () => {
-    window.open(construirLinkWhatsApp(mensaje, url), "_blank");
+    window.open(construirLinkWhatsApp(url), "_blank");
     onOpenChange(false);
   };
 
   const handleNativo = async () => {
-    await compartirNativo({
-      title: `Productos de ${ctx.nombreComercio}`,
-      text: mensaje,
-      url,
-    });
+    await compartirNativo({ url });
     onOpenChange(false);
   };
 

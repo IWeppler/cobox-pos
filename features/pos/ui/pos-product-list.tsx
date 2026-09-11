@@ -9,7 +9,6 @@ import {
 } from "@/shared/lib/unidad-venta";
 import { ShareButton } from "@/shared/components/share-button";
 import {
-  armarMensajeProducto,
   construirUrlProducto,
   esVisibleEnCatalogo,
 } from "@/shared/utils/compartir-catalogo";
@@ -137,11 +136,6 @@ export function PosProductList({
 
             <ShareButton
               url={urlProducto ?? ""}
-              title={`${producto.nombre} | ${nombreComercio}`}
-              text={armarMensajeProducto(
-                producto.nombre,
-                formatearMoneda(producto.precio),
-              )}
               disabled={compartirDeshabilitado}
               disabledReason={
                 !urlProducto

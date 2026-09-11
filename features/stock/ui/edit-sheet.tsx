@@ -69,13 +69,11 @@ import { ProductFiscalSection } from "./create-product/product-fiscal-section";
 import { ProductListasSection } from "./create-product/product-listas-section";
 import { ShareButton } from "@/shared/components/share-button";
 import {
-  armarMensajeProducto,
   construirUrlProducto,
   esVisibleEnCatalogo,
 } from "@/shared/utils/compartir-catalogo";
 import { getTotalStock } from "../lib/stock-product-utils";
 import { snapshotCampo } from "../lib/precio-en-todas-las-variantes";
-import { textoPrecioProducto } from "../lib/precio-efectivo-producto";
 
 type ProductEditDetailSheetProps = {
   producto: ProductoIndice;
@@ -183,12 +181,6 @@ export function ProductEditDetailSheet({
 
           <ShareButton
             url={urlProducto ?? ""}
-            title={`${producto.nombre} | ${nombreComercio}`}
-            text={armarMensajeProducto(
-              producto.nombre,
-              // El precio efectivo, no el de cabecera: ver stock-table.
-              textoPrecioProducto(producto),
-            )}
             disabled={compartirDeshabilitado}
             disabledReason={motivoCompartirDeshabilitado}
             label="Compartir"

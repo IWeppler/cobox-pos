@@ -13,8 +13,6 @@ import {
 
 interface ShareButtonProps {
   url: string;
-  title: string;
-  text: string;
   disabled?: boolean;
   disabledReason?: string;
   /** Si se pasa, el botón muestra ícono + texto. Sin esto, es solo ícono. */
@@ -29,11 +27,13 @@ interface ShareButtonProps {
  * usa directo (hoja nativa, deja elegir WhatsApp o lo que sea). Si no,
  * cae a un popover chico con "Copiar link" y "Enviar por WhatsApp".
  * Detecta por capability (typeof navigator.share), no por user-agent.
+ *
+ * Comparte SOLO el link, sin nombre ni precio adelante: el preview del
+ * link (og:title / og:image) ya muestra eso, y el texto suelto quedaba
+ * duplicado y viejo si el precio cambiaba después de mandarlo.
  */
 export function ShareButton({
   url,
-  title,
-  text,
   disabled = false,
   disabledReason,
   label,
@@ -47,7 +47,7 @@ export function ShareButton({
 
   const handleNativeClick = async (event: MouseEvent) => {
     event.stopPropagation();
-    await compartirNativo({ title, text, url });
+    await compartirNativo({ url });
   };
 
   const handleCopiar = async (event: MouseEvent) => {
@@ -59,7 +59,7 @@ export function ShareButton({
 
   const handleWhatsApp = (event: MouseEvent) => {
     event.stopPropagation();
-    window.open(construirLinkWhatsApp(text, url), "_blank");
+    window.open(construirLinkWhatsApp(url), "_blank");
     setIsPopoverOpen(false);
   };
 

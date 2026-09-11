@@ -89,7 +89,6 @@ const UpdatePricesModal = dynamic(
 import { PriceHistoryModal } from "./price-history-modal";
 import { ShareButton } from "@/shared/components/share-button";
 import {
-  armarMensajeCategoria,
   construirUrlCategoria,
 } from "@/shared/utils/compartir-catalogo";
 
@@ -747,8 +746,6 @@ export function StockFiltersToolbar({
             {slugCategoriaActiva && (
               <ShareButton
                 url={construirUrlCategoria(slugNegocio, slugCategoriaActiva)}
-                title={`${nombreCategoriaActiva} | ${nombreComercio}`}
-                text={armarMensajeCategoria(nombreCategoriaActiva || "")}
                 label="Compartir esta categoría"
                 variant="outline"
                 size="sm"

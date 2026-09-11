@@ -14,7 +14,9 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { useCartStore } from "@/shared/store/cart-store";
-import { useRutaCatalogo } from "@/shared/lib/use-negocio";
+import { useRutaCatalogo, useSlugNegocio } from "@/shared/lib/use-negocio";
+import { ShareButton } from "@/shared/components/share-button";
+import { construirUrlProducto } from "@/shared/utils/compartir-catalogo";
 import { PrecioConDescuento } from "./precio-con-descuento";
 import { ConfiguracionPOS } from "@/entities/config/types";
 import { resolverAtributosVariante } from "@/entities/productos/lib/build-propiedades-filtro";
@@ -33,6 +35,7 @@ export function ProductDetail({
   config,
 }: Readonly<ProductDetailProps>) {
   const rutaDelCatalogo = useRutaCatalogo();
+  const slugNegocio = useSlugNegocio();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [descOpen, setDescOpen] = useState(false);
   const mobileGalleryRef = useRef<HTMLDivElement>(null);
@@ -434,9 +437,22 @@ export function ProductDetail({
 
       {/* LADO DERECHO: INFORMACIÓN Y CTA */}
       <div className="w-full md:flex-1 md:max-w-lg flex flex-col pt-4 sm:px-0">
-        <h1 className="text-2xl md:text-4xl font-semibold text-foreground uppercase tracking-tight mb-2 md:mb-4">
-          {producto.nombre}
-        </h1>
+        <div className="flex items-start justify-between gap-3 mb-2 md:mb-4">
+          <h1 className="text-2xl md:text-4xl font-semibold text-foreground uppercase tracking-tight">
+            {producto.nombre}
+          </h1>
+          {/* El link se arma con urlDeCatalogo, no con la URL de la pestaña:
+              en modo path (preview desde el panel) la pestaña no es el link
+              público que tiene que quedar pegado en el chat. */}
+          {slugNegocio && producto.slug && (
+            <ShareButton
+              url={construirUrlProducto(slugNegocio, producto.slug)}
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0 mt-1 text-muted-foreground hover:text-foreground"
+            />
+          )}
+        </div>
 
         {config?.mostrar_precios !== false && (
           <div className="mb-6 md:mb-8">

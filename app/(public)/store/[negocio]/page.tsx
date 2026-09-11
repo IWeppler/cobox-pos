@@ -293,17 +293,6 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
       <main className="flex-1 mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6 w-full">
         {config?.banner_activo && config.banner_imagen && (
           <div className="relative w-full aspect-16/20 sm:aspect-[4/1.5] rounded-2xl overflow-hidden mb-6 lg:mb-8 group">
-            {/* El LCP de la portada en mobile. Pasó de `<img>` crudo a
-                `next/image` cuando se prendió el optimizador: el banner NO
-                pasa por el pipeline de derivadas de producto, así que se venía
-                sirviendo tal cual lo subió el comercio — el de Evens, 1.321 kB.
-                Con el loader de Supabase son 68 kB a 640px, en webp.
-                `priority` emite el preload y le pone fetchPriority alto. */}
-            {/* La imagen de desktop y el encuadre son opcionales: sin ellos
-                esto se comporta igual que antes (una sola foto, recortada
-                desde el centro). Las formas del recorte están espejadas en
-                HERO_MOBILE / HERO_DESKTOP de , que es contra
-                lo que encuadra el panel. */}
             <BannerCatalogo
               src={config.banner_imagen}
               srcDesktop={config.banner_imagen_desktop}
