@@ -292,29 +292,22 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
     <div className="min-h-screen flex flex-col">
       <main className="flex-1 mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6 w-full">
         {config?.banner_activo && config.banner_imagen && (
-          <div className="relative w-full aspect-16/12 sm:aspect-auto sm:h-[90dvh] rounded-2xl overflow-hidden mb-6 lg:mb-8 group">
-            {/* El LCP de la portada, y el banner NO pasa por el pipeline de
-                derivadas de producto: se venía sirviendo tal cual lo subió el
-                comercio — el de Evens, 1.321 kB. El transformador de Storage
-                lo baja a ~98 kB. Ver `banner-optimizado.ts`.
-
-                El alto: 16/12 en el celular y 90dvh de `sm` para arriba, que
-                es el mismo corte donde `BannerCatalogo` cambia de imagen. NO
-                100dvh a propósito: que el borde de abajo quede a la vista es
-                lo que le dice a la clienta que hay catálogo si sigue
-                bajando. */}
-            <BannerCatalogo
-              src={config.banner_imagen}
-              srcDesktop={config.banner_imagen_desktop}
-            />
+          <div className="relative w-full aspect-16/20 sm:aspect-[4/1.5] rounded-2xl overflow-hidden mb-6 lg:mb-8 group">
+            {/* El LCP de la portada en mobile. Pasó de `<img>` crudo a
+                `next/image` cuando se prendió el optimizador: el banner NO
+                pasa por el pipeline de derivadas de producto, así que se venía
+                sirviendo tal cual lo subió el comercio — el de Evens, 1.321 kB.
+                Con el loader de Supabase son 68 kB a 640px, en webp.
+                `priority` emite el preload y le pone fetchPriority alto. */}
+            <BannerCatalogo src={config.banner_imagen} />
             <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-center p-6">
               {config.banner_titulo && (
-                <h2 className="text-2xl md:text-5xl lg:text-6xl font-black text-white uppercase tracking-tight mb-2">
+                <h2 className="text-2xl md:text-4xl font-black text-white uppercase tracking-tight mb-2">
                   {config.banner_titulo}
                 </h2>
               )}
               {config.banner_subtitulo && (
-                <p className="text-sm md:text-xl text-white/90 font-medium max-w-xl mb-6">
+                <p className="text-sm md:text-lg text-white/90 font-medium max-w-xl mb-6">
                   {config.banner_subtitulo}
                 </p>
               )}
