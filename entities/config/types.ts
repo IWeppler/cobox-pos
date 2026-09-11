@@ -88,6 +88,11 @@ export interface ConfiguracionPOS {
   banner_imagen?: string;
   /** Opcional. Vacío = se usa `banner_imagen` también en desktop. */
   banner_imagen_desktop?: string | null;
+  /** Encuadre del banner: porcentajes 0-100. NULL = centrado (default de CSS). */
+  banner_focal_x?: number | null;
+  banner_focal_y?: number | null;
+  banner_focal_desktop_x?: number | null;
+  banner_focal_desktop_y?: number | null;
   banner_titulo?: string;
   banner_subtitulo?: string;
   banner_boton_texto?: string;

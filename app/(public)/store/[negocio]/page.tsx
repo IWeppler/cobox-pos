@@ -299,7 +299,20 @@ export default async function StorePage({ params }: Readonly<StorePageProps>) {
                 sirviendo tal cual lo subió el comercio — el de Evens, 1.321 kB.
                 Con el loader de Supabase son 68 kB a 640px, en webp.
                 `priority` emite el preload y le pone fetchPriority alto. */}
-            <BannerCatalogo src={config.banner_imagen} />
+            {/* La imagen de desktop y el encuadre son opcionales: sin ellos
+                esto se comporta igual que antes (una sola foto, recortada
+                desde el centro). Las formas del recorte están espejadas en
+                HERO_MOBILE / HERO_DESKTOP de , que es contra
+                lo que encuadra el panel. */}
+            <BannerCatalogo
+              src={config.banner_imagen}
+              srcDesktop={config.banner_imagen_desktop}
+              foco={{ x: config.banner_focal_x, y: config.banner_focal_y }}
+              focoDesktop={{
+                x: config.banner_focal_desktop_x,
+                y: config.banner_focal_desktop_y,
+              }}
+            />
             <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-center p-6">
               {config.banner_titulo && (
                 <h2 className="text-2xl md:text-4xl font-black text-white uppercase tracking-tight mb-2">

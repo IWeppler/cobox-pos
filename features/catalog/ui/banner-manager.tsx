@@ -12,39 +12,59 @@ import {
   Loader2,
   Megaphone,
   Trash2,
+  Crop,
   Link as LinkIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/shared/config/supabase/client";
 import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { FORMATOS_IMAGEN_ACEPTADOS } from "@/shared/lib/formatos-imagen";
+import {
+  HERO_DESKTOP,
+  HERO_MOBILE,
+  objectPositionDeFoco,
+  tieneFoco,
+} from "@/shared/lib/foco-banner";
+import { EncuadreBannerModal } from "./encuadre-banner-modal";
 
 interface BannerManagerProps {
   config: ConfiguracionPOS;
 }
 
 /**
- * Los dos campos de imagen del banner.
+ * Las dos imágenes del banner, cada una con su encuadre.
  *
  * La de mobile es la obligatoria y la que se usa si no hay otra; la de desktop
- * es opcional y solo entra de 640px para arriba, donde el hero pasa a ocupar
- * 90dvh de alto. El vacío NO se rellena copiando la de mobile: vacío significa
- * "usá la misma en las dos", y copiar la URL haría que cambiar la de mobile
- * dejara la otra vieja, sin que nadie se entere. Mismo criterio que el precio
- * heredado de las variantes.
+ * es opcional y solo entra de 640px para arriba, donde el hero cambia de
+ * forma. El vacío NO se rellena copiando la de mobile: vacío significa "usá la
+ * misma en las dos", y copiar la URL haría que cambiar la de mobile dejara la
+ * otra vieja, sin que nadie se entere. Mismo criterio que el precio heredado
+ * de las variantes.
+ *
+ * EL ENCUADRE ES DEL PAR (imagen, forma), NO DE LA IMAGEN. Por eso la fila de
+ * desktop tiene su propio foco incluso cuando no tiene imagen propia: ahí se
+ * está encuadrando la foto de mobile contra el marco ancho de la computadora,
+ * que es un recorte completamente distinto —de 16/20 a 4/1.5— y es justo el
+ * caso donde `object-cover` se come más cosas.
  */
-const CAMPOS_IMAGEN = [
+const FILAS_BANNER = [
   {
     campo: "banner_imagen" as const,
+    campoFocoX: "banner_focal_x" as const,
+    campoFocoY: "banner_focal_y" as const,
     titulo: "Imagen para celular",
-    ayuda: "Vertical, ~1080×810. Es la que se usa si no cargás la de abajo.",
-    proporcion: "aspect-4/3",
+    ayuda: "Vertical, ~1080×1350. Es la que se usa si no cargás la de abajo.",
+    forma: HERO_MOBILE,
+    etiquetaForma: "el celular",
   },
   {
     campo: "banner_imagen_desktop" as const,
+    campoFocoX: "banner_focal_desktop_x" as const,
+    campoFocoY: "banner_focal_desktop_y" as const,
     titulo: "Imagen para computadora (opcional)",
-    ayuda: "Apaisada y alta, ~1920×1080. Se usa en pantallas grandes.",
-    proporcion: "aspect-16/9",
+    ayuda: "Apaisada, ~1920×720. Se usa en pantallas grandes.",
+    forma: HERO_DESKTOP,
+    etiquetaForma: "la computadora",
   },
 ];
 
@@ -75,9 +95,21 @@ export function BannerManager({ config }: Readonly<BannerManagerProps>) {
     banner_subtitulo: config.banner_subtitulo || "",
     banner_boton_texto: config.banner_boton_texto || "",
     banner_link: config.banner_link || "",
+    // Los focos viven en el mismo estado que el resto: se guardan con el
+    // mismo botón, y null (centrado) tiene que poder volver a ser null.
+    banner_focal_x: config.banner_focal_x ?? null,
+    banner_focal_y: config.banner_focal_y ?? null,
+    banner_focal_desktop_x: config.banner_focal_desktop_x ?? null,
+    banner_focal_desktop_y: config.banner_focal_desktop_y ?? null,
   });
 
-  const handleChange = (field: string, value: string | boolean) => {
+  /** Qué fila se está encuadrando, o null si el modal está cerrado. */
+  const [encuadrando, setEncuadrando] = useState<number | null>(null);
+
+  const handleChange = (
+    field: string,
+    value: string | boolean | number | null,
+  ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -188,39 +220,93 @@ export function BannerManager({ config }: Readonly<BannerManagerProps>) {
       >
         {/* Lado Izquierdo: Imágenes */}
         <div className="space-y-6">
-          {CAMPOS_IMAGEN.map(({ campo, titulo, ayuda, proporcion }) => {
+          {FILAS_BANNER.map((fila, indice) => {
+            const {
+              campo,
+              campoFocoX,
+              campoFocoY,
+              titulo,
+              ayuda,
+              forma,
+              etiquetaForma,
+            } = fila;
             const valor = formData[campo];
             const estaSubiendo = subiendo === campo;
+            const foco = {
+              x: formData[campoFocoX],
+              y: formData[campoFocoY],
+            };
+
+            // La fila de desktop puede no tener imagen propia: ahí lo que se
+            // encuadra —y lo que la clienta va a ver en una computadora— es la
+            // foto de mobile. Sin esto, el caso más común (un solo banner) se
+            // quedaría justo sin el encuadre que más falta hace, porque el
+            // recorte ancho es el que más se come.
+            const urlAEncuadrar = valor || formData.banner_imagen;
 
             return (
               <div key={campo} className="space-y-2">
                 <Label className="text-sm font-semibold">{titulo}</Label>
                 <p className="text-xs text-muted-foreground">{ayuda}</p>
 
-                {valor ? (
+                {/* La miniatura se dibuja con la FORMA REAL del hero y el foco
+                    elegido: es una vista previa, no una decoración. Si acá se
+                    ve bien, en la tienda se ve igual. */}
+                {urlAEncuadrar ? (
                   <div
-                    className={`relative w-full ${proporcion} rounded-xl overflow-hidden border border-border group`}
+                    className="relative w-full rounded-xl overflow-hidden border border-border group"
+                    style={{ aspectRatio: `${forma.ancho} / ${forma.alto}` }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={valor}
+                      src={urlAEncuadrar}
                       alt={titulo}
                       className="w-full h-full object-cover"
+                      style={{ objectPosition: objectPositionDeFoco(foco) }}
                     />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+
+                    {!valor && (
+                      <span className="absolute top-2 left-2 rounded-full bg-background/85 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        Usa la foto del celular
+                      </span>
+                    )}
+                    {tieneFoco(foco) && (
+                      <span className="absolute top-2 right-2 rounded-full bg-background/85 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                        Encuadrada
+                      </span>
+                    )}
+
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex items-center justify-center gap-2">
                       <Button
-                        variant="destructive"
+                        type="button"
                         size="sm"
-                        onClick={() => handleChange(campo, "")}
+                        onClick={() => setEncuadrando(indice)}
                       >
-                        <Trash2 className="w-4 h-4 mr-2" /> Eliminar imagen
+                        <Crop className="w-4 h-4 mr-2" /> Encuadrar
                       </Button>
+                      {valor && (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            handleChange(campo, "");
+                            // El foco se va con la imagen: dejarlo puesto
+                            // encuadraría la PRÓXIMA foto contra un punto
+                            // elegido para otra.
+                            handleChange(campoFocoX, null);
+                            handleChange(campoFocoY, null);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" /> Eliminar
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ) : (
                   <Label
                     htmlFor={`upload-${campo}`}
-                    className={`flex flex-col items-center justify-center w-full ${proporcion} border-2 border-dashed border-border rounded-xl cursor-pointer bg-muted/20 hover:bg-primary/10 hover:border-primary/50 transition-colors`}
+                    className="flex flex-col items-center justify-center w-full aspect-4/3 border-2 border-dashed border-border rounded-xl cursor-pointer bg-muted/20 hover:bg-primary/10 hover:border-primary/50 transition-colors"
                   >
                     <div className="flex flex-col items-center justify-center text-center px-4">
                       {estaSubiendo ? (
@@ -244,6 +330,41 @@ export function BannerManager({ config }: Readonly<BannerManagerProps>) {
                       disabled={subiendo !== null}
                     />
                   </Label>
+                )}
+
+                {/* Subir una segunda foto cuando la fila ya muestra la de
+                    mobile: sin esto no habría forma de llegar al input. */}
+                {!valor && urlAEncuadrar && (
+                  <Label
+                    htmlFor={`upload-${campo}`}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary cursor-pointer hover:underline"
+                  >
+                    <ImagePlus className="w-3.5 h-3.5" />
+                    Subir una foto distinta para computadora
+                    <Input
+                      id={`upload-${campo}`}
+                      type="file"
+                      accept={FORMATOS_IMAGEN_ACEPTADOS}
+                      className="hidden"
+                      onChange={(e) => handleImageUpload(e, campo)}
+                      disabled={subiendo !== null}
+                    />
+                  </Label>
+                )}
+
+                {urlAEncuadrar && (
+                  <EncuadreBannerModal
+                    abierto={encuadrando === indice}
+                    onOpenChange={(v) => setEncuadrando(v ? indice : null)}
+                    url={urlAEncuadrar}
+                    forma={forma}
+                    etiquetaForma={etiquetaForma}
+                    foco={foco}
+                    onGuardar={({ x, y }) => {
+                      handleChange(campoFocoX, x);
+                      handleChange(campoFocoY, y);
+                    }}
+                  />
                 )}
               </div>
             );
