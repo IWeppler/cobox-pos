@@ -15,6 +15,7 @@ import { esErrorDeRed, mensajeErrorDeRed } from "@/shared/lib/error-de-red";
 import { subirImagenesProductoDesdeCliente } from "../lib/subir-imagenes-cliente";
 import type { UrlsImagenesProducto } from "../lib/imagenes-producto-comun";
 import { MAX_IMAGENES_PRODUCTO } from "@/shared/utils/limites-imagen";
+import { controlarPayloadDeAction } from "@/shared/lib/tamano-payload";
 import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import { useVariantSelection } from "./use-variant-selection";
 import { queryKeys } from "@/shared/lib/query-keys";
@@ -323,6 +324,12 @@ export function useCreateProductForm(control?: ControlDeApertura) {
         setIsCompressing(false);
       }
     }
+
+    // Con la red de seguridad de arriba el POST puede volver a llevar los
+    // binarios. Medirlo es lo que hace que, si un día se pasa del tope de la
+    // plataforma, quede en el log con los campos culpables en vez de aparecer
+    // como una pantalla rota sin causa.
+    controlarPayloadDeAction("crear-producto:guardar", formData);
 
     startTransition(() => formAction(formData));
   };

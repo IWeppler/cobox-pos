@@ -108,6 +108,12 @@ const nextConfig: NextConfig = {
   // comprimido antes de subir (ver shared/utils/image-optimizer.ts).
   experimental: {
     serverActions: {
+      // OJO: este número NO es el límite efectivo. La plataforma corta el
+      // request antes (~4,5 MB) y lo que devuelve no es un payload RSC, así
+      // que el cliente ni siquiera lo puede leer como error de la action:
+      // termina en el error boundary con "el servidor devolvió una respuesta
+      // incompleta". Subir este valor no cambia nada — lo único que sirve es
+      // mandar menos. Ver shared/lib/tamano-payload.ts, que lo mide y avisa.
       bodySizeLimit: "10mb",
     },
 

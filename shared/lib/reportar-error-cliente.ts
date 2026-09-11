@@ -17,7 +17,11 @@ export type TipoEventoCliente =
   | "error"
   | "unhandledrejection"
   | "react-error-boundary"
-  | "posible-crash-renderer";
+  | "posible-crash-renderer"
+  // Un POST a una Server Action que se acerca al tope de la plataforma. No es
+  // un error todavía: es el aviso de que va camino a serlo (ver
+  // `tamano-payload.ts`).
+  | "payload-grande";
 
 export type EventoErrorCliente = {
   tipo: TipoEventoCliente;

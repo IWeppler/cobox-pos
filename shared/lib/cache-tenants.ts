@@ -1,3 +1,5 @@
+import { ESTADOS_HABILITADOS } from "./estado-negocio";
+
 /**
  * Traducción slug -> negocio para el MIDDLEWARE, cacheada en memoria con TTL.
  *
@@ -72,9 +74,28 @@ async function consultar(slug: string): Promise<string | null> {
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) throw new Error("Faltan las credenciales de Supabase");
 
+  // Los estados HABILITADOS, no solo 'activo'.
+  //
+  // Con `estado=eq.activo` el middleware daba "no existe" para todo comercio
+  // en `prueba` o en `demo`, y reescribía su subdominio a /tienda-no-encontrada
+  // ANTES de que la página pudiera resolver nada. Medido en producción el
+  // 11/9/2026: los tres `activo` respondían 200 por subdominio y los seis
+  // `prueba`/`demo` daban 404 — o sea la tienda pública de TODOS los que están
+  // evaluando si pagar, más la de muestra que usa el vendedor para demostrar
+  // el producto. Por path (`/store/<slug>`) andaban bien, que es lo que hacía
+  // que el bug pareciera del negocio y no del ruteo.
+  //
+  // `tenant.ts` ya había arreglado esto mismo de su lado y tiene el comentario
+  // puesto; acá faltaba. Son DOS lugares que responden la misma pregunta, así
+  // que la lista sale de `ESTADOS_HABILITADOS` en vez de escribirse a mano:
+  // volver a divergir tendría que costar una edición deliberada.
+  // Las comas van codificadas y PostgREST las decodifica ANTES de partir la
+  // lista: verificado contra la API con las dos formas, devuelven lo mismo.
+  const estados = ESTADOS_HABILITADOS.join(",");
   const consulta =
     `${url}/rest/v1/negocios` +
-    `?select=id&estado=eq.activo&limit=1&slug=eq.${encodeURIComponent(slug)}`;
+    `?select=id&estado=in.(${encodeURIComponent(estados)})` +
+    `&limit=1&slug=eq.${encodeURIComponent(slug)}`;
 
   const respuesta = await fetch(consulta, {
     headers: { apikey: key, Authorization: `Bearer ${key}` },

@@ -3,6 +3,7 @@
 import { parsearCantidadDeEntrada } from "@/shared/lib/unidad-venta";
 import { esErrorDeRed, mensajeErrorDeRed } from "@/shared/lib/error-de-red";
 import { subirImagenesProductoDesdeCliente } from "../lib/subir-imagenes-cliente";
+import { controlarPayloadDeAction } from "@/shared/lib/tamano-payload";
 import { MAX_IMAGENES_PRODUCTO } from "@/shared/utils/limites-imagen";
 import { useNegocioActivo } from "@/shared/components/negocio-activo-provider";
 import {
@@ -506,9 +507,31 @@ function EditProductForm({
       return;
     }
 
-    // Las fotos NO pasan por este submit: se subieron y se guardaron cuando
-    // se eligieron (ver subirFotosAhora). Este formulario guarda nombre,
-    // precio, categoría y variantes.
+    // Las fotos ya se subieron a Storage y ya quedaron guardadas en el
+    // producto cuando se eligieron (ver subirFotosAhora). Pero el `<input
+    // type="file" name="imagenes">` sigue montado DENTRO de este <form> y
+    // conserva los archivos ORIGINALES, así que `new FormData(e.currentTarget)`
+    // los mete igual: el POST se llevaba las fotos crudas del celular, de
+    // varios MB, para no usarlas.
+    //
+    // Eso es lo que rompía la edición de precio + foto en Estilo Bonito el 10 y
+    // el 11/9/2026: pasado el tope de cuerpo de la plataforma el request muere
+    // antes de llegar al handler, la respuesta no es RSC y el boundary muestra
+    // "el servidor devolvió una respuesta incompleta". Y por debajo del tope
+    // tampoco era gratis: `edit-product.ts` toma la rama vieja cuando ve
+    // archivos y vuelve a subir a Storage lo que ya estaba subido.
+    //
+    // El formulario de ALTA ya hacía exactamente esto (ver
+    // use-create-product-form.ts); acá faltaba. El comentario decía que las
+    // fotos no pasaban por el submit — ahora es cierto.
+    formData.delete("imagenes");
+    formData.delete("thumbnails");
+    formData.delete("grids");
+    formData.delete("masters");
+
+    // Lo que quede tiene que ser chico. Si algún día no lo es, que quede
+    // medido en el log en vez de aparecer como una pantalla rota sin causa.
+    controlarPayloadDeAction("editar-producto:guardar", formData);
 
     if (showVariants) {
       await abrirConfirmacionVariantes(formData);

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { limpiarCacheTenants, resolverTienda } from "./cache-tenants";
+import { ESTADOS_HABILITADOS } from "./estado-negocio";
 
 const envOriginal = { ...process.env };
 
@@ -90,7 +91,11 @@ describe("resolverTienda", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("es indiferente a mayúsculas y pide solo negocios activos", async () => {
+  // Este test afirmaba "pide solo negocios activos" y verificaba
+  // `estado=eq.activo`: o sea que el bug de los subdominios en prueba y demo
+  // estaba CONGELADO en la suite como si fuera lo correcto. Lo que se prueba
+  // acá es la normalización del slug; qué estados se piden se prueba abajo.
+  it("es indiferente a mayúsculas en el slug", async () => {
     const fetchMock = responder([{ id: "neg-1" }]);
     vi.stubGlobal("fetch", fetchMock);
 
@@ -98,8 +103,39 @@ describe("resolverTienda", () => {
     await resolverTienda("evens");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const url = String(fetchMock.mock.calls[0][0]);
-    expect(url).toContain("slug=eq.evens");
-    expect(url).toContain("estado=eq.activo");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("slug=eq.evens");
+  });
+});
+
+describe("qué estados considera vivos", () => {
+  /**
+   * El bug del 11/9/2026: la consulta pedía `estado=eq.activo`, así que el
+   * middleware daba "no existe" para todo comercio en prueba o en demo y
+   * mandaba su subdominio a /tienda-no-encontrada. Eran 6 de 10 negocios —
+   * todos los que están evaluando si pagar, más la tienda de muestra.
+   */
+  it("pide los tres estados habilitados, no solo activo", async () => {
+    const fetchMock = responder([{ id: "neg-1" }]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await resolverTienda("tienda-demo");
+
+    const url = decodeURIComponent(fetchMock.mock.calls[0][0] as string);
+    expect(url).toContain("estado=in.(activo,prueba,demo)");
+    expect(url).not.toContain("estado=eq.activo");
+  });
+
+  // Los dos módulos que traducen slug -> negocio tienen que preguntar lo
+  // mismo: es exactamente la divergencia que causó el incidente.
+  it("usa la misma lista que el resto del sistema", async () => {
+    const fetchMock = responder([{ id: "neg-1" }]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await resolverTienda("evens");
+
+    const url = decodeURIComponent(fetchMock.mock.calls[0][0] as string);
+    for (const estado of ESTADOS_HABILITADOS) {
+      expect(url).toContain(estado);
+    }
   });
 });
